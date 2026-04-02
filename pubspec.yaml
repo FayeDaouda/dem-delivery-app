@@ -1,0 +1,44 @@
+name: dem_app
+description: "DEM — Application de livraison à moto"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # HTTP
+  dio: ^5.4.0
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # Navigation
+  go_router: ^13.2.0
+
+  # Stockage local (token JWT)
+  shared_preferences: ^2.2.3
+
+  # Carte
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
+
+  # UI
+  pin_code_fields: ^8.0.1          # Champ OTP
+  country_code_picker: ^3.0.0      # Indicatif téléphone
+  loading_animation_widget: ^1.2.1 # Loaders
+  flutter_svg: ^2.0.10             # Logo SVG
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/DEM.png
