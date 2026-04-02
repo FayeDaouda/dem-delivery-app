@@ -114,7 +114,7 @@ class _HomeDriverScreenState extends State<HomeDriverScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: AppColors.surface.withOpacity(0.95),
+                      color: AppColors.surface.withValues(alpha:0.95),
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Row(
@@ -141,7 +141,7 @@ class _HomeDriverScreenState extends State<HomeDriverScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.surface.withOpacity(0.95),
+                        color: AppColors.surface.withValues(alpha:0.95),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.logout, color: AppColors.textSecondary, size: 20),
@@ -160,7 +160,7 @@ class _HomeDriverScreenState extends State<HomeDriverScreen> {
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 20)],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.4), blurRadius: 20)],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
