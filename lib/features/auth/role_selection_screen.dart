@@ -19,10 +19,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       await AuthService.setupProfile(role: role, vehicleType: vehicleType);
       if (!mounted) return;
 
-      if (role == 'DRIVER' && vehicleType == 'TAXI') {
-        context.go('/driver/thiak/home');
-      } else if (role == 'DRIVER') {
-        context.go('/driver/home');
+      if (role == 'DRIVER') {
+        // Driver → onboarding pour compléter le profil (nom + plaque)
+        context.go('/driver/onboarding?type=$vehicleType');
       } else {
         context.go('/client/home');
       }

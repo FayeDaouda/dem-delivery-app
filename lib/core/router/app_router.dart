@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/phone_screen.dart';
 import '../../features/auth/otp_screen.dart';
 import '../../features/auth/role_selection_screen.dart';
+import '../../features/auth/driver_onboarding_screen.dart';
 import '../../features/home_client/home_client_screen.dart';
 import '../../features/home_driver/home_driver_screen.dart';
 import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
@@ -30,6 +31,13 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/role-selection',
       builder: (context, state) => const RoleSelectionScreen(),
+    ),
+    GoRoute(
+      path: '/driver/onboarding',
+      builder: (context, state) {
+        final type = state.uri.queryParameters['type'] ?? 'MOTO';
+        return DriverOnboardingScreen(vehicleType: type);
+      },
     ),
 
     // ── Client ──
