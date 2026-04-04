@@ -1,12 +1,13 @@
 import 'package:go_router/go_router.dart';
-import '../../features/auth/phone_screen.dart';
-import '../../features/auth/otp_screen.dart';
-import '../../features/auth/role_selection_screen.dart';
-import '../../features/auth/driver_onboarding_screen.dart';
+import '../../features/auth/screens/phone_screen.dart';
+import '../../features/auth/screens/otp_screen.dart';
+import '../../features/auth/screens/role_selection_screen.dart';
+import '../../features/auth/screens/driver_onboarding_screen.dart';
 import '../../features/home_client/home_client_screen.dart';
 import '../../features/home_driver/home_driver_screen.dart';
 import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
-import '../../features/splash/splash_screen.dart';
+import '../../features/splash/screens/splash_screen.dart';
+import '../../features/profile/screens/driver_profile_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
@@ -56,6 +57,12 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/driver/thiak/home',
       builder: (context, state) => const HomeDriverThiakScreen(),
+    ),
+
+    // ── Profil driver ──
+    GoRoute(
+      path: '/driver/profile',
+      builder: (context, state) => const DriverProfileScreen(),
     ),
   ],
 );

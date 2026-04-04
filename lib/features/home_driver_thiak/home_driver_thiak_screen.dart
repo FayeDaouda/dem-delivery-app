@@ -1,43 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/storage/auth_storage.dart';
-import '../../core/api/api_client.dart';
+import '../../features/profile/providers/profile_provider.dart';
 
-class HomeDriverThiakScreen extends StatefulWidget {
+class HomeDriverThiakScreen extends ConsumerStatefulWidget {
   const HomeDriverThiakScreen({super.key});
 
   @override
-  State<HomeDriverThiakScreen> createState() => _HomeDriverThiakScreenState();
+  ConsumerState<HomeDriverThiakScreen> createState() => _HomeDriverThiakScreenState();
 }
 
-class _HomeDriverThiakScreenState extends State<HomeDriverThiakScreen> {
-  bool _isAvailable = false;
-  String? _driverName;
-
+class _HomeDriverThiakScreenState extends ConsumerState<HomeDriverThiakScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUser();
-  }
-
-  Future<void> _loadUser() async {
-    final user = await AuthStorage.getUser();
-    if (mounted) {
-      setState(() => _driverName = user?['name'] as String?);
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(profileProvider.notifier).fetchProfile();
+    });
   }
 
   Future<void> _toggleAvailability(bool val) async {
     try {
-      await ApiClient.dio.patch('/users/driver/availability');
-      if (mounted) setState(() => _isAvailable = val);
-    } catch (_) {}
+      await ref.read(profileProvider.notifier).toggleAvailability();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final profile = ref.watch(profileProvider);
+    final isAvailable = profile.isAvailable;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -61,48 +60,54 @@ class _HomeDriverThiakScreenState extends State<HomeDriverThiakScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  // Badge Thiak Thiak
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryDark,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.directions_car, color: Colors.white, size: 14),
-                        SizedBox(width: 6),
-                        Text('Thiak Thiak', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                      ],
+                  // Toggle disponibilité (gauche)
+                  GestureDetector(
+                    onTap: () => _toggleAvailability(!isAvailable),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isAvailable ? AppColors.primary : AppColors.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8)],
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.circle, size: 8,
+                              color: isAvailable ? Colors.white : AppColors.textSecondary),
+                          const SizedBox(width: 8),
+                          Text(
+                            isAvailable ? 'En ligne' : 'Hors ligne',
+                            style: TextStyle(
+                              color: isAvailable ? Colors.white : AppColors.textSecondary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Switch.adaptive(
+                            value: isAvailable,
+                            onChanged: _toggleAvailability,
+                            activeThumbColor: Colors.white,
+                            activeTrackColor: Colors.white.withValues(alpha: 0.4),
+                            inactiveThumbColor: AppColors.textSecondary,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const Spacer(),
-                  // Toggle disponibilité
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _isAvailable ? AppColors.primary : AppColors.card,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          _isAvailable ? 'En ligne' : 'Hors ligne',
-                          style: TextStyle(
-                            color: _isAvailable ? Colors.white : AppColors.textSecondary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Switch.adaptive(
-                          value: _isAvailable,
-                          onChanged: _toggleAvailability,
-                          activeThumbColor: Colors.white,
-                          activeTrackColor: AppColors.primaryMid,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ],
+                  // Icône profil (droite)
+                  GestureDetector(
+                    onTap: () => context.push('/driver/profile'),
+                    child: Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8)],
+                      ),
+                      child: const Icon(Icons.person_outline, color: AppColors.textPrimary, size: 22),
                     ),
                   ),
                 ],
@@ -125,22 +130,18 @@ class _HomeDriverThiakScreenState extends State<HomeDriverThiakScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _driverName != null ? 'Bonjour, $_driverName 👋' : 'Bonjour 👋',
+                    profile.name.isNotEmpty ? 'Bonjour, ${profile.name} 👋' : 'Bonjour 👋',
                     style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
+                        color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _isAvailable
+                    isAvailable
                         ? 'Vous êtes en ligne — en attente de courses'
                         : 'Activez votre disponibilité pour recevoir des courses',
                     style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
                   const SizedBox(height: 20),
-                  // Stats rapides
                   Row(
                     children: [
                       _StatChip(icon: Icons.route, label: '0 courses', color: AppColors.primary),

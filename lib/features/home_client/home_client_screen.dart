@@ -71,8 +71,9 @@ class _HomeClientScreenState extends State<HomeClientScreen> {
                   const Spacer(),
                   GestureDetector(
                     onTap: () async {
+                      final router = GoRouter.of(context);
                       await AuthStorage.clear();
-                      if (mounted) context.go('/phone');
+                      router.go('/phone');
                     },
                     child: Container(
                       padding: const EdgeInsets.all(10),

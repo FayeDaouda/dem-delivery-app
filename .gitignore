@@ -1,3 +1,7 @@
+# Secrets locaux (jamais committer)
+.env.local
+*.env
+
 # Miscellaneous
 *.class
 *.log
