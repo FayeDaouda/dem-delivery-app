@@ -7,15 +7,13 @@ final ordersRepositoryProvider = Provider<OrdersRepository>((_) => OrdersReposit
 // ─── Available orders ──────────────────────────────────────────────────────
 class AvailableOrdersNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
   @override
-  Future<List<Map<String, dynamic>>> build() => _fetch();
+  Future<List<Map<String, dynamic>>> build() async => [];
 
   OrdersRepository get _repo => ref.read(ordersRepositoryProvider);
 
-  Future<List<Map<String, dynamic>>> _fetch() => _repo.getAvailableOrders();
-
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(_fetch);
+    state = await AsyncValue.guard(() => _repo.getAvailableOrders());
   }
 
   Future<void> acceptOrder(String orderId) async {

@@ -13,7 +13,8 @@ class ProfileState {
 
   const ProfileState({this.user, this.isLoading = false, this.error});
 
-  bool get isAvailable => user?['isAvailable'] as bool? ?? false;
+  // Par défaut en ligne — évite le flash "Hors ligne" au démarrage
+  bool get isAvailable => user?['isAvailable'] as bool? ?? true;
   String get name => user?['name'] as String? ?? '';
   String get vehicleType => user?['vehicleType'] as String? ?? 'MOTO';
 
@@ -43,15 +44,23 @@ class ProfileNotifier extends Notifier<ProfileState> {
   Future<void> _loadFromStorage() async {
     final user = await AuthStorage.getUser();
     if (user != null) {
-      state = state.copyWith(user: user);
+      // Le driver est toujours mis en ligne au démarrage
+      final userOnline = Map<String, dynamic>.from(user)
+        ..['isAvailable'] = true;
+      await AuthStorage.saveUser(userOnline);
+      state = state.copyWith(user: userOnline);
     }
   }
 
-  Future<void> fetchProfile() async {
+  Future<void> fetchProfile({bool goOnlineIfOffline = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final user = await _repo.getMe();
       state = state.copyWith(user: user, isLoading: false);
+      // Mise en ligne automatique à la connexion
+      if (goOnlineIfOffline && !(user['isAvailable'] as bool? ?? false)) {
+        await toggleAvailability();
+      }
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
