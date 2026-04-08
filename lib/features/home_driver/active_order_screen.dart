@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -68,12 +69,38 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       ? null
       : NavigationService.distanceTo(_driverPosition!, _targetLatLng);
 
+  BitmapDescriptor? _driverIcon;
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
     _order = widget.order;
+    _buildDriverIcon().then((icon) {
+      if (mounted) setState(() => _driverIcon = icon);
+    });
     _startNavigation();
+  }
+
+  static Future<BitmapDescriptor> _buildDriverIcon() async {
+    const double size = 96;
+    const double cx = size / 2, cy = size / 2;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawCircle(
+      const Offset(cx, cy), 40,
+      Paint()..color = const Color(0x4033BCD4),
+    );
+    final path = Path()
+      ..moveTo(cx, cy - 18)
+      ..lineTo(cx + 14.4, cy + 10.8)
+      ..lineTo(cx - 14.4, cy + 10.8)
+      ..close();
+    canvas.drawPath(path, Paint()..color = const Color(0xFF33BCD4));
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.toInt(), size.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: 48, height: 48);
   }
 
   @override
@@ -99,9 +126,17 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   }
 
   Future<void> _loadRoute() async {
+    // Phase 1 : driver → pickup | Phase 2 : pickup → delivery
+    final origin = _isPickedUp
+        ? _pickupLatLng
+        : (_driverPosition != null
+            ? LatLng(_driverPosition!.latitude, _driverPosition!.longitude)
+            : _pickupLatLng);
+    final destination = _isPickedUp ? _deliveryLatLng : _pickupLatLng;
+
     final result = await DirectionsService.getRoute(
-      origin: _pickupLatLng,
-      destination: _deliveryLatLng,
+      origin: origin,
+      destination: destination,
       apiKey: AppConfig.mapsApiKey,
     );
     if (!mounted) return;
@@ -203,15 +238,70 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.deliverOrder(_order['id']);
       setState(() => _order = updated);
-      _showAlert('Livraison effectuée avec succès !', AlertPriority.high);
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) context.go('/driver/home');
+      if (mounted) _showSuccessDialog();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
+  }
+
+  void _showSuccessDialog() {
+    final price = (_order['price'] as num?)?.toInt() ?? 0;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72, height: 72,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF00C853),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check, color: Colors.white, size: 40),
+              ),
+              const SizedBox(height: 20),
+              const Text('Livraison effectuée !',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('$price FCFA encaissés',
+                  style: const TextStyle(fontSize: 15, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Text(_order['deliveryAddress'] ?? '',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: Colors.black54)),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    context.go('/driver/home');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00C853),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                  child: const Text('Retour à l\'accueil',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Carte : marqueurs ─────────────────────────────────────────────────────
@@ -240,8 +330,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
           markerId: const MarkerId('driver'),
           position:
               LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueAzure),
+          icon: _driverIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
           flat: true,
           rotation: _driverPosition!.heading,
           anchor: const Offset(0.5, 0.5),
