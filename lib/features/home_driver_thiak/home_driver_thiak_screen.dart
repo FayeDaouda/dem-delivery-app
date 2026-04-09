@@ -46,6 +46,7 @@ class _HomeDriverThiakScreenState
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _newOrderSub;
   StreamSubscription<String>?              _expiredOrderSub;
+  StreamSubscription<void>?                _reconnectSub;
 
   // ── Polling fallback (toutes les 30s si socket déconnecté) ───────────────
   Timer? _pollTimer;
@@ -79,6 +80,11 @@ class _HomeDriverThiakScreenState
     _expiredOrderSub = SocketService.instance.onOrderExpired.listen((orderId) {
       if (!mounted) return;
       ref.read(availableOrdersProvider.notifier).removeOrder(orderId);
+    });
+
+    _reconnectSub = SocketService.instance.onReconnect.listen((_) {
+      if (!mounted) return;
+      ref.read(availableOrdersProvider.notifier).refresh();
     });
   }
 
@@ -182,6 +188,7 @@ class _HomeDriverThiakScreenState
     _pollTimer?.cancel();
     _newOrderSub?.cancel();
     _expiredOrderSub?.cancel();
+    _reconnectSub?.cancel();
     _locationSub?.cancel();
     _mapController?.dispose();
     super.dispose();

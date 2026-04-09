@@ -19,12 +19,16 @@ class SocketService {
   // ── Streams publics ────────────────────────────────────────────────────────
   final _newOrderController     = StreamController<Map<String, dynamic>>.broadcast();
   final _expiredOrderController = StreamController<String>.broadcast();
+  final _reconnectController    = StreamController<void>.broadcast();
 
   /// Émis quand le backend dispatche une nouvelle course à ce driver.
   Stream<Map<String, dynamic>> get onNewOrder     => _newOrderController.stream;
 
   /// Émis quand l'offre expire côté backend (orderId).
-  Stream<String>               get onOrderExpired => _expiredOrderController.stream;
+  Stream<String>               get onOrderExpired  => _expiredOrderController.stream;
+
+  /// Émis à chaque reconnexion — le screen doit rafraîchir les courses.
+  Stream<void>                 get onReconnect     => _reconnectController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -50,6 +54,11 @@ class SocketService {
       ..on('connect', (_) {
         // ignore: avoid_print
         print('[SOCKET] Connecté à $_serverUrl');
+      })
+      ..on('reconnect', (_) {
+        // ignore: avoid_print
+        print('[SOCKET] Reconnecté — rafraîchissement des courses');
+        _reconnectController.add(null);
       })
       ..on('disconnect', (reason) {
         // ignore: avoid_print
