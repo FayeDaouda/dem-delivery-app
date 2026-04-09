@@ -60,7 +60,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
         (_order['deliveryLongitude'] as num).toDouble(),
       );
 
-  bool get _isPickedUp => _order['status'] == 'PICKED_UP';
+  // Backend réel retourne 'IN_TRANSIT', simulation dev utilise 'PICKED_UP'
+  bool get _isPickedUp =>
+      _order['status'] == 'IN_TRANSIT' || _order['status'] == 'PICKED_UP';
   bool get _isDelivered => _order['status'] == 'DELIVERED';
 
   LatLng get _targetLatLng => _isPickedUp ? _deliveryLatLng : _pickupLatLng;
@@ -83,24 +85,62 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   }
 
   static Future<BitmapDescriptor> _buildDriverIcon() async {
-    const double size = 96;
-    const double cx = size / 2, cy = size / 2;
+    const double size = 128;
+    const double cx = size / 2;
+    const double cy = size / 2;
+
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    canvas.drawCircle(
-      const Offset(cx, cy), 40,
-      Paint()..color = const Color(0x4033BCD4),
-    );
-    final path = Path()
-      ..moveTo(cx, cy - 18)
-      ..lineTo(cx + 14.4, cy + 10.8)
-      ..lineTo(cx - 14.4, cy + 10.8)
+
+    // Halo externe
+    canvas.drawCircle(const Offset(cx, cy), 48, Paint()..color = const Color(0x2533BCD4));
+    canvas.drawCircle(const Offset(cx, cy), 36, Paint()..color = const Color(0x4033BCD4));
+
+    // Ombre portée
+    final shadowPaint = Paint()
+      ..color = const Color(0x6000B4C8)
+      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6);
+    final shadowPath = Path()
+      ..moveTo(cx, cy - 22 + 4)
+      ..lineTo(cx + 16, cy + 14 + 4)
+      ..lineTo(cx, cy + 8 + 4)
+      ..lineTo(cx - 16, cy + 14 + 4)
       ..close();
-    canvas.drawPath(path, Paint()..color = const Color(0xFF33BCD4));
+    canvas.drawPath(shadowPath, shadowPaint);
+
+    // Cercle de base blanc 3D
+    canvas.drawCircle(const Offset(cx, cy + 4), 20, Paint()..color = const Color(0xFFFFFFFF));
+    canvas.drawCircle(const Offset(cx, cy + 4), 18, Paint()..color = const Color(0xFF1AB8CC));
+
+    // Flèche de navigation avec gradient 3D
+    final arrowPath = Path()
+      ..moveTo(cx, cy - 22)
+      ..lineTo(cx + 15, cy + 12)
+      ..lineTo(cx, cy + 6)
+      ..lineTo(cx - 15, cy + 12)
+      ..close();
+
+    canvas.drawPath(
+      arrowPath,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(cx, cy - 22),
+          const Offset(cx, cy + 12),
+          [const Color(0xFF5EEEFF), const Color(0xFF00A8C0)],
+        ),
+    );
+    canvas.drawPath(
+      arrowPath,
+      Paint()
+        ..color = const Color(0xCCFFFFFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0,
+    );
+
     final picture = recorder.endRecording();
     final img = await picture.toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: 48, height: 48);
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: 56, height: 56);
   }
 
   @override
@@ -115,14 +155,25 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   Future<void> _startNavigation() async {
     final style = await rootBundle.loadString(MapTheme.styleAsset);
     if (mounted) setState(() => _mapStyle = style);
-    await _loadRoute();
 
+    // GPS d'abord pour avoir une position de départ précise
     final initial = await NavigationService.requestAndGetPosition();
     if (initial != null && mounted) {
       setState(() => _driverPosition = initial);
     }
 
+    // Route calculée depuis la vraie position du driver
+    await _loadRoute();
+
+    // Lance le suivi GPS continu
     _locationSub = NavigationService.positionStream.listen(_onPosition);
+
+    // Mode conduite immédiat si position disponible
+    if (_driverPosition != null && mounted) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (mounted) _recenter();
+      });
+    }
   }
 
   Future<void> _loadRoute() async {
@@ -219,12 +270,19 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   }
 
   // ── Actions commande ──────────────────────────────────────────────────────
+  bool get _isDevOrder => _order['id']?.toString().startsWith('dev-') ?? false;
+
   Future<void> _pickup() async {
+    if (_isDevOrder) {
+      setState(() => _order = {..._order, 'status': 'PICKED_UP'});
+      await _loadRoute();
+      return;
+    }
     try {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.pickupOrder(_order['id']);
       setState(() => _order = updated);
-      await _loadRoute(); // recharge la route depuis pickup → delivery
+      await _loadRoute();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -234,6 +292,11 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   }
 
   Future<void> _deliver() async {
+    if (_isDevOrder) {
+      setState(() => _order = {..._order, 'status': 'DELIVERED'});
+      if (mounted) _showSuccessDialog();
+      return;
+    }
     try {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.deliverOrder(_order['id']);
@@ -249,60 +312,134 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
   void _showSuccessDialog() {
     final price = (_order['price'] as num?)?.toInt() ?? 0;
+    int selectedRating = 5;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72, height: 72,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF00C853),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check, color: Colors.white, size: 40),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.92),
+                  const Color(0xFF1A6B7A).withValues(alpha: 0.97),
+                ],
               ),
-              const SizedBox(height: 20),
-              const Text('Livraison effectuée !',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text('$price FCFA encaissés',
-                  style: const TextStyle(fontSize: 15, color: Colors.grey)),
-              const SizedBox(height: 8),
-              Text(_order['deliveryAddress'] ?? '',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54)),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    context.go('/driver/home');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00C853),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72, height: 72,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF00C853),
+                    shape: BoxShape.circle,
                   ),
-                  child: const Text('Retour à l\'accueil',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  child: const Icon(Icons.check, color: Colors.white, size: 40),
                 ),
-              ),
-            ],
+                const SizedBox(height: 20),
+                const Text(
+                  'Livraison effectuée !',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$price FCFA encaissés',
+                  style: const TextStyle(fontSize: 15, color: Colors.white70),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _order['deliveryAddress'] ?? '',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: Colors.white60),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 24),
+                // ── Notation ──
+                const Text(
+                  'Notez votre livraison',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final star = i + 1;
+                    return GestureDetector(
+                      onTap: () => setDialogState(() => selectedRating = star),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(
+                          star <= selectedRating ? Icons.star : Icons.star_border,
+                          color: star <= selectedRating
+                              ? const Color(0xFFFFD700)
+                              : Colors.white38,
+                          size: 36,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      context.go(_homeRoute);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00C853),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Retour à l\'accueil',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  String get _homeRoute =>
+      (_order['id']?.toString().startsWith('dev-') ?? false)
+          ? '/driver/thiak/home'
+          : '/driver/home';
 
   // ── Carte : marqueurs ─────────────────────────────────────────────────────
   Set<Marker> get _markers {
@@ -367,13 +504,20 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
           // ── Carte ──
           SizedBox.expand(
             child: GoogleMap(
-              initialCameraPosition:
-                  CameraPosition(target: _pickupLatLng, zoom: 13),
+              initialCameraPosition: _driverPosition != null
+                  ? CameraPosition(
+                      target: LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
+                      zoom: 17.5,
+                      bearing: _driverPosition!.heading,
+                      tilt: 55,
+                    )
+                  : CameraPosition(target: _pickupLatLng, zoom: 14),
               style: _mapStyle,
               onMapCreated: (controller) {
                 _mapController = controller;
-                Future.delayed(const Duration(milliseconds: 300), () {
-                  if (_driverPosition != null && _autoFollow) {
+                Future.delayed(const Duration(milliseconds: 400), () {
+                  if (!mounted) return;
+                  if (_driverPosition != null) {
                     _recenter();
                   } else {
                     _fitBounds();
@@ -381,12 +525,11 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                 });
               },
               onCameraMove: (_) {
-                // L'utilisateur a bougé la carte → pause auto-follow
                 if (_autoFollow) setState(() => _autoFollow = false);
               },
               polylines: _polylines,
               markers: _markers,
-              trafficEnabled: true,       // couche trafic en temps réel
+              trafficEnabled: false,
               myLocationEnabled: false,
               zoomControlsEnabled: false,
               mapToolbarEnabled: false,
@@ -420,7 +563,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                 children: [
                   if (_currentAlert == null) // masqué quand alerte visible
                     GestureDetector(
-                      onTap: () => context.go('/driver/home'),
+                      onTap: () => context.go(_homeRoute),
                       child: Container(
                         width: 44,
                         height: 44,
@@ -475,12 +618,19 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
             child: Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
               decoration: BoxDecoration(
-                color: Colors.white,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.92),
+                    const Color(0xFF1A6B7A).withValues(alpha: 0.97),
+                  ],
+                ),
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
+                    color: Colors.black.withValues(alpha: 0.25),
                     blurRadius: 20,
                   )
                 ],
@@ -510,7 +660,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                                 style: const TextStyle(
                                   fontSize: 34,
                                   fontWeight: FontWeight.w800,
-                                  color: Colors.black87,
+                                  color: Colors.white,
                                   height: 1,
                                 ),
                               ),
@@ -523,7 +673,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
+                            color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
@@ -533,13 +683,13 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
+                                  color: Colors.white,
                                 ),
                               ),
                               const Text(
                                 'ETA',
                                 style: TextStyle(
-                                    fontSize: 10, color: AppColors.primary),
+                                    fontSize: 10, color: Colors.white70),
                               ),
                             ],
                           ),
@@ -571,7 +721,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                     child: SizedBox(
                       height: 12,
                       child: VerticalDivider(
-                          color: Color(0xFFBDBDBD), thickness: 1.5),
+                          color: Colors.white38, thickness: 1.5),
                     ),
                   ),
                   _AddressRow(
@@ -587,14 +737,14 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                   Row(
                     children: [
                       const Icon(Icons.payments_outlined,
-                          size: 16, color: Colors.grey),
+                          size: 16, color: Colors.white70),
                       const SizedBox(width: 6),
                       Text(
                         '${((_order['price'] as num?)?.toInt() ?? 0)} FCFA',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
+                          color: Colors.white,
                         ),
                       ),
                     ],
@@ -770,11 +920,11 @@ class _AddressRow extends StatelessWidget {
               Text(label,
                   style: const TextStyle(
                       fontSize: 10,
-                      color: Colors.grey,
+                      color: Colors.white60,
                       fontWeight: FontWeight.w500)),
               Text(address,
                   style: const TextStyle(
-                      fontSize: 13, color: Colors.black87),
+                      fontSize: 13, color: Colors.white),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
             ],

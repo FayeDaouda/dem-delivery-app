@@ -44,7 +44,9 @@ class OrdersRepository {
   Future<Map<String, dynamic>> acceptOrder(String id) async {
     try {
       final response = await _dio.patch('/orders/$id/accept');
-      return response.data as Map<String, dynamic>;
+      // Backend retourne { message, order } — on extrait l'objet order
+      final data = response.data as Map<String, dynamic>;
+      return (data['order'] ?? data) as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible d\'accepter la commande.',
@@ -56,7 +58,8 @@ class OrdersRepository {
   Future<Map<String, dynamic>> pickupOrder(String id) async {
     try {
       final response = await _dio.patch('/orders/$id/pickup');
-      return response.data as Map<String, dynamic>;
+      final data = response.data as Map<String, dynamic>;
+      return (data['order'] ?? data) as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Erreur lors de la récupération.',
@@ -68,10 +71,22 @@ class OrdersRepository {
   Future<Map<String, dynamic>> deliverOrder(String id) async {
     try {
       final response = await _dio.patch('/orders/$id/deliver');
-      return response.data as Map<String, dynamic>;
+      final data = response.data as Map<String, dynamic>;
+      return (data['order'] ?? data) as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Erreur lors de la livraison.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> declineOrder(String id) async {
+    try {
+      await _dio.patch('/orders/$id/decline');
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de refuser la course.',
         e.response?.statusCode,
       );
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../profile/data/profile_repository.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -61,22 +62,31 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _navigate() async {
     final isLoggedIn = await AuthStorage.isLoggedIn();
-    final user = await AuthStorage.getUser();
-
     if (!mounted) return;
 
-    if (isLoggedIn) {
-      final role = user?['role'] as String?;
-      final vehicleType = user?['vehicleType'] as String?;
-      if (role == 'DRIVER' && vehicleType == 'TAXI') {
-        context.go('/driver/thiak/home');
-      } else if (role == 'DRIVER') {
-        context.go('/driver/home');
-      } else {
-        context.go('/client/home');
-      }
-    } else {
+    if (!isLoggedIn) {
       context.go('/phone');
+      return;
+    }
+
+    // Récupère les données fraîches depuis l'API (évite le cache obsolète)
+    Map<String, dynamic>? user;
+    try {
+      user = await ProfileRepository().getMe();
+    } catch (_) {
+      // fallback sur le cache local si l'API échoue
+      user = await AuthStorage.getUser();
+    }
+
+    if (!mounted) return;
+    final role = user?['role'] as String?;
+    final vehicleType = user?['vehicleType'] as String?;
+    if (role == 'DRIVER' && vehicleType == 'TAXI') {
+      context.go('/driver/thiak/home');
+    } else if (role == 'DRIVER') {
+      context.go('/driver/home');
+    } else {
+      context.go('/client/home');
     }
   }
 

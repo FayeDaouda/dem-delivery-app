@@ -20,6 +20,45 @@ class AvailableOrdersNotifier extends AsyncNotifier<List<Map<String, dynamic>>> 
     await _repo.acceptOrder(orderId);
     await refresh();
   }
+
+  /// Reçu via WebSocket — injecte une course dispatchée en temps réel.
+  /// Ignoré si une course est déjà affichée (ne pas écraser).
+  void injectSocketOrder(Map<String, dynamic> order) {
+    final current = state.value ?? [];
+    if (current.isEmpty) {
+      state = AsyncData([order]);
+    }
+  }
+
+  /// Retire une course par son id (offre expirée côté backend).
+  void removeOrder(String orderId) {
+    final current = state.value ?? [];
+    state = AsyncData(current.where((o) => o['id'] != orderId).toList());
+  }
+
+  /// MODE DEV — injecte une fausse commande sans appel API
+  void injectDevOrder() {
+    state = AsyncData([
+      {
+        'id': 'dev-order-001',
+        'status': 'PENDING',
+        'price': 2500,
+        'pickupAddress': 'Cité Keur Gorgui, Dakar',
+        'deliveryAddress': 'Marché Sandaga, Dakar',
+        'pickupLatitude': 14.7120,
+        'pickupLongitude': -17.4680,
+        'deliveryLatitude': 14.6941,
+        'deliveryLongitude': -17.4442,
+        'clientName': 'Moussa Diallo',
+        'clientPhone': '+221771234567',
+        'description': 'Colis fragile — 2 boîtes',
+      }
+    ]);
+  }
+
+  void clearDevOrder() {
+    state = const AsyncData([]);
+  }
 }
 
 final availableOrdersProvider =

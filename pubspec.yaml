@@ -33,6 +33,9 @@ dependencies:
   flutter_map: ^6.1.0
   latlong2: ^0.9.0
 
+  # WebSocket (temps réel — dispatch courses)
+  socket_io_client: ^2.0.3+1
+
   # UI
   pin_code_fields: ^8.0.1          # Champ OTP
   country_code_picker: ^3.0.0      # Indicatif téléphone
