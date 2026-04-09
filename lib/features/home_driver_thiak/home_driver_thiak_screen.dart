@@ -721,9 +721,9 @@ class _ThiakOrderSheet extends StatelessWidget {
               // Titre + countdown
               Row(
                 children: [
-                  const Icon(Icons.delivery_dining, color: Colors.white, size: 26),
+                  const Icon(Icons.directions_car_outlined, color: Colors.white, size: 26),
                   const SizedBox(width: 10),
-                  const Text('Nouvelle course',
+                  const Text('Nouveau passager',
                       style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
                   const Spacer(),
                   SizedBox(
@@ -755,7 +755,7 @@ class _ThiakOrderSheet extends StatelessWidget {
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Point de collecte',
+                      Text('Prise en charge',
                           style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11)),
                       Text(pickup,
                           style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
@@ -776,7 +776,7 @@ class _ThiakOrderSheet extends StatelessWidget {
                 child: Row(children: [
                   Icon(Icons.lock_outline, color: Colors.white.withValues(alpha: 0.4), size: 14),
                   const SizedBox(width: 10),
-                  Text('Destination révélée après collecte',
+                  Text('Destination révélée après prise en charge',
                       style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 12,
                           fontStyle: FontStyle.italic)),
                 ]),
