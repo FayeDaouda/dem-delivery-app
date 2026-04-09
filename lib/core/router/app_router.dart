@@ -51,7 +51,10 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/orders/create',
-      builder: (context, state) => const OrderCreateScreen(),
+      builder: (context, state) {
+        final type = state.uri.queryParameters['type'] ?? 'DELIVERY';
+        return OrderCreateScreen(orderType: type);
+      },
     ),
     GoRoute(
       path: '/orders/confirmation',

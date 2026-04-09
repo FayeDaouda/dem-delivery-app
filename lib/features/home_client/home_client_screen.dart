@@ -104,7 +104,7 @@ class _HomeClientScreenState extends State<HomeClientScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Que voulez-vous envoyer ?',
+                    'Que voulez-vous faire ?',
                     style: TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 18,
@@ -112,32 +112,43 @@ class _HomeClientScreenState extends State<HomeClientScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  // ── Transport humain (Thiak Thiak) ──
+                  _ServiceCard(
+                    icon: Icons.directions_car_outlined,
+                    label: 'Transport',
+                    subtitle: 'Thiak Thiak',
+                    color: const Color(0xFF1A6B7A),
+                    onTap: () => context.push('/orders/create?type=RIDE'),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // ── Livraison colis ──
+                  const Text(
+                    'Livraison',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       _ServiceCard(
                         icon: Icons.inventory_2_outlined,
                         label: 'Colis',
-                        onTap: () => context.push('/orders/create'),
+                        onTap: () => context.push('/orders/create?type=DELIVERY'),
                       ),
                       const SizedBox(width: 12),
                       _ServiceCard(
                         icon: Icons.restaurant_outlined,
                         label: 'Repas',
-                        onTap: () => context.push('/orders/create'),
+                        onTap: () => context.push('/orders/create?type=DELIVERY'),
                       ),
                       const SizedBox(width: 12),
                       _ServiceCard(
                         icon: Icons.more_horiz,
                         label: 'Autre',
-                        onTap: () => context.push('/orders/create'),
+                        onTap: () => context.push('/orders/create?type=DELIVERY'),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () => context.push('/orders/create'),
-                    icon: const Icon(Icons.add_location_alt_outlined),
-                    label: const Text('Nouvelle livraison'),
                   ),
                 ],
               ),
@@ -149,15 +160,54 @@ class _HomeClientScreenState extends State<HomeClientScreen> {
   }
 }
 
+/// Carte large (avec subtitle) — s'étend sur toute la largeur.
+/// Carte compacte (sans subtitle) — doit être placée dans un Row avec Expanded.
 class _ServiceCard extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? subtitle;
+  final Color? color;
   final VoidCallback onTap;
 
-  const _ServiceCard({required this.icon, required this.label, required this.onTap});
+  const _ServiceCard({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.subtitle,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final accent = color ?? AppColors.primary;
+
+    if (subtitle != null) {
+      // ── Carte large (ex: Transport) ──
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: accent.withValues(alpha: 0.4)),
+          ),
+          child: Row(children: [
+            Icon(icon, color: accent, size: 32),
+            const SizedBox(width: 14),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: TextStyle(color: accent, fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(subtitle!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            ]),
+            const Spacer(),
+            Icon(Icons.arrow_forward_ios, color: accent, size: 16),
+          ]),
+        ),
+      );
+    }
+
+    // ── Carte compacte (ex: Colis, Repas, Autre) — enveloppée dans Expanded ──
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -167,13 +217,11 @@ class _ServiceCard extends StatelessWidget {
             color: AppColors.card,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Column(
-            children: [
-              Icon(icon, color: AppColors.primary, size: 28),
-              const SizedBox(height: 6),
-              Text(label, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-            ],
-          ),
+          child: Column(children: [
+            Icon(icon, color: AppColors.primary, size: 28),
+            const SizedBox(height: 6),
+            Text(label, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+          ]),
         ),
       ),
     );

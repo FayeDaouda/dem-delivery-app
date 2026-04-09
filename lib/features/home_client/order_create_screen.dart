@@ -8,7 +8,9 @@ import '../../core/theme/app_theme.dart';
 import '../deliveries/data/orders_repository.dart';
 
 class OrderCreateScreen extends StatefulWidget {
-  const OrderCreateScreen({super.key});
+  /// 'RIDE' = transport humain (Thiak Thiak) | 'DELIVERY' = livraison colis
+  final String orderType;
+  const OrderCreateScreen({super.key, this.orderType = 'DELIVERY'});
 
   @override
   State<OrderCreateScreen> createState() => _OrderCreateScreenState();
@@ -120,24 +122,26 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
       return;
     }
     if (dLat == null || dLng == null) {
-      _showError('Entrez les coordonnées de livraison.');
+      _showError('Entrez les coordonnées de destination.');
       return;
     }
     if (_deliveryAddressCtrl.text.trim().isEmpty) {
-      _showError('Entrez l\'adresse de livraison.');
+      _showError('Entrez l\'adresse de destination.');
       return;
     }
 
     setState(() => _submitting = true);
     try {
       final order = await _repo.createOrder({
+        'orderType':         widget.orderType,
         'pickupAddress':     _pickupAddressCtrl.text.trim(),
         'pickupLatitude':    _pickupLat,
         'pickupLongitude':   _pickupLng,
         'deliveryAddress':   _deliveryAddressCtrl.text.trim(),
         'deliveryLatitude':  dLat,
         'deliveryLongitude': dLng,
-        'description':       _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
+        if (widget.orderType == 'DELIVERY')
+          'description': _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
       });
 
       if (mounted) context.pushReplacement('/orders/confirmation', extra: order);
@@ -158,12 +162,14 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Nouvelle course')),
+      appBar: AppBar(
+        title: Text(widget.orderType == 'RIDE' ? 'Réserver un transport' : 'Nouvelle livraison'),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
         children: [
           // ── Départ GPS ──
-          _SectionLabel(label: 'Point de départ'),
+          _SectionLabel(label: widget.orderType == 'RIDE' ? 'Où êtes-vous ?' : 'Point de départ'),
           const SizedBox(height: 8),
           Row(children: [
             Expanded(
@@ -215,15 +221,17 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
 
           const SizedBox(height: 20),
 
-          // ── Description ──
-          _SectionLabel(label: 'Description (optionnel)'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _descriptionCtrl,
-            decoration: const InputDecoration(hintText: 'Ex: médicaments, documents...'),
-          ),
-
-          const SizedBox(height: 28),
+          // ── Description (livraison uniquement) ──
+          if (widget.orderType == 'DELIVERY') ...[
+            _SectionLabel(label: 'Description (optionnel)'),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _descriptionCtrl,
+              decoration: const InputDecoration(hintText: 'Ex: médicaments, documents...'),
+            ),
+            const SizedBox(height: 28),
+          ] else
+            const SizedBox(height: 28),
 
           // ── Estimation prix ──
           _PriceEstimate(
@@ -240,7 +248,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
             child: _submitting
                 ? const SizedBox(height: 22, width: 22,
                     child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background))
-                : const Text('Commander'),
+                : Text(widget.orderType == 'RIDE' ? 'Réserver' : 'Commander'),
           ),
         ],
       ),
