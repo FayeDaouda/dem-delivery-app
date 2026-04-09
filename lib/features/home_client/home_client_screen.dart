@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 
+
 // Centre par défaut : Dakar
 const _dakar = LatLng(14.6937, -17.4441);
 
@@ -70,9 +71,8 @@ class _HomeClientScreenState extends State<HomeClientScreen> {
                   ),
                   const Spacer(),
                   GestureDetector(
-                    onTap: () async {
-                      await AuthStorage.clear();
-                      if (mounted) context.go('/phone');
+                    onTap: () {
+                      context.go('/client/profile');
                     },
                     child: Container(
                       padding: const EdgeInsets.all(10),
@@ -80,7 +80,7 @@ class _HomeClientScreenState extends State<HomeClientScreen> {
                         color: AppColors.surface.withOpacity(0.95),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.logout, color: AppColors.textSecondary, size: 20),
+                      child: const Icon(Icons.person, color: AppColors.primary, size: 20),
                     ),
                   ),
                 ],

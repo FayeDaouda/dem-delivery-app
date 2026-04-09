@@ -6,6 +6,7 @@ import '../../features/auth/driver_onboarding_screen.dart';
 import '../../features/home_client/home_client_screen.dart';
 import '../../features/home_driver/home_driver_screen.dart';
 import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
+import '../../features/client_profile/client_profile_screen.dart';
 import '../../features/splash/splash_screen.dart';
 
 final appRouter = GoRouter(
@@ -44,6 +45,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/client/home',
       builder: (context, state) => const HomeClientScreen(),
+    ),
+    GoRoute(
+      path: '/client/profile',
+      builder: (context, state) => const ClientProfileScreen(),
     ),
 
     // ── Driver Livraison (moto) ──
