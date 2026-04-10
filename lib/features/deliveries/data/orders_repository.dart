@@ -81,6 +81,23 @@ class OrdersRepository {
     }
   }
 
+  Future<Map<String, dynamic>> confirmPayment(
+      String id, String status, {String? note}) async {
+    try {
+      final response = await _dio.patch(
+        '/orders/$id/confirm-payment',
+        data: {'status': status, 'note': note},
+      );
+      final data = response.data as Map<String, dynamic>;
+      return (data['order'] ?? data) as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Erreur lors de la confirmation.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> createOrder(Map<String, dynamic> body) async {
     try {
       final response = await _dio.post('/orders', data: body);

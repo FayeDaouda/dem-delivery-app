@@ -294,18 +294,239 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   Future<void> _deliver() async {
     if (_isDevOrder) {
       setState(() => _order = {..._order, 'status': 'DELIVERED'});
-      if (mounted) _showSuccessDialog();
+      if (mounted) _showPaymentDialog();
       return;
     }
     try {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.deliverOrder(_order['id']);
       setState(() => _order = updated);
-      if (mounted) _showSuccessDialog();
+      if (mounted) _showPaymentDialog();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  // ── Dialogue : paiement reçu ? ────────────────────────────────────────────
+  void _showPaymentDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A2332),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.payments_outlined,
+                    color: AppColors.primary, size: 32),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _isRide ? 'Paiement reçu ?' : 'Paiement reçu ?',
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${((_order['price'] as num?)?.toInt() ?? 0)} FCFA',
+                style: const TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.primary),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Cash ou Mobile Money',
+                style: TextStyle(fontSize: 13, color: Colors.white54),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  // Problème
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _showDisputeDialog();
+                      },
+                      icon: const Icon(Icons.warning_amber_outlined, size: 18),
+                      label: const Text('Problème'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                        side: const BorderSide(color: Colors.orange),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Oui
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _confirmPayment('PAID');
+                      },
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text('Oui, reçu'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00C853),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Dialogue : signaler un problème de paiement ───────────────────────────
+  void _showDisputeDialog() {
+    final noteController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A2332),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Décrire le problème',
+                style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'L\'admin sera notifié immédiatement.',
+                style: TextStyle(fontSize: 12, color: Colors.white54),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: noteController,
+                maxLines: 3,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Ex: le client dit avoir payé par Wave mais je n\'ai rien reçu...',
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.07),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _showPaymentDialog(); // retour en arrière
+                      },
+                      child: const Text('Retour',
+                          style: TextStyle(color: Colors.white54)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final note = noteController.text.trim();
+                        if (note.isEmpty) return;
+                        Navigator.of(context).pop();
+                        _confirmPayment('DISPUTED', note: note);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: const Text('Signaler'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Appel API confirmation paiement ──────────────────────────────────────
+  Future<void> _confirmPayment(String status, {String? note}) async {
+    if (!_isDevOrder) {
+      try {
+        final repo = ref.read(ordersRepositoryProvider);
+        await repo.confirmPayment(_order['id'], status, note: note);
+      } catch (_) {
+        // Non bloquant — le driver passe à l'accueil quoi qu'il arrive
+      }
+    }
+    if (status == 'PAID') {
+      if (mounted) _showSuccessDialog();
+    } else {
+      // DISPUTED : message simple + retour accueil
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Problème signalé. L\'admin va prendre en charge.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) context.go(_homeRoute);
+        });
       }
     }
   }
