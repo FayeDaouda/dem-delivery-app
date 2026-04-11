@@ -41,6 +41,7 @@ dependencies:
   country_code_picker: ^3.0.0      # Indicatif téléphone
   loading_animation_widget: ^1.2.1 # Loaders
   flutter_svg: ^2.0.10             # Logo SVG
+  geocoding: ^4.0.0
 
 dev_dependencies:
   flutter_test:
