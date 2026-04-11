@@ -1,12 +1,18 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/providers/orders_provider.dart';
+import '../home_driver/navigation/map_theme.dart';
+import '../home_driver/navigation/navigation_service.dart';
 
 // Centre par défaut : Dakar
 const _dakar = LatLng(14.6937, -17.4441);
@@ -28,6 +34,16 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   bool _loadingOrders = false;
   bool _cancelling = false;
 
+  // ── Map ──────────────────────────────────────────────────────────────────
+  GoogleMapController? _mapController;
+  String? _mapStyle;
+  BitmapDescriptor? _clientIcon;
+
+  // ── GPS ──────────────────────────────────────────────────────────────────
+  StreamSubscription<Position>? _locationSub;
+  Position? _clientPosition;
+  bool _autoFollow = true;
+
   // ── Sheet rétractable ──────────────────────────────────────────────────────
   bool _sheetExpanded = true;
   late AnimationController _sheetAnim;
@@ -39,15 +55,22 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     _sheetAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 320),
-      value: 1.0, // 1 = ouvert
+      value: 1.0,
     );
     _sheetSlide = CurvedAnimation(parent: _sheetAnim, curve: Curves.easeInOut);
+    _loadMapStyle();
+    _buildClientIcon().then((icon) {
+      if (mounted) setState(() => _clientIcon = icon);
+    });
+    _startGPS();
     _loadUser();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkPendingOrder());
   }
 
   @override
   void dispose() {
+    _locationSub?.cancel();
+    _mapController?.dispose();
     _sheetAnim.dispose();
     super.dispose();
   }
@@ -59,6 +82,104 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       _sheetAnim.forward();
     }
     setState(() => _sheetExpanded = !_sheetExpanded);
+  }
+
+  // ── Map style ─────────────────────────────────────────────────────────────
+  Future<void> _loadMapStyle() async {
+    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    if (mounted) setState(() => _mapStyle = style);
+  }
+
+  // ── Marqueur client (point cyan + halo) ───────────────────────────────────
+  static Future<BitmapDescriptor> _buildClientIcon() async {
+    const double size = 96;
+    const double cx = size / 2;
+    const double cy = size / 2;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Halo semi-transparent
+    canvas.drawCircle(
+      const Offset(cx, cy),
+      38,
+      Paint()..color = const Color(0x4033BCD4),
+    );
+    // Point plein
+    canvas.drawCircle(
+      const Offset(cx, cy),
+      14,
+      Paint()..color = const Color(0xFF33BCD4),
+    );
+    // Bordure blanche
+    canvas.drawCircle(
+      const Offset(cx, cy),
+      14,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3,
+    );
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.toInt(), size.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(
+      bytes!.buffer.asUint8List(),
+      width: size / 2,
+      height: size / 2,
+    );
+  }
+
+  // ── GPS ──────────────────────────────────────────────────────────────────
+  Future<void> _startGPS() async {
+    final initial = await NavigationService.requestAndGetPosition();
+    if (initial != null && mounted) {
+      setState(() => _clientPosition = initial);
+      _centerOn(initial);
+    }
+    _locationSub = NavigationService.positionStream.listen(_onPosition);
+  }
+
+  void _onPosition(Position position) {
+    if (!mounted) return;
+    setState(() => _clientPosition = position);
+    if (_autoFollow) _centerOn(position);
+  }
+
+  void _centerOn(Position position) {
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(position.latitude, position.longitude),
+          zoom: 15.5,
+          bearing: 0,
+          tilt: 0,
+        ),
+      ),
+    );
+  }
+
+  void _recenter() {
+    if (_clientPosition == null) return;
+    setState(() => _autoFollow = true);
+    _centerOn(_clientPosition!);
+  }
+
+  // ── Marqueur client ───────────────────────────────────────────────────────
+  Set<Marker> get _clientMarkers {
+    if (_clientPosition == null) return {};
+    return {
+      Marker(
+        markerId: const MarkerId('client'),
+        position: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
+        icon: _clientIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        flat: true,
+        anchor: const Offset(0.5, 0.5),
+        zIndexInt: 2,
+      ),
+    };
   }
 
   // ── User ──────────────────────────────────────────────────────────────────
@@ -159,16 +280,59 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // ── Carte plein écran ──
-          FlutterMap(
-            options: const MapOptions(initialCenter: _dakar, initialZoom: 13),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.dem.app',
+          // ── Carte plein écran Google Maps style Waze ──
+          SizedBox.expand(
+            child: GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                target: _dakar,
+                zoom: 14,
               ),
-            ],
+              onMapCreated: (controller) {
+                _mapController = controller;
+                if (_clientPosition != null) _centerOn(_clientPosition!);
+              },
+              style: _mapStyle,
+              onCameraMove: (_) {
+                if (_autoFollow) setState(() => _autoFollow = false);
+              },
+              markers: _clientMarkers,
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              compassEnabled: false,
+              mapToolbarEnabled: false,
+            ),
           ),
+
+          // ── Bouton re-centrer ──
+          if (!_autoFollow)
+            Positioned(
+              left: 16,
+              bottom: _navBarHeight + 80,
+              child: GestureDetector(
+                onTap: _recenter,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.card, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.my_location,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
 
           // ── Header ──
           SafeArea(
