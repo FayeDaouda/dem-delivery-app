@@ -1,47 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/theme/app_theme.dart';
-import 'auth_service.dart';
+import '../../../core/theme/app_theme.dart';
+import '../providers/auth_provider.dart';
 
-class RoleSelectionScreen extends StatefulWidget {
+class RoleSelectionScreen extends ConsumerWidget {
   const RoleSelectionScreen({super.key});
 
-  @override
-  State<RoleSelectionScreen> createState() => _RoleSelectionScreenState();
-}
-
-class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
-  bool _loading = false;
-
-  Future<void> _select(String role, {String? vehicleType}) async {
-    setState(() => _loading = true);
+  Future<void> _select(BuildContext context, WidgetRef ref, String role, {String? vehicleType}) async {
     try {
-      await AuthService.setupProfile(role: role, vehicleType: vehicleType);
-      if (!mounted) return;
-
+      await ref.read(authProvider.notifier).setupProfile(role: role, vehicleType: vehicleType);
+      if (!context.mounted) return;
       if (role == 'DRIVER') {
-        // Driver → onboarding pour compléter le profil (nom + plaque)
         context.go('/driver/onboarding?type=$vehicleType');
       } else {
         context.go('/client/home');
       }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Une erreur est survenue. Réessayez.')),
-        );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loading = ref.watch(authProvider).isLoading;
+
     return Scaffold(
       body: Column(
         children: [
-          // ── Header gradient ──
           Container(
             decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
             child: SafeArea(
@@ -58,8 +46,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               ),
             ),
           ),
-
-          // ── Carte ──
           Expanded(
             child: Container(
               width: double.infinity,
@@ -72,51 +58,37 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Qui êtes-vous ?',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                    const Text('Qui êtes-vous ?',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
-                    const Text(
-                      'Choisissez votre profil pour continuer',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                    ),
+                    const Text('Choisissez votre profil pour continuer',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
                     const SizedBox(height: 32),
-
-                    // CLIENT
                     _RoleCard(
                       icon: Icons.shopping_bag_outlined,
                       title: 'Client',
                       subtitle: 'Je veux envoyer des colis ou me faire livrer',
                       color: AppColors.primary,
-                      loading: _loading,
-                      onTap: () => _select('CLIENT'),
+                      loading: loading,
+                      onTap: () => _select(context, ref, 'CLIENT'),
                     ),
                     const SizedBox(height: 16),
-
-                    // DRIVER LIVRAISON
                     _RoleCard(
                       icon: Icons.motorcycle,
                       title: 'Livreur — DEM Livraison',
                       subtitle: 'Je livre des colis à moto dans la ville',
                       color: AppColors.primaryMid,
-                      loading: _loading,
-                      onTap: () => _select('DRIVER', vehicleType: 'MOTO'),
+                      loading: loading,
+                      onTap: () => _select(context, ref, 'DRIVER', vehicleType: 'MOTO'),
                     ),
                     const SizedBox(height: 16),
-
-                    // DRIVER THIAK THIAK
                     _RoleCard(
                       icon: Icons.directions_car_outlined,
                       title: 'Chauffeur — Thiak Thiak',
                       subtitle: 'Je transporte des passagers en taxi / clando',
                       color: AppColors.primaryDark,
-                      loading: _loading,
-                      onTap: () => _select('DRIVER', vehicleType: 'TAXI'),
+                      loading: loading,
+                      onTap: () => _select(context, ref, 'DRIVER', vehicleType: 'TAXI'),
                     ),
                   ],
                 ),
@@ -160,8 +132,7 @@ class _RoleCard extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 52,
-              height: 52,
+              width: 52, height: 52,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(14),
@@ -174,17 +145,9 @@ class _RoleCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      )),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 3),
-                  Text(subtitle,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      )),
+                  Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                 ],
               ),
             ),

@@ -1,51 +1,48 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
-import '../../core/theme/app_theme.dart';
-import 'auth_service.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/gradient_button.dart';
+import '../providers/auth_provider.dart';
 
-class OtpScreen extends StatefulWidget {
+class OtpScreen extends ConsumerStatefulWidget {
   final String phone;
   const OtpScreen({super.key, required this.phone});
 
   @override
-  State<OtpScreen> createState() => _OtpScreenState();
+  ConsumerState<OtpScreen> createState() => _OtpScreenState();
 }
 
-class _OtpScreenState extends State<OtpScreen> {
+class _OtpScreenState extends ConsumerState<OtpScreen> {
   String _code = '';
-  bool _loading = false;
   bool _resending = false;
 
   Future<void> _verifyOtp() async {
     if (_code.length < 4) return;
-    setState(() => _loading = true);
     try {
-      final data = await AuthService.verifyOtp(phone: widget.phone, code: _code);
+      final data = await ref.read(authProvider.notifier).verifyOtp(
+            phone: widget.phone,
+            code: _code,
+          );
       if (!mounted) return;
-
-      final user = data['user'] as Map<String, dynamic>;
-      final isNew = data['isNew'] as bool;
-
-      if (isNew) {
-        // Nouveau compte → choisir son rôle
-        context.go('/role-selection');
-        return;
-      }
-
-      _navigateByRole(user);
-    } on Exception {
+      _navigate(data);
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Code invalide ou expiré. Réessayez.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _navigateByRole(Map<String, dynamic> user) {
+  void _navigate(Map<String, dynamic> data) {
+    final user = data['user'] as Map<String, dynamic>;
+    final isNew = data['isNew'] as bool;
+
+    if (isNew) {
+      context.go('/role-selection');
+      return;
+    }
+
     final role = user['role'] as String;
     final vehicleType = user['vehicleType'] as String?;
 
@@ -60,21 +57,22 @@ class _OtpScreenState extends State<OtpScreen> {
 
   Future<void> _resend() async {
     setState(() => _resending = true);
-    await AuthService.sendOtp(widget.phone);
-    if (mounted) {
-      setState(() => _resending = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Code renvoyé !')),
-      );
-    }
+    try {
+      await ref.read(authProvider.notifier).sendOtp(widget.phone);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code renvoyé !')));
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _resending = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final loading = ref.watch(authProvider).isLoading;
+
     return Scaffold(
       body: Column(
         children: [
-          // ── Header gradient ──
           Container(
             decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
             child: SafeArea(
@@ -92,10 +90,8 @@ class _OtpScreenState extends State<OtpScreen> {
                             icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                           ),
                           const Spacer(),
-                          Text(
-                            '+221 ${widget.phone}',
-                            style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
-                          ),
+                          Text('+221 ${widget.phone}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
                           const SizedBox(width: 16),
                         ],
                       ),
@@ -115,8 +111,6 @@ class _OtpScreenState extends State<OtpScreen> {
               ),
             ),
           ),
-
-          // ── Carte ──
           Expanded(
             child: Container(
               width: double.infinity,
@@ -129,15 +123,11 @@ class _OtpScreenState extends State<OtpScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Vérification',
-                      style: TextStyle(color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.w800),
-                    ),
+                    const Text('Vérification',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
-                    Text(
-                      'Code envoyé au +221 ${widget.phone}',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                    ),
+                    Text('Code envoyé au +221 ${widget.phone}',
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
                     const SizedBox(height: 36),
                     PinCodeTextField(
                       appContext: context,
@@ -158,17 +148,16 @@ class _OtpScreenState extends State<OtpScreen> {
                       ),
                       enableActiveFill: true,
                       textStyle: const TextStyle(
-                        color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.w700),
+                          color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.w700),
                       onChanged: (val) => _code = val,
                       onCompleted: (_) => _verifyOtp(),
                     ),
                     const SizedBox(height: 32),
-                    _GradientButton(label: 'Valider', loading: _loading, onTap: _verifyOtp),
+                    GradientButton(label: 'Valider', loading: loading, onTap: _verifyOtp),
                     const SizedBox(height: 20),
                     Center(
                       child: _resending
-                          ? const SizedBox(height: 20, width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                           : TextButton(
                               onPressed: _resend,
                               child: const Text('Renvoyer le code',
@@ -181,38 +170,6 @@ class _OtpScreenState extends State<OtpScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _GradientButton extends StatelessWidget {
-  final String label;
-  final bool loading;
-  final VoidCallback onTap;
-  const _GradientButton({required this.label, required this.loading, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: loading ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        height: 54,
-        decoration: BoxDecoration(
-          gradient: loading
-              ? const LinearGradient(colors: [AppColors.card, AppColors.card])
-              : const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark]),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Center(
-          child: loading
-              ? const SizedBox(height: 22, width: 22,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Text(label,
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-        ),
       ),
     );
   }

@@ -137,10 +137,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     icon: Icons.list_alt,
                     title: 'Mes commandes',
                     onTap: () {
-                      // context.push('/orders/my');
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      context.push('/orders/my');
+                      /*ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Bientôt disponible')),
-                      );
+                      );*/
                     },
                   ),
                   const SizedBox(height: 12),

@@ -1,13 +1,22 @@
 import 'package:go_router/go_router.dart';
-import '../../features/auth/phone_screen.dart';
-import '../../features/auth/otp_screen.dart';
-import '../../features/auth/role_selection_screen.dart';
-import '../../features/auth/driver_onboarding_screen.dart';
+import '../../features/auth/screens/phone_screen.dart';
+import '../../features/auth/screens/otp_screen.dart';
+import '../../features/auth/screens/role_selection_screen.dart';
+import '../../features/auth/screens/driver_onboarding_screen.dart';
 import '../../features/home_client/home_client_screen.dart';
+import '../../features/home_client/order_create_screen.dart';
+import '../../features/home_client/order_confirmation_screen.dart';
 import '../../features/home_driver/home_driver_screen.dart';
 import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
+
 import '../../features/client_profile/client_profile_screen.dart';
-import '../../features/splash/splash_screen.dart';
+import '../../features/home_client/my_orders_screen.dart';
+
+
+import '../../features/splash/screens/splash_screen.dart';
+import '../../features/profile/screens/driver_profile_screen.dart';
+import '../../features/home_driver/active_order_screen.dart';
+
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
@@ -50,6 +59,24 @@ final appRouter = GoRouter(
       path: '/client/profile',
       builder: (context, state) => const ClientProfileScreen(),
     ),
+    GoRoute(
+      path: '/orders/create',
+      builder: (context, state) {
+        final type = state.uri.queryParameters['type'] ?? 'DELIVERY';
+        return OrderCreateScreen(orderType: type);
+      },
+    ),
+    GoRoute(
+      path: '/orders/confirmation',
+      builder: (context, state) {
+        final order = state.extra as Map<String, dynamic>;
+        return OrderConfirmationScreen(order: order);
+      },
+    ),
+    GoRoute(
+      path: '/orders/my',
+      builder: (context, state) => const MyOrdersScreen(),
+    ),
 
     // ── Driver Livraison (moto) ──
     GoRoute(
@@ -61,6 +88,21 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/driver/thiak/home',
       builder: (context, state) => const HomeDriverThiakScreen(),
+    ),
+
+    // ── Active order (driver) ──
+    GoRoute(
+      path: '/driver/order/active',
+      builder: (context, state) {
+        final order = state.extra as Map<String, dynamic>;
+        return ActiveOrderScreen(order: order);
+      },
+    ),
+
+    // ── Profil driver ──
+    GoRoute(
+      path: '/driver/profile',
+      builder: (context, state) => const DriverProfileScreen(),
     ),
   ],
 );

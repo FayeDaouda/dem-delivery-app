@@ -1,150 +1,363 @@
-import 'package:dio/dio.dart';
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
-import 'package:latlong2/latlong.dart';
-import '../../core/api/api_client.dart';
-import '../../core/storage/auth_storage.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 import '../../core/theme/app_theme.dart';
+import '../../features/deliveries/providers/orders_provider.dart';
+import '../../features/profile/providers/profile_provider.dart';
+import 'navigation/map_theme.dart';
+import 'navigation/navigation_service.dart';
 
 const _dakar = LatLng(14.6937, -17.4441);
 
-class HomeDriverScreen extends StatefulWidget {
+class HomeDriverScreen extends ConsumerStatefulWidget {
   const HomeDriverScreen({super.key});
 
   @override
-  State<HomeDriverScreen> createState() => _HomeDriverScreenState();
+  ConsumerState<HomeDriverScreen> createState() => _HomeDriverScreenState();
 }
 
-class _HomeDriverScreenState extends State<HomeDriverScreen> {
-  Map<String, dynamic>? _user;
-  bool _isAvailable = false;
-  bool _togglingAvailability = false;
-  List<dynamic> _availableOrders = [];
-  bool _loadingOrders = false;
+class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
+  // ── Map ──────────────────────────────────────────────────────────────────
+  GoogleMapController? _mapController;
+  String? _mapStyle;
+  BitmapDescriptor? _driverIcon;
+
+  // ── GPS ──────────────────────────────────────────────────────────────────
+  StreamSubscription<Position>? _locationSub;
+  Position? _driverPosition;
+  bool _autoFollow = true;
+
+  // ── Countdown nouvelle course ─────────────────────────────────────────────
+  int _countdown = 20;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadUser();
+    _loadMapStyle();
+    _buildDriverIcon().then((icon) {
+      if (mounted) setState(() => _driverIcon = icon);
+    });
+    _startGPS();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(profileProvider.notifier).fetchProfile(goOnlineIfOffline: true);
+    });
   }
 
-  Future<void> _loadUser() async {
-    final user = await AuthStorage.getUser();
-    if (mounted) {
-      setState(() {
-        _user = user;
-        _isAvailable = user?['isAvailable'] ?? false;
-      });
-      if (_isAvailable) _loadAvailableOrders();
+  @override
+  void dispose() {
+    _locationSub?.cancel();
+    _mapController?.dispose();
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    setState(() => _countdown = 20);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() => _countdown--);
+      if (_countdown <= 0) {
+        t.cancel();
+        ref.read(availableOrdersProvider.notifier).refresh();
+      }
+    });
+  }
+
+  void _cancelCountdown() {
+    _countdownTimer?.cancel();
+    if (mounted) setState(() => _countdown = 20);
+  }
+
+  // ── Map style ─────────────────────────────────────────────────────────────
+  Future<void> _loadMapStyle() async {
+    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    if (mounted) setState(() => _mapStyle = style);
+  }
+
+  // ── Marqueur triangle Waze ────────────────────────────────────────────────
+  static Future<BitmapDescriptor> _buildDriverIcon() async {
+    const double size = 96;
+    const double cx = size / 2;
+    const double cy = size / 2;
+    const double haloR = 40;
+    const double arrowR = 18;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Halo semi-transparent
+    canvas.drawCircle(
+      const Offset(cx, cy),
+      haloR,
+      Paint()..color = const Color(0x4033BCD4),
+    );
+
+    // Triangle pointant vers le haut
+    final path = Path()
+      ..moveTo(cx, cy - arrowR)
+      ..lineTo(cx + arrowR * 0.8, cy + arrowR * 0.6)
+      ..lineTo(cx - arrowR * 0.8, cy + arrowR * 0.6)
+      ..close();
+    canvas.drawPath(path, Paint()..color = const Color(0xFF33BCD4));
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.toInt(), size.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(
+      bytes!.buffer.asUint8List(),
+      width: size / 2,
+      height: size / 2,
+    );
+  }
+
+  // ── GPS ──────────────────────────────────────────────────────────────────
+  Future<void> _startGPS() async {
+    final initial = await NavigationService.requestAndGetPosition();
+    if (initial != null && mounted) {
+      setState(() => _driverPosition = initial);
+      _centerOn(initial);
     }
+
+    _locationSub = NavigationService.positionStream.listen(_onPosition);
   }
 
+  void _onPosition(Position position) {
+    if (!mounted) return;
+    setState(() => _driverPosition = position);
+    if (_autoFollow) _centerOn(position);
+  }
+
+  void _centerOn(Position position) {
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(position.latitude, position.longitude),
+          zoom: 15.5, // vue rue détaillée style Waze
+          bearing: 0, // nord fixe — pas de rotation sur l'écran d'accueil
+          tilt: 0, // plat = labels quartiers + POI visibles
+        ),
+      ),
+    );
+  }
+
+  void _recenter() {
+    if (_driverPosition == null) return;
+    setState(() => _autoFollow = true);
+    _centerOn(_driverPosition!);
+  }
+
+  // ── Marker driver triangle Waze ───────────────────────────────────────────
+  Set<Marker> get _driverMarkers {
+    if (_driverPosition == null) return {};
+    return {
+      Marker(
+        markerId: const MarkerId('driver'),
+        position: LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
+        icon:
+            _driverIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        flat: true,
+        rotation: _driverPosition!.heading,
+        anchor: const Offset(0.5, 0.5),
+        zIndexInt: 2,
+      ),
+    };
+  }
+
+  // ── Actions ───────────────────────────────────────────────────────────────
   Future<void> _toggleAvailability() async {
-    setState(() => _togglingAvailability = true);
     try {
-      final res = await ApiClient.dio.patch('/users/driver/availability');
-      final newAvailability = res.data['isAvailable'] as bool;
-
-      // Mettre à jour le stockage local
-      if (_user != null) {
-        _user!['isAvailable'] = newAvailability;
-        await AuthStorage.saveUser(_user!);
-      }
-
-      if (mounted) {
-        setState(() => _isAvailable = newAvailability);
-        if (newAvailability) _loadAvailableOrders();
-      }
+      await ref.read(profileProvider.notifier).toggleAvailability();
+      final isAvailable = ref.read(profileProvider).isAvailable;
+      if (isAvailable) ref.read(availableOrdersProvider.notifier).refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur. Réessayez.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
-    } finally {
-      if (mounted) setState(() => _togglingAvailability = false);
-    }
-  }
-
-  Future<void> _loadAvailableOrders() async {
-    setState(() => _loadingOrders = true);
-    try {
-      final res = await ApiClient.dio.get('/orders/available');
-      if (mounted) setState(() => _availableOrders = res.data as List);
-    } on DioException {
-      // ignore
-    } finally {
-      if (mounted) setState(() => _loadingOrders = false);
     }
   }
 
   Future<void> _acceptOrder(String orderId) async {
-    await ApiClient.dio.patch('/orders/$orderId/accept');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Commande acceptée !')),
-      );
-      _loadAvailableOrders();
+    try {
+      final order = await ref
+          .read(ordersRepositoryProvider)
+          .acceptOrder(orderId);
+      if (mounted) context.push('/driver/order/active', extra: order);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final profile = ref.watch(profileProvider);
+    final isAvailable = profile.isAvailable;
+    final ordersAsync = ref.watch(availableOrdersProvider);
+    // En cas d'erreur API, on traite comme liste vide (pas d'affichage d'erreur)
+    final orders = ordersAsync.value ?? [];
+
+    // Mise en ligne auto → charge les commandes
+    ref.listen<ProfileState>(profileProvider, (prev, next) {
+      if (!(prev?.isAvailable ?? false) && next.isAvailable) {
+        ref.read(availableOrdersProvider.notifier).refresh();
+      }
+    });
+
+    // Détecte l'arrivée d'une nouvelle course → recenter + countdown
+    ref.listen<AsyncValue<List<Map<String, dynamic>>>>(
+      availableOrdersProvider,
+      (prev, next) {
+        final prevList = prev?.value ?? [];
+        final nextList = next.value ?? [];
+        if (nextList.isNotEmpty && prevList.isEmpty && isAvailable) {
+          setState(() => _autoFollow = true);
+          if (_driverPosition != null) _centerOn(_driverPosition!);
+          _startCountdown();
+        } else if (nextList.isEmpty) {
+          _cancelCountdown();
+        }
+      },
+    );
+
     return Scaffold(
       body: Stack(
         children: [
-          // Carte plein écran
-          FlutterMap(
-            options: const MapOptions(initialCenter: _dakar, initialZoom: 13),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.dem.app',
+          // ── Carte plein écran style Waze sombre ──
+          SizedBox.expand(
+            child: GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                target: _dakar,
+                zoom: 14,
               ),
-            ],
+              onMapCreated: (controller) {
+                _mapController = controller;
+                if (_driverPosition != null) _centerOn(_driverPosition!);
+              },
+              style: _mapStyle,
+              onCameraMove: (_) {
+                if (_autoFollow) setState(() => _autoFollow = false);
+              },
+              markers: _driverMarkers,
+              trafficEnabled: isAvailable && orders.isNotEmpty,
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              compassEnabled: false,
+              mapToolbarEnabled: false,
+            ),
           ),
 
-          // Header
+          // ── Toggle disponibilité + profil (header) ──
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface.withOpacity(0.95),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.circle,
-                          size: 10,
-                          color: _isAvailable ? AppColors.online : AppColors.offline,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _isAvailable ? 'En ligne' : 'Hors ligne',
-                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
-                        ),
-                      ],
+                  // Toggle
+                  GestureDetector(
+                    onTap: profile.isLoading ? null : _toggleAvailability,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isAvailable
+                            ? AppColors.primary
+                            : Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.circle,
+                            size: 8,
+                            color: isAvailable
+                                ? Colors.white
+                                : AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isAvailable ? 'En ligne' : 'Hors ligne',
+                            style: TextStyle(
+                              color: isAvailable
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          profile.isLoading
+                              ? const SizedBox(
+                                  width: 28,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Switch.adaptive(
+                                  value: isAvailable,
+                                  onChanged: (_) => _toggleAvailability(),
+                                  activeThumbColor: Colors.white,
+                                  activeTrackColor: Colors.white.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                  inactiveThumbColor: AppColors.textSecondary,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                        ],
+                      ),
                     ),
                   ),
                   const Spacer(),
+                  // Profil
                   GestureDetector(
-                    onTap: () async {
-                      await AuthStorage.clear();
-                      if (mounted) context.go('/phone');
-                    },
+                    onTap: () => context.push('/driver/profile'),
                     child: Container(
-                      padding: const EdgeInsets.all(10),
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
-                        color: AppColors.surface.withOpacity(0.95),
+                        color: Colors.black.withValues(alpha: 0.7),
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                          ),
+                        ],
                       ),
-                      child: const Icon(Icons.logout, color: AppColors.textSecondary, size: 20),
+                      child: const Icon(
+                        Icons.person_outline,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                   ),
                 ],
@@ -152,118 +365,79 @@ class _HomeDriverScreenState extends State<HomeDriverScreen> {
             ),
           ),
 
-          // Bottom sheet driver
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 20)],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Toggle ON/OFF
-                  Row(
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Bonjour, ${_user?['name'] ?? 'Driver'} 👋',
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _isAvailable ? 'Vous recevez des commandes' : 'Activez pour recevoir des courses',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                          ),
-                        ],
+          // ── Bouton re-centrer (boussole) — overlay quand on dézoom ──
+          if (!_autoFollow)
+            Positioned(
+              left: 16,
+              bottom: 220,
+              child: GestureDetector(
+                onTap: _recenter,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.card, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 12,
                       ),
-                      const Spacer(),
-                      _togglingAvailability
-                          ? const SizedBox(
-                              height: 32,
-                              width: 32,
-                              child: CircularProgressIndicator(strokeWidth: 3),
-                            )
-                          : GestureDetector(
-                              onTap: _toggleAvailability,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                width: 64,
-                                height: 34,
-                                decoration: BoxDecoration(
-                                  color: _isAvailable ? AppColors.primary : AppColors.card,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: AnimatedAlign(
-                                  duration: const Duration(milliseconds: 300),
-                                  alignment: _isAvailable ? Alignment.centerRight : Alignment.centerLeft,
-                                  child: Container(
-                                    margin: const EdgeInsets.all(4),
-                                    width: 26,
-                                    height: 26,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
                     ],
                   ),
-
-                  // Commandes disponibles
-                  if (_isAvailable) ...[
-                    const SizedBox(height: 16),
-                    const Divider(color: AppColors.card),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Text(
-                          'Courses disponibles',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_loadingOrders)
-                          const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        else
-                          GestureDetector(
-                            onTap: _loadAvailableOrders,
-                            child: const Icon(Icons.refresh, color: AppColors.primary, size: 20),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (_availableOrders.isEmpty)
-                      const Text(
-                        'Aucune course pour l\'instant...',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                      )
-                    else
-                      ...(_availableOrders.take(3).map((order) => _OrderCard(
-                            order: order,
-                            onAccept: () => _acceptOrder(order['id']),
-                          ))),
-                  ],
-                ],
+                  child: const Icon(
+                    Icons.my_location,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                ),
               ),
+            ),
+
+          // ── Bottom sheet — 3 états (toujours visible) ──
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              switchInCurve: Curves.easeOutBack,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, anim) {
+                final slide =
+                    Tween<Offset>(
+                      begin: const Offset(0, 1),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
+                    );
+                return SlideTransition(
+                  position: slide,
+                  child: FadeTransition(opacity: anim, child: child),
+                );
+              },
+              child: isAvailable && orders.isNotEmpty
+                  // ── État 3 : nouvelle course ──
+                  ? _OrderNotificationSheet(
+                      key: const ValueKey('order'),
+                      order: orders.first,
+                      countdown: _countdown,
+                      onAccept: () {
+                        _cancelCountdown();
+                        _acceptOrder(orders.first['id']);
+                      },
+                      onDecline: () {
+                        _cancelCountdown();
+                        ref.read(availableOrdersProvider.notifier).refresh();
+                      },
+                    )
+                  // ── État 1 : accueil normal ──
+                  : _NormalSheet(
+                      key: const ValueKey('normal'),
+                      profile: profile,
+                      isAvailable: isAvailable,
+                      ordersLoading: ordersAsync.isLoading,
+                      onToggle: _toggleAvailability,
+                    ),
             ),
           ),
         ],
@@ -272,74 +446,430 @@ class _HomeDriverScreenState extends State<HomeDriverScreen> {
   }
 }
 
-class _OrderCard extends StatelessWidget {
-  final Map<String, dynamic> order;
-  final VoidCallback onAccept;
+// ── Glassmorphism sheet base ──────────────────────────────────────────────────
+class _GlassSheet extends StatelessWidget {
+  final Widget child;
 
-  const _OrderCard({required this.order, required this.onAccept});
+  const _GlassSheet({required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.delivery_dining, color: AppColors.primary, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  order['pickupAddress'] ?? '',
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  '→ ${order['deliveryAddress'] ?? ''}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+    const radius = BorderRadius.vertical(top: Radius.circular(28));
+    return ClipRRect(
+      borderRadius: radius,
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.80),
+                Colors.white.withValues(alpha: 0.70),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${order['price']?.toInt()} F',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+            border: Border.all(
+              color: Colors.white.withValues(
+                alpha: MapTheme.isNight ? 0.15 : 0.50,
               ),
-              const SizedBox(height: 4),
-              GestureDetector(
-                onTap: onAccept,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Accepter',
-                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ),
+              width: 0.8,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 32,
+                offset: const Offset(0, -4),
               ),
             ],
           ),
-        ],
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// ── État 1 : accueil normal ───────────────────────────────────────────────────
+class _NormalSheet extends StatelessWidget {
+  final dynamic profile;
+  final bool isAvailable;
+  final bool ordersLoading;
+  final VoidCallback onToggle;
+
+  const _NormalSheet({
+    super.key,
+    required this.profile,
+    required this.isAvailable,
+    required this.ordersLoading,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isNight = MapTheme.isNight;
+    const textPrimary = Color(0xFF1A1A2E);
+    final textSecondary = const Color(0xFF1A1A2E).withValues(alpha: 0.55);
+
+    return _GlassSheet(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: isNight ? 0.25 : 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.name.isNotEmpty
+                          ? 'Bonjour, ${profile.name} 👋'
+                          : 'Bonjour 👋',
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isAvailable
+                          ? 'En attente de courses...'
+                          : 'Activez pour recevoir des courses',
+                      style: TextStyle(color: textSecondary, fontSize: 13),
+                    ),
+                  ],
+                ),
+                if (ordersLoading) ...[
+                  const Spacer(),
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (isAvailable) ...[
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  _StatPill(
+                    icon: Icons.route_outlined,
+                    label: '0 courses',
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  _StatPill(
+                    icon: Icons.star_outline,
+                    label: '—',
+                    color: AppColors.primaryMid,
+                  ),
+                  const SizedBox(width: 10),
+                  _StatPill(
+                    icon: Icons.monetization_on_outlined,
+                    label: '0 FCFA',
+                    color: AppColors.primaryDark,
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── État 3 : notification nouvelle course ─────────────────────────────────────
+class _OrderNotificationSheet extends StatelessWidget {
+  final Map<String, dynamic> order;
+  final int countdown;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  const _OrderNotificationSheet({
+    super.key,
+    required this.order,
+    required this.countdown,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final price = (order['price'] as num?)?.toInt() ?? 0;
+    final pickup = order['pickupAddress'] ?? '';
+    final delivery = order['deliveryAddress'] ?? '';
+
+    return _GlassSheet(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.primary, width: 2)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header : titre + countdown
+            Row(
+              children: [
+                const Icon(
+                  Icons.delivery_dining,
+                  color: AppColors.primary,
+                  size: 26,
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Nouvelle course',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                // Countdown circulaire
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: countdown / 20,
+                        strokeWidth: 3,
+                        backgroundColor: AppColors.card,
+                        color: countdown > 8
+                            ? AppColors.primary
+                            : Colors.orange,
+                      ),
+                      Text(
+                        '$countdown',
+                        style: TextStyle(
+                          color: countdown > 8
+                              ? AppColors.primary
+                              : Colors.orange,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Adresses
+            _AddressRow(
+              icon: Icons.circle,
+              color: const Color(0xFF4CAF50),
+              label: 'Récupération',
+              address: pickup,
+            ),
+            Container(
+              margin: const EdgeInsets.only(left: 10),
+              width: 1.5,
+              height: 16,
+              color: AppColors.card,
+            ),
+            _AddressRow(
+              icon: Icons.location_on,
+              color: AppColors.primary,
+              label: 'Livraison',
+              address: delivery,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Prix
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$price FCFA',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Boutons
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onDecline,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.card, width: 1.5),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Text(
+                        'Refuser',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: GestureDetector(
+                    onTap: onAccept,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Text(
+                        'Accepter',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddressRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String address;
+
+  const _AddressRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.address,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 14),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 10,
+                ),
+              ),
+              Text(
+                address,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _StatPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
