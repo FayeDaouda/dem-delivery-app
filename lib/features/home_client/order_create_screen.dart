@@ -11,12 +11,13 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
 
 // ─── Heights par step ────────────────────────────────────────────────────────
-const _kPanelHeights = [180.0, 260.0, 260.0]; // step 0, 1, 2
+const _kPanelHeights = [180.0, 240.0, 260.0, 260.0]; // step 0, 1, 2, 3
 
 class OrderCreateScreen extends StatefulWidget {
   final String orderType;
@@ -74,6 +75,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
   bool _submitting   = false;
   Timer? _surgeDebounce;
   List<LatLng> _routePoints = [];
+  Map<String, dynamic>? _currentUser;
 
   @override
   void initState() {
@@ -81,6 +83,19 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     _pageCtrl = PageController();
     _loadMapStyle();
     _fetchGpsInit();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await AuthStorage.getUser();
+    if (mounted) setState(() => _currentUser = user);
+  }
+
+  void _fillMe(TextEditingController nameCtrl, TextEditingController phoneCtrl) {
+    if (_currentUser != null) {
+      nameCtrl.text = _currentUser!['name'] ?? _currentUser!['firstName'] ?? '';
+      phoneCtrl.text = (_currentUser!['phone'] ?? '').replaceFirst('+221', '');
+    }
   }
 
   @override
@@ -573,6 +588,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
             curve: Curves.easeInOut,
+            margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -605,19 +621,25 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
                             ),
                             _Step1Panel(
                               orderType: widget.orderType,
-                              senderNameCtrl: _senderNameCtrl,
-                              senderPhoneCtrl: _senderPhoneCtrl,
-                              receiverNameCtrl: _receiverNameCtrl,
-                              receiverPhoneCtrl: _receiverPhoneCtrl,
-                              descriptionCtrl: _descriptionCtrl,
-                              onPickSender: () => _pickContact(nameCtrl: _senderNameCtrl, phoneCtrl: _senderPhoneCtrl),
-                              onPickReceiver: () => _pickContact(nameCtrl: _receiverNameCtrl, phoneCtrl: _receiverPhoneCtrl),
-                              onNext: () {
-                                _updateEstimate();
-                                _goStep(2);
-                              },
+                              nameCtrl: _senderNameCtrl,
+                              phoneCtrl: _senderPhoneCtrl,
+                              onPickContact: () => _pickContact(nameCtrl: _senderNameCtrl, phoneCtrl: _senderPhoneCtrl),
+                              onPickMe: () => _fillMe(_senderNameCtrl, _senderPhoneCtrl),
+                              onNext: () => _goStep(2),
                             ),
                             _Step2Panel(
+                              orderType: widget.orderType,
+                              nameCtrl: _receiverNameCtrl,
+                              phoneCtrl: _receiverPhoneCtrl,
+                              descriptionCtrl: _descriptionCtrl,
+                              onPickContact: () => _pickContact(nameCtrl: _receiverNameCtrl, phoneCtrl: _receiverPhoneCtrl),
+                              onPickMe: () => _fillMe(_receiverNameCtrl, _receiverPhoneCtrl),
+                              onNext: () {
+                                _updateEstimate();
+                                _goStep(3);
+                              },
+                            ),
+                            _Step3Panel(
                               pickupLabel: _pickupCtrl.text.isNotEmpty ? _pickupCtrl.text : 'Départ',
                               deliveryLabel: _deliveryCtrl.text.isNotEmpty ? _deliveryCtrl.text : 'Destination',
                               estimatedPrice: _estimatedPrice,
@@ -671,7 +693,7 @@ class _TopBar extends StatelessWidget {
         Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
         const Spacer(),
         // Step dots
-        Row(children: List.generate(3, (i) => AnimatedContainer(
+        Row(children: List.generate(4, (i) => AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           margin: const EdgeInsets.only(left: 4),
           width: i == step ? 20 : 6,
@@ -881,21 +903,16 @@ class _Step0Panel extends StatelessWidget {
 
 class _Step1Panel extends StatelessWidget {
   final String orderType;
-  final TextEditingController senderNameCtrl;
-  final TextEditingController senderPhoneCtrl;
-  final TextEditingController receiverNameCtrl;
-  final TextEditingController receiverPhoneCtrl;
-  final TextEditingController descriptionCtrl;
-  final VoidCallback onPickSender;
-  final VoidCallback onPickReceiver;
+  final TextEditingController nameCtrl;
+  final TextEditingController phoneCtrl;
+  final VoidCallback onPickContact;
+  final VoidCallback? onPickMe;
   final VoidCallback onNext;
 
   const _Step1Panel({
     required this.orderType,
-    required this.senderNameCtrl, required this.senderPhoneCtrl,
-    required this.receiverNameCtrl, required this.receiverPhoneCtrl,
-    required this.descriptionCtrl,
-    required this.onPickSender, required this.onPickReceiver,
+    required this.nameCtrl, required this.phoneCtrl,
+    required this.onPickContact, this.onPickMe,
     required this.onNext,
   });
 
@@ -905,25 +922,65 @@ class _Step1Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
-          Row(children: [
-            Expanded(child: _ContactMini(
-              label: orderType == 'RIDE' ? 'Passager' : 'Expéditeur',
-              dotColor: AppColors.success,
-              nameCtrl: senderNameCtrl,
-              phoneCtrl: senderPhoneCtrl,
-              onPick: onPickSender,
-            )),
-            const SizedBox(width: 10),
-            Expanded(child: _ContactMini(
-              label: orderType == 'RIDE' ? 'Destination' : 'Destinataire',
-              dotColor: AppColors.error,
-              nameCtrl: receiverNameCtrl,
-              phoneCtrl: receiverPhoneCtrl,
-              onPick: onPickReceiver,
-            )),
-          ]),
+          _ContactMini(
+            label: orderType == 'RIDE' ? 'Passager' : 'Expéditeur',
+            dotColor: AppColors.success,
+            nameCtrl: nameCtrl,
+            phoneCtrl: phoneCtrl,
+            onPick: onPickContact,
+            onPickMe: onPickMe,
+          ),
+          const Spacer(),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onNext,
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                Text('Suivant — Destinataire'),
+                SizedBox(width: 8),
+                Icon(Icons.arrow_forward, size: 16),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Step2Panel extends StatelessWidget {
+  final String orderType;
+  final TextEditingController nameCtrl;
+  final TextEditingController phoneCtrl;
+  final TextEditingController descriptionCtrl;
+  final VoidCallback onPickContact;
+  final VoidCallback? onPickMe;
+  final VoidCallback onNext;
+
+  const _Step2Panel({
+    required this.orderType,
+    required this.nameCtrl, required this.phoneCtrl,
+    required this.descriptionCtrl,
+    required this.onPickContact, this.onPickMe,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        children: [
+          _ContactMini(
+            label: orderType == 'RIDE' ? 'Destination' : 'Destinataire',
+            dotColor: AppColors.error,
+            nameCtrl: nameCtrl,
+            phoneCtrl: phoneCtrl,
+            onPick: onPickContact,
+            onPickMe: onPickMe,
+          ),
           if (orderType == 'DELIVERY') ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: descriptionCtrl,
               style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
@@ -960,7 +1017,8 @@ class _ContactMini extends StatelessWidget {
   final TextEditingController nameCtrl;
   final TextEditingController phoneCtrl;
   final VoidCallback onPick;
-  const _ContactMini({required this.label, required this.dotColor, required this.nameCtrl, required this.phoneCtrl, required this.onPick});
+  final VoidCallback? onPickMe;
+  const _ContactMini({required this.label, required this.dotColor, required this.nameCtrl, required this.phoneCtrl, required this.onPick, this.onPickMe});
 
   @override
   Widget build(BuildContext context) {
@@ -977,6 +1035,16 @@ class _ContactMini extends StatelessWidget {
           const SizedBox(width: 5),
           Text(label, style: TextStyle(color: dotColor, fontSize: 11, fontWeight: FontWeight.w700)),
           const Spacer(),
+          if (onPickMe != null)
+            GestureDetector(
+              onTap: onPickMe,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                child: Text('Moi', style: TextStyle(color: dotColor, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ),
           GestureDetector(
             onTap: onPick,
             child: Icon(Icons.contacts_rounded, color: dotColor, size: 16),
@@ -1014,7 +1082,7 @@ class _ContactMini extends StatelessWidget {
   }
 }
 
-class _Step2Panel extends StatelessWidget {
+class _Step3Panel extends StatelessWidget {
   final String pickupLabel;
   final String deliveryLabel;
   final double? estimatedPrice;
@@ -1024,7 +1092,7 @@ class _Step2Panel extends StatelessWidget {
   final bool canSubmit;
   final VoidCallback onSubmit;
 
-  const _Step2Panel({
+  const _Step3Panel({
     required this.pickupLabel, required this.deliveryLabel,
     required this.estimatedPrice, required this.surgeMultiplier,
     required this.loadingSurge, required this.submitting,
