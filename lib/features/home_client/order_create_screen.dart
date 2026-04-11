@@ -4,17 +4,21 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
 
+// ─── Heights par step ────────────────────────────────────────────────────────
+const _kPanelHeights = [180.0, 260.0, 260.0]; // step 0, 1, 2
+
 class OrderCreateScreen extends StatefulWidget {
-  /// 'RIDE' = transport humain (Thiak Thiak) | 'DELIVERY' = livraison colis
   final String orderType;
   const OrderCreateScreen({super.key, this.orderType = 'DELIVERY'});
 
@@ -25,108 +29,131 @@ class OrderCreateScreen extends StatefulWidget {
 class _OrderCreateScreenState extends State<OrderCreateScreen> {
   final _repo = OrdersRepository();
 
-  // ── Constantes ────────────────────────────────────────────────────────────
+  // ── Constants ────────────────────────────────────────────────────────────
   static const double _baseFare = 500;
   static const double _pricePerKm = 200;
   static const LatLng _dakar = LatLng(14.6937, -17.4441);
 
-  // ── Map State ──────────────────────────────────────────────────────────────
+  // ── Step wizard ──────────────────────────────────────────────────────────
+  int _step = 0; // 0=Trajet, 1=Contacts, 2=Résumé
+  late final PageController _pageCtrl;
+
+  // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   String? _mapStyle;
   bool _isMapMoving = false;
   LatLng _currentCameraPos = _dakar;
 
-  // ── Mode de sélection ──────────────────────────────────────────────────────
+  // ── Placement mode ───────────────────────────────────────────────────────
   bool _isSelectingPickup = true;
   bool _isMapPlacementMode = false;
 
-  // ── Form & Coordinates ─────────────────────────────────────────────────────
-  final _pickupAddressCtrl = TextEditingController();
-  final _deliveryAddressCtrl = TextEditingController();
-  final _descriptionCtrl = TextEditingController();
+  // ── Addresses ────────────────────────────────────────────────────────────
+  final _pickupCtrl   = TextEditingController();
+  final _deliveryCtrl = TextEditingController();
+  double? _pickupLat, _pickupLng;
+  double? _deliveryLat, _deliveryLng;
 
-  double? _pickupLat;
-  double? _pickupLng;
-  double? _deliveryLat;
-  double? _deliveryLng;
+  // ── Contacts ─────────────────────────────────────────────────────────────
+  final _senderNameCtrl    = TextEditingController();
+  final _senderPhoneCtrl   = TextEditingController();
+  final _receiverNameCtrl  = TextEditingController();
+  final _receiverPhoneCtrl = TextEditingController();
+  final _descriptionCtrl   = TextEditingController();
 
-  // ── Pricing State ──────────────────────────────────────────────────────────
+  // ── Autocomplete ─────────────────────────────────────────────────────────
+  List<Map<String, dynamic>> _suggestions = [];
+  bool _isSearching = false;
+  Timer? _searchDebounce;
+
+  // ── Pricing ──────────────────────────────────────────────────────────────
   double _surgeMultiplier = 1.0;
   double? _estimatedPrice;
   bool _loadingSurge = false;
-  bool _loadingGps = false;
-  bool _submitting = false;
+  bool _loadingGps   = false;
+  bool _submitting   = false;
   Timer? _surgeDebounce;
-
-  // ── Autocomplete ───────────────────────────────────────────────────────────
-  List<Map<String, dynamic>> _searchSuggestions = [];
-  bool _isSearchingAddress = false;
-  Timer? _addressSearchDebounce;
+  List<LatLng> _routePoints = [];
 
   @override
   void initState() {
     super.initState();
+    _pageCtrl = PageController();
     _loadMapStyle();
     _fetchGpsInit();
   }
 
   @override
   void dispose() {
+    _pageCtrl.dispose();
+    _searchDebounce?.cancel();
     _surgeDebounce?.cancel();
-    _addressSearchDebounce?.cancel();
-    _pickupAddressCtrl.dispose();
-    _deliveryAddressCtrl.dispose();
+    _pickupCtrl.dispose();
+    _deliveryCtrl.dispose();
+    _senderNameCtrl.dispose();
+    _senderPhoneCtrl.dispose();
+    _receiverNameCtrl.dispose();
+    _receiverPhoneCtrl.dispose();
     _descriptionCtrl.dispose();
     _mapController?.dispose();
     super.dispose();
   }
 
+  // ── Map style ────────────────────────────────────────────────────────────
   Future<void> _loadMapStyle() async {
     final style = await rootBundle.loadString(MapTheme.styleAsset);
     if (mounted) setState(() => _mapStyle = style);
   }
 
-  // ── Initial GPS Fetch (Centrage) ───────────────────────────────────────────
+  // ── GPS ──────────────────────────────────────────────────────────────────
   Future<void> _fetchGpsInit() async {
     setState(() => _loadingGps = true);
     try {
       final perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        await Geolocator.requestPermission();
-      }
+      if (perm == LocationPermission.denied) await Geolocator.requestPermission();
       final pos = await Geolocator.getCurrentPosition();
-      final latLng = LatLng(pos.latitude, pos.longitude);
-      _currentCameraPos = latLng;
-      
-      _centerMap(latLng);
-      // Au démarrage, on est en mode "Pickup"
-      _pickupLat = latLng.latitude;
-      _pickupLng = latLng.longitude;
-      _reverseGeocode(latLng);
+      final ll = LatLng(pos.latitude, pos.longitude);
+      _currentCameraPos = ll;
+      _centerMap(ll);
+      _pickupLat = ll.latitude;
+      _pickupLng = ll.longitude;
+      _reverseGeocode(ll, forPickup: true);
     } catch (_) {
-      // Fallback Waze/Dakar
+      // fallback Dakar
     } finally {
       if (mounted) setState(() => _loadingGps = false);
     }
   }
 
-  // ── Map Events ─────────────────────────────────────────────────────────────
-  void _centerMap(LatLng position) {
-    if (_mapController != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: position, zoom: 16),
-        ),
-      );
-    }
+  void _centerMap(LatLng pos) {
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 15.5)),
+    );
   }
 
-  Future<void> _onCameraIdle() async {
-    setState(() => _isMapMoving = false);
+  // ── Reverse geocoding ────────────────────────────────────────────────────
+  Future<void> _reverseGeocode(LatLng pos, {required bool forPickup}) async {
+    try {
+      final marks = await geo.placemarkFromCoordinates(pos.latitude, pos.longitude)
+          .timeout(const Duration(seconds: 5));
+      if (marks.isNotEmpty && mounted) {
+        final p = marks.first;
+        final street = p.street ?? p.name ?? '';
+        final local  = p.subLocality ?? p.locality ?? '';
+        final addr   = street.isNotEmpty ? '$street, $local' : local;
+        setState(() {
+          if (forPickup) {
+            _pickupCtrl.text = addr.isNotEmpty ? addr : '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
+          } else {
+            _deliveryCtrl.text = addr.isNotEmpty ? addr : '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
+          }
+        });
+      }
+    } catch (_) {}
   }
 
-  // ── Confirmer la position depuis la map ────────────────────────────────────
-  Future<void> _confirmMapPlacement() async {
+  // ── Confirm map placement ─────────────────────────────────────────────────
+  Future<void> _confirmPlacement() async {
     setState(() {
       _isMapPlacementMode = false;
       if (_isSelectingPickup) {
@@ -137,97 +164,34 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
         _deliveryLng = _currentCameraPos.longitude;
       }
     });
-
     _updateEstimate();
-    await _reverseGeocode(_currentCameraPos);
+    await _reverseGeocode(_currentCameraPos, forPickup: _isSelectingPickup);
   }
 
-  // ── Geocoding ──────────────────────────────────────────────────────────────
-  Future<void> _reverseGeocode(LatLng pos) async {
-    try {
-      List<geo.Placemark> placemarks = await geo.placemarkFromCoordinates(
-        pos.latitude,
-        pos.longitude,
-      ).timeout(const Duration(seconds: 5));
-
-      if (placemarks.isNotEmpty) {
-        final p = placemarks[0];
-        final name = p.street ?? p.name ?? '';
-        final local = p.subLocality ?? p.locality ?? '';
-        final addr = name.isNotEmpty ? '$name, $local' : local;
-        
-        if (mounted) {
-          setState(() {
-            if (_isSelectingPickup) {
-              _pickupAddressCtrl.text = addr.isNotEmpty ? addr : 'Départ sélect.';
-            } else {
-              _deliveryAddressCtrl.text = addr.isNotEmpty ? addr : 'Dest. sélect.';
-            }
-          });
-        }
-      }
-    } catch (_) {
-      // Ignorer l'erreur, le placeholder par défaut reste
-      if (mounted) {
-        setState(() {
-          if (_isSelectingPickup && _pickupAddressCtrl.text.isEmpty) {
-             _pickupAddressCtrl.text = 'Position (${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)})';
-          } else if (!_isSelectingPickup && _deliveryAddressCtrl.text.isEmpty) {
-             _deliveryAddressCtrl.text = 'Position (${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)})';
-          }
-        });
-      }
-    }
-  }
-
-  // Permet à l'utilisateur de taper et chercher (Geocoding texte manuel)
-  Future<void> _geocodeAddress(String address) async {
-    if (address.trim().isEmpty) return;
-    try {
-      List<geo.Location> locations = await geo.locationFromAddress(address).timeout(const Duration(seconds: 5));
-      if (locations.isNotEmpty) {
-        final loc = locations[0];
-        final latLng = LatLng(loc.latitude, loc.longitude);
-        _centerMap(latLng); // Ça va déclencher _onCameraIdle
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lieu introuvable, essayez de déplacer la carte.')),
-        );
-      }
-    }
-  }
-
-  // ── Autocomplete / Suggestions ─────────────────────────────────────────────
-  void _onAddressChanged(String query) {
-    _addressSearchDebounce?.cancel();
+  // ── Autocomplete ─────────────────────────────────────────────────────────
+  void _onAddressChanged(String query, {required bool forPickup}) {
+    setState(() => _isSelectingPickup = forPickup);
+    _searchDebounce?.cancel();
     if (query.trim().length < 3) {
-      if (_searchSuggestions.isNotEmpty) setState(() => _searchSuggestions = []);
+      if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
       return;
     }
-    
-    _addressSearchDebounce = Timer(const Duration(milliseconds: 600), () async {
-      setState(() => _isSearchingAddress = true);
+    _searchDebounce = Timer(const Duration(milliseconds: 600), () async {
+      setState(() => _isSearching = true);
       try {
         final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
-        final response = await dio.get(
+        final res = await dio.get(
           'https://nominatim.openstreetmap.org/search',
-          queryParameters: {
-            'q': query,
-            'format': 'json',
-            'limit': 5,
-            'countrycodes': 'sn',
-          },
+          queryParameters: {'q': query, 'format': 'json', 'limit': 5, 'countrycodes': 'sn'},
         );
         if (mounted) {
           setState(() {
-            _searchSuggestions = List<Map<String, dynamic>>.from(response.data);
-            _isSearchingAddress = false;
+            _suggestions = List<Map<String, dynamic>>.from(res.data);
+            _isSearching = false;
           });
         }
       } catch (_) {
-        if (mounted) setState(() => _isSearchingAddress = false);
+        if (mounted) setState(() => _isSearching = false);
       }
     });
   }
@@ -236,51 +200,63 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     final lat = double.tryParse(place['lat']?.toString() ?? '');
     final lng = double.tryParse(place['lon']?.toString() ?? '');
     if (lat == null || lng == null) return;
-    
-    final name = place['name'] ?? place['display_name'] ?? '';
-    
+    final name = (place['name'] as String?) ?? place['display_name'] as String? ?? '';
+    FocusScope.of(context).unfocus();
     setState(() {
-      _searchSuggestions = [];
+      _suggestions = [];
       if (_isSelectingPickup) {
-        _pickupLat = lat;
-        _pickupLng = lng;
-        _pickupAddressCtrl.text = name;
+        _pickupLat = lat; _pickupLng = lng;
+        _pickupCtrl.text = name;
       } else {
-        _deliveryLat = lat;
-        _deliveryLng = lng;
-        _deliveryAddressCtrl.text = name;
+        _deliveryLat = lat; _deliveryLng = lng;
+        _deliveryCtrl.text = name;
       }
     });
-    
-    FocusScope.of(context).unfocus();
     _centerMap(LatLng(lat, lng));
     _updateEstimate();
   }
 
-  // ── Pricing ────────────────────────────────────────────────────────────────
+  // ── Pricing ──────────────────────────────────────────────────────────────
   void _updateEstimate() {
     if (_pickupLat == null || _deliveryLat == null) return;
-
     _surgeDebounce?.cancel();
     _surgeDebounce = Timer(const Duration(milliseconds: 800), _computeEstimate);
+  }
+
+  Future<Map<String, dynamic>?> _fetchRouteAndDistance(double lat1, double lng1, double lat2, double lng2) async {
+    try {
+      final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
+      final res = await dio.get('https://router.project-osrm.org/route/v1/driving/$lng1,$lat1;$lng2,$lat2?overview=full&geometries=geojson');
+      if (res.statusCode == 200 && res.data['routes'] != null && (res.data['routes'] as List).isNotEmpty) {
+        final route = res.data['routes'][0];
+        final distance = (route['distance'] as num) / 1000.0; // in km
+        final coords = route['geometry']['coordinates'] as List;
+        final points = coords.map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())).toList();
+        return {'distance': distance, 'points': points};
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> _computeEstimate() async {
     if (_pickupLat == null || _deliveryLat == null) return;
     setState(() => _loadingSurge = true);
-
     try {
       final surge = await _repo.getSurgeMultiplier(_pickupLat!, _pickupLng!);
-      final dist = _haversineKm(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
-      final price = (_baseFare + dist * _pricePerKm) * surge;
-
-      if (mounted) {
-        setState(() {
-          _surgeMultiplier = surge;
-          _estimatedPrice = price.roundToDouble();
-          _loadingSurge = false;
-        });
+      
+      final routeData = await _fetchRouteAndDistance(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
+      double dist = 0.0;
+      
+      if (routeData != null && mounted) {
+        dist = routeData['distance'] as double;
+        setState(() => _routePoints = routeData['points'] as List<LatLng>);
+      } else {
+        dist = _haversineKm(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
+        if (mounted) setState(() => _routePoints = [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)]);
       }
+
+      final price = (_baseFare + dist * _pricePerKm) * surge;
+      if (mounted) setState(() { _surgeMultiplier = surge; _estimatedPrice = price.roundToDouble(); _loadingSurge = false; });
     } catch (_) {
       if (mounted) setState(() => _loadingSurge = false);
     }
@@ -291,463 +267,836 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     final dLat = (lat2 - lat1) * pi / 180;
     final dLng = (lng2 - lng1) * pi / 180;
     final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) *
-        sin(dLng / 2) * sin(dLng / 2);
+        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLng / 2) * sin(dLng / 2);
     return r * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
-  // ── Soumission ────────────────────────────────────────────────────────────
-  Future<void> _submit() async {
-    if (_pickupLat == null || _pickupLng == null) {
-      _showError('Sélectionnez un point de départ sur la carte.');
-      return;
-    }
-    if (_deliveryLat == null || _deliveryLng == null) {
-      _showError('Sélectionnez un point d\'arrivée sur la carte.');
-      return;
-    }
-    if (_pickupAddressCtrl.text.trim().isEmpty) {
-      _pickupAddressCtrl.text = 'Position (${_pickupLat!.toStringAsFixed(4)}, ${_pickupLng!.toStringAsFixed(4)})';
-    }
-    if (_deliveryAddressCtrl.text.trim().isEmpty) {
-      _deliveryAddressCtrl.text = 'Position (${_deliveryLat!.toStringAsFixed(4)}, ${_deliveryLng!.toStringAsFixed(4)})';
-    }
+  // ── Step navigation ───────────────────────────────────────────────────────
+  bool get _routeComplete => _pickupLat != null && _deliveryLat != null;
 
+  void _goStep(int step) {
+    setState(() => _step = step);
+    _pageCtrl.animateToPage(step,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
+
+  // ── Contacts ─────────────────────────────────────────────────────────────
+  Future<void> _pickContact({
+    required TextEditingController nameCtrl,
+    required TextEditingController phoneCtrl,
+  }) async {
+    final status = await Permission.contacts.status;
+    bool granted = status.isGranted || status.isLimited;
+    if (!granted) {
+      final result = await Permission.contacts.request();
+      granted = result.isGranted || result.isLimited;
+    }
+    if (!granted) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Accès aux contacts refusé'),
+        action: status.isPermanentlyDenied
+            ? SnackBarAction(label: 'Paramètres', onPressed: openAppSettings)
+            : null,
+      ));
+      return;
+    }
+    final contacts = await FlutterContacts.getAll(
+      properties: {ContactProperty.name, ContactProperty.phone},
+    );
+    if (!mounted) return;
+    _showContactPicker(contacts, nameCtrl: nameCtrl, phoneCtrl: phoneCtrl);
+  }
+
+  void _showContactPicker(List<Contact> contacts,
+      {required TextEditingController nameCtrl,
+      required TextEditingController phoneCtrl}) {
+    String q = '';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSB) {
+          final filtered = contacts.where((c) =>
+              q.isEmpty || (c.displayName ?? '').toLowerCase().contains(q.toLowerCase())).toList();
+          return DraggableScrollableSheet(
+            initialChildSize: 0.65, maxChildSize: 0.95, minChildSize: 0.4,
+            builder: (_, sc) => Container(
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(children: [
+                const SizedBox(height: 12),
+                Container(width: 40, height: 4,
+                    decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 12),
+                const Text('Choisir un contact',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: TextField(
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Rechercher...',
+                      prefixIcon: const Icon(Icons.search),
+                      fillColor: AppColors.card, filled: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (v) => setSB(() => q = v),
+                  ),
+                ),
+                Divider(color: AppColors.textSecondary.withValues(alpha: 0.2), height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    controller: sc,
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) {
+                      final c = filtered[i];
+                      final phoneObj = c.phones.isNotEmpty ? c.phones.first : null;
+                      if (phoneObj == null) return const SizedBox.shrink();
+                      final cleaned = phoneObj.number.replaceAll(RegExp(r'[\s\-\(\)]'), '').replaceFirst('+221', '');
+                      final name = c.displayName ?? 'Contact';
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                          child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                        ),
+                        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                        subtitle: Text(cleaned, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          nameCtrl.text = name;
+                          phoneCtrl.text = cleaned;
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  Future<void> _submit() async {
+    if (_pickupCtrl.text.trim().isEmpty) {
+      _pickupCtrl.text = '${_pickupLat!.toStringAsFixed(4)}, ${_pickupLng!.toStringAsFixed(4)}';
+    }
+    if (_deliveryCtrl.text.trim().isEmpty) {
+      _deliveryCtrl.text = '${_deliveryLat!.toStringAsFixed(4)}, ${_deliveryLng!.toStringAsFixed(4)}';
+    }
     setState(() => _submitting = true);
     try {
       final order = await _repo.createOrder({
         'orderType': widget.orderType,
-        'pickupAddress': _pickupAddressCtrl.text.trim(),
+        'pickupAddress': _pickupCtrl.text.trim(),
         'pickupLatitude': _pickupLat,
         'pickupLongitude': _pickupLng,
-        'deliveryAddress': _deliveryAddressCtrl.text.trim(),
+        'deliveryAddress': _deliveryCtrl.text.trim(),
         'deliveryLatitude': _deliveryLat,
         'deliveryLongitude': _deliveryLng,
+        if (_senderNameCtrl.text.trim().isNotEmpty)   'senderName':  _senderNameCtrl.text.trim(),
+        if (_senderPhoneCtrl.text.trim().isNotEmpty)  'senderPhone': '+221${_senderPhoneCtrl.text.trim()}',
+        if (_receiverNameCtrl.text.trim().isNotEmpty) 'receiverName': _receiverNameCtrl.text.trim(),
+        if (_receiverPhoneCtrl.text.trim().isNotEmpty)'receiverPhone':'+221${_receiverPhoneCtrl.text.trim()}',
         if (widget.orderType == 'DELIVERY')
           'description': _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
       });
-
       if (mounted) context.pushReplacement('/orders/confirmation', extra: order);
     } catch (e) {
-      _showError(e.toString());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
+        );
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppColors.error),
-    );
-  }
-
-  // ── UI ────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    // Si la destination existe et qu'on cherche le point de départ, afficher une ligne
+    final panelH = _isMapPlacementMode ? 90.0 : _kPanelHeights[_step];
+
+    // Polyline + inactive markers
     Set<Polyline> polylines = {};
+    Set<Marker> markers    = {};
     if (_pickupLat != null && _deliveryLat != null) {
       polylines.add(Polyline(
         polylineId: const PolylineId('route'),
-        points: [
-          LatLng(_pickupLat!, _pickupLng!),
-          LatLng(_deliveryLat!, _deliveryLng!),
-        ],
-        color: AppColors.primary,
-        width: 4,
+        points: _routePoints.isNotEmpty ? _routePoints : [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)],
+        color: AppColors.primary, width: 4,
       ));
     }
-
-    // Afficher les marqueurs inactifs
-    Set<Marker> markers = {};
-    if (_isSelectingPickup && _deliveryLat != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('delivery'),
-        position: LatLng(_deliveryLat!, _deliveryLng!),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      ));
-    } else if (!_isSelectingPickup && _pickupLat != null) {
+    if (_pickupLat != null && (!_isSelectingPickup || !_isMapPlacementMode)) {
       markers.add(Marker(
         markerId: const MarkerId('pickup'),
         position: LatLng(_pickupLat!, _pickupLng!),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ));
     }
+    if (_deliveryLat != null && (_isSelectingPickup || !_isMapPlacementMode)) {
+      markers.add(Marker(
+        markerId: const MarkerId('delivery'),
+        position: LatLng(_deliveryLat!, _deliveryLng!),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ));
+    }
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          // ── Map ──
-          SizedBox.expand(
-            child: GoogleMap(
-              initialCameraPosition: const CameraPosition(
-                target: _dakar,
-                zoom: 15,
-              ),
-              onMapCreated: (ctrl) => _mapController = ctrl,
-              style: _mapStyle,
-              onCameraMoveStarted: () => setState(() => _isMapMoving = true),
-              onCameraMove: (pos) => _currentCameraPos = pos.target,
-              onCameraIdle: _onCameraIdle,
-              polylines: polylines,
-              markers: markers,
-              myLocationEnabled: true,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              compassEnabled: false,
-              mapToolbarEnabled: false,
-            ),
+      body: Stack(children: [
+
+        // ── MAP ────────────────────────────────────────────────────────────
+        SizedBox.expand(
+          child: GoogleMap(
+            initialCameraPosition: const CameraPosition(target: _dakar, zoom: 14),
+            onMapCreated: (c) => _mapController = c,
+            style: _mapStyle,
+            onCameraMoveStarted: () => setState(() => _isMapMoving = true),
+            onCameraMove: (p) => _currentCameraPos = p.target,
+            onCameraIdle: () => setState(() => _isMapMoving = false),
+            polylines: polylines,
+            markers: markers,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            compassEnabled: false,
+            mapToolbarEnabled: false,
           ),
+        ),
 
-          // ── Center Pin ──
-          if (_isMapPlacementMode)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 35.0),
-                child: AnimatedScale(
-                  scale: _isMapMoving ? 1.2 : 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.location_on,
-                    size: 44,
-                    color: _isSelectingPickup ? const Color(0xFF4CAF50) : AppColors.error,
-                    shadows: [
-                      Shadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          // ── Bouton recentrer ──
-          if (_isMapPlacementMode)
-          Positioned(
-            right: 16,
-            bottom: MediaQuery.of(context).size.height * 0.4 + 16,
-            child: GestureDetector(
-              onTap: _fetchGpsInit,
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8),
-                  ],
-                ),
-                child: _loadingGps
-                    ? const Padding(
-                        padding: EdgeInsets.all(14),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.my_location, color: AppColors.primary),
-              ),
-            ),
-          ),
-
-          // ── Top Bar (Inputs) ──
-          SafeArea(
+        // ── CENTER PIN (placement mode only) ───────────────────────────────
+        if (_isMapPlacementMode)
+          Center(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 16),
-                      ],
+              padding: const EdgeInsets.only(bottom: 35),
+              child: AnimatedScale(
+                scale: _isMapMoving ? 1.2 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  Icons.location_on, size: 44,
+                  color: _isSelectingPickup ? AppColors.success : AppColors.error,
+                  shadows: [Shadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 4))],
+                ),
+              ),
+            ),
+          ),
+
+        // ── RECENTER BTN ───────────────────────────────────────────────────
+        Positioned(
+          right: 16,
+          bottom: panelH + 16,
+          child: _FloatingBtn(
+            icon: _loadingGps ? null : Icons.my_location,
+            loading: _loadingGps,
+            onTap: _fetchGpsInit,
+          ),
+        ),
+
+        // ── TOP BAR ────────────────────────────────────────────────────────
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                _TopBar(
+                  title: widget.orderType == 'RIDE' ? 'Transport' : 'Livraison',
+                  step: _step,
+                  onBack: () {
+                    if (_step > 0) {
+                      _goStep(_step - 1);
+                    } else {
+                      Navigator.pop(context);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                // Search fields (step 0 only, not in placement mode)
+                if (_step == 0) ...[
+                  _AddressField(
+                    controller: _pickupCtrl,
+                    hint: 'Point de départ...',
+                    dotColor: AppColors.success,
+                    active: _isSelectingPickup && !_isMapPlacementMode,
+                    onTap: () => setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; }),
+                    onChanged: (v) => _onAddressChanged(v, forPickup: true),
+                    onMapTap: () => setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; }),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                    child: Row(children: [
+                      Container(width: 2, height: 16, color: AppColors.textSecondary.withValues(alpha: 0.3)),
+                    ]),
+                  ),
+                  _AddressField(
+                    controller: _deliveryCtrl,
+                    hint: 'Destination...',
+                    dotColor: AppColors.error,
+                    active: !_isSelectingPickup && !_isMapPlacementMode,
+                    onTap: () => setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; }),
+                    onChanged: (v) => _onAddressChanged(v, forPickup: false),
+                    onMapTap: () => setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; }),
+                  ),
+
+                  // Autocomplete dropdown
+                  if (_isSearching || _suggestions.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _AutocompleteDropdown(
+                      suggestions: _suggestions,
+                      loading: _isSearching,
+                      onSelect: _selectSuggestion,
                     ),
-                    child: Column(
-                      children: [
-                        // Bouton retour
-                        Row(
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ),
+
+        // ── BOTTOM PANEL ───────────────────────────────────────────────────
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeInOut,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, -4))],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle
+                const SizedBox(height: 8),
+                Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 4),
+
+                // Content via PageView (non scrollable)
+                SizedBox(
+                  height: panelH - 20,
+                  child: _isMapPlacementMode
+                      ? _PlacementConfirmPanel(
+                          isPickup: _isSelectingPickup,
+                          onConfirm: _confirmPlacement,
+                        )
+                      : PageView(
+                          controller: _pageCtrl,
+                          physics: const NeverScrollableScrollPhysics(),
+                          onPageChanged: (i) => setState(() => _step = i),
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back),
-                              onPressed: () => Navigator.pop(context),
+                            _Step0Panel(
+                              routeComplete: _routeComplete,
+                              onNext: () => _goStep(1),
                             ),
-                            Expanded(
-                              child: Text(
-                                widget.orderType == 'RIDE' ? 'Transport' : 'Livraison',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              ),
+                            _Step1Panel(
+                              orderType: widget.orderType,
+                              senderNameCtrl: _senderNameCtrl,
+                              senderPhoneCtrl: _senderPhoneCtrl,
+                              receiverNameCtrl: _receiverNameCtrl,
+                              receiverPhoneCtrl: _receiverPhoneCtrl,
+                              descriptionCtrl: _descriptionCtrl,
+                              onPickSender: () => _pickContact(nameCtrl: _senderNameCtrl, phoneCtrl: _senderPhoneCtrl),
+                              onPickReceiver: () => _pickContact(nameCtrl: _receiverNameCtrl, phoneCtrl: _receiverPhoneCtrl),
+                              onNext: () {
+                                _updateEstimate();
+                                _goStep(2);
+                              },
+                            ),
+                            _Step2Panel(
+                              pickupLabel: _pickupCtrl.text.isNotEmpty ? _pickupCtrl.text : 'Départ',
+                              deliveryLabel: _deliveryCtrl.text.isNotEmpty ? _deliveryCtrl.text : 'Destination',
+                              estimatedPrice: _estimatedPrice,
+                              surgeMultiplier: _surgeMultiplier,
+                              loadingSurge: _loadingSurge,
+                              submitting: _submitting,
+                              canSubmit: _routeComplete,
+                              onSubmit: _submit,
                             ),
                           ],
                         ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
 
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Column(
-                            children: [
-                              // ── Pickup Field ──
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() { 
-                                    _isSelectingPickup = true;
-                                    _isMapPlacementMode = false;
-                                  });
-                                  if (_pickupLat != null) {
-                                    _centerMap(LatLng(_pickupLat!, _pickupLng!));
-                                  }
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: (_isSelectingPickup && !_isMapPlacementMode)
-                                        ? Border.all(color: const Color(0xFF4CAF50), width: 2)
-                                        : Border.all(color: Colors.transparent),
-                                    borderRadius: BorderRadius.circular(8),
-                                    color: (_isSelectingPickup && !_isMapPlacementMode) ? const Color(0xFF4CAF50).withValues(alpha: 0.05) : null,
-                                  ),
-                                  child: TextField(
-                                    controller: _pickupAddressCtrl,
-                                    onChanged: (val) {
-                                      setState(() => _isSelectingPickup = true);
-                                      _onAddressChanged(val);
-                                    },
-                                    onSubmitted: _geocodeAddress,
-                                    textInputAction: TextInputAction.search,
-                                    decoration: InputDecoration(
-                                      hintText: 'Rechercher le départ...',
-                                      prefixIcon: const Icon(Icons.circle, color: Color(0xFF4CAF50), size: 16),
-                                      suffixIcon: IconButton(
-                                        icon: const Icon(Icons.map_outlined, color: Color(0xFF4CAF50)),
-                                        tooltip: 'Placer sur la map',
-                                        onPressed: () {
-                                          setState(() {
-                                            _isSelectingPickup = true;
-                                            _isMapPlacementMode = true;
-                                          });
-                                        },
-                                      ),
-                                      border: InputBorder.none,
-                                      enabledBorder: InputBorder.none,
-                                      focusedBorder: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              
-                              const Padding(
-                                padding: EdgeInsets.only(left: 20),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Icon(Icons.more_vert, size: 20, color: AppColors.textSecondary),
-                                ),
-                              ),
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-widgets
+// ─────────────────────────────────────────────────────────────────────────────
 
-                              // ── Delivery Field ──
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _isSelectingPickup = false;
-                                    _isMapPlacementMode = false;
-                                  });
-                                  if (_deliveryLat != null) {
-                                    _centerMap(LatLng(_deliveryLat!, _deliveryLng!));
-                                  }
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: (!_isSelectingPickup && !_isMapPlacementMode)
-                                        ? Border.all(color: AppColors.error, width: 2)
-                                        : Border.all(color: Colors.transparent),
-                                    borderRadius: BorderRadius.circular(8),
-                                    color: (!_isSelectingPickup && !_isMapPlacementMode) ? AppColors.error.withValues(alpha: 0.05) : null,
-                                  ),
-                                  child: TextField(
-                                    controller: _deliveryAddressCtrl,
-                                    onChanged: (val) {
-                                      setState(() => _isSelectingPickup = false);
-                                      _onAddressChanged(val);
-                                    },
-                                    onSubmitted: _geocodeAddress,
-                                    textInputAction: TextInputAction.search,
-                                    decoration: InputDecoration(
-                                      hintText: 'Rechercher la destination...',
-                                      prefixIcon: const Icon(Icons.location_on, color: AppColors.error),
-                                      suffixIcon: IconButton(
-                                        icon: const Icon(Icons.map_outlined, color: AppColors.error),
-                                        tooltip: 'Placer sur la map',
-                                        onPressed: () {
-                                          setState(() {
-                                            _isSelectingPickup = false;
-                                            _isMapPlacementMode = true;
-                                          });
-                                        },
-                                      ),
-                                      border: InputBorder.none,
-                                      enabledBorder: InputBorder.none,
-                                      focusedBorder: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
-                  ),
+class _TopBar extends StatelessWidget {
+  final String title;
+  final int step;
+  final VoidCallback onBack;
+  const _TopBar({required this.title, required this.step, required this.onBack});
 
-                  // ── Autocomplete Dropdown ──
-                  if (_isSearchingAddress || _searchSuggestions.isNotEmpty)
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 250),
-                      margin: const EdgeInsets.only(top: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 16)
-                        ]
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: _isSearchingAddress 
-                          ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
-                          : ListView.separated(
-                              padding: EdgeInsets.zero,
-                              shrinkWrap: true,
-                              itemCount: _searchSuggestions.length,
-                              separatorBuilder: (ctx, i) => Divider(height: 1, color: AppColors.textSecondary.withValues(alpha: 0.2)),
-                              itemBuilder: (context, index) {
-                                final place = _searchSuggestions[index];
-                                final name = place['name']?.toString() ?? '';
-                                final address = place['display_name']?.toString().replaceAll('$name, ', '') ?? '';
-                                
-                                return ListTile(
-                                  leading: const Icon(Icons.place_outlined, color: AppColors.textSecondary),
-                                  title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  subtitle: address.isNotEmpty ? Text(address, style: const TextStyle(color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
-                                  onTap: () => _selectSuggestion(place),
-                                );
-                              },
-                            ),
-                      ),
-                    ),
-                ],
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 12)],
+      ),
+      child: Row(children: [
+        GestureDetector(
+          onTap: onBack,
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 14),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
+        const Spacer(),
+        // Step dots
+        Row(children: List.generate(3, (i) => AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.only(left: 4),
+          width: i == step ? 20 : 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: i == step ? AppColors.primary : AppColors.card,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ))),
+      ]),
+    );
+  }
+}
+
+class _AddressField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final Color dotColor;
+  final bool active;
+  final VoidCallback onTap;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onMapTap;
+
+  const _AddressField({
+    required this.controller, required this.hint, required this.dotColor,
+    required this.active, required this.onTap, required this.onChanged, required this.onMapTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: active ? dotColor.withValues(alpha: 0.6) : Colors.transparent, width: 1.5),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+        ),
+        child: Row(children: [
+          const SizedBox(width: 12),
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: dotColor, borderRadius: BorderRadius.circular(4))),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                isDense: true,
+                fillColor: Colors.transparent,
+                filled: true,
               ),
             ),
           ),
+          IconButton(
+            icon: Icon(Icons.map_outlined, color: dotColor, size: 18),
+            onPressed: onMapTap,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            constraints: const BoxConstraints(),
+          ),
+        ]),
+      ),
+    );
+  }
+}
 
-          // ── Bottom Panel (Details & Submit) ──
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, -4)),
-                ],
+class _AutocompleteDropdown extends StatelessWidget {
+  final List<Map<String, dynamic>> suggestions;
+  final bool loading;
+  final ValueChanged<Map<String, dynamic>> onSelect;
+  const _AutocompleteDropdown({required this.suggestions, required this.loading, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 200),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 16)],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: loading
+            ? const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
+            : ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: suggestions.length,
+                separatorBuilder: (context, idx) => Divider(height: 1, color: AppColors.textSecondary.withValues(alpha: 0.15)),
+                itemBuilder: (_, i) {
+                  final p = suggestions[i];
+                  final name = p['name']?.toString() ?? '';
+                  final sub  = (p['display_name']?.toString() ?? '').replaceAll('$name, ', '');
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.place_outlined, color: AppColors.textSecondary, size: 18),
+                    title: Text(name, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: sub.isNotEmpty ? Text(sub, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+                    onTap: () => onSelect(p),
+                  );
+                },
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Ligne pour passer au suivant si pas fini
-                  if (_isMapPlacementMode) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _confirmMapPlacement,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: _isSelectingPickup ? const Color(0xFF4CAF50) : AppColors.error,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        child: const Text('Valider cette position', style: TextStyle(fontSize: 16, color: Colors.white)),
-                      ),
-                    ),
-                  ] else ...[
-                    if ((_isSelectingPickup && _pickupLat != null && _deliveryLat == null)) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => setState(() {
-                            _isSelectingPickup = false;
-                            if (_deliveryLat != null) _centerMap(LatLng(_deliveryLat!, _deliveryLng!));
-                          }),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.primary),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: const Text('Passer à la destination', style: TextStyle(color: AppColors.primary)),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+      ),
+    );
+  }
+}
 
-                    if (widget.orderType == 'DELIVERY') ...[
-                      TextField(
-                        controller: _descriptionCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Détails du colis (optionnel)...',
-                          fillColor: AppColors.card,
-                          filled: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+class _FloatingBtn extends StatelessWidget {
+  final IconData? icon;
+  final bool loading;
+  final VoidCallback onTap;
+  const _FloatingBtn({required this.icon, required this.loading, required this.onTap});
 
-                    // ── Estimation ──
-                    if (_estimatedPrice != null)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Prix estimé', style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
-                          _loadingSurge
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                              : Row(
-                                  children: [
-                                    if (_surgeMultiplier > 1.0)
-                                      const Padding(
-                                        padding: EdgeInsets.only(right: 8.0),
-                                        child: Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 16),
-                                      ),
-                                    Text(
-                                      '${_estimatedPrice!.toInt()} FCFA',
-                                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                ),
-                        ],
-                      )
-                    else
-                      const Text('Sélectionnez les lieux pour voir le prix', style: TextStyle(color: AppColors.textSecondary)),
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: AppColors.surface, shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
+        ),
+        child: loading
+            ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+            : Icon(icon, color: AppColors.primary, size: 20),
+      ),
+    );
+  }
+}
 
-                    const SizedBox(height: 20),
+// ─────────────────────────────────────────────────────────────────────────────
+// Panels de chaque step
+// ─────────────────────────────────────────────────────────────────────────────
 
-                    // ── Commander ──
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: (_pickupLat == null || _deliveryLat == null || _submitting) ? null : _submit,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        child: _submitting
-                            ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : Text(widget.orderType == 'RIDE' ? 'Confirmer la course' : 'Valider la livraison', style: const TextStyle(fontSize: 16, color: Colors.white)),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+class _PlacementConfirmPanel extends StatelessWidget {
+  final bool isPickup;
+  final VoidCallback onConfirm;
+  const _PlacementConfirmPanel({required this.isPickup, required this.onConfirm});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isPickup ? AppColors.success : AppColors.error;
+    final label = isPickup ? 'Valider ce point de départ' : 'Valider cette destination';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: onConfirm,
+          icon: const Icon(Icons.check_circle_outline, size: 20),
+          label: Text(label),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Step0Panel extends StatelessWidget {
+  final bool routeComplete;
+  final VoidCallback onNext;
+  const _Step0Panel({required this.routeComplete, required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Définissez votre trajet',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          const Text('Utiliser les champs de recherche ou le bouton 🗺 pour placer un point sur la carte.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 11), maxLines: 2),
+          const Spacer(),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: routeComplete ? onNext : null,
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                Text('Suivant — Contacts'),
+                SizedBox(width: 8),
+                Icon(Icons.arrow_forward, size: 16),
+              ]),
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _Step1Panel extends StatelessWidget {
+  final String orderType;
+  final TextEditingController senderNameCtrl;
+  final TextEditingController senderPhoneCtrl;
+  final TextEditingController receiverNameCtrl;
+  final TextEditingController receiverPhoneCtrl;
+  final TextEditingController descriptionCtrl;
+  final VoidCallback onPickSender;
+  final VoidCallback onPickReceiver;
+  final VoidCallback onNext;
+
+  const _Step1Panel({
+    required this.orderType,
+    required this.senderNameCtrl, required this.senderPhoneCtrl,
+    required this.receiverNameCtrl, required this.receiverPhoneCtrl,
+    required this.descriptionCtrl,
+    required this.onPickSender, required this.onPickReceiver,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        children: [
+          Row(children: [
+            Expanded(child: _ContactMini(
+              label: orderType == 'RIDE' ? 'Passager' : 'Expéditeur',
+              dotColor: AppColors.success,
+              nameCtrl: senderNameCtrl,
+              phoneCtrl: senderPhoneCtrl,
+              onPick: onPickSender,
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: _ContactMini(
+              label: orderType == 'RIDE' ? 'Destination' : 'Destinataire',
+              dotColor: AppColors.error,
+              nameCtrl: receiverNameCtrl,
+              phoneCtrl: receiverPhoneCtrl,
+              onPick: onPickReceiver,
+            )),
+          ]),
+          if (orderType == 'DELIVERY') ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: descriptionCtrl,
+              style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'Description du colis (optionnel)...',
+                fillColor: AppColors.card, filled: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                isDense: true,
+              ),
+            ),
+          ],
+          const Spacer(),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onNext,
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                Text('Suivant — Résumé'),
+                SizedBox(width: 8),
+                Icon(Icons.arrow_forward, size: 16),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactMini extends StatelessWidget {
+  final String label;
+  final Color dotColor;
+  final TextEditingController nameCtrl;
+  final TextEditingController phoneCtrl;
+  final VoidCallback onPick;
+  const _ContactMini({required this.label, required this.dotColor, required this.nameCtrl, required this.phoneCtrl, required this.onPick});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: dotColor.withValues(alpha: 0.2), width: 1.5),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 6, height: 6, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(color: dotColor, fontSize: 11, fontWeight: FontWeight.w700)),
+          const Spacer(),
+          GestureDetector(
+            onTap: onPick,
+            child: Icon(Icons.contacts_rounded, color: dotColor, size: 16),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        TextField(
+          controller: nameCtrl,
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+          decoration: InputDecoration(
+            hintText: 'Nom',
+            hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            fillColor: AppColors.surface, filled: true, isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextField(
+          controller: phoneCtrl,
+          keyboardType: TextInputType.phone,
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+          decoration: InputDecoration(
+            hintText: 'Téléphone',
+            hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            prefixText: '+221 ',
+            prefixStyle: TextStyle(color: dotColor, fontWeight: FontWeight.w700, fontSize: 12),
+            fillColor: AppColors.surface, filled: true, isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _Step2Panel extends StatelessWidget {
+  final String pickupLabel;
+  final String deliveryLabel;
+  final double? estimatedPrice;
+  final double surgeMultiplier;
+  final bool loadingSurge;
+  final bool submitting;
+  final bool canSubmit;
+  final VoidCallback onSubmit;
+
+  const _Step2Panel({
+    required this.pickupLabel, required this.deliveryLabel,
+    required this.estimatedPrice, required this.surgeMultiplier,
+    required this.loadingSurge, required this.submitting,
+    required this.canSubmit, required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(children: [
+        // Route recap
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12)),
+          child: Column(children: [
+            _RouteRow(icon: Icons.circle, color: AppColors.success, text: pickupLabel),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Container(width: 1, height: 14, color: AppColors.textSecondary.withValues(alpha: 0.3)),
+            ),
+            _RouteRow(icon: Icons.location_on, color: AppColors.error, text: deliveryLabel),
+          ]),
+        ),
+        const SizedBox(height: 10),
+        // Price row
+        Row(children: [
+          const Text('Prix estimé', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          const Spacer(),
+          if (loadingSurge)
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+          else if (estimatedPrice != null) ...[
+            if (surgeMultiplier > 1.0) ...[
+              const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 14),
+              const SizedBox(width: 4),
+            ],
+            Text('${estimatedPrice!.toInt()} FCFA',
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+          ] else
+            const Text('—', style: TextStyle(color: AppColors.textSecondary)),
+        ]),
+        const Spacer(),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: (canSubmit && !submitting) ? onSubmit : null,
+            child: submitting
+                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Text('Confirmer la commande'),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _RouteRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+  const _RouteRow({required this.icon, required this.color, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Icon(icon, color: color, size: 14),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(text,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+    ]);
   }
 }
