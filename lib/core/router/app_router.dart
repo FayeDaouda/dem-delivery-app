@@ -10,7 +10,7 @@ import '../../features/home_driver/home_driver_screen.dart';
 import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
 
 import '../../features/client_profile/client_profile_screen.dart';
-import '../../features/home_client/my_orders_screen.dart';
+import '../../features/home_client/orders_history_screen.dart';
 
 
 import '../../features/splash/screens/splash_screen.dart';
@@ -75,7 +75,7 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/orders/my',
-      builder: (context, state) => const MyOrdersScreen(),
+      builder: (context, state) => const OrdersHistoryScreen(),
     ),
 
     // ── Driver Livraison (moto) ──

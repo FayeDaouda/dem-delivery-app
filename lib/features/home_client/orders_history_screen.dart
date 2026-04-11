@@ -10,8 +10,8 @@ final myOrdersProvider =
   return ref.read(ordersRepositoryProvider).getMyOrders();
 });
 
-class MyOrdersScreen extends ConsumerWidget {
-  const MyOrdersScreen({super.key});
+class OrdersHistoryScreen extends ConsumerWidget {
+  const OrdersHistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
