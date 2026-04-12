@@ -443,7 +443,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           label: 'Transport',
           subtitle: 'Thiak Thiak',
           color: const Color(0xFF1A6B7A),
-          onTap: () => context.push('/orders/create?type=RIDE'),
+          onTap: () async {
+            await context.push('/orders/create?type=RIDE');
+            _checkPendingOrder();
+          },
         ),
         const SizedBox(height: 10),
         const Text(
@@ -459,19 +462,28 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             _ServiceCard(
               icon: Icons.inventory_2_outlined,
               label: 'Colis',
-              onTap: () => context.push('/orders/create?type=DELIVERY'),
+              onTap: () async {
+                await context.push('/orders/create?type=DELIVERY');
+                _checkPendingOrder();
+              },
             ),
             const SizedBox(width: 12),
             _ServiceCard(
               icon: Icons.restaurant_outlined,
               label: 'Repas',
-              onTap: () => context.push('/orders/create?type=DELIVERY'),
+              onTap: () async {
+                await context.push('/orders/create?type=DELIVERY');
+                _checkPendingOrder();
+              },
             ),
             const SizedBox(width: 12),
             _ServiceCard(
               icon: Icons.more_horiz,
               label: 'Autre',
-              onTap: () => context.push('/orders/create?type=DELIVERY'),
+              onTap: () async {
+                await context.push('/orders/create?type=DELIVERY');
+                _checkPendingOrder();
+              },
             ),
           ],
         ),

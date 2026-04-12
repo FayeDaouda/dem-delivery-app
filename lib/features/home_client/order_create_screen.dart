@@ -423,7 +423,14 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
         if (_receiverPhoneCtrl.text.trim().isNotEmpty)'receiverPhone':'+221${_receiverPhoneCtrl.text.trim()}',
         if (widget.orderType == 'DELIVERY')
           'description': _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
+        if (_estimatedPrice != null) 'price': _estimatedPrice,
       });
+      
+      // Assure que le prix affiché sur la confirmation est exactement le même que l'estimé
+      if (_estimatedPrice != null) {
+        order['price'] = _estimatedPrice;
+      }
+      
       if (mounted) context.pushReplacement('/orders/confirmation', extra: order);
     } catch (e) {
       if (mounted) {
@@ -1108,11 +1115,11 @@ class _Step3Panel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12)),
-          child: Column(children: [
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             _RouteRow(icon: Icons.circle, color: AppColors.success, text: pickupLabel),
             Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Container(width: 1, height: 14, color: AppColors.textSecondary.withValues(alpha: 0.3)),
+              padding: const EdgeInsets.only(left: 6),
+              child: Container(width: 2, height: 14, color: AppColors.textSecondary.withValues(alpha: 0.3)),
             ),
             _RouteRow(icon: Icons.location_on, color: AppColors.error, text: deliveryLabel),
           ]),

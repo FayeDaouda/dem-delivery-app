@@ -1,151 +1,233 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../home_driver/navigation/map_theme.dart';
 
 /// Affiché après la création d'une commande.
 /// Reçoit l'objet `order` retourné par le backend.
-class OrderConfirmationScreen extends StatelessWidget {
+class OrderConfirmationScreen extends StatefulWidget {
   final Map<String, dynamic> order;
   const OrderConfirmationScreen({super.key, required this.order});
 
   @override
+  State<OrderConfirmationScreen> createState() => _OrderConfirmationScreenState();
+}
+
+class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
+  String? _mapStyle;
+  List<LatLng> _routePoints = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMapStyle();
+    _fetchRoute();
+  }
+
+  Future<void> _loadMapStyle() async {
+    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    if (mounted) setState(() => _mapStyle = style);
+  }
+
+  Future<void> _fetchRoute() async {
+    final order = widget.order;
+    final pickupLat = order['pickupLatitude'] as num?;
+    final pickupLng = order['pickupLongitude'] as num?;
+    final deliveryLat = order['deliveryLatitude'] as num?;
+    final deliveryLng = order['deliveryLongitude'] as num?;
+
+    if (pickupLat == null || pickupLng == null || deliveryLat == null || deliveryLng == null) return;
+    
+    // Draw basic straight line initially
+    if (mounted) setState(() => _routePoints = [
+      LatLng(pickupLat.toDouble(), pickupLng.toDouble()),
+      LatLng(deliveryLat.toDouble(), deliveryLng.toDouble()),
+    ]);
+
+    try {
+      final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
+      final res = await dio.get('https://router.project-osrm.org/route/v1/driving/${pickupLng},${pickupLat};${deliveryLng},${deliveryLat}?overview=full&geometries=geojson');
+      if (res.statusCode == 200 && res.data['routes'] != null && (res.data['routes'] as List).isNotEmpty) {
+        final route = res.data['routes'][0];
+        final coords = route['geometry']['coordinates'] as List;
+        final points = coords.map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())).toList();
+        if (mounted) setState(() => _routePoints = points);
+      }
+    } catch (_) {}
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final order           = widget.order;
     final price           = order['price'] as num?;
     final surge           = (order['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
-    final etaPickup       = order['etaPickupMin'] as int?;
-    final etaDelivery     = order['etaDeliveryMin'] as int?;
-    final pickupAddress   = order['pickupAddress'] as String? ?? '';
-    final deliveryAddress = order['deliveryAddress'] as String? ?? '';
+    final pickupAddress   = order['pickupAddress'] as String? ?? 'Départ';
+    final deliveryAddress = order['deliveryAddress'] as String? ?? 'Arrivée';
+
+    final pickupLat = order['pickupLatitude'] as num?;
+    final pickupLng = order['pickupLongitude'] as num?;
+    final deliveryLat = order['deliveryLatitude'] as num?;
+    final deliveryLng = order['deliveryLongitude'] as num?;
+
+    Set<Marker> markers = {};
+    Set<Polyline> polylines = {};
+
+    if (pickupLat != null && pickupLng != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('pickup'),
+        position: LatLng(pickupLat.toDouble(), pickupLng.toDouble()),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      ));
+    }
+    if (deliveryLat != null && deliveryLng != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('delivery'),
+        position: LatLng(deliveryLat.toDouble(), deliveryLng.toDouble()),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ));
+    }
+
+    if (_routePoints.isNotEmpty) {
+      polylines.add(Polyline(
+        polylineId: const PolylineId('route'),
+        points: _routePoints,
+        color: AppColors.primary,
+        width: 4,
+      ));
+    }
+
+    final initialTarget = pickupLat != null && pickupLng != null 
+        ? LatLng(pickupLat.toDouble(), pickupLng.toDouble()) 
+        : const LatLng(14.6937, -17.4441);
 
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              const Spacer(),
-
-              // ── Icône succès ──
-              Container(
-                width: 80, height: 80,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [AppColors.primary, Color(0xFF1A6B7A)],
-                  ),
-                ),
-                child: const Icon(Icons.check_rounded, color: Colors.white, size: 44),
-              ),
-              const SizedBox(height: 20),
-              const Text('Course commandée !',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text('Recherche d\'un driver en cours…',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-
-              const SizedBox(height: 32),
-
-              // ── Carte détails ──
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(18),
-                  border: surge > 1.0
-                      ? Border.all(color: const Color(0xFFFF9800), width: 1.5)
-                      : null,
-                ),
-                child: Column(children: [
-                  _Row(icon: Icons.my_location,   label: 'Départ',    value: pickupAddress),
-                  const Divider(color: AppColors.surface, height: 20),
-                  _Row(icon: Icons.location_on,   label: 'Arrivée',   value: deliveryAddress),
-                  const Divider(color: AppColors.surface, height: 20),
-                  _Row(
-                    icon: Icons.payments_outlined,
-                    label: 'Prix',
-                    value: '${price?.toInt() ?? '—'} FCFA',
-                    valueStyle: const TextStyle(
-                      color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  if (surge > 1.0) ...[
-                    const SizedBox(height: 12),
-                    _SurgeBadge(multiplier: surge),
-                  ],
-                  if (etaPickup != null) ...[
-                    const Divider(color: AppColors.surface, height: 20),
-                    _Row(
-                      icon: Icons.timer_outlined,
-                      label: 'ETA arrivée driver',
-                      value: '~$etaPickup min',
-                    ),
-                  ],
-                  if (etaDelivery != null) ...[
-                    const SizedBox(height: 4),
-                    _Row(
-                      icon: Icons.flag_outlined,
-                      label: 'ETA livraison',
-                      value: '~$etaDelivery min',
-                    ),
-                  ],
-                ]),
-              ),
-
-              const Spacer(),
-
-              // ── Bouton retour ──
-              ElevatedButton(
-                onPressed: () => context.go('/client/home'),
-                child: const Text('Retour à l\'accueil'),
-              ),
-            ],
+      body: Stack(
+        children: [
+          // ── Map Background ──
+          SizedBox.expand(
+            child: GoogleMap(
+              initialCameraPosition: CameraPosition(target: initialTarget, zoom: 14),
+              style: _mapStyle,
+              markers: markers,
+              polylines: polylines,
+              zoomControlsEnabled: false,
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              compassEnabled: false,
+              mapToolbarEnabled: false,
+            ),
           ),
-        ),
+
+          // ── Contenu superposé Exactement comme Step 3 ──
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, -4))],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 0), // 0 to allow panel flush bottom
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Drag handle
+                      Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(2)))),
+                      const SizedBox(height: 16),
+
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        child: Column(
+                          children: [
+                            // ── Indicateur de chargement ──
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary)),
+                                const SizedBox(width: 12),
+                                const Text('Recherche d\'un driver en cours…',
+                                  style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // ── Route recap ──
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12)),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _RouteRow(icon: Icons.circle, color: AppColors.success, text: pickupAddress),
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 6),
+                                    child: Container(width: 2, height: 14, color: AppColors.textSecondary.withValues(alpha: 0.3)),
+                                  ),
+                                  _RouteRow(icon: Icons.location_on, color: AppColors.error, text: deliveryAddress),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // ── Price row ──
+                            Row(children: [
+                              const Text('Prix estimé', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                              const Spacer(),
+                              if (surge > 1.0) ...[
+                                const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 14),
+                                const SizedBox(width: 4),
+                              ],
+                              Text('${price?.toInt() ?? '—'} FCFA',
+                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+                            ]),
+                            const SizedBox(height: 24),
+
+                            // ── Bouton retour ──
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => context.pop(),
+                                child: const Text('Retour à l\'accueil'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _Row extends StatelessWidget {
+class _RouteRow extends StatelessWidget {
   final IconData icon;
-  final String label;
-  final String value;
-  final TextStyle? valueStyle;
-  const _Row({required this.icon, required this.label, required this.value, this.valueStyle});
+  final Color color;
+  final String text;
+  const _RouteRow({required this.icon, required this.color, required this.text});
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(icon, color: AppColors.primary, size: 18),
-      const SizedBox(width: 10),
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Icon(icon, color: color, size: 14),
+      const SizedBox(width: 8),
       Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-          const SizedBox(height: 2),
-          Text(value, style: valueStyle ?? const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
-        ]),
+        child: Text(text,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
-    ],
-  );
-}
-
-class _SurgeBadge extends StatelessWidget {
-  final double multiplier;
-  const _SurgeBadge({required this.multiplier});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-    decoration: BoxDecoration(
-      color: const Color(0xFFFF9800).withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.local_fire_department, color: Color(0xFFFF9800), size: 16),
-      const SizedBox(width: 6),
-      Text('Forte demande — ×${multiplier.toStringAsFixed(1)} appliqué',
-        style: const TextStyle(color: Color(0xFFFF9800), fontWeight: FontWeight.w600, fontSize: 13)),
-    ]),
-  );
+    ]);
+  }
 }
