@@ -17,9 +17,13 @@ import '../../features/splash/screens/splash_screen.dart';
 import '../../features/profile/screens/driver_profile_screen.dart';
 import '../../features/home_driver/active_order_screen.dart';
 
+import 'package:flutter/widgets.dart';
+
+final routeObserver = RouteObserver<ModalRoute<void>>();
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
+  observers: [routeObserver],
   routes: [
     GoRoute(
       path: '/splash',

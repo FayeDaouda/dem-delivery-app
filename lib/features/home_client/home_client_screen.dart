@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/providers/orders_provider.dart';
@@ -28,11 +29,10 @@ class HomeClientScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, RouteAware {
   Map<String, dynamic>? _user;
-  Map<String, dynamic>? _pendingOrder;
+  List<Map<String, dynamic>> _pendingOrders = [];
   bool _loadingOrders = false;
-  bool _cancelling = false;
 
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
@@ -68,7 +68,23 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is ModalRoute<void>) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPopNext() {
+    // Appelée lorsque l'écran courant redevient le premier plan (au dessus est poppé)
+    _checkPendingOrder();
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     _locationSub?.cancel();
     _mapController?.dispose();
     _sheetAnim.dispose();
@@ -194,13 +210,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     setState(() => _loadingOrders = true);
     try {
       final orders = await ref.read(ordersRepositoryProvider).getMyOrders();
-      final pending = orders.firstWhere(
-        (o) => o['status'] == 'PENDING',
-        orElse: () => {},
-      );
+      final pendingList = orders.where((o) => o['status'] == 'PENDING').toList();
+      
       if (mounted) {
         setState(() {
-          _pendingOrder = pending.isNotEmpty ? pending : null;
+          _pendingOrders = pendingList;
           _loadingOrders = false;
         });
       }
@@ -209,68 +223,75 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     }
   }
 
-  // ── Annule la commande en attente ──────────────────────────────────────────
-  Future<void> _cancelPendingOrder() async {
-    final orderId = _pendingOrder?['id'] as String?;
-    if (orderId == null) return;
-
-    final confirmed = await showDialog<bool>(
+  // ── Affiche un sélecteur s'il y a plusieurs commandes en attente ─────────
+  void _showPendingOrdersSelection() {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Annuler la commande ?',
-          style: TextStyle(
-              color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Voulez-vous vraiment annuler cette commande en attente ?',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Non',
-                style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Oui, annuler',
-              style: TextStyle(
-                  color: Color(0xFFFF5252), fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+             padding: const EdgeInsets.all(16),
+             child: Column(
+               mainAxisSize: MainAxisSize.min,
+               crossAxisAlignment: CrossAxisAlignment.stretch,
+               children: [
+                 // Handle drag
+                 Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(2)))),
+                 const SizedBox(height: 20),
+                 const Text('Vos commandes en attente', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                 const SizedBox(height: 16),
+                 ..._pendingOrders.map((o) {
+                    final type = o['orderType'] ?? o['type'] ?? '';
+                    final price = (o['price'] as num?)?.toInt() ?? 0;
+                    final pickup = o['pickupAddress'] as String? ?? 'Départ';
+                    final delivery = o['deliveryAddress'] as String? ?? 'Arrivée';
+                    return GestureDetector(
+                       onTap: () {
+                         Navigator.pop(ctx);
+                         context.push('/orders/confirmation', extra: o);
+                       },
+                       child: Container(
+                         margin: const EdgeInsets.only(bottom: 12),
+                         padding: const EdgeInsets.all(16),
+                         decoration: BoxDecoration(
+                           color: AppColors.card,
+                           borderRadius: BorderRadius.circular(16),
+                           border: Border.all(color: const Color(0xFFFFB300).withValues(alpha: 0.3)),
+                         ),
+                         child: Row(
+                           children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(color: const Color(0xFFFFB300).withValues(alpha: 0.15), shape: BoxShape.circle),
+                                child: const Icon(Icons.timer, color: Color(0xFFFFB300), size: 22)
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(type == 'RIDE' ? 'Transport (Thiak Thiak)' : 'Livraison', style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Text('$pickup  ➔  $delivery', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ]
+                                )
+                              ),
+                              const SizedBox(width: 10),
+                              Text('$price CFA', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                           ]
+                         )
+                       )
+                    );
+                 })
+               ]
+             )
+          )
+        );
+      }
     );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _cancelling = true);
-    try {
-      await ref.read(ordersRepositoryProvider).cancelOrder(orderId);
-      if (mounted) {
-        setState(() {
-          _pendingOrder = null;
-          _cancelling = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Commande annulée avec succès'),
-            backgroundColor: Color(0xFF4CAF50),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _cancelling = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
-    }
   }
 
   @override
@@ -303,36 +324,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               mapToolbarEnabled: false,
             ),
           ),
-
-          // ── Bouton re-centrer ──
-          if (!_autoFollow)
-            Positioned(
-              left: 16,
-              bottom: _navBarHeight + 80,
-              child: GestureDetector(
-                onTap: _recenter,
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.card, width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 12,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.my_location,
-                    color: AppColors.primary,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ),
 
           // ── Header ──
           SafeArea(
@@ -388,22 +379,89 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             bottom: 0,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // ── Flottants juste au dessus du bottom sheet ──
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Bouton re-centrer
+                      if (!_autoFollow)
+                        GestureDetector(
+                          onTap: _recenter,
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.card, width: 1.5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.my_location,
+                              color: AppColors.primary,
+                              size: 22,
+                            ),
+                          ),
+                        )
+                      else
+                        const SizedBox(width: 52), // Spacer to hold horizontal layout
+
+                      // Badge Commandes en attente
+                      if (_pendingOrders.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            if (_pendingOrders.length == 1) {
+                              context.push('/orders/confirmation', extra: _pendingOrders.first);
+                            } else {
+                              _showPendingOrdersSelection();
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFB300),
+                              borderRadius: BorderRadius.circular(30),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFFB300).withValues(alpha: 0.4),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                )
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.timer, color: Colors.white, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _pendingOrders.length == 1 ? '1 commande en cours' : '${_pendingOrders.length} commandes en cours',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
                 // ── Sheet rétractable ──
                 _AnimatedSheet(
                   animation: _sheetSlide,
                   onToggle: _toggleSheet,
                   expanded: _sheetExpanded,
-                  isPending: _pendingOrder != null && !_loadingOrders,
-                  child: _loadingOrders
-                      ? _buildLoadingContent()
-                      : _pendingOrder != null
-                          ? _PendingOrderSheetContent(
-                              order: _pendingOrder!,
-                              cancelling: _cancelling,
-                              onCancel: _cancelPendingOrder,
-                            )
-                          : _buildServiceContent(),
+                  child: _buildServiceContent(),
                 ),
 
                 // ── Navbar fixe ──
@@ -498,26 +556,20 @@ class _AnimatedSheet extends StatelessWidget {
   final Widget child;
   final VoidCallback onToggle;
   final bool expanded;
-  final bool isPending;
 
   const _AnimatedSheet({
     required this.animation,
     required this.child,
     required this.onToggle,
     required this.expanded,
-    required this.isPending,
   });
 
   @override
   Widget build(BuildContext context) {
-    final borderColor =
-        isPending ? const Color(0xFFFFB300) : Colors.transparent;
-
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(top: BorderSide(color: borderColor, width: 2)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.35),
@@ -670,151 +722,7 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-// ── Contenu sheet commande en attente ─────────────────────────────────────────
-class _PendingOrderSheetContent extends StatelessWidget {
-  final Map<String, dynamic> order;
-  final bool cancelling;
-  final VoidCallback onCancel;
-
-  const _PendingOrderSheetContent({
-    required this.order,
-    required this.cancelling,
-    required this.onCancel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final type = order['type'] as String? ?? '';
-    final price = (order['price'] as num?)?.toInt() ?? 0;
-    final pickup = order['pickupAddress'] as String? ?? '—';
-    final delivery = order['deliveryAddress'] as String? ?? '—';
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Header ──
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFB300).withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.access_time_rounded,
-                  color: Color(0xFFFFB300), size: 22),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Commande en attente',
-                  style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  _typeLabel(type),
-                  style: const TextStyle(
-                      color: AppColors.textSecondary, fontSize: 12),
-                ),
-              ],
-            ),
-            const Spacer(),
-            Text(
-              '$price FCFA',
-              style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-
-        // ── Adresses ──
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              _AddressRow(
-                  icon: Icons.circle,
-                  color: const Color(0xFF4CAF50),
-                  label: 'Récupération',
-                  address: pickup),
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Container(
-                    width: 1.5,
-                    height: 12,
-                    color: AppColors.textSecondary.withValues(alpha: 0.3)),
-              ),
-              _AddressRow(
-                  icon: Icons.location_on,
-                  color: AppColors.primary,
-                  label: 'Destination',
-                  address: delivery),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // ── Bouton annuler ──
-        SizedBox(
-          width: double.infinity,
-          child: GestureDetector(
-            onTap: cancelling ? null : onCancel,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF5252).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                    color: const Color(0xFFFF5252).withValues(alpha: 0.5),
-                    width: 1.5),
-              ),
-              child: cancelling
-                  ? const Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Color(0xFFFF5252)),
-                      ),
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.cancel_outlined,
-                            color: Color(0xFFFF5252), size: 18),
-                        SizedBox(width: 8),
-                        Text('Annuler la commande',
-                            style: TextStyle(
-                                color: Color(0xFFFF5252),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _typeLabel(String type) => switch (type) {
-        'RIDE' => 'Thiak Thiak',
-        'DELIVERY' => 'Livraison',
-        _ => type,
-      };
-}
+// Content removed since pending orders are shown via badge
 
 // ── Ligne adresse ─────────────────────────────────────────────────────────────
 class _AddressRow extends StatelessWidget {
