@@ -1,25 +1,28 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
 
 /// Affiché après la création d'une commande.
 /// Reçoit l'objet `order` retourné par le backend.
-class OrderConfirmationScreen extends StatefulWidget {
+class OrderConfirmationScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> order;
   const OrderConfirmationScreen({super.key, required this.order});
 
   @override
-  State<OrderConfirmationScreen> createState() => _OrderConfirmationScreenState();
+  ConsumerState<OrderConfirmationScreen> createState() => _OrderConfirmationScreenState();
 }
 
-class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
+class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScreen> {
   String? _mapStyle;
   List<LatLng> _routePoints = [];
+  bool _cancelling = false;
 
   @override
   void initState() {
@@ -58,6 +61,46 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
         if (mounted) setState(() => _routePoints = points);
       }
     } catch (_) {}
+  }
+
+  Future<void> _cancelOrder() async {
+    final orderId = widget.order['id'] as String?;
+    if (orderId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Annuler la commande ?', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+        content: const Text('Voulez-vous vraiment annuler cette commande en attente ?', style: TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Non', style: TextStyle(color: AppColors.textSecondary))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Oui, annuler', style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancelling = true);
+    try {
+      await ref.read(ordersRepositoryProvider).cancelOrder(orderId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Commande annulée avec succès'), backgroundColor: Color(0xFF4CAF50)),
+        );
+        context.pop(); // Returns to home
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _cancelling = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
   }
 
   @override
@@ -189,13 +232,35 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                             ]),
                             const SizedBox(height: 24),
 
-                            // ── Bouton retour ──
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () => context.pop(),
-                                child: const Text('Retour à l\'accueil'),
-                              ),
+                            // ── Boutons Action ──
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFF5252),
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                    ),
+                                    onPressed: _cancelling ? null : _cancelOrder,
+                                    child: _cancelling
+                                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                        : const Text('Annuler', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                    ),
+                                    onPressed: _cancelling ? null : () => context.pop(),
+                                    child: const Text('Retour à l\'accueil', style: TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
