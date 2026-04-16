@@ -484,10 +484,35 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── Contenu choix du service ───────────────────────────────────────────────
   Widget _buildServiceContent() {
+    final hour = DateTime.now().hour;
+    String greeting;
+    if (hour >= 5 && hour < 12) {
+      greeting = 'Bonjour';
+    } else if (hour >= 12 && hour < 18) {
+      greeting = 'Bon après-midi';
+    } else {
+      greeting = 'Bonsoir';
+    }
+
+    final fullName = _user?['name'] as String? ?? 'user';
+    final firstName = fullName.split(' ').first;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (firstName.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '$greeting $firstName 👋',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
         const Text(
           'Que voulez-vous faire ?',
           style: TextStyle(
@@ -497,7 +522,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         ),
         const SizedBox(height: 16),
         _ServiceCard(
-          icon: Icons.directions_car_outlined,
+          icon: Icons.bike_scooter_outlined,
           label: 'Transport',
           subtitle: 'Thiak Thiak',
           color: const Color(0xFF1A6B7A),
@@ -506,8 +531,18 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             _checkPendingOrder();
           },
         ),
-        const SizedBox(height: 10),
-        const Text(
+        const SizedBox(height: 16),
+        _ServiceCard(
+          icon: Icons.inventory_2_outlined,
+          label: 'Coursier',
+          subtitle: 'Colis',
+          color: const Color(0xFF1A6B7A),
+          onTap: () async {
+            await context.push('/orders/create?type=DELIVERY');
+            _checkPendingOrder();
+          },
+        ),
+        /*const Text(
           'Livraison',
           style: TextStyle(
               color: AppColors.textSecondary,
@@ -544,7 +579,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               },
             ),
           ],
-        ),
+        ),*/
       ],
     );
   }
