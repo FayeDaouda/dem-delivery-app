@@ -8,12 +8,22 @@ import '../../features/home_client/order_create_screen.dart';
 import '../../features/home_client/order_confirmation_screen.dart';
 import '../../features/home_driver/home_driver_screen.dart';
 import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
+
+import '../../features/client_profile/client_profile_screen.dart';
+import '../../features/home_client/orders_history_screen.dart';
+
+
 import '../../features/splash/screens/splash_screen.dart';
 import '../../features/profile/screens/driver_profile_screen.dart';
 import '../../features/home_driver/active_order_screen.dart';
 
+import 'package:flutter/widgets.dart';
+
+final routeObserver = RouteObserver<ModalRoute<void>>();
+
 final appRouter = GoRouter(
   initialLocation: '/splash',
+  observers: [routeObserver],
   routes: [
     GoRoute(
       path: '/splash',
@@ -50,6 +60,10 @@ final appRouter = GoRouter(
       builder: (context, state) => const HomeClientScreen(),
     ),
     GoRoute(
+      path: '/client/profile',
+      builder: (context, state) => const ClientProfileScreen(),
+    ),
+    GoRoute(
       path: '/orders/create',
       builder: (context, state) {
         final type = state.uri.queryParameters['type'] ?? 'DELIVERY';
@@ -62,6 +76,10 @@ final appRouter = GoRouter(
         final order = state.extra as Map<String, dynamic>;
         return OrderConfirmationScreen(order: order);
       },
+    ),
+    GoRoute(
+      path: '/orders/my',
+      builder: (context, state) => const OrdersHistoryScreen(),
     ),
 
     // ── Driver Livraison (moto) ──
