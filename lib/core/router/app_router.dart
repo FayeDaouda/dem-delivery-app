@@ -14,8 +14,11 @@ import '../../features/home_client/orders_history_screen.dart';
 
 
 import '../../features/splash/screens/splash_screen.dart';
+import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/profile/screens/driver_profile_screen.dart';
 import '../../features/home_driver/active_order_screen.dart';
+import '../../features/admin/screens/admin_login_screen.dart';
+import '../../features/admin/screens/admin_panel_screen.dart';
 
 import 'package:flutter/widgets.dart';
 
@@ -28,6 +31,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/splash',
       builder: (context, state) => const SplashScreen(),
+    ),
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingScreen(),
     ),
 
     // ── Auth ──
@@ -107,6 +114,16 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/driver/profile',
       builder: (context, state) => const DriverProfileScreen(),
+    ),
+
+    // ── Admin ──
+    GoRoute(
+      path: '/admin/login',
+      builder: (context, state) => const AdminLoginScreen(),
+    ),
+    GoRoute(
+      path: '/admin/home',
+      builder: (context, state) => const AdminPanelScreen(),
     ),
   ],
 );

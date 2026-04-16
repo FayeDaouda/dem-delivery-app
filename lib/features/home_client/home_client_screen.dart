@@ -296,7 +296,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
 
     return Scaffold(
       body: Stack(

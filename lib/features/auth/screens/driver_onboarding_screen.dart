@@ -1,9 +1,55 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../../profile/providers/profile_provider.dart';
+
+// ── Formateur plaque sénégalaise : "DK 1234 AB" ───────────────────────────────
+// Accepte les formes : "DK1234AB", "DK 1234 AB", etc.
+// Normalise : 2 lettres · espace · 1-4 chiffres · espace · 1-2 lettres
+class _PlateFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // On garde uniquement lettres et chiffres, en majuscules
+    final raw = newValue.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (raw.isEmpty) return newValue.copyWith(text: '');
+
+    final buf = StringBuffer();
+    int i = 0;
+
+    // 1-2 lettres préfixe (ex: "DK")
+    while (i < raw.length && i < 2 && RegExp(r'[A-Z]').hasMatch(raw[i])) {
+      buf.write(raw[i++]);
+    }
+    // chiffres (max 4)
+    if (i < raw.length) {
+      final digits = StringBuffer();
+      while (i < raw.length && digits.length < 4 && RegExp(r'\d').hasMatch(raw[i])) {
+        digits.write(raw[i++]);
+      }
+      if (digits.isNotEmpty) { buf.write(' '); buf.write(digits); }
+    }
+    // lettres suffixe (max 2)
+    if (i < raw.length) {
+      final suffix = StringBuffer();
+      while (i < raw.length && suffix.length < 2 && RegExp(r'[A-Z]').hasMatch(raw[i])) {
+        suffix.write(raw[i++]);
+      }
+      if (suffix.isNotEmpty) { buf.write(' '); buf.write(suffix); }
+    }
+
+    final formatted = buf.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
 
 class DriverOnboardingScreen extends ConsumerStatefulWidget {
   final String vehicleType;
@@ -14,9 +60,10 @@ class DriverOnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen> {
-  final _nameController = TextEditingController();
+  final _nameController  = TextEditingController();
   final _plateController = TextEditingController();
-  bool _loading = false;
+  bool    _loading   = false;
+  String? _nameError;
 
   bool get _isMoto => widget.vehicleType == 'MOTO';
 
@@ -29,18 +76,22 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
 
   Future<void> _submit() async {
     final name = _nameController.text.trim();
+
+    // Validation inline
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Entrez votre nom complet.')),
-      );
+      setState(() => _nameError = 'Entrez votre nom complet.');
+      return;
+    }
+    if (name.split(' ').length < 2) {
+      setState(() => _nameError = 'Prénom et nom requis (ex : Mamadou Diallo).');
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() { _loading = true; _nameError = null; });
     try {
       await ref.read(profileRepositoryProvider).completeOnboarding(
             name: name,
-            vehiclePlate: _plateController.text.trim().toUpperCase(),
+            vehiclePlate: _plateController.text.trim().replaceAll(' ', '').toUpperCase(),
           );
       await ref.read(profileProvider.notifier).fetchProfile();
       if (!mounted) return;
@@ -84,7 +135,9 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                     Text(
                       _isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
                       style: const TextStyle(
-                          color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 1),
+                        color: Colors.white, fontSize: 16,
+                        fontWeight: FontWeight.w700, letterSpacing: 1,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -117,33 +170,50 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Votre profil',
-                        style: TextStyle(color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.w800)),
+                    const Text(
+                      'Votre profil',
+                      style: TextStyle(
+                        color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    const Text('Ces informations seront visibles par vos clients',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+                    const Text(
+                      'Ces informations seront visibles par vos clients',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                    ),
                     const SizedBox(height: 32),
 
+                    // ── Nom complet ──
                     _InputLabel('Nom complet *'),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _nameController,
                       style: const TextStyle(color: AppColors.textPrimary),
                       textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Ex : Mamadou Diallo',
-                        prefixIcon: Icon(Icons.person_outline, color: AppColors.textSecondary, size: 20),
+                        prefixIcon: const Icon(Icons.person_outline, color: AppColors.textSecondary, size: 20),
+                        errorText: _nameError,
+                        errorStyle: const TextStyle(fontSize: 12),
                       ),
+                      onChanged: (_) {
+                        if (_nameError != null) setState(() => _nameError = null);
+                      },
                     ),
                     const SizedBox(height: 20),
 
+                    // ── Plaque ──
                     _InputLabel(_isMoto ? 'Plaque moto' : 'Plaque véhicule'),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _plateController,
                       style: const TextStyle(
-                          color: AppColors.textPrimary, letterSpacing: 2, fontWeight: FontWeight.w600),
+                        color: AppColors.textPrimary,
+                        letterSpacing: 2,
+                        fontWeight: FontWeight.w600,
+                      ),
                       textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [_PlateFormatter()],
                       decoration: InputDecoration(
                         hintText: _isMoto ? 'Ex : DK 1234 AB' : 'Ex : DK 5678 CD',
                         prefixIcon: Icon(
@@ -181,9 +251,13 @@ class _InputLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(
-            color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5));
+    return Text(
+      text,
+      style: const TextStyle(
+        color: AppColors.textSecondary, fontSize: 12,
+        fontWeight: FontWeight.w600, letterSpacing: 0.5,
+      ),
+    );
   }
 }
 

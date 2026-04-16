@@ -6,6 +6,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// ── Lecture de key.properties ────────────────────────────────────────────────
+val keyProps = Properties()
+val keyPropsFile = rootProject.file("key.properties")   // android/key.properties → absent du git
+if (keyPropsFile.exists()) keyProps.load(keyPropsFile.inputStream())
+
 android {
     namespace = "com.dem.dem_app"
     compileSdk = flutter.compileSdkVersion
@@ -19,6 +24,16 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
+    }
+
+    // ── Signing ───────────────────────────────────────────────────────────────
+    signingConfigs {
+        create("release") {
+            storeFile     = file(keyProps["storeFile"]     as String)
+            storePassword = keyProps["storePassword"]      as String
+            keyAlias      = keyProps["keyAlias"]           as String
+            keyPassword   = keyProps["keyPassword"]        as String
         }
     }
 
@@ -38,7 +53,13 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled   = true    // obfuscation du code
+            isShrinkResources = true    // supprime les ressources inutilisées
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

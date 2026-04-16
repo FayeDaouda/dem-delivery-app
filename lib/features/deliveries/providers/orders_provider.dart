@@ -68,11 +68,6 @@ final availableOrdersProvider =
   AvailableOrdersNotifier.new,
 );
 
-// ─── My orders (historique) ────────────────────────────────────────────────
-final myOrdersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
-  return ref.read(ordersRepositoryProvider).getMyOrders();
-});
-
 // ─── Order detail ──────────────────────────────────────────────────────────
 final orderDetailProvider =
     FutureProvider.family<Map<String, dynamic>, String>((ref, orderId) {

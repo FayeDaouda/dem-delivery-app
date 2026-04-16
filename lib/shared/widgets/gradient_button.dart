@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 class GradientButton extends StatelessWidget {
   final String label;
   final bool loading;
+  final bool enabled;
   final VoidCallback onTap;
 
   const GradientButton({
@@ -11,36 +12,46 @@ class GradientButton extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.loading = false,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final active = enabled && !loading;
     return GestureDetector(
-      onTap: loading ? null : onTap,
+      onTap: active ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         height: 54,
         decoration: BoxDecoration(
-          gradient: loading
-              ? const LinearGradient(colors: [AppColors.card, AppColors.card])
-              : const LinearGradient(
-                  colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
-                ),
+          color: !active ? Colors.white.withValues(alpha: 0.4) : Colors.white,
           borderRadius: BorderRadius.circular(14),
+          boxShadow: !active
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
         ),
         child: Center(
           child: loading
               ? const SizedBox(
                   height: 22,
                   width: 22,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  child: CircularProgressIndicator(color: AppColors.primaryMid, strokeWidth: 2),
                 )
               : Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: enabled
+                        ? AppColors.primaryDark
+                        : AppColors.primaryDark.withValues(alpha: 0.45),
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
                   ),
                 ),
         ),

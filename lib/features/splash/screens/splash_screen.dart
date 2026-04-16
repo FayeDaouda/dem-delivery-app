@@ -14,86 +14,93 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
 
-  late final AnimationController _logoController;
-  late final AnimationController _taglineController;
+  late final AnimationController _logoCtrl;
+  late final AnimationController _taglineCtrl;
+  late final AnimationController _loaderCtrl;
 
   late final Animation<double> _logoScale;
   late final Animation<double> _logoOpacity;
   late final Animation<double> _taglineOpacity;
+  late final Animation<Offset> _taglineSlide;
+  late final Animation<double> _loaderOpacity;
 
   @override
   void initState() {
     super.initState();
 
-    // Logo : scale + fade — 800ms
-    _logoController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
+    // Logo : scale élastique + fade — 800ms
+    _logoCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
     _logoScale = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
+      CurvedAnimation(parent: _logoCtrl, curve: Curves.elasticOut),
     );
     _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _logoController,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
-      ),
+      CurvedAnimation(parent: _logoCtrl, curve: const Interval(0.0, 0.45, curve: Curves.easeIn)),
     );
 
-    // Tagline : fade — 600ms
-    _taglineController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
+    // Tagline : slide-up + fade — 500ms
+    _taglineCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
     _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _taglineController, curve: Curves.easeIn),
+      CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOut),
+    );
+    _taglineSlide = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero).animate(
+      CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOutCubic),
     );
 
-    _runAnimations();
+    // Loader : fade in discret — 400ms
+    _loaderCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    _loaderOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _loaderCtrl, curve: Curves.easeIn),
+    );
+
+    _runSequence();
   }
 
-  Future<void> _runAnimations() async {
-    await _logoController.forward();
-    await _taglineController.forward();
-    await Future.delayed(const Duration(milliseconds: 800));
+  Future<void> _runSequence() async {
+    // 1. Logo pop élastique
+    await _logoCtrl.forward();
+    // 2. Tagline slide-up + fade
+    await _taglineCtrl.forward();
+    // 3. Courte pause puis loader visible pendant l'appel réseau
+    await Future.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
-    _navigate();
+    _loaderCtrl.forward();
+
+    // 4. Résolution de la navigation (appel API)
+    final destination = await _resolveDestination();
+    if (!mounted) return;
+
+    // 5. Navigation directe — pas de fade-out pour éviter l'écran noir
+    context.go(destination);
   }
 
-  Future<void> _navigate() async {
+  Future<String> _resolveDestination() async {
     final isLoggedIn = await AuthStorage.isLoggedIn();
-    if (!mounted) return;
-
     if (!isLoggedIn) {
-      context.go('/phone');
-      return;
+      final seen = await AuthStorage.isOnboardingSeen();
+      return seen ? '/phone' : '/onboarding';
     }
 
-    // Récupère les données fraîches depuis l'API (évite le cache obsolète)
     Map<String, dynamic>? user;
     try {
       user = await ProfileRepository().getMe();
     } catch (_) {
-      // fallback sur le cache local si l'API échoue
       user = await AuthStorage.getUser();
     }
 
-    if (!mounted) return;
-    final role = user?['role'] as String?;
+    final role        = user?['role'] as String?;
     final vehicleType = user?['vehicleType'] as String?;
-    if (role == 'DRIVER' && vehicleType == 'TAXI') {
-      context.go('/driver/thiak/home');
-    } else if (role == 'DRIVER') {
-      context.go('/driver/home');
-    } else {
-      context.go('/client/home');
-    }
+
+    if (role == 'DRIVER' && vehicleType == 'TAXI') return '/driver/thiak/home';
+    if (role == 'DRIVER') return '/driver/home';
+    if (role == 'CLIENT') return '/client/home';
+    return '/phone';
   }
 
   @override
   void dispose() {
-    _logoController.dispose();
-    _taglineController.dispose();
+    _logoCtrl.dispose();
+    _taglineCtrl.dispose();
+    _loaderCtrl.dispose();
     super.dispose();
   }
 
@@ -106,36 +113,51 @@ class _SplashScreenState extends State<SplashScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo DEM animé
+
+              // ── Logo ──
               AnimatedBuilder(
-                animation: _logoController,
-                builder: (context, child) => Opacity(
+                animation: _logoCtrl,
+                builder: (_, _) => Opacity(
                   opacity: _logoOpacity.value,
                   child: Transform.scale(
                     scale: _logoScale.value,
-                    child: Image.asset(
-                      'assets/DEM.png',
-                      width: 140,
-                      height: 140,
-                    ),
+                    child: Image.asset('assets/DEM.png', width: 140, height: 140),
                   ),
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              // Tagline fade in
+              // ── Tagline slide-up ──
               AnimatedBuilder(
-                animation: _taglineController,
-                builder: (context, child) => Opacity(
-                  opacity: _taglineOpacity.value,
-                  child: const Text(
-                    'DELIVERY · EXPRESS · MOBILITY',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 3,
+                animation: _taglineCtrl,
+                builder: (_, child) => FadeTransition(
+                  opacity: _taglineOpacity,
+                  child: SlideTransition(position: _taglineSlide, child: child),
+                ),
+                child: const Text(
+                  'DELIVERY · EXPRESS · MOBILITY',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 3,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 48),
+
+              // ── Loader discret — visible pendant l'appel réseau ──
+              AnimatedBuilder(
+                animation: _loaderCtrl,
+                builder: (_, _) => Opacity(
+                  opacity: _loaderOpacity.value,
+                  child: SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white.withValues(alpha: 0.50),
                     ),
                   ),
                 ),
