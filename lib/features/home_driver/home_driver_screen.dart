@@ -23,11 +23,18 @@ class HomeDriverScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeDriverScreen> createState() => _HomeDriverScreenState();
 }
 
-class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
+class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
+    with TickerProviderStateMixin {
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   String? _mapStyle;
   BitmapDescriptor? _driverIcon;
+
+  // ── Pulse animation ───────────────────────────────────────────────────────
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseScale;
+  late final Animation<double> _pulseOpacity;
+  ScreenCoordinate? _driverScreenPos;
 
   // ── GPS ──────────────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
@@ -41,6 +48,14 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
   @override
   void initState() {
     super.initState();
+
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+    _pulseScale = Tween<double>(begin: 0.4, end: 2.2).animate(_pulseCtrl);
+    _pulseOpacity = Tween<double>(begin: 0.7, end: 0.0).animate(_pulseCtrl);
+
     _loadMapStyle();
     _buildDriverIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
@@ -53,6 +68,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
 
   @override
   void dispose() {
+    _pulseCtrl.dispose();
     _locationSub?.cancel();
     _mapController?.dispose();
     _countdownTimer?.cancel();
@@ -137,6 +153,15 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
     if (!mounted) return;
     setState(() => _driverPosition = position);
     if (_autoFollow) _centerOn(position);
+    _updateDriverScreenPos();
+  }
+
+  Future<void> _updateDriverScreenPos() async {
+    if (_driverPosition == null || _mapController == null) return;
+    final coord = await _mapController!.getScreenCoordinate(
+      LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
+    );
+    if (mounted) setState(() => _driverScreenPos = coord);
   }
 
   void _centerOn(Position position) {
@@ -192,11 +217,27 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
   }
 
   Future<void> _acceptOrder(String orderId) async {
+    // Mode DEV — commande simulée, pas d'appel API
+    if (orderId.startsWith('dev-')) {
+      final devOrder = ref.read(availableOrdersProvider).value?.firstWhere(
+            (o) => o['id'] == orderId,
+            orElse: () => {},
+          ) ?? {};
+      if (mounted) context.push('/driver/order/active', extra: devOrder);
+      return;
+    }
     try {
-      final order = await ref
+      // Sauvegarde la notification originale (contient client.phone depuis le backend)
+      // avant qu'elle soit effacée par le provider après acceptation
+      final notifOrder = (ref.read(availableOrdersProvider).value ?? [])
+          .firstWhere((o) => o['id'] == orderId, orElse: () => {});
+      final acceptedOrder = await ref
           .read(ordersRepositoryProvider)
           .acceptOrder(orderId);
-      if (mounted) context.push('/driver/order/active', extra: order);
+      // Fusionne : notifOrder (infos client) + acceptedOrder (statut ACCEPTED)
+      // acceptedOrder écrase les champs en double (status, etc.)
+      final merged = {...notifOrder, ...acceptedOrder};
+      if (mounted) context.push('/driver/order/active', extra: merged);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -255,8 +296,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
               onCameraMove: (_) {
                 if (_autoFollow) setState(() => _autoFollow = false);
               },
+              onCameraIdle: _updateDriverScreenPos,
               markers: _driverMarkers,
-              trafficEnabled: isAvailable && orders.isNotEmpty,
+              trafficEnabled: false,
+              buildingsEnabled: true,
               myLocationEnabled: false,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -264,6 +307,35 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
               mapToolbarEnabled: false,
             ),
           ),
+
+          // ── Pulse animation sur le marqueur driver ──
+          if (_driverScreenPos != null)
+            Positioned(
+              left: _driverScreenPos!.x.toDouble() - 30,
+              top: _driverScreenPos!.y.toDouble() - 30,
+              child: IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: _pulseCtrl,
+                  builder: (_, _) => Transform.scale(
+                    scale: _pulseScale.value,
+                    child: Opacity(
+                      opacity: _pulseOpacity.value,
+                      child: Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF33BCD4),
+                            width: 2.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // ── Toggle disponibilité + profil (header) ──
           SafeArea(
@@ -344,12 +416,13 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
+                        color: AppColors.primary,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            blurRadius: 8,
+                            color: AppColors.primary.withValues(alpha: 0.45),
+                            blurRadius: 12,
+                            spreadRadius: 1,
                           ),
                         ],
                       ),
@@ -403,13 +476,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
               switchInCurve: Curves.easeOutBack,
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (child, anim) {
-                final slide =
-                    Tween<Offset>(
-                      begin: const Offset(0, 1),
-                      end: Offset.zero,
-                    ).animate(
-                      CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
-                    );
+                final slide = Tween<Offset>(
+                  begin: const Offset(0, 1),
+                  end: Offset.zero,
+                ).animate(anim);
                 return SlideTransition(
                   position: slide,
                   child: FadeTransition(opacity: anim, child: child),
@@ -437,6 +507,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen> {
                       isAvailable: isAvailable,
                       ordersLoading: ordersAsync.isLoading,
                       onToggle: _toggleAvailability,
+                      onDevTap: () => ref.read(availableOrdersProvider.notifier).injectDevOrder(),
                     ),
             ),
           ),
@@ -462,18 +533,14 @@ class _GlassSheet extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: radius,
-            gradient: LinearGradient(
+            gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.80),
-                Colors.white.withValues(alpha: 0.70),
-              ],
+              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
+              stops: [0.0, 0.5, 1.0],
             ),
             border: Border.all(
-              color: Colors.white.withValues(
-                alpha: MapTheme.isNight ? 0.15 : 0.50,
-              ),
+              color: Colors.white.withValues(alpha: 0.20),
               width: 0.8,
             ),
             boxShadow: [
@@ -497,6 +564,7 @@ class _NormalSheet extends StatelessWidget {
   final bool isAvailable;
   final bool ordersLoading;
   final VoidCallback onToggle;
+  final VoidCallback? onDevTap;
 
   const _NormalSheet({
     super.key,
@@ -504,17 +572,17 @@ class _NormalSheet extends StatelessWidget {
     required this.isAvailable,
     required this.ordersLoading,
     required this.onToggle,
+    this.onDevTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isNight = MapTheme.isNight;
-    const textPrimary = Color(0xFF1A1A2E);
-    final textSecondary = const Color(0xFF1A1A2E).withValues(alpha: 0.55);
+    const textPrimary = Colors.white;
+    final textSecondary = Colors.white.withValues(alpha: 0.70);
 
     return _GlassSheet(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -524,42 +592,56 @@ class _NormalSheet extends StatelessWidget {
               height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: isNight ? 0.25 : 0.4),
+                color: Colors.white.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             Row(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      profile.name.isNotEmpty
-                          ? 'Bonjour, ${profile.name} 👋'
-                          : 'Bonjour 👋',
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        profile.name.isNotEmpty
+                            ? 'Bonjour, ${profile.name} 👋'
+                            : 'Bonjour 👋',
+                        style: TextStyle(
+                          color: textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      isAvailable
-                          ? 'En attente de courses...'
-                          : 'Activez pour recevoir des courses',
-                      style: TextStyle(color: textSecondary, fontSize: 13),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        isAvailable
+                            ? 'En attente de courses...'
+                            : 'Activez pour recevoir des courses',
+                        style: TextStyle(color: textSecondary, fontSize: 13),
+                      ),
+                    ],
+                  ),
                 ),
-                if (ordersLoading) ...[
-                  const Spacer(),
+                if (ordersLoading)
                   SizedBox(
-                    width: 18,
-                    height: 18,
+                    width: 18, height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+                if (onDevTap != null) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: onDevTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text('DEV',
+                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
                     ),
                   ),
                 ],
@@ -573,18 +655,21 @@ class _NormalSheet extends StatelessWidget {
                     icon: Icons.route_outlined,
                     label: '0 courses',
                     color: AppColors.primary,
+                    onTap: () => _showStatModal(context, _StatType.courses),
                   ),
                   const SizedBox(width: 10),
                   _StatPill(
                     icon: Icons.star_outline,
                     label: '—',
                     color: AppColors.primaryMid,
+                    onTap: () => _showStatModal(context, _StatType.rating),
                   ),
                   const SizedBox(width: 10),
                   _StatPill(
                     icon: Icons.monetization_on_outlined,
                     label: '0 FCFA',
                     color: AppColors.primaryDark,
+                    onTap: () => _showStatModal(context, _StatType.gains),
                   ),
                 ],
               ),
@@ -620,7 +705,7 @@ class _OrderNotificationSheet extends StatelessWidget {
     return _GlassSheet(
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 16),
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.primary, width: 2)),
         ),
@@ -629,8 +714,7 @@ class _OrderNotificationSheet extends StatelessWidget {
           children: [
             // Drag handle
             Container(
-              width: 36,
-              height: 4,
+              width: 36, height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.25),
@@ -641,25 +725,15 @@ class _OrderNotificationSheet extends StatelessWidget {
             // Header : titre + countdown
             Row(
               children: [
-                const Icon(
-                  Icons.delivery_dining,
-                  color: AppColors.primary,
-                  size: 26,
-                ),
+                const Icon(Icons.inventory_2_outlined, color: AppColors.primary, size: 26),
                 const SizedBox(width: 10),
                 const Text(
-                  'Nouvelle course',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  'Nouvelle livraison',
+                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
-                // Countdown circulaire
                 SizedBox(
-                  width: 44,
-                  height: 44,
+                  width: 44, height: 44,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
@@ -667,16 +741,12 @@ class _OrderNotificationSheet extends StatelessWidget {
                         value: countdown / 20,
                         strokeWidth: 3,
                         backgroundColor: AppColors.card,
-                        color: countdown > 8
-                            ? AppColors.primary
-                            : Colors.orange,
+                        color: countdown > 8 ? AppColors.primary : Colors.orange,
                       ),
                       Text(
                         '$countdown',
                         style: TextStyle(
-                          color: countdown > 8
-                              ? AppColors.primary
-                              : Colors.orange,
+                          color: countdown > 8 ? AppColors.primary : Colors.orange,
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
@@ -689,43 +759,51 @@ class _OrderNotificationSheet extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // Adresses
-            _AddressRow(
-              icon: Icons.circle,
-              color: const Color(0xFF4CAF50),
-              label: 'Récupération',
-              address: pickup,
-            ),
+            // Adresses sur carte blanche pour lisibilité
             Container(
-              margin: const EdgeInsets.only(left: 10),
-              width: 1.5,
-              height: 16,
-              color: AppColors.card,
-            ),
-            _AddressRow(
-              icon: Icons.location_on,
-              color: AppColors.primary,
-              label: 'Livraison',
-              address: delivery,
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                children: [
+                  _AddressRow(
+                    icon: Icons.circle,
+                    color: Colors.black87,
+                    label: 'Récupération',
+                    address: pickup,
+                  ),
+                  Container(
+                    margin: const EdgeInsets.only(left: 10, top: 4, bottom: 4),
+                    width: 1.5, height: 12,
+                    color: Colors.black12,
+                  ),
+                  _AddressRow(
+                    icon: Icons.location_on,
+                    color: Colors.black87,
+                    label: 'Livraison',
+                    address: delivery,
+                  ),
+                ],
+              ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // Prix
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: AppColors.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 '$price FCFA',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+                  color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -741,16 +819,15 @@ class _OrderNotificationSheet extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.card, width: 1.5),
+                        color: Colors.black.withValues(alpha: 0.55),
+                        border: Border.all(color: Colors.red, width: 1.5),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Text(
                         'Refuser',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                          color: Colors.red, fontSize: 15, fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -771,9 +848,7 @@ class _OrderNotificationSheet extends StatelessWidget {
                         'Accepter',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                          color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -814,14 +889,16 @@ class _AddressRow extends StatelessWidget {
               Text(
                 label,
                 style: const TextStyle(
-                  color: AppColors.textSecondary,
+                  color: Colors.black45,
                   fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
                 ),
               ),
               Text(
                 address,
                 style: const TextStyle(
-                  color: AppColors.textPrimary,
+                  color: Colors.black87,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -840,36 +917,211 @@ class _StatPill extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
+  final VoidCallback? onTap;
 
   const _StatPill({
     required this.icon,
     required this.label,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: Colors.white, size: 18),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Modal détail statistique ──────────────────────────────────────────────────
+void _showStatModal(BuildContext context, _StatType type) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => _StatDetailModal(type: type),
+  );
+}
+
+enum _StatType { courses, rating, gains }
+
+class _StatDetailModal extends StatelessWidget {
+  final _StatType type;
+  const _StatDetailModal({required this.type});
+
+  @override
+  Widget build(BuildContext context) {
+    final config = _modalConfig(type);
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
+          stops: [0.0, 0.5, 1.0],
+        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24, 16, 24, MediaQuery.of(context).viewPadding.bottom + 28,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            width: 36, height: 4,
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Icône + titre
+          Row(
+            children: [
+              Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                ),
+                child: Icon(config['icon'] as IconData, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Text(
+                config['title'] as String,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // Lignes de stats
+          ...((config['rows'] as List<Map<String, String>>).map(
+            (row) => _StatRow(label: row['label']!, value: row['value']!, sub: row['sub']),
+          )),
+        ],
+      ),
+    );
+  }
+
+  Map<String, dynamic> _modalConfig(_StatType type) {
+    switch (type) {
+      case _StatType.courses:
+        return {
+          'icon': Icons.route_outlined,
+          'title': 'Mes courses',
+          'rows': [
+            {'label': "Aujourd'hui",   'value': '0',  'sub': 'courses effectuées'},
+            {'label': 'Cette semaine', 'value': '0',  'sub': 'courses effectuées'},
+            {'label': 'Total',         'value': '0',  'sub': 'depuis le début'},
+            {'label': 'Annulées',      'value': '0',  'sub': 'taux 0%'},
+          ],
+        };
+      case _StatType.rating:
+        return {
+          'icon': Icons.star_outline_rounded,
+          'title': 'Ma note',
+          'rows': [
+            {'label': 'Note moyenne', 'value': '—',  'sub': 'sur 5 étoiles'},
+            {'label': 'Avis reçus',   'value': '0',  'sub': 'clients satisfaits'},
+            {'label': 'Ponctualité',  'value': '—',  'sub': 'arrivée à temps'},
+            {'label': 'Colis intact', 'value': '—',  'sub': 'taux de satisfaction'},
+          ],
+        };
+      case _StatType.gains:
+        return {
+          'icon': Icons.monetization_on_outlined,
+          'title': 'Mes gains',
+          'rows': [
+            {'label': "Aujourd'hui",   'value': '0 FCFA', 'sub': 'revenus du jour'},
+            {'label': 'Cette semaine', 'value': '0 FCFA', 'sub': 'revenus 7 jours'},
+            {'label': 'Ce mois',       'value': '0 FCFA', 'sub': 'revenus 30 jours'},
+            {'label': 'Total cumulé',  'value': '0 FCFA', 'sub': 'depuis le début'},
+          ],
+        };
+    }
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? sub;
+  const _StatRow({required this.label, required this.value, this.sub});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.80),
+              fontSize: 14,
+            ),
+          ),
+          const Spacer(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (sub != null)
+                Text(
+                  sub!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 10,
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

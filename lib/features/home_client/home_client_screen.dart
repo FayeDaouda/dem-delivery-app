@@ -93,7 +93,7 @@ class _HomeClientScreenState extends State<HomeClientScreen> {
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
+              padding: EdgeInsets.fromLTRB(20, 24, 20, MediaQuery.of(context).viewPadding.bottom + 16),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),

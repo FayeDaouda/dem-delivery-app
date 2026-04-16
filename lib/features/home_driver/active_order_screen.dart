@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import 'navigation/map_theme.dart';
@@ -208,9 +209,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: LatLng(position.latitude, position.longitude),
-            zoom: 17.5,
+            zoom: 18.0,
             bearing: position.heading,
-            tilt: 55,
+            tilt: 65,
           ),
         ),
       );
@@ -281,7 +282,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     try {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.pickupOrder(_order['id']);
-      setState(() => _order = updated);
+      // Fusionne : _order (conserve client/clientPhone) + updated (nouveau statut)
+      setState(() => _order = {..._order, ...updated});
       await _loadRoute();
     } catch (e) {
       if (mounted) {
@@ -300,7 +302,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     try {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.deliverOrder(_order['id']);
-      setState(() => _order = updated);
+      // Fusionne : _order (conserve client/clientPhone) + updated (nouveau statut)
+      setState(() => _order = {..._order, ...updated});
       if (mounted) _showPaymentDialog();
     } catch (e) {
       if (mounted) {
@@ -322,7 +325,11 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1A2332),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
+            ),
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
@@ -339,11 +346,11 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
               Container(
                 width: 64, height: 64,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.payments_outlined,
-                    color: AppColors.primary, size: 32),
+                    color: Colors.white, size: 32),
               ),
               const SizedBox(height: 16),
               Text(
@@ -355,12 +362,12 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
               Text(
                 '${((_order['price'] as num?)?.toInt() ?? 0)} FCFA',
                 style: const TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.primary),
+                    fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
               ),
               const SizedBox(height: 6),
               const Text(
                 'Cash ou Mobile Money',
-                style: TextStyle(fontSize: 13, color: Colors.white54),
+                style: TextStyle(fontSize: 13, color: Colors.white70),
               ),
               const SizedBox(height: 28),
               Row(
@@ -426,7 +433,11 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1A2332),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
+            ),
             borderRadius: BorderRadius.circular(24),
           ),
           padding: const EdgeInsets.all(24),
@@ -659,6 +670,20 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
   bool get _isRide => _order['orderType'] == 'RIDE';
 
+  /// Numéro du client — compatible format plat (dev) et imbriqué (API réelle)
+  /// Dev order : _order['clientPhone'] = '+221...'
+  /// API réelle : _order['client'] = { 'phone': '+221...' }
+  String? get _clientPhone =>
+      (_order['clientPhone'] as String?) ??
+      ((_order['client'] as Map<String, dynamic>?)?['phone'] as String?);
+
+  Future<void> _callPickup() async {
+    final phone = _clientPhone;
+    if (phone == null || phone.isEmpty) return;
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
+
   String get _homeRoute => _isRide ? '/driver/thiak/home' : '/driver/home';
 
   // ── Carte : marqueurs ─────────────────────────────────────────────────────
@@ -667,9 +692,13 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       Marker(
         markerId: const MarkerId('pickup'),
         position: _pickupLatLng,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        infoWindow:
-            InfoWindow(title: 'Collecte', snippet: _order['pickupAddress']),
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          _isRide ? BitmapDescriptor.hueAzure : BitmapDescriptor.hueGreen,
+        ),
+        infoWindow: InfoWindow(
+          title: _isRide ? 'Prise en charge' : 'Collecte',
+          snippet: _order['pickupAddress'],
+        ),
       ),
       Marker(
         markerId: const MarkerId('delivery'),
@@ -836,18 +865,14 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 16),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.primary.withValues(alpha: 0.92),
-                    const Color(0xFF1A6B7A).withValues(alpha: 0.97),
-                  ],
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
                 ),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.25),
@@ -945,12 +970,32 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                           color: Colors.white38, thickness: 1.5),
                     ),
                   ),
-                  _AddressRow(
-                    icon: Icons.location_on,
-                    iconColor: Colors.red,
-                    label: _isRide ? 'Destination' : 'Livraison',
-                    address: _order['deliveryAddress'] ?? '',
-                  ),
+                  // Pour Thiak Thiak : destination masquée avant prise en charge
+                  if (_isRide && !_isPickedUp)
+                    Row(
+                      children: [
+                        Icon(Icons.lock_outline,
+                            color: Colors.white.withValues(alpha: 0.40), size: 16),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Destination révélée après prise en charge',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.45),
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    _AddressRow(
+                      icon: Icons.location_on,
+                      iconColor: Colors.red,
+                      label: _isRide ? 'Destination' : 'Livraison',
+                      address: _order['deliveryAddress'] ?? '',
+                    ),
 
                   const SizedBox(height: 12),
 
@@ -971,33 +1016,53 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                     ],
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
-                  // Bouton action
+                  // Bouton action principal + cercle appel
                   if (!_isDelivered)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isPickedUp ? _deliver : _pickup,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _isPickedUp
-                              ? AppColors.primary
-                              : const Color(0xFF00C853),
-                          foregroundColor: Colors.white,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          _isPickedUp
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isPickedUp ? _deliver : _pickup,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _isPickedUp
+                                  ? AppColors.primary
+                                  : const Color(0xFF00C853),
+                              foregroundColor: Colors.white,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                              elevation: 0,
+                            ),
+                            child: Text(
+                              _isPickedUp
                               ? (_isRide ? 'Course terminée' : 'Livraison effectuée')
                               : (_isRide ? 'Passager à bord' : "J'ai récupéré le colis"),
                           style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
+                    ),
+
+                        // Cercle appel — visible jusqu'à livraison
+                        if (_clientPhone != null) ...[
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: _callPickup,
+                            child: Container(
+                              width: 54,
+                              height: 54,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF00C853),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.phone, color: Colors.white, size: 24),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
 
                   if (_isDelivered)
@@ -1045,7 +1110,7 @@ class _PhaseChip extends StatelessWidget {
         ? (isRide ? 'Course effectuée ✓' : 'Livraison effectuée ✓', const Color(0xFF00C853))
         : isPickedUp
             ? (isRide ? 'En route vers la destination' : 'En route vers la livraison', AppColors.primary)
-            : (isRide ? 'En route vers le passager' : 'En route vers le pickup', Colors.orange);
+            : (isRide ? 'En route vers le passager' : 'En route vers la collecte', Colors.orange);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

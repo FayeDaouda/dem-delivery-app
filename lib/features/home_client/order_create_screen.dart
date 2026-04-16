@@ -166,7 +166,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
         title: Text(widget.orderType == 'RIDE' ? 'Réserver un transport' : 'Nouvelle livraison'),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 24),
         children: [
           // ── Départ GPS ──
           _SectionLabel(label: widget.orderType == 'RIDE' ? 'Où êtes-vous ?' : 'Point de départ'),

@@ -37,12 +37,14 @@ class AvailableOrdersNotifier extends AsyncNotifier<List<Map<String, dynamic>>> 
   }
 
   /// MODE DEV — injecte une fausse commande sans appel API
-  void injectDevOrder() {
+  /// [orderType] : 'DELIVERY' (livreur) ou 'RIDE' (Thiak Thiak)
+  void injectDevOrder({String orderType = 'DELIVERY'}) {
     state = AsyncData([
       {
         'id': 'dev-order-001',
+        'orderType': orderType,
         'status': 'PENDING',
-        'price': 2500,
+        'price': orderType == 'RIDE' ? 3000 : 2500,
         'pickupAddress': 'Cité Keur Gorgui, Dakar',
         'deliveryAddress': 'Marché Sandaga, Dakar',
         'pickupLatitude': 14.7120,
@@ -51,7 +53,7 @@ class AvailableOrdersNotifier extends AsyncNotifier<List<Map<String, dynamic>>> 
         'deliveryLongitude': -17.4442,
         'clientName': 'Moussa Diallo',
         'clientPhone': '+221771234567',
-        'description': 'Colis fragile — 2 boîtes',
+        if (orderType == 'DELIVERY') 'description': 'Colis fragile — 2 boîtes',
       }
     ]);
   }

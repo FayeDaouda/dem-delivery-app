@@ -382,8 +382,14 @@ class _HomeDriverThiakScreenState
       return;
     }
     try {
-      final order = await ref.read(ordersRepositoryProvider).acceptOrder(orderId);
-      if (mounted) context.push('/driver/order/active', extra: order);
+      // Sauvegarde la notification originale (contient client.phone depuis le backend)
+      // avant qu'elle soit effacée après acceptation
+      final notifOrder = (ref.read(availableOrdersProvider).value ?? [])
+          .firstWhere((o) => o['id'] == orderId, orElse: () => {});
+      final acceptedOrder = await ref.read(ordersRepositoryProvider).acceptOrder(orderId);
+      // Fusionne : notifOrder (infos client) + acceptedOrder (statut ACCEPTED)
+      final merged = {...notifOrder, ...acceptedOrder};
+      if (mounted) context.push('/driver/order/active', extra: merged);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -501,9 +507,15 @@ class _HomeDriverThiakScreenState
                         child: Container(
                           width: 42, height: 42,
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.7),
+                            color: AppColors.primary,
                             shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 8)],
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.45),
+                                blurRadius: 12,
+                                spreadRadius: 1,
+                              ),
+                            ],
                           ),
                           child: const Icon(Icons.person_outline, color: Colors.white, size: 22),
                         ),
@@ -569,7 +581,7 @@ class _HomeDriverThiakScreenState
                       key: const ValueKey('normal'),
                       profile: profile,
                       isAvailable: isAvailable,
-                      onDevTap: () => ref.read(availableOrdersProvider.notifier).injectDevOrder(),
+                      onDevTap: () => ref.read(availableOrdersProvider.notifier).injectDevOrder(orderType: 'RIDE'),
                     ),
             ),
           ),
@@ -597,15 +609,12 @@ class _ThiakNormalSheet extends StatelessWidget {
         filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+          padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 16),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.primary.withValues(alpha: 0.92),
-                const Color(0xFF1A6B7A).withValues(alpha: 0.97),
-              ],
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
             ),
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.30), blurRadius: 32, offset: const Offset(0, -4))],
           ),
@@ -698,7 +707,7 @@ class _ThiakOrderSheet extends StatelessWidget {
         filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+          padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
