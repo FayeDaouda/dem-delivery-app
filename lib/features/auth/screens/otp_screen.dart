@@ -54,7 +54,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   // ── Vérification OTP ───────────────────────────────────────────────────────
   Future<void> _verifyOtp() async {
-    if (_code.length < 4) return;
+    if (_code.length < 6) return;
     setState(() => _hasError = false);
     try {
       final data = await ref.read(authProvider.notifier).verifyOtp(
@@ -152,7 +152,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                               border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
                             ),
                             child: Text(
-                              '+221 ${widget.phone}',
+                              widget.phone,
                               style: const TextStyle(
                                 color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600,
                               ),
@@ -202,7 +202,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Code envoyé au +221 ${widget.phone}',
+                        'Code envoyé au ${widget.phone}',
                         style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 14),
                         textAlign: TextAlign.center,
                       ),
@@ -211,16 +211,16 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       // ── Cases OTP ──
                       PinCodeTextField(
                         appContext: context,
-                        length: 4,
+                        length: 6,
                         keyboardType: TextInputType.number,
                         animationType: AnimationType.scale,
                         animationDuration: const Duration(milliseconds: 150),
                         backgroundColor: Colors.transparent,
                         pinTheme: PinTheme(
                           shape: PinCodeFieldShape.box,
-                          borderRadius: BorderRadius.circular(16),
-                          fieldHeight: 68,
-                          fieldWidth: 68,
+                          borderRadius: BorderRadius.circular(14),
+                          fieldHeight: 58,
+                          fieldWidth: 48,
                           activeFillColor: _hasError
                               ? errorColor.withValues(alpha: 0.20)
                               : Colors.white.withValues(alpha: 0.20),
@@ -278,7 +278,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       GradientButton(
                         label: 'Valider',
                         loading: loading,
-                        enabled: _code.length == 4 && !_hasError,
+                        enabled: _code.length == 6 && !_hasError,
                         onTap: _verifyOtp,
                       ),
                       const SizedBox(height: 20),

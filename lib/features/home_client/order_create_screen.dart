@@ -17,7 +17,7 @@ import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
 
 // ─── Heights par step ────────────────────────────────────────────────────────
-const _kPanelHeights = [180.0, 240.0, 260.0, 260.0]; // step 0, 1, 2, 3
+const _kPanelHeights = [180.0, 290.0, 310.0, 260.0]; // step 0, 1, 2, 3
 
 class OrderCreateScreen extends StatefulWidget {
   final String orderType;
@@ -597,7 +597,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
             curve: Curves.easeInOut,
             margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              gradient: AppColors.gradientSplash,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, -4))],
             ),
@@ -606,7 +606,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
               children: [
                 // Drag handle
                 const SizedBox(height: 8),
-                Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(2)))),
+                Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(2)))),
                 const SizedBox(height: 4),
 
                 // Content via PageView (non scrollable)
@@ -683,7 +683,7 @@ class _TopBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        gradient: AppColors.gradientSplash,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 12)],
       ),
@@ -735,9 +735,9 @@ class _AddressField extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          gradient: AppColors.gradientSplash,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: active ? dotColor.withValues(alpha: 0.6) : Colors.transparent, width: 1.5),
+          border: Border.all(color: active ? dotColor.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.15), width: 1.5),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
         ),
         child: Row(children: [
@@ -752,7 +752,7 @@ class _AddressField extends StatelessWidget {
               style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
               decoration: InputDecoration(
                 hintText: hint,
-                hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 13),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
@@ -764,7 +764,7 @@ class _AddressField extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: Icon(Icons.map_outlined, color: dotColor, size: 18),
+            icon: Icon(Icons.map_outlined, color: Colors.white.withValues(alpha: 0.80), size: 18),
             onPressed: onMapTap,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             constraints: const BoxConstraints(),
@@ -786,28 +786,28 @@ class _AutocompleteDropdown extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(maxHeight: 200),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        gradient: AppColors.gradientSplash,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 16)],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: loading
-            ? const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
+            ? const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
             : ListView.separated(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
                 itemCount: suggestions.length,
-                separatorBuilder: (context, idx) => Divider(height: 1, color: AppColors.textSecondary.withValues(alpha: 0.15)),
+                separatorBuilder: (context, idx) => Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
                 itemBuilder: (_, i) {
                   final p = suggestions[i];
                   final name = p['name']?.toString() ?? '';
                   final sub  = (p['display_name']?.toString() ?? '').replaceAll('$name, ', '');
                   return ListTile(
                     dense: true,
-                    leading: const Icon(Icons.place_outlined, color: AppColors.textSecondary, size: 18),
-                    title: Text(name, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: sub.isNotEmpty ? Text(sub, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+                    leading: Icon(Icons.place_outlined, color: Colors.white.withValues(alpha: 0.80), size: 18),
+                    title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: sub.isNotEmpty ? Text(sub, style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
                     onTap: () => onSelect(p),
                   );
                 },
@@ -886,21 +886,15 @@ class _Step0Panel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Définissez votre trajet',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+              style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          const Text('Utiliser les champs de recherche ou le bouton 🗺 pour placer un point sur la carte.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 11), maxLines: 2),
+          Text('Utiliser les champs de recherche ou le bouton 🗺 pour placer un point sur la carte.',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 11), maxLines: 2),
           const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: routeComplete ? onNext : null,
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
-                Text('Suivant — Contacts'),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward, size: 16),
-              ]),
-            ),
+          _NextButton(
+            label: 'Suivant — Contacts',
+            icon: Icons.arrow_forward,
+            onTap: routeComplete ? onNext : null,
           ),
         ],
       ),
@@ -938,16 +932,10 @@ class _Step1Panel extends StatelessWidget {
             onPickMe: onPickMe,
           ),
           const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onNext,
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
-                Text('Suivant — Destinataire'),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward, size: 16),
-              ]),
-            ),
+          _NextButton(
+            label: 'Suivant — Destinataire',
+            icon: Icons.arrow_forward,
+            onTap: onNext,
           ),
         ],
       ),
@@ -990,10 +978,11 @@ class _Step2Panel extends StatelessWidget {
             const SizedBox(height: 12),
             TextField(
               controller: descriptionCtrl,
-              style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+              style: const TextStyle(fontSize: 14, color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Description du colis (optionnel)...',
-                fillColor: AppColors.card, filled: true,
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.50), fontSize: 14),
+                fillColor: Colors.white.withValues(alpha: 0.10), filled: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 isDense: true,
@@ -1001,16 +990,10 @@ class _Step2Panel extends StatelessWidget {
             ),
           ],
           const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onNext,
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
-                Text('Suivant — Résumé'),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward, size: 16),
-              ]),
-            ),
+          _NextButton(
+            label: 'Suivant — Résumé',
+            icon: Icons.arrow_forward,
+            onTap: onNext,
           ),
         ],
       ),
@@ -1029,59 +1012,62 @@ class _ContactMini extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Vert vif visible sur fond cyan/bleu foncé
+    final visibleDot = dotColor == AppColors.success ? const Color(0xFF69F0AE) : dotColor;
+
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: dotColor.withValues(alpha: 0.2), width: 1.5),
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: visibleDot.withValues(alpha: 0.85), width: 1.5),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Container(width: 6, height: 6, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
-          const SizedBox(width: 5),
-          Text(label, style: TextStyle(color: dotColor, fontSize: 11, fontWeight: FontWeight.w700)),
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: visibleDot, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: visibleDot, fontSize: 13, fontWeight: FontWeight.w700)),
           const Spacer(),
           if (onPickMe != null)
             GestureDetector(
               onTap: onPickMe,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                margin: const EdgeInsets.only(right: 6),
-                decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                child: Text('Moi', style: TextStyle(color: dotColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.20), borderRadius: BorderRadius.circular(8)),
+                child: const Text('Moi', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
               ),
             ),
           GestureDetector(
             onTap: onPick,
-            child: Icon(Icons.contacts_rounded, color: dotColor, size: 16),
+            child: Icon(Icons.contacts_rounded, color: Colors.white.withValues(alpha: 0.90), size: 26),
           ),
         ]),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         TextField(
           controller: nameCtrl,
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: InputDecoration(
             hintText: 'Nom',
-            hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            fillColor: AppColors.surface, filled: true, isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14),
+            fillColor: Colors.white.withValues(alpha: 0.10), filled: true, isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         TextField(
           controller: phoneCtrl,
           keyboardType: TextInputType.phone,
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: InputDecoration(
             hintText: 'Téléphone',
-            hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14),
             prefixText: '+221 ',
-            prefixStyle: TextStyle(color: dotColor, fontWeight: FontWeight.w700, fontSize: 12),
-            fillColor: AppColors.surface, filled: true, isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            prefixStyle: TextStyle(color: visibleDot, fontWeight: FontWeight.w700, fontSize: 14),
+            fillColor: Colors.white.withValues(alpha: 0.10), filled: true, isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
           ),
         ),
       ]),
@@ -1142,16 +1128,71 @@ class _Step3Panel extends StatelessWidget {
             const Text('—', style: TextStyle(color: AppColors.textSecondary)),
         ]),
         const Spacer(),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: (canSubmit && !submitting) ? onSubmit : null,
-            child: submitting
-                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Text('Confirmer la commande'),
-          ),
+        _NextButton(
+          label: 'Confirmer la commande',
+          onTap: (canSubmit && !submitting) ? onSubmit : null,
+          loading: submitting,
         ),
       ]),
+    );
+  }
+}
+
+// ─── Bouton dégradé cyan (style "Livraison effectuée") ───────────────────────
+class _NextButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onTap;
+  final bool loading;
+
+  const _NextButton({required this.label, this.icon, this.onTap, this.loading = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = onTap != null && !loading;
+    return GestureDetector(
+      onTap: active ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          gradient: active
+              ? const LinearGradient(
+                  colors: [Color(0xFF00D2FF), Color(0xFF0086C8)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                )
+              : null,
+          color: active ? null : Colors.white.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: active
+              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 12, offset: const Offset(0, 4))]
+              : [],
+        ),
+        child: Center(
+          child: loading
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: active ? Colors.white : Colors.white.withValues(alpha: 0.45),
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    if (icon != null) ...[
+                      const SizedBox(width: 8),
+                      Icon(icon, color: active ? Colors.white : Colors.white.withValues(alpha: 0.45), size: 16),
+                    ],
+                  ],
+                ),
+        ),
+      ),
     );
   }
 }

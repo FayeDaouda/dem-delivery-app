@@ -69,18 +69,57 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Annuler la commande ?', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
-        content: const Text('Voulez-vous vraiment annuler cette commande en attente ?', style: TextStyle(color: AppColors.textSecondary)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Non', style: TextStyle(color: AppColors.textSecondary))),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Oui, annuler', style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.bold)),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: AppColors.gradientSplash,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 8))],
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Annuler la commande ?',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
+              const SizedBox(height: 10),
+              Text('Voulez-vous vraiment annuler cette commande en attente ?',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14)),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text('Non', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF5252),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text('Oui, annuler', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
 
@@ -90,17 +129,43 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
     try {
       await ref.read(ordersRepositoryProvider).cancelOrder(orderId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Commande annulée avec succès'), backgroundColor: Color(0xFF4CAF50)),
-        );
-        context.pop(); // Returns to home
+        _showToast(context, message: 'Commande annulée avec succès', icon: Icons.check_circle_rounded, isError: false);
+        context.pop();
       }
     } catch (e) {
       if (mounted) {
         setState(() => _cancelling = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        _showToast(context, message: e.toString(), icon: Icons.error_outline_rounded, isError: true);
       }
     }
+  }
+
+  void _showToast(BuildContext ctx, {required String message, required IconData icon, required bool isError}) {
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+        padding: EdgeInsets.zero,
+        backgroundColor: Colors.transparent,
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+        duration: const Duration(seconds: 3),
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: isError
+                ? const LinearGradient(colors: [Color(0xFFB71C1C), Color(0xFFE53935)])
+                : AppColors.gradientSplash,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 14, offset: const Offset(0, 5))],
+          ),
+          child: Row(children: [
+            Icon(icon, color: isError ? Colors.white : const Color(0xFF69F0AE), size: 22),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14))),
+          ]),
+        ),
+      ),
+    );
   }
 
   @override
@@ -165,24 +230,24 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
             ),
           ),
 
-          // ── Contenu superposé Exactement comme Step 3 ──
+          // ── Panneau bas dégradé cyan ──
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                gradient: AppColors.gradientSplash,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                 boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, -4))],
               ),
               child: SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 0), // 0 to allow panel flush bottom
+                  padding: const EdgeInsets.only(top: 8, bottom: 0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Drag handle
-                      Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(2)))),
+                      Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(2)))),
                       const SizedBox(height: 16),
 
                       Padding(
@@ -193,10 +258,10 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary)),
+                                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
                                 const SizedBox(width: 12),
                                 const Text('Recherche d\'un driver en cours…',
-                                  style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+                                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                               ],
                             ),
                             const SizedBox(height: 16),
@@ -204,14 +269,17 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                             // ── Route recap ──
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12)),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _RouteRow(icon: Icons.circle, color: AppColors.success, text: pickupAddress),
+                                  _RouteRow(icon: Icons.circle, color: const Color(0xFF69F0AE), text: pickupAddress),
                                   Padding(
                                     padding: const EdgeInsets.only(left: 6),
-                                    child: Container(width: 2, height: 14, color: AppColors.textSecondary.withValues(alpha: 0.3)),
+                                    child: Container(width: 2, height: 14, color: Colors.white.withValues(alpha: 0.25)),
                                   ),
                                   _RouteRow(icon: Icons.location_on, color: AppColors.error, text: deliveryAddress),
                                 ],
@@ -221,43 +289,59 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
 
                             // ── Price row ──
                             Row(children: [
-                              const Text('Prix estimé', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                              Text('Prix estimé', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13)),
                               const Spacer(),
                               if (surge > 1.0) ...[
                                 const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 14),
                                 const SizedBox(width: 4),
                               ],
                               Text('${price?.toInt() ?? '—'} FCFA',
-                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+                                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                             ]),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 20),
 
                             // ── Boutons Action ──
                             Row(
                               children: [
                                 Expanded(
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFFF5252),
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                  child: GestureDetector(
+                                    onTap: _cancelling ? null : _cancelOrder,
+                                    child: Container(
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFF5252),
+                                        borderRadius: BorderRadius.circular(14),
+                                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 8, offset: const Offset(0, 3))],
+                                      ),
+                                      child: Center(
+                                        child: _cancelling
+                                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                            : const Text('Annuler', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                                      ),
                                     ),
-                                    onPressed: _cancelling ? null : _cancelOrder,
-                                    child: _cancelling
-                                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                        : const Text('Annuler', style: TextStyle(fontWeight: FontWeight.bold)),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                  child: GestureDetector(
+                                    onTap: _cancelling ? null : () => context.pop(),
+                                    child: Container(
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [Color(0xFF00D2FF), Color(0xFF0086C8)],
+                                          begin: Alignment.centerLeft,
+                                          end: Alignment.centerRight,
+                                        ),
+                                        borderRadius: BorderRadius.circular(14),
+                                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 8, offset: const Offset(0, 3))],
+                                      ),
+                                      child: const Center(
+                                        child: Text('Retour à l\'accueil',
+                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      ),
                                     ),
-                                    onPressed: _cancelling ? null : () => context.pop(),
-                                    child: const Text('Retour à l\'accueil', style: TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                                   ),
                                 ),
                               ],
@@ -290,7 +374,7 @@ class _RouteRow extends StatelessWidget {
       const SizedBox(width: 8),
       Expanded(
         child: Text(text,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+            style: const TextStyle(color: Colors.white, fontSize: 12),
             maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
     ]);

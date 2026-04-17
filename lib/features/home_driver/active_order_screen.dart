@@ -61,9 +61,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
         (_order['deliveryLongitude'] as num).toDouble(),
       );
 
-  // Backend réel retourne 'IN_TRANSIT', simulation dev utilise 'PICKED_UP'
-  bool get _isPickedUp =>
-      _order['status'] == 'IN_TRANSIT' || _order['status'] == 'PICKED_UP';
+  bool get _isPickedUp => _order['status'] == 'PICKED_UP';
   bool get _isDelivered => _order['status'] == 'DELIVERED';
 
   LatLng get _targetLatLng => _isPickedUp ? _deliveryLatLng : _pickupLatLng;

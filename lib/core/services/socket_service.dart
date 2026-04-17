@@ -17,20 +17,27 @@ class SocketService {
   io.Socket? _socket;
 
   // ── Streams publics ────────────────────────────────────────────────────────
-  final _newOrderController     = StreamController<Map<String, dynamic>>.broadcast();
-  final _expiredOrderController = StreamController<String>.broadcast();
-  final _reconnectController    = StreamController<void>.broadcast();
+  final _newOrderController      = StreamController<Map<String, dynamic>>.broadcast();
+  final _expiredOrderController  = StreamController<String>.broadcast();
+  final _reconnectController     = StreamController<void>.broadcast();
+  final _orderAcceptedController = StreamController<Map<String, dynamic>>.broadcast();
 
   /// Émis quand le backend dispatche une nouvelle course à ce driver.
-  Stream<Map<String, dynamic>> get onNewOrder     => _newOrderController.stream;
+  Stream<Map<String, dynamic>> get onNewOrder      => _newOrderController.stream;
 
   /// Émis quand l'offre expire côté backend (orderId).
-  Stream<String>               get onOrderExpired  => _expiredOrderController.stream;
+  Stream<String>               get onOrderExpired   => _expiredOrderController.stream;
 
   /// Émis à chaque reconnexion — le screen doit rafraîchir les courses.
-  Stream<void>                 get onReconnect     => _reconnectController.stream;
+  Stream<void>                 get onReconnect      => _reconnectController.stream;
+
+  /// Émis quand un driver accepte la commande du client (orderId, etaPickupMin).
+  Stream<Map<String, dynamic>> get onOrderAccepted => _orderAcceptedController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
+
+  /// Envoie un heartbeat au backend pour maintenir lastSeenAt à jour.
+  void ping() => _socket?.emit('driver:ping', null);
 
   // ── Connexion ──────────────────────────────────────────────────────────────
   void connect(String token) {
@@ -76,6 +83,11 @@ class SocketService {
       ..on('order:expired', (data) {
         if (data is Map && data['orderId'] != null) {
           _expiredOrderController.add(data['orderId'] as String);
+        }
+      })
+      ..on('order:accepted', (data) {
+        if (data is Map) {
+          _orderAcceptedController.add(Map<String, dynamic>.from(data));
         }
       })
       ..connect();

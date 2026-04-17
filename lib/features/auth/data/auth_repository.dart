@@ -10,6 +10,8 @@ class AuthRepository {
     try {
       await _dio.post('/auth/send-otp', data: {'phone': phone});
     } on DioException catch (e) {
+      // ignore: avoid_print
+      print('[AUTH] sendOtp error — type: ${e.type}, status: ${e.response?.statusCode}, msg: ${e.message}');
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible d\'envoyer le code.',
         e.response?.statusCode,

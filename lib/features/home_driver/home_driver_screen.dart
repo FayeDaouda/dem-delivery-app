@@ -8,6 +8,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/services/socket_service.dart';
+import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
 import '../../features/profile/providers/profile_provider.dart';
@@ -41,6 +43,17 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   Position? _driverPosition;
   bool _autoFollow = true;
 
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  StreamSubscription<Map<String, dynamic>>? _newOrderSub;
+  StreamSubscription<String>?              _expiredOrderSub;
+  StreamSubscription<void>?                _reconnectSub;
+
+  // ── Polling fallback (si socket déconnecté) ───────────────────────────────
+  Timer? _pollTimer;
+
+  // ── Heartbeat lastSeenAt ──────────────────────────────────────────────────
+  Timer? _heartbeatTimer;
+
   // ── Countdown nouvelle course ─────────────────────────────────────────────
   int _countdown = 20;
   Timer? _countdownTimer;
@@ -63,6 +76,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _startGPS();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(profileProvider.notifier).fetchProfile(goOnlineIfOffline: true);
+      _connectSocket();
+      _startPolling();
     });
   }
 
@@ -72,7 +87,53 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _locationSub?.cancel();
     _mapController?.dispose();
     _countdownTimer?.cancel();
+    _newOrderSub?.cancel();
+    _expiredOrderSub?.cancel();
+    _reconnectSub?.cancel();
+    _pollTimer?.cancel();
+    _heartbeatTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _connectSocket() async {
+    final token = await AuthStorage.getToken();
+    if (token == null) return;
+
+    SocketService.instance.connect(token);
+
+    _newOrderSub = SocketService.instance.onNewOrder.listen((order) {
+      if (!mounted) return;
+      ref.read(availableOrdersProvider.notifier).injectSocketOrder(order);
+      _startCountdown();
+    });
+
+    _expiredOrderSub = SocketService.instance.onOrderExpired.listen((orderId) {
+      if (!mounted) return;
+      ref.read(availableOrdersProvider.notifier).removeOrder(orderId);
+      _cancelCountdown();
+    });
+
+    _reconnectSub = SocketService.instance.onReconnect.listen((_) {
+      if (!mounted) return;
+      ref.read(availableOrdersProvider.notifier).refresh();
+    });
+
+    // Heartbeat toutes les 30s pour maintenir lastSeenAt à jour côté backend
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (SocketService.instance.isConnected) SocketService.instance.ping();
+    });
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      final isAvailable = ref.read(profileProvider).isAvailable;
+      final hasOrder    = (ref.read(availableOrdersProvider).value ?? []).isNotEmpty;
+      if (isAvailable && !hasOrder && !SocketService.instance.isConnected) {
+        ref.read(availableOrdersProvider.notifier).refresh();
+      }
+    });
   }
 
   void _startCountdown() {

@@ -56,6 +56,9 @@ class _HomeDriverThiakScreenState
   // ── Polling fallback (toutes les 30s si socket déconnecté) ───────────────
   Timer? _pollTimer;
 
+  // ── Heartbeat lastSeenAt ──────────────────────────────────────────────────
+  Timer? _heartbeatTimer;
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +95,11 @@ class _HomeDriverThiakScreenState
     _reconnectSub = SocketService.instance.onReconnect.listen((_) {
       if (!mounted) return;
       ref.read(availableOrdersProvider.notifier).refresh();
+    });
+
+    // Heartbeat toutes les 30s pour maintenir lastSeenAt à jour côté backend
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (SocketService.instance.isConnected) SocketService.instance.ping();
     });
   }
 
@@ -225,6 +233,7 @@ class _HomeDriverThiakScreenState
     _countdownTimer?.cancel();
     _pollTimer?.cancel();
     _heatmapTimer?.cancel();
+    _heartbeatTimer?.cancel();
     _newOrderSub?.cancel();
     _expiredOrderSub?.cancel();
     _reconnectSub?.cancel();

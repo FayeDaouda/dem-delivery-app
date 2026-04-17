@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "75751133767",
+    "project_id": "dem-app-ec8c4",
+    "storage_bucket": "dem-app-ec8c4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:75751133767:android:46a0977a5fc1815ccd1762",
+        "android_client_info": {
+          "package_name": "com.dem.dem_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCT-D__2AjJ-RlpNn3UhKmthKp80mzBJpg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

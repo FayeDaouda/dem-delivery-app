@@ -60,17 +60,40 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
 
   Future<void> _sendOtp() async {
     if (!_canContinue) return;
-    // On envoie le numéro brut (sans espaces) au backend
-    final phone = _phoneController.text.replaceAll(' ', '').trim();
+    // On préfixe avec +221 pour former un numéro E.164 complet
+    final phone = '+221${_phoneController.text.replaceAll(' ', '').trim()}';
     _focusNode.unfocus();
+
+    // Affiche un message si ça prend du temps (serveur en démarrage)
+    final slowTimer = Future.delayed(const Duration(seconds: 8), () {
+      if (mounted && ref.read(authProvider).isLoading) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connexion lente, patientez…'),
+            duration: Duration(seconds: 30),
+          ),
+        );
+      }
+    });
+
     try {
       await ref.read(authProvider.notifier).sendOtp(phone);
-      if (mounted) context.push('/otp', extra: {'phone': phone});
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        context.push('/otp', extra: {'phone': phone});
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
       }
     }
+    await slowTimer; // évite que le Future soit GC avant d'être résolu
   }
 
   @override

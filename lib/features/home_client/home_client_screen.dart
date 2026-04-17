@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/providers/orders_provider.dart';
@@ -39,6 +40,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   String? _mapStyle;
   BitmapDescriptor? _clientIcon;
 
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  StreamSubscription<Map<String, dynamic>>? _orderAcceptedSub;
+
   // ── GPS ──────────────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
   Position? _clientPosition;
@@ -64,7 +68,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     });
     _startGPS();
     _loadUser();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPendingOrder());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingOrder();
+      _connectSocket();
+    });
   }
 
   @override
@@ -85,10 +92,63 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
+    _orderAcceptedSub?.cancel();
     _locationSub?.cancel();
     _mapController?.dispose();
     _sheetAnim.dispose();
     super.dispose();
+  }
+
+  Future<void> _connectSocket() async {
+    final token = await AuthStorage.getToken();
+    if (token == null) return;
+
+    SocketService.instance.connect(token);
+
+    _orderAcceptedSub = SocketService.instance.onOrderAccepted.listen((data) {
+      if (!mounted) return;
+      // Retire la commande PENDING de la liste (elle vient d'être acceptée)
+      final acceptedId = data['orderId'] as String?;
+      setState(() {
+        _pendingOrders.removeWhere((o) => o['id'] == acceptedId);
+      });
+      // Notifie le client avec un toast stylé
+      final eta = data['etaPickupMin'];
+      final etaText = eta != null ? ' — Driver en route (~$eta min)' : '';
+      _showToast('Commande acceptée par un driver$etaText', isSuccess: true);
+    });
+  }
+
+  void _showToast(String message, {required bool isSuccess}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        padding: EdgeInsets.zero,
+        backgroundColor: Colors.transparent,
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+        duration: const Duration(seconds: 4),
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: isSuccess
+                ? AppColors.gradientSplash
+                : const LinearGradient(colors: [Color(0xFFB71C1C), Color(0xFFE53935)]),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 14, offset: const Offset(0, 5))],
+          ),
+          child: Row(children: [
+            Icon(
+              isSuccess ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+              color: isSuccess ? const Color(0xFF69F0AE) : Colors.white,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14))),
+          ]),
+        ),
+      ),
+    );
   }
 
   void _toggleSheet() {
@@ -603,7 +663,7 @@ class _AnimatedSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        gradient: AppColors.gradientSplash,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
@@ -629,7 +689,7 @@ class _AnimatedSheet extends StatelessWidget {
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: AppColors.card,
+                      color: Colors.white.withValues(alpha: 0.35),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -820,8 +880,6 @@ class _ServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = color ?? AppColors.primary;
-
     if (subtitle != null) {
       return GestureDetector(
         onTap: onTap,
@@ -829,29 +887,29 @@ class _ServiceCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
           decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.12),
+            color: Colors.white.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: accent.withValues(alpha: 0.4)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
           ),
           child: Row(
             children: [
-              Icon(icon, color: accent, size: 32),
+              Icon(icon, color: Colors.white, size: 32),
               const SizedBox(width: 14),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label,
-                      style: TextStyle(
-                          color: accent,
+                      style: const TextStyle(
+                          color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.bold)),
                   Text(subtitle!,
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 12)),
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
                 ],
               ),
               const Spacer(),
-              Icon(Icons.arrow_forward_ios, color: accent, size: 16),
+              Icon(Icons.arrow_forward_ios, color: Colors.white.withValues(alpha: 0.65), size: 16),
             ],
           ),
         ),
