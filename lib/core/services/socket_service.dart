@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
-const _serverUrl = 'https://dem-delivery-backend.onrender.com';
+const _serverUrl = 'https://api.dem.sn';
 
 /// Service WebSocket singleton — reçoit les courses en temps réel.
 ///
@@ -17,27 +17,27 @@ class SocketService {
   io.Socket? _socket;
 
   // ── Streams publics ────────────────────────────────────────────────────────
-  final _newOrderController      = StreamController<Map<String, dynamic>>.broadcast();
-  final _expiredOrderController  = StreamController<String>.broadcast();
-  final _reconnectController     = StreamController<void>.broadcast();
-  final _orderAcceptedController = StreamController<Map<String, dynamic>>.broadcast();
+  final _newOrderController           = StreamController<Map<String, dynamic>>.broadcast();
+  final _expiredOrderController       = StreamController<String>.broadcast();
+  final _reconnectController          = StreamController<void>.broadcast();
+  final _orderAcceptedController      = StreamController<Map<String, dynamic>>.broadcast();
+  final _orderStatusUpdatedController = StreamController<Map<String, dynamic>>.broadcast();
+  final _driverLocationController     = StreamController<Map<String, dynamic>>.broadcast();
 
-  /// Émis quand le backend dispatche une nouvelle course à ce driver.
-  Stream<Map<String, dynamic>> get onNewOrder      => _newOrderController.stream;
-
-  /// Émis quand l'offre expire côté backend (orderId).
-  Stream<String>               get onOrderExpired   => _expiredOrderController.stream;
-
-  /// Émis à chaque reconnexion — le screen doit rafraîchir les courses.
-  Stream<void>                 get onReconnect      => _reconnectController.stream;
-
-  /// Émis quand un driver accepte la commande du client (orderId, etaPickupMin).
-  Stream<Map<String, dynamic>> get onOrderAccepted => _orderAcceptedController.stream;
+  Stream<Map<String, dynamic>> get onNewOrder           => _newOrderController.stream;
+  Stream<String>               get onOrderExpired        => _expiredOrderController.stream;
+  Stream<void>                 get onReconnect           => _reconnectController.stream;
+  Stream<Map<String, dynamic>> get onOrderAccepted       => _orderAcceptedController.stream;
+  Stream<Map<String, dynamic>> get onOrderStatusUpdated  => _orderStatusUpdatedController.stream;
+  Stream<Map<String, dynamic>> get onDriverLocation      => _driverLocationController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
-  /// Envoie un heartbeat au backend pour maintenir lastSeenAt à jour.
   void ping() => _socket?.emit('driver:ping', null);
+
+  void emitDriverLocation(double lat, double lng, String orderId) {
+    _socket?.emit('driver:location', {'lat': lat, 'lng': lng, 'orderId': orderId});
+  }
 
   // ── Connexion ──────────────────────────────────────────────────────────────
   void connect(String token) {
@@ -48,7 +48,7 @@ class SocketService {
     _socket = io.io(
       _serverUrl,
       io.OptionBuilder()
-          .setTransports(['polling', 'websocket'])
+          .setTransports(['websocket'])
           .setAuth({'token': token})
           .disableAutoConnect()
           .enableReconnection()
@@ -88,6 +88,16 @@ class SocketService {
       ..on('order:accepted', (data) {
         if (data is Map) {
           _orderAcceptedController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('order:status_updated', (data) {
+        if (data is Map) {
+          _orderStatusUpdatedController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('driver:location', (data) {
+        if (data is Map) {
+          _driverLocationController.add(Map<String, dynamic>.from(data));
         }
       })
       ..connect();

@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 
-const _baseUrl = 'https://dem-delivery-backend.onrender.com';
+const _baseUrl = 'https://api.dem.sn';
 
 class AdminSession {
   static String? token;

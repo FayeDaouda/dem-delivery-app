@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import '../storage/auth_storage.dart';
 import '../router/app_router.dart';
 
-const _baseUrl = 'https://dem-delivery-backend.onrender.com';
+const _baseUrl = 'https://api.dem.sn';
 
 class ApiClient {
   static final Dio _dio = _buildDio();
