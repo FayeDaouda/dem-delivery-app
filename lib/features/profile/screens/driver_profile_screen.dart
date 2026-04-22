@@ -524,6 +524,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         onTap: _showLanguageSheet),
                     _divider(),
                     _ActionRow(icon: Icons.support_agent_outlined, label: s.support, onTap: _showSupportSheet),
+                    _divider(),
+                    _ActionRow(icon: Icons.privacy_tip_outlined, label: s.privacyPolicy,
+                        onTap: () => _launch('https://fayedaouda.github.io/dem-legal/privacy.html')),
+                    _divider(),
+                    _ActionRow(icon: Icons.description_outlined, label: s.termsOfService,
+                        onTap: () => _launch('https://fayedaouda.github.io/dem-legal/terms.html')),
                   ]),
                   const SizedBox(height: 16),
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/services/socket_service.dart';
+import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
@@ -24,11 +28,38 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   List<LatLng> _routePoints = [];
   bool _cancelling = false;
 
+  StreamSubscription<Map<String, dynamic>>? _acceptedSub;
+
   @override
   void initState() {
     super.initState();
     _loadMapStyle();
     _fetchRoute();
+    _connectSocket();
+  }
+
+  @override
+  void dispose() {
+    _acceptedSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _connectSocket() async {
+    final token = await AuthStorage.getToken();
+    if (token == null) return;
+    SocketService.instance.connect(token);
+    final orderId = widget.order['id'] as String?;
+    _acceptedSub = SocketService.instance.onOrderAccepted.listen((data) {
+      if (!mounted) return;
+      if (orderId != null && data['orderId'] != orderId) return;
+      final driverId = data['driverId'] as String?;
+      if (driverId == null) return;
+      context.pushReplacement('/orders/tracking', extra: {
+        'orderId': data['orderId'] as String,
+        'driverId': driverId,
+        'etaPickupMin': data['etaPickupMin'] as int?,
+      });
+    });
   }
 
   Future<void> _loadMapStyle() async {
@@ -43,17 +74,20 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
     final deliveryLat = order['deliveryLatitude'] as num?;
     final deliveryLng = order['deliveryLongitude'] as num?;
 
-    if (pickupLat == null || pickupLng == null || deliveryLat == null || deliveryLng == null) return;
-    
-    // Draw basic straight line initially
-    if (mounted) setState(() => _routePoints = [
-      LatLng(pickupLat.toDouble(), pickupLng.toDouble()),
-      LatLng(deliveryLat.toDouble(), deliveryLng.toDouble()),
-    ]);
+    if (pickupLat == null || pickupLng == null || deliveryLat == null || deliveryLng == null) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _routePoints = [
+        LatLng(pickupLat.toDouble(), pickupLng.toDouble()),
+        LatLng(deliveryLat.toDouble(), deliveryLng.toDouble()),
+      ]);
+    }
 
     try {
       final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
-      final res = await dio.get('https://router.project-osrm.org/route/v1/driving/${pickupLng},${pickupLat};${deliveryLng},${deliveryLat}?overview=full&geometries=geojson');
+      final res = await dio.get('https://router.project-osrm.org/route/v1/driving/$pickupLng,$pickupLat;$deliveryLng,$deliveryLat?overview=full&geometries=geojson');
       if (res.statusCode == 200 && res.data['routes'] != null && (res.data['routes'] as List).isNotEmpty) {
         final route = res.data['routes'][0];
         final coords = route['geometry']['coordinates'] as List;
@@ -218,7 +252,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
           // ── Map Background ──
           SizedBox.expand(
             child: GoogleMap(
-              initialCameraPosition: CameraPosition(target: initialTarget, zoom: 14),
+              initialCameraPosition: CameraPosition(target: initialTarget, zoom: 17, tilt: 55),
               style: _mapStyle,
               markers: markers,
               polylines: polylines,
@@ -227,6 +261,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
               myLocationButtonEnabled: false,
               compassEnabled: false,
               mapToolbarEnabled: false,
+              buildingsEnabled: true,
             ),
           ),
 

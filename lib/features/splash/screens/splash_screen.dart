@@ -82,7 +82,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     Map<String, dynamic>? user;
     try {
-      user = await ProfileRepository().getMe();
+      user = await ProfileRepository().getMe().timeout(const Duration(seconds: 8));
     } catch (_) {
       user = await AuthStorage.getUser();
     }

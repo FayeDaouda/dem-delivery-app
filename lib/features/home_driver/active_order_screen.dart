@@ -10,6 +10,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/config/app_config.dart';
+import '../../core/services/socket_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'navigation/map_theme.dart';
 import '../deliveries/providers/orders_provider.dart';
@@ -38,6 +39,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   StreamSubscription<Position>? _locationSub;
   Position? _driverPosition;
   bool _autoFollow = true;
+  DateTime? _lastLocationEmit;
 
   // ── Route ─────────────────────────────────────────────────────────────────
   List<LatLng> _routePoints = [];
@@ -213,6 +215,16 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
           ),
         ),
       );
+    }
+
+    // Émet la position au client toutes les 10s
+    final now = DateTime.now();
+    if (_lastLocationEmit == null || now.difference(_lastLocationEmit!).inSeconds >= 10) {
+      _lastLocationEmit = now;
+      final orderId = _order['id'] as String?;
+      if (orderId != null) {
+        SocketService.instance.emitDriverLocation(position.latitude, position.longitude, orderId);
+      }
     }
 
     // Alertes de proximité
@@ -781,6 +793,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
               zoomControlsEnabled: false,
               mapToolbarEnabled: false,
               compassEnabled: false,
+              buildingsEnabled: true,
             ),
           ),
 

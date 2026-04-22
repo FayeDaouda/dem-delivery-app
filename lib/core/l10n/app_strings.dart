@@ -95,6 +95,10 @@ class AppStrings {
   String get phoneChangeSent => _t('Demande envoyée. En attente de validation admin.', 'Request sent. Awaiting admin approval.');
   String get phonePending    => _t('Modification en attente de validation', 'Change pending approval');
 
+  // ── Legal ─────────────────────────────────────────────────────────────────
+  String get privacyPolicy   => _t('Politique de confidentialité', 'Privacy Policy');
+  String get termsOfService  => _t('Conditions d\'utilisation',    'Terms of Service');
+
   // ── Common ────────────────────────────────────────────────────────────────
   String get cancel          => _t('Annuler',     'Cancel');
   String get save            => _t('Enregistrer', 'Save');

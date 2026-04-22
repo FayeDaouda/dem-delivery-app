@@ -107,48 +107,19 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
     _orderAcceptedSub = SocketService.instance.onOrderAccepted.listen((data) {
       if (!mounted) return;
-      // Retire la commande PENDING de la liste (elle vient d'être acceptée)
       final acceptedId = data['orderId'] as String?;
+      final driverId = data['driverId'] as String?;
       setState(() {
         _pendingOrders.removeWhere((o) => o['id'] == acceptedId);
       });
-      // Notifie le client avec un toast stylé
-      final eta = data['etaPickupMin'];
-      final etaText = eta != null ? ' — Driver en route (~$eta min)' : '';
-      _showToast('Commande acceptée par un driver$etaText', isSuccess: true);
+      if (acceptedId != null && driverId != null) {
+        context.push('/orders/tracking', extra: {
+          'orderId': acceptedId,
+          'driverId': driverId,
+          'etaPickupMin': data['etaPickupMin'] as int?,
+        });
+      }
     });
-  }
-
-  void _showToast(String message, {required bool isSuccess}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        padding: EdgeInsets.zero,
-        backgroundColor: Colors.transparent,
-        behavior: SnackBarBehavior.floating,
-        elevation: 0,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-        duration: const Duration(seconds: 4),
-        content: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: isSuccess
-                ? AppColors.gradientSplash
-                : const LinearGradient(colors: [Color(0xFFB71C1C), Color(0xFFE53935)]),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 14, offset: const Offset(0, 5))],
-          ),
-          child: Row(children: [
-            Icon(
-              isSuccess ? Icons.check_circle_rounded : Icons.error_outline_rounded,
-              color: isSuccess ? const Color(0xFF69F0AE) : Colors.white,
-              size: 22,
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14))),
-          ]),
-        ),
-      ),
-    );
   }
 
   void _toggleSheet() {
@@ -228,9 +199,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: LatLng(position.latitude, position.longitude),
-          zoom: 15.5,
+          zoom: 17,
           bearing: 0,
-          tilt: 0,
+          tilt: 55,
         ),
       ),
     );
@@ -366,7 +337,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             child: GoogleMap(
               initialCameraPosition: const CameraPosition(
                 target: _dakar,
-                zoom: 14,
+                zoom: 17,
+                tilt: 55,
               ),
               onMapCreated: (controller) {
                 _mapController = controller;
@@ -382,6 +354,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               zoomControlsEnabled: false,
               compassEnabled: false,
               mapToolbarEnabled: false,
+              buildingsEnabled: true,
             ),
           ),
 
@@ -396,18 +369,18 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: AppColors.surface.withValues(alpha: 0.95),
+                      color: AppColors.primary,
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Row(
                       children: [
                         const Icon(Icons.location_on,
-                            color: AppColors.primary, size: 18),
+                            color: Colors.white, size: 18),
                         const SizedBox(width: 6),
                         Text(
                           _user?['name'] ?? 'Mon compte',
                           style: const TextStyle(
-                            color: AppColors.textPrimary,
+                            color: Colors.white,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -419,12 +392,12 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     onTap: () => context.go('/client/profile'),
                     child: Container(
                       padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface.withValues(alpha: 0.95),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.person,
-                          color: AppColors.primary, size: 20),
+                          color: Colors.white, size: 20),
                     ),
                   ),
                 ],
@@ -534,13 +507,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     );
   }
 
-  // ── Contenu chargement ─────────────────────────────────────────────────────
-  Widget _buildLoadingContent() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 16),
-      child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-    );
-  }
 
   // ── Contenu choix du service ───────────────────────────────────────────────
   Widget _buildServiceContent() {
@@ -813,51 +779,6 @@ class _NavItem extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-// Content removed since pending orders are shown via badge
-
-// ── Ligne adresse ─────────────────────────────────────────────────────────────
-class _AddressRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String address;
-
-  const _AddressRow({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.address,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: color, size: 12),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600)),
-              Text(address,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary, fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

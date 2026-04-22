@@ -142,7 +142,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
 
   void _centerMap(LatLng pos) {
     _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 15.5)),
+      CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 17, tilt: 55)),
     );
   }
 
@@ -482,7 +482,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
         // ── MAP ────────────────────────────────────────────────────────────
         SizedBox.expand(
           child: GoogleMap(
-            initialCameraPosition: const CameraPosition(target: _dakar, zoom: 14),
+            initialCameraPosition: const CameraPosition(target: _dakar, zoom: 17, tilt: 55),
             onMapCreated: (c) => _mapController = c,
             style: _mapStyle,
             onCameraMoveStarted: () => setState(() => _isMapMoving = true),
@@ -495,6 +495,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
             zoomControlsEnabled: false,
             compassEnabled: false,
             mapToolbarEnabled: false,
+            buildingsEnabled: true,
           ),
         ),
 
@@ -601,7 +602,9 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, -4))],
             ),
-            child: Column(
+            child: SafeArea(
+              top: false,
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Drag handle
@@ -660,6 +663,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
                         ),
                 ),
               ],
+            ),
             ),
           ),
         ),

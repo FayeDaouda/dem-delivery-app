@@ -129,6 +129,27 @@ class OrdersRepository {
     }
   }
 
+  Future<void> rateDriver({
+    required String orderId,
+    required String driverId,
+    required int score,
+    String? comment,
+  }) async {
+    try {
+      await _dio.post('/ratings', data: {
+        'orderId': orderId,
+        'ratedId': driverId,
+        'score': score,
+        'comment': comment,
+      });
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'envoyer la note.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<void> declineOrder(String id) async {
     try {
       await _dio.patch('/orders/$id/decline');

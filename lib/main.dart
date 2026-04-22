@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
 import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
+import 'core/notifications/notification_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
@@ -19,6 +20,9 @@ void main() async {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
+
+  // ── Push notifications ────────────────────────────────────────────────────
+  NotificationService.init().timeout(const Duration(seconds: 5)).catchError((_) {});
 
   // ── Google Maps (Android) ──────────────────────────────────────────────────
   final mapsImplementation = GoogleMapsFlutterPlatform.instance;

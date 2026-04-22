@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/api/api_client.dart';
@@ -38,6 +39,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     } catch (e) {
       // Ignorer l'erreur pour l'instant si l'utilisateur peut toujours se déconnecter
     }
+  }
+
+  Future<void> _launch(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _handleLogout() async {
@@ -142,6 +148,18 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         const SnackBar(content: Text('Bientôt disponible')),
                       );*/
                     },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildMenuItem(
+                    icon: Icons.privacy_tip_outlined,
+                    title: 'Politique de confidentialité',
+                    onTap: () => _launch('https://fayedaouda.github.io/dem-legal/privacy.html'),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildMenuItem(
+                    icon: Icons.description_outlined,
+                    title: 'Conditions d\'utilisation',
+                    onTap: () => _launch('https://fayedaouda.github.io/dem-legal/terms.html'),
                   ),
                   const SizedBox(height: 12),
                   _buildMenuItem(

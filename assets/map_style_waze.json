@@ -12,7 +12,7 @@
   {"featureType":"administrative.neighborhood","elementType":"labels","stylers":[{"visibility":"on"}]},
   {"featureType":"administrative.neighborhood","elementType":"labels.text.fill","stylers":[{"color":"#8E9BB8"}]},
 
-  {"featureType":"landscape.man_made","elementType":"geometry","stylers":[{"visibility":"off"}]},
+  {"featureType":"landscape.man_made","elementType":"geometry","stylers":[{"color":"#1E2A3C"}]},
   {"featureType":"landscape.natural","elementType":"geometry","stylers":[{"color":"#1A2336"}]},
 
   {"featureType":"poi","elementType":"labels.icon","stylers":[{"visibility":"off"}]},

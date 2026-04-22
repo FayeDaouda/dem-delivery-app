@@ -3,6 +3,8 @@
 *.env
 android/local.properties
 android/key.properties
+android/app/*.keystore
+android/app/*.jks
 
 # Miscellaneous
 *.class

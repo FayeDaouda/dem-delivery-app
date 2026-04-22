@@ -11,6 +11,7 @@ import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
 
 import '../../features/client_profile/client_profile_screen.dart';
 import '../../features/home_client/orders_history_screen.dart';
+import '../../features/home_client/order_tracking_screen.dart';
 
 
 import '../../features/splash/screens/splash_screen.dart';
@@ -87,6 +88,17 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/orders/my',
       builder: (context, state) => const OrdersHistoryScreen(),
+    ),
+    GoRoute(
+      path: '/orders/tracking',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        return OrderTrackingScreen(
+          orderId: extra['orderId'] as String,
+          driverId: extra['driverId'] as String,
+          etaPickupMin: extra['etaPickupMin'] as int?,
+        );
+      },
     ),
 
     // ── Driver Livraison (moto) ──
