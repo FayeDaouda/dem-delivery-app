@@ -353,6 +353,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     final driverName = driverMap?['name'] as String? ?? 'Livreur';
     final hasDriverPhone =
         (driverMap?['phone'] as String?)?.isNotEmpty == true;
+    final driverRating = (driverMap?['averageRating'] as num?)?.toDouble();
     final pickupAddress = order?['pickupAddress'] as String? ?? '';
     final deliveryAddress = order?['deliveryAddress'] as String? ?? '';
     final price = (order?['price'] as num?)?.toInt() ?? 0;
@@ -553,15 +554,28 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                                     style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 15,
-                                        fontWeight:
-                                            FontWeight.bold)),
-                                if (widget.etaPickupMin != null &&
-                                    _status == 'ACCEPTED')
-                                  Text(
-                                      'Arrivée dans ~${widget.etaPickupMin} min',
-                                      style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12)),
+                                        fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 3),
+                                Row(
+                                  children: [
+                                    if (driverRating != null) ...[
+                                      const Icon(Icons.star_rounded,
+                                          color: Color(0xFFFFD700), size: 14),
+                                      const SizedBox(width: 3),
+                                      Text(driverRating.toStringAsFixed(1),
+                                          style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12)),
+                                      if (widget.etaPickupMin != null && _status == 'ACCEPTED')
+                                        const Text(' · ', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                                    ],
+                                    if (widget.etaPickupMin != null && _status == 'ACCEPTED')
+                                      Text('${widget.etaPickupMin} min',
+                                          style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12)),
+                                  ],
+                                ),
                               ],
                             ),
                           ),

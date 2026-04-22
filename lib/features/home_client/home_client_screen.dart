@@ -12,6 +12,7 @@ import '../../core/router/app_router.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/map_theme_provider.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
@@ -133,8 +134,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── Map style ─────────────────────────────────────────────────────────────
   Future<void> _loadMapStyle() async {
-    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    final bool isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
+  }
+
+  Future<void> _toggleMapTheme() async {
+    await ref.read(mapNightProvider.notifier).toggle();
+    await _loadMapStyle();
   }
 
   // ── Marqueur client (point cyan + halo) ───────────────────────────────────
@@ -447,7 +454,27 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                           ),
                         )
                       else
-                        const SizedBox(width: 52), // Spacer to hold horizontal layout
+                        const SizedBox(width: 52),
+
+                      // Bouton toggle jour/nuit
+                      GestureDetector(
+                        onTap: _toggleMapTheme,
+                        child: Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.card, width: 1.5),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                          ),
+                          child: Icon(
+                            ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                            color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                            size: 22,
+                          ),
+                        ),
+                      ),
 
                       // Badge Commandes en attente
                       if (_pendingOrders.isNotEmpty)

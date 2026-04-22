@@ -5,16 +5,18 @@ import 'package:flutter/material.dart';
 class MapTheme {
   MapTheme._();
 
-  // ── Détection jour/nuit ────────────────────────────────────────────────
+  // ── Détection automatique jour/nuit ───────────────────────────────────
   static bool get isNight {
     final hour = DateTime.now().hour;
     return hour >= 20 || hour < 7;
   }
 
-  // ── Assets map style ──────────────────────────────────────────────────
-  static String get styleAsset => isNight
+  // ── Assets map style (avec override manuel possible) ──────────────────
+  static String styleAssetFor(bool night) => night
       ? 'assets/map_style_waze.json'   // nuit : sombre immersif
       : 'assets/map_style_day.json';   // jour  : clair lisible
+
+  static String get styleAsset => styleAssetFor(isNight);
 
   // ── Couleurs trafic ───────────────────────────────────────────────────
   /// [level] : 'low' | 'medium' | 'high'

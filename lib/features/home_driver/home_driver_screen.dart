@@ -11,6 +11,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/map_theme_provider.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
 import '../../features/profile/providers/profile_provider.dart';
 import 'navigation/map_theme.dart';
@@ -159,8 +160,14 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   // ── Map style ─────────────────────────────────────────────────────────────
   Future<void> _loadMapStyle() async {
-    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    final bool isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
+  }
+
+  Future<void> _toggleMapTheme() async {
+    await ref.read(mapNightProvider.notifier).toggle();
+    await _loadMapStyle();
   }
 
   // ── Marqueur triangle Waze ────────────────────────────────────────────────
@@ -529,6 +536,30 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
               ),
             ),
 
+          // ── Bouton toggle jour/nuit ──────────────────────────────────────
+          Positioned(
+            left: 16,
+            bottom: _autoFollow ? 220 : 284,
+            child: GestureDetector(
+              onTap: _toggleMapTheme,
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.card, width: 1.5),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                ),
+                child: Icon(
+                  ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                  color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+
           // ── Bottom sheet — 3 états (toujours visible) ──
           Align(
             alignment: Alignment.bottomCenter,
@@ -717,13 +748,6 @@ class _NormalSheet extends StatelessWidget {
                     label: '0 courses',
                     color: AppColors.primary,
                     onTap: () => _showStatModal(context, _StatType.courses),
-                  ),
-                  const SizedBox(width: 10),
-                  _StatPill(
-                    icon: Icons.star_outline,
-                    label: '—',
-                    color: AppColors.primaryMid,
-                    onTap: () => _showStatModal(context, _StatType.rating),
                   ),
                   const SizedBox(width: 10),
                   _StatPill(
