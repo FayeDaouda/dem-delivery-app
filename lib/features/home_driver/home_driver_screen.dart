@@ -219,11 +219,27 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _locationSub = NavigationService.positionStream.listen(_onPosition);
   }
 
+  bool _firstPositionSent = false;
+
   void _onPosition(Position position) {
     if (!mounted) return;
     setState(() => _driverPosition = position);
     if (_autoFollow) _centerOn(position);
     _updateDriverScreenPos();
+    _trySendFirstPosition(position);
+  }
+
+  void _trySendFirstPosition(Position position) {
+    if (_firstPositionSent) return;
+    if (!SocketService.instance.isConnected) {
+      // Réessayer dans 2s si socket pas encore connecté
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && _driverPosition != null) _trySendFirstPosition(_driverPosition!);
+      });
+      return;
+    }
+    _firstPositionSent = true;
+    SocketService.instance.ping(lat: position.latitude, lng: position.longitude);
   }
 
   Future<void> _updateDriverScreenPos() async {
