@@ -46,10 +46,14 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
+        val mapsProps = Properties()
+        val mapsPropsFile = rootProject.file("maps.properties")
+        if (mapsPropsFile.exists()) mapsProps.load(mapsPropsFile.inputStream())
         val localProps = Properties()
         val localPropsFile = rootProject.file("local.properties")
         if (localPropsFile.exists()) localProps.load(localPropsFile.inputStream())
-        val googleMapsKey = localProps.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
+        val googleMapsKey = mapsProps.getProperty("GOOGLE_MAPS_API_KEY")
+            ?: localProps.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsKey
     }
 
