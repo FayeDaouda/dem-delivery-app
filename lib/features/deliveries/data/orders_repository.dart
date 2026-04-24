@@ -172,4 +172,10 @@ class OrdersRepository {
       );
     }
   }
+
+  Future<void> updateDriverLocation(double lat, double lng) async {
+    try {
+      await _dio.patch('/users/driver/location', data: {'lat': lat, 'lng': lng});
+    } catch (_) {}
+  }
 }

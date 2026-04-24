@@ -231,15 +231,14 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   void _trySendFirstPosition(Position position) {
     if (_firstPositionSent) return;
-    if (!SocketService.instance.isConnected) {
-      // Réessayer dans 2s si socket pas encore connecté
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted && _driverPosition != null) _trySendFirstPosition(_driverPosition!);
-      });
-      return;
-    }
     _firstPositionSent = true;
-    SocketService.instance.ping(lat: position.latitude, lng: position.longitude);
+    // Envoi via REST (fiable) + socket ping
+    ref.read(ordersRepositoryProvider).updateDriverLocation(
+      position.latitude, position.longitude,
+    ).catchError((_) {});
+    if (SocketService.instance.isConnected) {
+      SocketService.instance.ping(lat: position.latitude, lng: position.longitude);
+    }
   }
 
   Future<void> _updateDriverScreenPos() async {
