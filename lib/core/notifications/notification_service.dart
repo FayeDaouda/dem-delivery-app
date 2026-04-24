@@ -14,29 +14,34 @@ class NotificationService {
 
   /// À appeler une seule fois dans main(), après Firebase.initializeApp().
   static Future<void> init() async {
-    // 1. Demande de permission (iOS + Android 13+)
-    await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    try {
+      // 1. Demande de permission (iOS + Android 13+)
+      await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      ).timeout(const Duration(seconds: 5));
 
-    // 2. iOS : affiche les notifications même quand l'app est au premier plan
-    await _messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+      // 2. iOS : affiche les notifications même quand l'app est au premier plan
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-    // 3. Handler background
-    FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
+      // 3. Handler background
+      FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
 
-    // 4. Envoi du token au backend dès qu'on en a un
-    final token = await _messaging.getToken();
-    if (token != null) await _saveToken(token);
+      // 4. Envoi du token au backend dès qu'on en a un
+      final token = await _messaging.getToken()
+          .timeout(const Duration(seconds: 10));
+      if (token != null) await _saveToken(token);
 
-    // 5. Renouvellement automatique du token
-    _messaging.onTokenRefresh.listen(_saveToken);
+      // 5. Renouvellement automatique du token
+      _messaging.onTokenRefresh.listen(_saveToken);
+    } catch (e) {
+      // Silencieux sur émulateur sans Google Play Services
+    }
   }
 
   static Future<void> _saveToken(String token) async {
