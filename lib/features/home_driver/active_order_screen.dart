@@ -529,8 +529,16 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       try {
         final repo = ref.read(ordersRepositoryProvider);
         await repo.confirmPayment(_order['id'], status, note: note);
-      } catch (_) {
-        // Non bloquant — le driver passe à l'accueil quoi qu'il arrive
+      } catch (e) {
+        debugPrint('[PAYMENT] Erreur confirmPayment: $e');
+        // Retry une fois après 2 secondes si erreur réseau
+        await Future.delayed(const Duration(seconds: 2));
+        try {
+          final repo = ref.read(ordersRepositoryProvider);
+          await repo.confirmPayment(_order['id'], status, note: note);
+        } catch (e2) {
+          debugPrint('[PAYMENT] Retry échoué: $e2');
+        }
       }
     }
     if (status == 'PAID') {
