@@ -121,7 +121,9 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
     // Heartbeat toutes les 30s pour maintenir lastSeenAt à jour côté backend
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (SocketService.instance.isConnected) SocketService.instance.ping();
+      if (!SocketService.instance.isConnected) return;
+      final pos = _driverPosition;
+      SocketService.instance.ping(lat: pos?.latitude, lng: pos?.longitude);
     });
   }
 

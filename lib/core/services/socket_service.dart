@@ -33,7 +33,10 @@ class SocketService {
 
   bool get isConnected => _socket?.connected ?? false;
 
-  void ping() => _socket?.emit('driver:ping', null);
+  void ping({double? lat, double? lng}) {
+    final data = (lat != null && lng != null) ? {'lat': lat, 'lng': lng} : null;
+    _socket?.emit('driver:ping', data);
+  }
 
   void emitDriverLocation(double lat, double lng, String orderId) {
     _socket?.emit('driver:location', {'lat': lat, 'lng': lng, 'orderId': orderId});
