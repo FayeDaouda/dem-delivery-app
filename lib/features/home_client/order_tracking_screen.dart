@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/map_theme_provider.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
 
@@ -66,7 +67,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   }
 
   Future<void> _loadMapStyle() async {
-    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    final bool isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
   }
 
@@ -305,11 +307,24 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
+  bool get _isDelivery => (_order?['orderType'] as String?) == 'DELIVERY';
+
   String get _statusLabel => switch (_status) {
-        'ACCEPTED' => 'Driver en route vers vous',
-        'PICKED_UP' => 'En route vers la destination',
-        'DELIVERED' => 'Livraison effectuée ✓',
+        'ACCEPTED' => _isDelivery
+            ? 'Livreur en route pour récupérer votre colis'
+            : 'Chauffeur en route vers vous',
+        'PICKED_UP' => _isDelivery
+            ? 'Colis pris en charge — en route'
+            : 'En route vers la destination',
+        'DELIVERED' => _isDelivery ? 'Colis livré ✓' : 'Arrivée effectuée ✓',
         _ => 'Commande en cours',
+      };
+
+  IconData get _statusIcon => switch (_status) {
+        'ACCEPTED' => _isDelivery ? Icons.inventory_2_outlined : Icons.directions_bike,
+        'PICKED_UP' => Icons.two_wheeler,
+        'DELIVERED' => Icons.check_circle,
+        _ => Icons.access_time,
       };
 
   Color get _statusColor => switch (_status) {
@@ -509,23 +524,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (_status != 'DELIVERED')
-                              const SizedBox(
-                                width: 10,
-                                height: 10,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white),
-                              )
-                            else
-                              const Icon(Icons.check_circle,
-                                  color: Color(0xFF00C853), size: 14),
+                            Icon(_statusIcon, color: _statusColor, size: 16),
                             const SizedBox(width: 8),
-                            Text(_statusLabel,
+                            Flexible(child: Text(_statusLabel,
                                 style: TextStyle(
                                     color: _statusColor,
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w600)),
+                                    fontWeight: FontWeight.w600))),
                           ],
                         ),
                       ),
