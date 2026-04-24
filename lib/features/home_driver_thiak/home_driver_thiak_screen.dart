@@ -44,9 +44,8 @@ class _HomeDriverThiakScreenState
   // ── Route vers pickup (pendant notification) ──────────────────────────────
   List<LatLng> _pendingRoutePoints = [];
 
-  // ── Heatmap zones chaudes ─────────────────────────────────────────────────
-  Set<Circle> _heatmapCircles = {};
-  Timer? _heatmapTimer;
+  // Heatmap désactivée pour le MVP
+  final Set<Circle> _heatmapCircles = {};
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _newOrderSub;
@@ -71,8 +70,6 @@ class _HomeDriverThiakScreenState
       ref.read(profileProvider.notifier).fetchProfile(goOnlineIfOffline: true);
       _connectSocket();
       _startPolling();
-      _loadHeatmap();
-      _heatmapTimer = Timer.periodic(const Duration(minutes: 5), (_) => _loadHeatmap());
     });
   }
 
@@ -113,37 +110,6 @@ class _HomeDriverThiakScreenState
       if (isAvailable && !hasOrder && !SocketService.instance.isConnected) {
         ref.read(availableOrdersProvider.notifier).refresh();
       }
-    });
-  }
-
-  Future<void> _loadHeatmap() async {
-    final points = await OrdersRepository().getHeatmap();
-    if (!mounted || points.isEmpty) return;
-
-    final maxCount = points.map((p) => (p['count'] as num).toInt()).reduce((a, b) => a > b ? a : b);
-
-    setState(() {
-      _heatmapCircles = points.asMap().entries.map((entry) {
-        final i     = entry.key;
-        final p     = entry.value;
-        final count = (p['count'] as num).toInt();
-        final ratio = maxCount > 0 ? count / maxCount : 0.0;
-
-        // Dégradé jaune → orange → rouge selon intensité
-        final color = ratio < 0.4
-            ? const Color(0xFFFFEB3B)   // jaune
-            : ratio < 0.7
-                ? const Color(0xFFFF9800) // orange
-                : const Color(0xFFF44336); // rouge
-
-        return Circle(
-          circleId: CircleId('heatmap_$i'),
-          center: LatLng((p['lat'] as num).toDouble(), (p['lng'] as num).toDouble()),
-          radius: 800,
-          fillColor: color.withValues(alpha: 0.25 + ratio * 0.35),
-          strokeWidth: 0,
-        );
-      }).toSet();
     });
   }
 
@@ -232,7 +198,6 @@ class _HomeDriverThiakScreenState
   void dispose() {
     _countdownTimer?.cancel();
     _pollTimer?.cancel();
-    _heatmapTimer?.cancel();
     _heartbeatTimer?.cancel();
     _newOrderSub?.cancel();
     _expiredOrderSub?.cancel();

@@ -616,7 +616,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                       isAvailable: isAvailable,
                       ordersLoading: ordersAsync.isLoading,
                       onToggle: _toggleAvailability,
-                      onDevTap: () => ref.read(availableOrdersProvider.notifier).injectDevOrder(),
+                      onDevTap: null,
                     ),
             ),
           ),
