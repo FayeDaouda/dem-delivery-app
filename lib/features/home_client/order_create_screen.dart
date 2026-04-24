@@ -966,7 +966,7 @@ class _Step2Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
@@ -993,7 +993,7 @@ class _Step2Panel extends StatelessWidget {
               ),
             ),
           ],
-          const Spacer(),
+          const SizedBox(height: 16),
           _NextButton(
             label: 'Suivant — Résumé',
             icon: Icons.arrow_forward,
