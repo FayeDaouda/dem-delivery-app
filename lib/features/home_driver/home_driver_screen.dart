@@ -8,12 +8,14 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
 import '../../features/profile/providers/profile_provider.dart';
+import 'navigation/directions_service.dart';
 import 'navigation/map_theme.dart';
 import 'navigation/navigation_service.dart';
 
@@ -54,6 +56,14 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   // ── Heartbeat lastSeenAt ──────────────────────────────────────────────────
   Timer? _heartbeatTimer;
+
+  // ── Route vers pickup (pendant notification) ──────────────────────────────
+  List<LatLng> _pendingRoutePoints = [];
+  int?    _pendingEtaSeconds;
+  double? _pendingDistanceMeters;
+
+  // ── Throttle émission position ────────────────────────────────────────────
+  DateTime? _lastLocationEmit;
 
   // ── Countdown nouvelle course ─────────────────────────────────────────────
   int _countdown = 20;
@@ -227,6 +237,13 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     if (_autoFollow) _centerOn(position);
     _updateDriverScreenPos();
     _trySendFirstPosition(position);
+
+    // Émission position au backend toutes les 10s pour le dispatch
+    final now = DateTime.now();
+    if (_lastLocationEmit == null || now.difference(_lastLocationEmit!).inSeconds >= 10) {
+      _lastLocationEmit = now;
+      SocketService.instance.ping(lat: position.latitude, lng: position.longitude);
+    }
   }
 
   void _trySendFirstPosition(Position position) {
@@ -266,6 +283,67 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     if (_driverPosition == null) return;
     setState(() => _autoFollow = true);
     _centerOn(_driverPosition!);
+  }
+
+  // ── Route vers pickup à la réception d'une offre ──────────────────────────
+  Future<void> _loadPendingRoute(Map<String, dynamic> order) async {
+    if (_driverPosition == null) return;
+    final pickup = LatLng(
+      (order['pickupLatitude'] as num).toDouble(),
+      (order['pickupLongitude'] as num).toDouble(),
+    );
+    final origin = LatLng(_driverPosition!.latitude, _driverPosition!.longitude);
+    final result = await DirectionsService.getRoute(
+      origin: origin,
+      destination: pickup,
+      apiKey: AppConfig.mapsApiKey,
+    );
+    if (!mounted) return;
+    setState(() {
+      _pendingRoutePoints    = result.points;
+      _pendingEtaSeconds     = result.durationSeconds;
+      _pendingDistanceMeters = result.distanceMeters;
+    });
+    _fitBoundsDriverToPickup(origin, pickup);
+  }
+
+  void _fitBoundsDriverToPickup(LatLng driver, LatLng pickup) {
+    final bounds = LatLngBounds(
+      southwest: LatLng(
+        driver.latitude  < pickup.latitude  ? driver.latitude  : pickup.latitude,
+        driver.longitude < pickup.longitude ? driver.longitude : pickup.longitude,
+      ),
+      northeast: LatLng(
+        driver.latitude  > pickup.latitude  ? driver.latitude  : pickup.latitude,
+        driver.longitude > pickup.longitude ? driver.longitude : pickup.longitude,
+      ),
+    );
+    setState(() => _autoFollow = false);
+    _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+  }
+
+  void _clearPendingRoute() {
+    if (!mounted) return;
+    setState(() {
+      _pendingRoutePoints    = [];
+      _pendingEtaSeconds     = null;
+      _pendingDistanceMeters = null;
+    });
+  }
+
+  Set<Polyline> get _pendingPolylines {
+    if (_pendingRoutePoints.isEmpty) return {};
+    return {
+      Polyline(
+        polylineId: const PolylineId('pending'),
+        points: _pendingRoutePoints,
+        color: AppColors.primary,
+        width: 5,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        jointType: JointType.round,
+      ),
+    };
   }
 
   // ── Marker driver triangle Waze ───────────────────────────────────────────
@@ -347,18 +425,18 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       }
     });
 
-    // Détecte l'arrivée d'une nouvelle course → recenter + countdown
+    // Détecte l'arrivée d'une nouvelle course → route + fit bounds + countdown
     ref.listen<AsyncValue<List<Map<String, dynamic>>>>(
       availableOrdersProvider,
       (prev, next) {
         final prevList = prev?.value ?? [];
         final nextList = next.value ?? [];
         if (nextList.isNotEmpty && prevList.isEmpty && isAvailable) {
-          setState(() => _autoFollow = true);
-          if (_driverPosition != null) _centerOn(_driverPosition!);
           _startCountdown();
+          _loadPendingRoute(nextList.first);
         } else if (nextList.isEmpty) {
           _cancelCountdown();
+          _clearPendingRoute();
         }
       },
     );
@@ -383,6 +461,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
               },
               onCameraIdle: _updateDriverScreenPos,
               markers: _driverMarkers,
+              polylines: _pendingPolylines,
               trafficEnabled: false,
               buildingsEnabled: true,
               myLocationEnabled: false,
@@ -600,12 +679,16 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                       key: const ValueKey('order'),
                       order: orders.first,
                       countdown: _countdown,
+                      etaSeconds: _pendingEtaSeconds,
+                      distanceMeters: _pendingDistanceMeters,
                       onAccept: () {
                         _cancelCountdown();
+                        _clearPendingRoute();
                         _acceptOrder(orders.first['id']);
                       },
                       onDecline: () {
                         _cancelCountdown();
+                        _clearPendingRoute();
                         ref.read(availableOrdersProvider.notifier).refresh();
                       },
                     )
@@ -787,6 +870,8 @@ class _NormalSheet extends StatelessWidget {
 class _OrderNotificationSheet extends StatelessWidget {
   final Map<String, dynamic> order;
   final int countdown;
+  final int?    etaSeconds;
+  final double? distanceMeters;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
@@ -794,6 +879,8 @@ class _OrderNotificationSheet extends StatelessWidget {
     super.key,
     required this.order,
     required this.countdown,
+    this.etaSeconds,
+    this.distanceMeters,
     required this.onAccept,
     required this.onDecline,
   });
@@ -858,6 +945,32 @@ class _OrderNotificationSheet extends StatelessWidget {
                 ),
               ],
             ),
+
+            if (etaSeconds != null || distanceMeters != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (etaSeconds != null) ...[
+                    const Icon(Icons.access_time_outlined, color: Colors.white70, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      NavigationService.formatDuration(etaSeconds!),
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                  if (etaSeconds != null && distanceMeters != null)
+                    const SizedBox(width: 16),
+                  if (distanceMeters != null) ...[
+                    const Icon(Icons.straighten_outlined, color: Colors.white70, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      NavigationService.formatDistance(distanceMeters!),
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ],
+              ),
+            ],
 
             const SizedBox(height: 16),
 

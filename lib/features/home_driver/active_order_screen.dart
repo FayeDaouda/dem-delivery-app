@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/config/app_config.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/map_theme_provider.dart';
 import 'navigation/map_theme.dart';
 import '../deliveries/providers/orders_provider.dart';
 import 'navigation/alert_manager.dart';
@@ -44,7 +45,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   // ── Route ─────────────────────────────────────────────────────────────────
   List<LatLng> _routePoints = [];
   bool _loadingRoute = true;
+  bool _isRerouting  = false;
   int? _etaSeconds;
+  DateTime? _lastReroute;
 
   // ── Alertes ───────────────────────────────────────────────────────────────
   final _alertManager = AlertManager();
@@ -154,7 +157,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
   // ── Navigation ────────────────────────────────────────────────────────────
   Future<void> _startNavigation() async {
-    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    final bool isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
 
     // GPS d'abord pour avoir une position de départ précise
@@ -193,10 +197,18 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     );
     if (!mounted) return;
     setState(() {
-      _routePoints = result.points;
-      _etaSeconds = result.durationSeconds;
+      _routePoints  = result.points;
+      _etaSeconds   = result.durationSeconds;
       _loadingRoute = false;
+      _isRerouting  = false;
     });
+  }
+
+  // Zoom 18 à l'arrêt → 15 à 120 km/h (décroissance linéaire)
+  static double _zoomForSpeed(double speedMs) {
+    if (speedMs < 0) return 18.0;
+    final kmh = (speedMs * 3.6).clamp(0.0, 120.0);
+    return 18.0 - (kmh / 120.0) * 3.0;
   }
 
   void _onPosition(Position position) {
@@ -209,7 +221,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: LatLng(position.latitude, position.longitude),
-            zoom: 18.0,
+            zoom: _zoomForSpeed(position.speed),
             bearing: position.heading,
             tilt: 65,
           ),
@@ -232,6 +244,25 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     if (dist != null) {
       final alert = _alertManager.check(dist, isPickupPhase: !_isPickedUp);
       if (alert != null) _showAlert(alert.message, alert.priority);
+    }
+
+    // Recalcul de route si déviation > 50m et dernier recalcul > 20s
+    if (_routePoints.isNotEmpty && !_loadingRoute) {
+      final now2 = DateTime.now();
+      if (_lastReroute == null || now2.difference(_lastReroute!).inSeconds >= 20) {
+        final driverLatLng = LatLng(position.latitude, position.longitude);
+        double minDist = double.infinity;
+        for (final pt in _routePoints) {
+          final d = Geolocator.distanceBetween(
+              driverLatLng.latitude, driverLatLng.longitude, pt.latitude, pt.longitude);
+          if (d < minDist) minDist = d;
+        }
+        if (minDist > 50) {
+          _lastReroute = now2;
+          setState(() => _isRerouting = true);
+          _loadRoute();
+        }
+      }
     }
   }
 
@@ -325,106 +356,168 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
   // ── Dialogue : paiement reçu ? ────────────────────────────────────────────
   void _showPaymentDialog() {
+    final price = (_order['price'] as num?)?.toInt() ?? 0;
+    final orderId = _order['id'] as String?;
+
     showDialog(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64, height: 64,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, setDialog) {
+          bool confirming = false;
+          String? errorMsg;
+
+          // Appelé dans StatefulBuilder → setDialog pour rebuilder le dialog
+          void confirm() async {
+            setDialog(() { confirming = true; errorMsg = null; });
+            // Capture avant les await pour éviter l'usage de BuildContext après gap async
+            final nav       = Navigator.of(dialogCtx);
+            final messenger = ScaffoldMessenger.of(context);
+            bool ok = false;
+            for (int i = 0; i < 2; i++) {
+              if (i > 0) await Future.delayed(const Duration(seconds: 2));
+              try {
+                if (!_isDevOrder && orderId != null) {
+                  await ref.read(ordersRepositoryProvider)
+                      .confirmPayment(orderId, 'PAID');
+                }
+                ok = true;
+                break;
+              } catch (_) {}
+            }
+            if (!mounted) return;
+            if (ok) {
+              nav.pop();
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Row(children: [
+                    const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Text(_isRide ? 'Course effectuée — paiement confirmé !' : 'Livraison effectuée — paiement confirmé !'),
+                  ]),
+                  backgroundColor: const Color(0xFF00C853),
+                  duration: const Duration(seconds: 3),
                 ),
-                child: const Icon(Icons.payments_outlined,
-                    color: Colors.white, size: 32),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                _isRide ? 'Paiement reçu ?' : 'Paiement reçu ?',
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${((_order['price'] as num?)?.toInt() ?? 0)} FCFA',
-                style: const TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Cash ou Mobile Money',
-                style: TextStyle(fontSize: 13, color: Colors.white70),
-              ),
-              const SizedBox(height: 28),
-              Row(
-                children: [
-                  // Problème
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _showDisputeDialog();
-                      },
-                      icon: const Icon(Icons.warning_amber_outlined, size: 18),
-                      label: const Text('Problème'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.orange,
-                        side: const BorderSide(color: Colors.orange),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
+              );
+              Future.delayed(const Duration(milliseconds: 300), () {
+                if (mounted) context.go(_homeRoute);
+              });
+            } else {
+              setDialog(() {
+                confirming = false;
+                errorMsg = 'Erreur réseau. Réessayez ou contactez le support.';
+              });
+            }
+          }
+
+          return PopScope(
+            canPop: false,
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
                   ),
-                  const SizedBox(width: 12),
-                  // Oui
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _confirmPayment('PAID');
-                      },
-                      icon: const Icon(Icons.check_circle_outline, size: 18),
-                      label: const Text('Oui, reçu'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00C853),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
-                      ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 64, height: 64,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.payments_outlined, color: Colors.white, size: 32),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Paiement reçu ?',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '$price FCFA',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text('Cash ou Mobile Money', style: TextStyle(fontSize: 13, color: Colors.white70)),
+                    if (errorMsg != null) ...[
+                      const SizedBox(height: 10),
+                      Text(errorMsg!, style: const TextStyle(color: Colors.orangeAccent, fontSize: 12), textAlign: TextAlign.center),
+                    ],
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        // Problème
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: confirming ? null : () {
+                              Navigator.of(dialogCtx).pop();
+                              _showDisputeDialog();
+                            },
+                            icon: const Icon(Icons.warning_amber_outlined, size: 18),
+                            label: const Text('Problème'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.orange,
+                              side: const BorderSide(color: Colors.orange),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Oui, reçu
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: confirming ? null : confirm,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00C853),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                            child: confirming
+                                ? const SizedBox(
+                                    width: 20, height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2.5,
+                                    ),
+                                  )
+                                : const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.check_circle_outline, size: 18),
+                                      SizedBox(width: 6),
+                                      Text('Oui, reçu', style: TextStyle(fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -526,19 +619,30 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   // ── Appel API confirmation paiement ──────────────────────────────────────
   Future<void> _confirmPayment(String status, {String? note}) async {
     if (!_isDevOrder) {
-      try {
-        final repo = ref.read(ordersRepositoryProvider);
-        await repo.confirmPayment(_order['id'], status, note: note);
-      } catch (e) {
-        debugPrint('[PAYMENT] Erreur confirmPayment: $e');
-        // Retry une fois après 2 secondes si erreur réseau
-        await Future.delayed(const Duration(seconds: 2));
+      bool confirmed = false;
+      for (int attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) await Future.delayed(const Duration(seconds: 2));
         try {
           final repo = ref.read(ordersRepositoryProvider);
           await repo.confirmPayment(_order['id'], status, note: note);
-        } catch (e2) {
-          debugPrint('[PAYMENT] Retry échoué: $e2');
+          confirmed = true;
+          break;
+        } catch (e) {
+          debugPrint('[PAYMENT] Erreur confirmPayment tentative $attempt: $e');
         }
+      }
+      if (!confirmed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Erreur : paiement non enregistré. Contactez le support.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 6),
+            ),
+          );
+        }
+        return; // ne pas naviguer tant que non confirmé
       }
     }
     if (status == 'PAID') {
@@ -753,7 +857,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       Polyline(
         polylineId: const PolylineId('route'),
         points: _routePoints,
-        color: MapTheme.routeColor,
+        color: _isRerouting
+            ? MapTheme.routeColor.withValues(alpha: 0.4)
+            : MapTheme.routeColor,
         width: 6,
         startCap: Cap.roundCap,
         endCap: Cap.roundCap,

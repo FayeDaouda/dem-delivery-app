@@ -13,6 +13,7 @@ import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../features/deliveries/data/orders_repository.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/map_theme_provider.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
 import '../../features/profile/providers/profile_provider.dart';
 import '../home_driver/navigation/directions_service.dart';
@@ -40,9 +41,12 @@ class _HomeDriverThiakScreenState
   StreamSubscription<Position>? _locationSub;
   Position? _driverPosition;
   bool _autoFollow = true;
+  DateTime? _lastLocationEmit;
 
   // ── Route vers pickup (pendant notification) ──────────────────────────────
   List<LatLng> _pendingRoutePoints = [];
+  int?    _pendingEtaSeconds;
+  double? _pendingDistanceMeters;
 
   // Heatmap désactivée pour le MVP
   final Set<Circle> _heatmapCircles = {};
@@ -208,7 +212,8 @@ class _HomeDriverThiakScreenState
   }
 
   Future<void> _loadMapStyle() async {
-    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    final bool isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
   }
 
@@ -225,6 +230,13 @@ class _HomeDriverThiakScreenState
     if (!mounted) return;
     setState(() => _driverPosition = position);
     if (_autoFollow) _centerOn(position);
+
+    // Émet la position au backend toutes les 10s pour que le dispatch trouve ce driver
+    final now = DateTime.now();
+    if (_lastLocationEmit == null || now.difference(_lastLocationEmit!).inSeconds >= 10) {
+      _lastLocationEmit = now;
+      SocketService.instance.ping(lat: position.latitude, lng: position.longitude);
+    }
   }
 
   void _centerOn(Position position) {
@@ -309,11 +321,38 @@ class _HomeDriverThiakScreenState
       destination: pickup,
       apiKey: AppConfig.mapsApiKey,
     );
-    if (mounted) setState(() => _pendingRoutePoints = result.points);
+    if (!mounted) return;
+    setState(() {
+      _pendingRoutePoints    = result.points;
+      _pendingEtaSeconds     = result.durationSeconds;
+      _pendingDistanceMeters = result.distanceMeters;
+    });
+    // Zoom pour inclure driver + point pickup dans le champ de vision
+    _fitBoundsDriverToPickup(origin, pickup);
+  }
+
+  void _fitBoundsDriverToPickup(LatLng driver, LatLng pickup) {
+    final bounds = LatLngBounds(
+      southwest: LatLng(
+        driver.latitude  < pickup.latitude  ? driver.latitude  : pickup.latitude,
+        driver.longitude < pickup.longitude ? driver.longitude : pickup.longitude,
+      ),
+      northeast: LatLng(
+        driver.latitude  > pickup.latitude  ? driver.latitude  : pickup.latitude,
+        driver.longitude > pickup.longitude ? driver.longitude : pickup.longitude,
+      ),
+    );
+    setState(() => _autoFollow = false);
+    _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
   }
 
   void _clearPendingRoute() {
-    if (mounted) setState(() => _pendingRoutePoints = []);
+    if (!mounted) return;
+    setState(() {
+      _pendingRoutePoints    = [];
+      _pendingEtaSeconds     = null;
+      _pendingDistanceMeters = null;
+    });
   }
 
   Set<Polyline> get _pendingPolylines {
@@ -538,6 +577,8 @@ class _HomeDriverThiakScreenState
                       order: orders.first,
                       countdown: _countdown,
                       countdownColor: _countdownColor,
+                      etaSeconds: _pendingEtaSeconds,
+                      distanceMeters: _pendingDistanceMeters,
                       onAccept: () => _acceptOrder(orders.first['id']),
                       onDecline: () {
                         _cancelCountdown();
@@ -658,6 +699,8 @@ class _ThiakOrderSheet extends StatelessWidget {
   final Map<String, dynamic> order;
   final int countdown;
   final Color countdownColor;
+  final int?    etaSeconds;
+  final double? distanceMeters;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
@@ -666,6 +709,8 @@ class _ThiakOrderSheet extends StatelessWidget {
     required this.order,
     required this.countdown,
     required this.countdownColor,
+    this.etaSeconds,
+    this.distanceMeters,
     required this.onAccept,
     required this.onDecline,
   });
@@ -724,6 +769,31 @@ class _ThiakOrderSheet extends StatelessWidget {
                   ),
                 ],
               ),
+              if (etaSeconds != null || distanceMeters != null) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    if (etaSeconds != null) ...[
+                      const Icon(Icons.access_time_outlined, color: Colors.white70, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        NavigationService.formatDuration(etaSeconds!),
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                    if (etaSeconds != null && distanceMeters != null)
+                      const SizedBox(width: 16),
+                    if (distanceMeters != null) ...[
+                      const Icon(Icons.straighten_outlined, color: Colors.white70, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        NavigationService.formatDistance(distanceMeters!),
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
               const SizedBox(height: 16),
               // Adresse pickup uniquement (destination révélée après)
               Container(
