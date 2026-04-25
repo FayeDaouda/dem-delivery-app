@@ -359,14 +359,16 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     final price = (_order['price'] as num?)?.toInt() ?? 0;
     final orderId = _order['id'] as String?;
 
+    // Déclarés hors du builder pour persister entre les rebuilds du StatefulBuilder
+    bool confirming = false;
+    String? errorMsg;
+
     showDialog(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (dialogCtx) => StatefulBuilder(
         builder: (dialogCtx, setDialog) {
-          bool confirming = false;
-          String? errorMsg;
 
           // Appelé dans StatefulBuilder → setDialog pour rebuilder le dialog
           void confirm() async {
