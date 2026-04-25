@@ -52,9 +52,16 @@ class DirectionsService {
       final route = (data['routes'] as List).first as Map<String, dynamic>;
       final leg = (route['legs'] as List).first as Map<String, dynamic>;
 
-      final points = _decodePolyline(
-        route['overview_polyline']['points'] as String,
-      );
+      // Concatène les polylines de chaque step → suit les courbes des rues
+      // (overview_polyline est trop simplifié → droites visibles en mode tilt)
+      final steps = leg['steps'] as List;
+      final points = <LatLng>[];
+      for (final step in steps) {
+        points.addAll(_decodePolyline(
+          (step as Map<String, dynamic>)['polyline']['points'] as String,
+        ));
+      }
+
       final durationSec = (leg['duration']['value'] as num).toInt();
       final distanceM = (leg['distance']['value'] as num).toDouble();
 
