@@ -1,0 +1,62 @@
+# Plateforme minimale — doit correspondre à IPHONEOS_DEPLOYMENT_TARGET du projet Xcode
+platform :ios, '13.0'
+
+# Désactive les stats CocoaPods (évite la latence réseau pendant flutter build)
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug'   => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+# ── Localisation du SDK Flutter ───────────────────────────────────────────────
+def flutter_root
+  generated = File.expand_path(
+    File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__
+  )
+  unless File.exist?(generated)
+    raise "#{generated} must exist. Run `flutter pub get` first."
+  end
+  File.foreach(generated) do |line|
+    matches = line.match(/FLUTTER_ROOT=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise 'FLUTTER_ROOT not found in Generated.xcconfig. Delete it and run flutter pub get.'
+end
+
+require File.expand_path(
+  File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root
+)
+
+flutter_ios_podfile_setup
+
+# ── Target principal ──────────────────────────────────────────────────────────
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+# ── Post-install : force le deployment target sur tous les pods ───────────────
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    target.build_configurations.each do |config|
+      # Aligne chaque pod sur notre minimum iOS — évite les warnings de compatibilité
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+
+      # Nécessaire pour geolocator (Swift concurrency back-deploy)
+      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+
+      # Désactive la signature pour les pods (Xcode 14+)
+      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+    end
+  end
+end
