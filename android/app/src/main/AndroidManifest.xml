@@ -6,7 +6,6 @@
     <!-- Localisation (foreground) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- Localisation en arrière-plan (driver en course) -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
@@ -55,6 +54,14 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${GOOGLE_MAPS_API_KEY}" />
+
+        <!-- Localisation en arrière-plan — Android 14+ exige foregroundServiceType="location"
+             sur tout service qui accède à la position quand l'app est en arrière-plan.
+             Sans cette déclaration, startForegroundService() échoue sur SDK 34+. -->
+        <service
+            android:name="com.baseflow.geolocator.GeolocatorService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
