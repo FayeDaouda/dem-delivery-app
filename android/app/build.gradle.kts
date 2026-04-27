@@ -14,7 +14,7 @@ val keyPropsFile = rootProject.file("key.properties")   // android/key.propertie
 if (keyPropsFile.exists()) keyProps.load(keyPropsFile.inputStream())
 
 android {
-    namespace = "com.dem.dem_app"
+    namespace = "com.dem.demapp"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -40,7 +40,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.dem.dem_app"
+        applicationId = "com.dem.demapp"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
