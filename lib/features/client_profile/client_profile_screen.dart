@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/api/api_client.dart';
+import '../../core/config/app_config.dart';
 
 class ClientProfileScreen extends StatefulWidget {
   const ClientProfileScreen({super.key});
@@ -153,13 +154,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   _buildMenuItem(
                     icon: Icons.privacy_tip_outlined,
                     title: 'Politique de confidentialité',
-                    onTap: () => _launch('https://fayedaouda.github.io/dem-legal/privacy.html'),
+                    onTap: () => _launch(AppConfig.privacyPolicyUrl),
                   ),
                   const SizedBox(height: 12),
                   _buildMenuItem(
                     icon: Icons.description_outlined,
                     title: 'Conditions d\'utilisation',
-                    onTap: () => _launch('https://fayedaouda.github.io/dem-legal/terms.html'),
+                    onTap: () => _launch(AppConfig.termsUrl),
                   ),
                   const SizedBox(height: 12),
                   _buildMenuItem(

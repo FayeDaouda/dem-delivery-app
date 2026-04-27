@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/api/api_client.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/l10n/app_strings.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
@@ -526,10 +527,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     _ActionRow(icon: Icons.support_agent_outlined, label: s.support, onTap: _showSupportSheet),
                     _divider(),
                     _ActionRow(icon: Icons.privacy_tip_outlined, label: s.privacyPolicy,
-                        onTap: () => _launch('https://fayedaouda.github.io/dem-legal/privacy.html')),
+                        onTap: () => _launch(AppConfig.privacyPolicyUrl)),
                     _divider(),
                     _ActionRow(icon: Icons.description_outlined, label: s.termsOfService,
-                        onTap: () => _launch('https://fayedaouda.github.io/dem-legal/terms.html')),
+                        onTap: () => _launch(AppConfig.termsUrl)),
                   ]),
                   const SizedBox(height: 16),
 
