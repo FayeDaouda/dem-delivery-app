@@ -1,5 +1,5 @@
 # Plateforme minimale — doit correspondre à IPHONEOS_DEPLOYMENT_TARGET du projet Xcode
-platform :ios, '13.0'
+platform :ios, '14.0'
 
 # Désactive les stats CocoaPods (évite la latence réseau pendant flutter build)
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -50,7 +50,7 @@ post_install do |installer|
 
     target.build_configurations.each do |config|
       # Aligne chaque pod sur notre minimum iOS — évite les warnings de compatibilité
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
 
       # Nécessaire pour geolocator (Swift concurrency back-deploy)
       config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
