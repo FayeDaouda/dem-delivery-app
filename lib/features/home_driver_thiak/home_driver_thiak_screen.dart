@@ -19,6 +19,7 @@ import '../../features/profile/providers/profile_provider.dart';
 import '../home_driver/navigation/directions_service.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
+import '../../core/map/poi_data.dart';
 
 const _dakar = LatLng(14.6937, -17.4441);
 
@@ -36,6 +37,8 @@ class _HomeDriverThiakScreenState
   GoogleMapController? _mapController;
   String? _mapStyle;
   BitmapDescriptor? _driverIcon;
+  double _currentZoom = 15.5;
+  Map<PoiCategory, BitmapDescriptor> _poiIcons = {};
 
   // ── GPS ──────────────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
@@ -68,6 +71,9 @@ class _HomeDriverThiakScreenState
     _loadMapStyle();
     _buildDriverIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
+    });
+    buildPoiIcons().then((icons) {
+      if (mounted) setState(() => _poiIcons = icons);
     });
     _startGPS();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -259,9 +265,9 @@ class _HomeDriverThiakScreenState
   }
 
   Set<Marker> get _driverMarkers {
-    if (_driverPosition == null) return {};
-    return {
-      Marker(
+    final markers = <Marker>{};
+    if (_driverPosition != null) {
+      markers.add(Marker(
         markerId: const MarkerId('driver'),
         position: LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
         icon: _driverIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
@@ -269,8 +275,23 @@ class _HomeDriverThiakScreenState
         rotation: _driverPosition!.heading,
         anchor: const Offset(0.5, 0.5),
         zIndexInt: 2,
-      ),
-    };
+      ));
+    }
+    if (_currentZoom >= 13 && _poiIcons.isNotEmpty) {
+      for (final poi in dakarPois) {
+        final icon = _poiIcons[poi.category];
+        if (icon == null) continue;
+        markers.add(Marker(
+          markerId: MarkerId('poi_${poi.id}'),
+          position: poi.position,
+          icon: icon,
+          anchor: const Offset(0.5, 0.5),
+          zIndexInt: 1,
+          infoWindow: InfoWindow(title: poi.name, snippet: poi.category.label),
+        ));
+      }
+    }
+    return markers;
   }
 
   // ── Countdown ─────────────────────────────────────────────────────────────
@@ -457,8 +478,11 @@ class _HomeDriverThiakScreenState
                 _mapController = controller;
                 if (_driverPosition != null) _centerOn(_driverPosition!);
               },
-              onCameraMove: (_) {
+              onCameraMove: (pos) {
                 if (_autoFollow) setState(() => _autoFollow = false);
+                if ((pos.zoom - _currentZoom).abs() > 0.5) {
+                  setState(() => _currentZoom = pos.zoom);
+                }
               },
               style: _mapStyle,
               markers: _driverMarkers,
