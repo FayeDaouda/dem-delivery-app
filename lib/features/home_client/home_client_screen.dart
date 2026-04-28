@@ -44,7 +44,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   double _currentZoom = 17;
 
   // ── POI ───────────────────────────────────────────────────────────────────
-  Map<PoiCategory, BitmapDescriptor> _poiIcons = {};
+  Map<String, BitmapDescriptor> _poiIcons = {};
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _orderAcceptedSub;
@@ -248,7 +248,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     // POI — visibles uniquement quand le zoom est suffisant (≥ 13)
     if (_currentZoom >= 13 && _poiIcons.isNotEmpty) {
       for (final poi in dakarPois) {
-        final icon = _poiIcons[poi.category];
+        final icon = _poiIcons[poi.id];
         if (icon == null) continue;
         markers.add(Marker(
           markerId: MarkerId('poi_${poi.id}'),

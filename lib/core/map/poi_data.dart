@@ -120,62 +120,74 @@ const List<PoiPoint> dakarPois = [
   PoiPoint(id: 's_shell_sacre',  name: 'Shell Sacré-Cœur',  category: PoiCategory.stationEssence, position: LatLng(14.7104, -17.4697)),
 ];
 
-// ── Génère les icônes par catégorie (appelé une seule fois au démarrage) ──────
-Future<Map<PoiCategory, BitmapDescriptor>> buildPoiIcons() async {
-  final icons = <PoiCategory, BitmapDescriptor>{};
-  for (final cat in PoiCategory.values) {
-    icons[cat] = await _buildPoiIcon(cat);
+// ── Génère un label texte par POI (Map<poiId, BitmapDescriptor>) ─────────────
+Future<Map<String, BitmapDescriptor>> buildPoiIcons() async {
+  final icons = <String, BitmapDescriptor>{};
+  for (final poi in dakarPois) {
+    icons[poi.id] = await _buildPoiTextIcon(poi.name, poi.category);
   }
   return icons;
 }
 
-Future<BitmapDescriptor> _buildPoiIcon(PoiCategory cat) async {
-  const size = 56.0;
-  const cx = size / 2;
-  const cy = size / 2;
+Future<BitmapDescriptor> _buildPoiTextIcon(String name, PoiCategory cat) async {
+  const double fontSize  = 22.0;
+  const double paddingH  = 12.0;
+  const double paddingV  = 6.0;
+  const double maxWidth  = 260.0;
+  const double radius    = 10.0;
 
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(recorder);
-  final color = cat.color;
-
-  // Ombre légère
-  canvas.drawCircle(
-    const Offset(cx, cy + 2),
-    18,
-    Paint()
-      ..color = Colors.black.withValues(alpha: 0.18)
-      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 4),
-  );
-
-  // Cercle de fond
-  canvas.drawCircle(const Offset(cx, cy), 18, Paint()..color = color);
-
-  // Anneau blanc
-  canvas.drawCircle(
-    const Offset(cx, cy),
-    18,
-    Paint()
-      ..color = Colors.white.withValues(alpha: 0.35)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5,
-  );
-
-  // Lettre centrale
+  // Mesure du texte
   final tp = TextPainter(
     text: TextSpan(
-      text: cat.emoji,
-      style: const TextStyle(
+      text: name,
+      style: TextStyle(
         color: Colors.white,
-        fontSize: 16,
-        fontWeight: FontWeight.w800,
+        fontSize: fontSize,
+        fontWeight: FontWeight.w700,
       ),
     ),
     textDirection: TextDirection.ltr,
-  )..layout();
-  tp.paint(canvas, Offset(cx - tp.width / 2, cy - tp.height / 2));
+  )..layout(maxWidth: maxWidth);
+
+  final imgW = (tp.width  + paddingH * 2).ceilToDouble();
+  final imgH = (tp.height + paddingV * 2 + 3).ceilToDouble(); // +3 pour ombre
+
+  final recorder = ui.PictureRecorder();
+  final canvas   = Canvas(recorder);
+
+  // Ombre portée
+  final shadowRect = RRect.fromRectAndRadius(
+    Rect.fromLTWH(1, 2, imgW - 2, imgH - 3),
+    const Radius.circular(radius),
+  );
+  canvas.drawRRect(shadowRect, Paint()
+    ..color = Colors.black.withValues(alpha: 0.28)
+    ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 3));
+
+  // Fond coloré selon catégorie
+  final bgRect = RRect.fromRectAndRadius(
+    Rect.fromLTWH(0, 0, imgW - 2, imgH - 3),
+    const Radius.circular(radius),
+  );
+  canvas.drawRRect(bgRect, Paint()..color = cat.color);
+
+  // Bordure blanche fine
+  canvas.drawRRect(bgRect, Paint()
+    ..color = Colors.white.withValues(alpha: 0.40)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.0);
+
+  // Texte centré
+  tp.paint(canvas, Offset(paddingH, paddingV));
 
   final picture = recorder.endRecording();
-  final img = await picture.toImage(size.toInt(), size.toInt());
-  final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-  return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: 28, height: 28);
+  final img     = await picture.toImage(imgW.toInt(), imgH.toInt());
+  final bytes   = await img.toByteData(format: ui.ImageByteFormat.png);
+
+  // Affichage à 50% de la taille de rendu → densité 2×
+  return BitmapDescriptor.bytes(
+    bytes!.buffer.asUint8List(),
+    width:  imgW / 2,
+    height: imgH / 2,
+  );
 }

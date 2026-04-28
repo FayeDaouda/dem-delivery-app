@@ -38,7 +38,7 @@ class _HomeDriverThiakScreenState
   String? _mapStyle;
   BitmapDescriptor? _driverIcon;
   double _currentZoom = 15.5;
-  Map<PoiCategory, BitmapDescriptor> _poiIcons = {};
+  Map<String, BitmapDescriptor> _poiIcons = {};
 
   // ── GPS ──────────────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
@@ -279,7 +279,7 @@ class _HomeDriverThiakScreenState
     }
     if (_currentZoom >= 13 && _poiIcons.isNotEmpty) {
       for (final poi in dakarPois) {
-        final icon = _poiIcons[poi.category];
+        final icon = _poiIcons[poi.id];
         if (icon == null) continue;
         markers.add(Marker(
           markerId: MarkerId('poi_${poi.id}'),

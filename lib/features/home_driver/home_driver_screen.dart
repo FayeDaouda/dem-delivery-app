@@ -36,7 +36,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   String? _mapStyle;
   BitmapDescriptor? _driverIcon;
   double _currentZoom = 15.5;
-  Map<PoiCategory, BitmapDescriptor> _poiIcons = {};
+  Map<String, BitmapDescriptor> _poiIcons = {};
 
   // ── Pulse animation ───────────────────────────────────────────────────────
   late final AnimationController _pulseCtrl;
@@ -368,7 +368,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     }
     if (_currentZoom >= 13 && _poiIcons.isNotEmpty) {
       for (final poi in dakarPois) {
-        final icon = _poiIcons[poi.category];
+        final icon = _poiIcons[poi.id];
         if (icon == null) continue;
         markers.add(Marker(
           markerId: MarkerId('poi_${poi.id}'),
