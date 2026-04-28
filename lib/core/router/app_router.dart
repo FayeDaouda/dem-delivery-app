@@ -3,6 +3,7 @@ import '../../features/auth/screens/phone_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/role_selection_screen.dart';
 import '../../features/auth/screens/driver_onboarding_screen.dart';
+import '../../features/auth/screens/client_onboarding_screen.dart';
 import '../../features/home_client/home_client_screen.dart';
 import '../../features/home_client/order_create_screen.dart';
 import '../../features/home_client/order_confirmation_screen.dart';
@@ -63,6 +64,10 @@ final appRouter = GoRouter(
     ),
 
     // ── Client ──
+    GoRoute(
+      path: '/client/onboarding',
+      builder: (context, state) => const ClientOnboardingScreen(),
+    ),
     GoRoute(
       path: '/client/home',
       builder: (context, state) => const HomeClientScreen(),

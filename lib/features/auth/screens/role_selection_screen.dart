@@ -62,7 +62,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
       if (role == 'DRIVER') {
         context.go('/driver/onboarding?type=$vehicleType');
       } else {
-        context.go('/client/home');
+        context.go('/client/onboarding');
       }
     } catch (e) {
       if (mounted) {
