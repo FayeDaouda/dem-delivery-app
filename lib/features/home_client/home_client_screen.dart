@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/map/poi_data.dart';
 import '../../core/router/app_router.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
@@ -40,6 +41,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   GoogleMapController? _mapController;
   String? _mapStyle;
   BitmapDescriptor? _clientIcon;
+  double _currentZoom = 17;
+
+  // ── POI ───────────────────────────────────────────────────────────────────
+  Map<PoiCategory, BitmapDescriptor> _poiIcons = {};
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _orderAcceptedSub;
@@ -66,6 +71,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     _loadMapStyle();
     _buildClientIcon().then((icon) {
       if (mounted) setState(() => _clientIcon = icon);
+    });
+    buildPoiIcons().then((icons) {
+      if (mounted) setState(() => _poiIcons = icons);
     });
     _startGPS();
     _loadUser();
@@ -222,9 +230,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── Marqueur client ───────────────────────────────────────────────────────
   Set<Marker> get _clientMarkers {
-    if (_clientPosition == null) return {};
-    return {
-      Marker(
+    final markers = <Marker>{};
+
+    // Position client
+    if (_clientPosition != null) {
+      markers.add(Marker(
         markerId: const MarkerId('client'),
         position: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
         icon: _clientIcon ??
@@ -232,8 +242,29 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         flat: true,
         anchor: const Offset(0.5, 0.5),
         zIndexInt: 2,
-      ),
-    };
+      ));
+    }
+
+    // POI — visibles uniquement quand le zoom est suffisant (≥ 13)
+    if (_currentZoom >= 13 && _poiIcons.isNotEmpty) {
+      for (final poi in dakarPois) {
+        final icon = _poiIcons[poi.category];
+        if (icon == null) continue;
+        markers.add(Marker(
+          markerId: MarkerId('poi_${poi.id}'),
+          position: poi.position,
+          icon: icon,
+          anchor: const Offset(0.5, 0.5),
+          zIndexInt: 1,
+          infoWindow: InfoWindow(
+            title: poi.name,
+            snippet: poi.category.label,
+          ),
+        ));
+      }
+    }
+
+    return markers;
   }
 
   // ── User ──────────────────────────────────────────────────────────────────
@@ -352,8 +383,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                 if (_clientPosition != null) _centerOn(_clientPosition!);
               },
               style: _mapStyle,
-              onCameraMove: (_) {
+              onCameraMove: (pos) {
                 if (_autoFollow) setState(() => _autoFollow = false);
+                if ((pos.zoom - _currentZoom).abs() > 0.5) {
+                  setState(() => _currentZoom = pos.zoom);
+                }
               },
               markers: _clientMarkers,
               myLocationEnabled: false,
