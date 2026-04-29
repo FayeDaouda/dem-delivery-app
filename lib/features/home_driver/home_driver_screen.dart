@@ -73,6 +73,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   int _countdown = 20;
   Timer? _countdownTimer;
 
+  // ── Stats du jour (pills accueil) ─────────────────────────────────────────
+  int _todayCourses = 0;
+  int _todayGains   = 0;
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +96,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       if (mounted) setState(() => _poiIconSet = set);
     });
     _startGPS();
+    _loadTodayStats();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(profileProvider.notifier).fetchProfile(goOnlineIfOffline: true);
       _connectSocket();
@@ -175,6 +180,28 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   void _cancelCountdown() {
     _countdownTimer?.cancel();
     if (mounted) setState(() => _countdown = 20);
+  }
+
+  // ── Stats du jour (pills accueil) ─────────────────────────────────────────
+  Future<void> _loadTodayStats() async {
+    try {
+      final res  = await ApiClient.dio.get('/orders/my');
+      final raw  = res.data;
+      final list = raw is List ? raw : (raw is Map && raw['orders'] != null ? raw['orders'] as List : []);
+      final now  = DateTime.now();
+      int courses = 0, gains = 0;
+      for (final o in List<Map<String, dynamic>>.from(list)) {
+        final status = (o['status'] as String? ?? '').toUpperCase();
+        if (status != 'DELIVERED' && status != 'PAYMENT_CONFIRMED') continue;
+        final dt = DateTime.tryParse(o['createdAt'] as String? ?? '')?.toLocal();
+        if (dt == null) continue;
+        if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+          courses++;
+          gains += (o['price'] as num?)?.toInt() ?? 0;
+        }
+      }
+      if (mounted) setState(() { _todayCourses = courses; _todayGains = gains; });
+    } catch (_) {}
   }
 
   // ── Map style ─────────────────────────────────────────────────────────────
@@ -712,6 +739,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                       profile: profile,
                       isAvailable: isAvailable,
                       ordersLoading: ordersAsync.isLoading,
+                      todayCourses: _todayCourses,
+                      todayGains: _todayGains,
                       onToggle: _toggleAvailability,
                       onDevTap: null,
                     ),
@@ -769,6 +798,8 @@ class _NormalSheet extends StatelessWidget {
   final dynamic profile;
   final bool isAvailable;
   final bool ordersLoading;
+  final int todayCourses;
+  final int todayGains;
   final VoidCallback onToggle;
   final VoidCallback? onDevTap;
 
@@ -777,6 +808,8 @@ class _NormalSheet extends StatelessWidget {
     required this.profile,
     required this.isAvailable,
     required this.ordersLoading,
+    required this.todayCourses,
+    required this.todayGains,
     required this.onToggle,
     this.onDevTap,
   });
@@ -859,14 +892,14 @@ class _NormalSheet extends StatelessWidget {
                 children: [
                   _StatPill(
                     icon: Icons.route_outlined,
-                    label: '0 courses',
+                    label: '$todayCourses course${todayCourses != 1 ? 's' : ''}',
                     color: AppColors.primary,
                     onTap: () => _showStatModal(context, _StatType.courses),
                   ),
                   const SizedBox(width: 10),
                   _StatPill(
                     icon: Icons.monetization_on_outlined,
-                    label: '0 FCFA',
+                    label: '$todayGains FCFA',
                     color: AppColors.primaryDark,
                     onTap: () => _showStatModal(context, _StatType.gains),
                   ),
