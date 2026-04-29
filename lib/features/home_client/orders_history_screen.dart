@@ -18,21 +18,20 @@ class OrdersHistoryScreen extends ConsumerWidget {
     final ordersAsync = ref.watch(myOrdersProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.primary,
         elevation: 0,
-        shadowColor: Colors.black12,
         surfaceTintColor: Colors.transparent,
+        foregroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: Color(0xFF1A1A2E), size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Mes commandes',
           style: TextStyle(
-            color: Color(0xFF1A1A2E),
+            color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -40,7 +39,7 @@ class OrdersHistoryScreen extends ConsumerWidget {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: AppColors.primary),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () => ref.invalidate(myOrdersProvider),
           ),
         ],
@@ -325,29 +324,29 @@ class _EmptyView extends StatelessWidget {
             width: 90,
             height: 90,
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: AppColors.primary,
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.receipt_long_outlined,
-              color: AppColors.primary,
+              color: Colors.white,
               size: 44,
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             'Aucune commande',
             style: TextStyle(
-              color: AppColors.textPrimary,
+              color: AppColors.primary,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Votre historique apparaîtra ici\naprès votre première commande.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            style: TextStyle(color: AppColors.primary.withValues(alpha: 0.65), fontSize: 14),
           ),
         ],
       ),
