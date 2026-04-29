@@ -61,6 +61,11 @@ class AvailableOrdersNotifier extends AsyncNotifier<List<Map<String, dynamic>>> 
   void clearDevOrder() {
     state = const AsyncData([]);
   }
+
+  /// Vide l'état après acceptation d'une course (évite la réapparition au retour home).
+  void clear() {
+    state = const AsyncData([]);
+  }
 }
 
 final availableOrdersProvider =

@@ -439,6 +439,8 @@ class _HomeDriverThiakScreenState
       final acceptedOrder = await ref.read(ordersRepositoryProvider).acceptOrder(orderId);
       // Fusionne : notifOrder (infos client) + acceptedOrder (statut ACCEPTED)
       final merged = {...notifOrder, ...acceptedOrder};
+      // Vide le provider avant de naviguer → évite la réapparition au retour home
+      ref.read(availableOrdersProvider.notifier).clear();
       if (mounted) context.push('/driver/order/active', extra: merged);
     } catch (e) {
       if (mounted) {
