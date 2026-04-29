@@ -23,56 +23,86 @@ class DirectionsService {
     receiveTimeout: const Duration(seconds: 10),
   ));
 
-  /// Récupère la vraie route routière via l'API Directions de Google.
-  /// Si la clé est absente ou invalide, retourne une ligne droite.
+  /// Récupère la vraie route routière.
+  /// Stratégie : Google Directions → OSRM (libre) → ligne droite.
   static Future<RouteResult> getRoute({
     required LatLng origin,
     required LatLng destination,
     required String apiKey,
   }) async {
-    if (apiKey.isEmpty) return RouteResult.fallback(origin, destination);
+    // ── 1. Google Directions API ──────────────────────────────────────────────
+    if (apiKey.isNotEmpty) {
+      try {
+        final response = await _dio.get(
+          'https://maps.googleapis.com/maps/api/directions/json',
+          queryParameters: {
+            'origin':      '${origin.latitude},${origin.longitude}',
+            'destination': '${destination.latitude},${destination.longitude}',
+            'key':         apiKey,
+            'mode':        'driving',
+            'alternatives':'false',
+          },
+        );
 
-    try {
-      final response = await _dio.get(
-        'https://maps.googleapis.com/maps/api/directions/json',
-        queryParameters: {
-          'origin': '${origin.latitude},${origin.longitude}',
-          'destination': '${destination.latitude},${destination.longitude}',
-          'key': apiKey,
-          'mode': 'driving',
-          'alternatives': 'false',
-        },
-      );
+        final data = response.data as Map<String, dynamic>;
+        if (data['status'] == 'OK') {
+          final route = (data['routes'] as List).first as Map<String, dynamic>;
+          final leg   = (route['legs']   as List).first as Map<String, dynamic>;
 
-      final data = response.data as Map<String, dynamic>;
-      if (data['status'] != 'OK') {
-        return RouteResult.fallback(origin, destination);
+          // Step-level polylines : suit les courbes réelles des rues
+          final steps  = leg['steps'] as List;
+          final points = <LatLng>[];
+          for (final step in steps) {
+            points.addAll(_decodePolyline(
+              (step as Map<String, dynamic>)['polyline']['points'] as String,
+            ));
+          }
+
+          return RouteResult(
+            points:          points,
+            durationSeconds: (leg['duration']['value'] as num).toInt(),
+            distanceMeters:  (leg['distance']['value']  as num).toDouble(),
+          );
+        }
+      } catch (_) {
+        // Google a échoué → on essaie OSRM
       }
-
-      final route = (data['routes'] as List).first as Map<String, dynamic>;
-      final leg = (route['legs'] as List).first as Map<String, dynamic>;
-
-      // Concatène les polylines de chaque step → suit les courbes des rues
-      // (overview_polyline est trop simplifié → droites visibles en mode tilt)
-      final steps = leg['steps'] as List;
-      final points = <LatLng>[];
-      for (final step in steps) {
-        points.addAll(_decodePolyline(
-          (step as Map<String, dynamic>)['polyline']['points'] as String,
-        ));
-      }
-
-      final durationSec = (leg['duration']['value'] as num).toInt();
-      final distanceM = (leg['distance']['value'] as num).toDouble();
-
-      return RouteResult(
-        points: points,
-        durationSeconds: durationSec,
-        distanceMeters: distanceM,
-      );
-    } catch (_) {
-      return RouteResult.fallback(origin, destination);
     }
+
+    // ── 2. OSRM (routeur libre, sans clé) ────────────────────────────────────
+    try {
+      final osrm = Dio(BaseOptions(
+        headers: {'User-Agent': 'com.dem.app/1.0'},
+        connectTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 8),
+      ));
+      final res = await osrm.get(
+        'https://router.project-osrm.org/route/v1/driving/'
+        '${origin.longitude},${origin.latitude};'
+        '${destination.longitude},${destination.latitude}'
+        '?overview=full&geometries=geojson',
+      );
+      if (res.statusCode == 200 &&
+          (res.data['routes'] as List?)?.isNotEmpty == true) {
+        final r      = res.data['routes'][0] as Map<String, dynamic>;
+        final coords = r['geometry']['coordinates'] as List;
+        return RouteResult(
+          points: coords
+              .map((c) => LatLng(
+                    (c[1] as num).toDouble(),
+                    (c[0] as num).toDouble(),
+                  ))
+              .toList(),
+          durationSeconds: (r['duration'] as num?)?.toInt(),
+          distanceMeters:  (r['distance']  as num?)?.toDouble(),
+        );
+      }
+    } catch (_) {
+      // OSRM a échoué → ligne droite
+    }
+
+    // ── 3. Dernier recours : ligne droite ─────────────────────────────────────
+    return RouteResult.fallback(origin, destination);
   }
 
   /// Décodage de la polyline encodée Google (algorithme officiel).
