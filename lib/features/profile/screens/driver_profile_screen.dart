@@ -464,7 +464,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           // ── Corps ──
           Expanded(
             child: Container(
-              color: AppColors.surface,
+              color: const Color(0xFFF4F6FA),
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
@@ -570,11 +570,15 @@ class _Section extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(title.toUpperCase(),
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11,
+          style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 11,
               fontWeight: FontWeight.w700, letterSpacing: 1.2)),
       const SizedBox(height: 8),
       Container(
-        decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
         child: Column(children: children),
       ),
     ],
@@ -594,10 +598,10 @@ class _InfoRow extends StatelessWidget {
     child: Row(children: [
       Icon(icon, color: AppColors.primary, size: 20),
       const SizedBox(width: 14),
-      Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+      Text(label, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 14)),
       const Spacer(),
       Text(value, style: TextStyle(
-          color: valueColor ?? AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+          color: valueColor ?? const Color(0xFF1A1A2E), fontSize: 14, fontWeight: FontWeight.w600)),
     ]),
   );
 }
@@ -618,7 +622,7 @@ class _DocRow extends StatelessWidget {
       child: Row(children: [
         Icon(icon, color: AppColors.primary, size: 20),
         const SizedBox(width: 14),
-        Expanded(child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14))),
+        Expanded(child: Text(label, style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 14))),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
@@ -636,7 +640,7 @@ class _DocRow extends StatelessWidget {
           ]),
         ),
         const SizedBox(width: 6),
-        const Icon(Icons.arrow_forward_ios, color: AppColors.textSecondary, size: 12),
+        const Icon(Icons.arrow_forward_ios, color: Color(0xFF7B8CA0), size: 12),
       ]),
     ),
   );
@@ -652,18 +656,18 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? AppColors.textPrimary;
+    final c = color ?? const Color(0xFF1A1A2E);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(children: [
-          Icon(icon, color: c, size: 20),
+          Icon(icon, color: color ?? AppColors.primary, size: 20),
           const SizedBox(width: 14),
           Expanded(child: Text(label, style: TextStyle(color: c, fontSize: 14, fontWeight: FontWeight.w500))),
           if (trailing != null) ...[
-            Text(trailing!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+            Text(trailing!, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13)),
             const SizedBox(width: 6),
           ],
           Icon(Icons.arrow_forward_ios, color: c.withValues(alpha: 0.4), size: 14),
