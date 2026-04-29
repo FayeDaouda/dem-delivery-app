@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
@@ -1198,30 +1199,88 @@ void _showStatModal(BuildContext context, _StatType type) {
 
 enum _StatType { courses, rating, gains }
 
-class _StatDetailModal extends StatelessWidget {
+// ── Modal stats — données réelles depuis /orders/my ───────────────────────────
+class _StatDetailModal extends StatefulWidget {
   final _StatType type;
   const _StatDetailModal({required this.type});
 
   @override
+  State<_StatDetailModal> createState() => _StatDetailModalState();
+}
+
+class _StatDetailModalState extends State<_StatDetailModal> {
+  late final Future<Map<String, int>> _statsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _statsFuture = _loadStats();
+  }
+
+  Future<Map<String, int>> _loadStats() async {
+    final res  = await ApiClient.dio.get('/orders/my');
+    final raw  = res.data;
+    final List<dynamic> list = raw is List
+        ? raw
+        : (raw is Map && raw['orders'] != null ? raw['orders'] as List : []);
+    final orders = List<Map<String, dynamic>>.from(list);
+
+    final now  = DateTime.now();
+    final mon  = DateTime(now.year, now.month, now.day - (now.weekday - 1));
+
+    int cToday = 0, cWeek = 0, cTotal = 0, cCancelled = 0;
+    int gToday = 0, gWeek = 0, gMonth = 0, gTotal = 0;
+
+    for (final o in orders) {
+      final status = (o['status'] as String? ?? '').toUpperCase();
+      final price  = (o['price'] as num?)?.toInt() ?? 0;
+      final raw2   = o['createdAt'] as String?;
+      final dt     = raw2 != null ? DateTime.tryParse(raw2)?.toLocal() : null;
+
+      if (status == 'CANCELLED') { cCancelled++; continue; }
+      if (status != 'DELIVERED' && status != 'PAYMENT_CONFIRMED') continue;
+
+      cTotal++;
+      gTotal += price;
+      if (dt != null) {
+        final sameDay = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+        if (sameDay) { cToday++; gToday += price; }
+        if (!dt.isBefore(mon)) { cWeek++; gWeek += price; }
+        if (dt.year == now.year && dt.month == now.month) gMonth += price;
+      }
+    }
+
+    final total = orders.length;
+    final cancelRate = total == 0 ? 0 : ((cCancelled / total) * 100).round();
+
+    return {
+      'cToday': cToday, 'cWeek': cWeek, 'cTotal': cTotal,
+      'cCancelled': cCancelled, 'cancelRate': cancelRate,
+      'gToday': gToday, 'gWeek': gWeek, 'gMonth': gMonth, 'gTotal': gTotal,
+    };
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final config = _modalConfig(type);
+    final (IconData icon, String title) = switch (widget.type) {
+      _StatType.courses => (Icons.route_outlined,            'Mes courses'),
+      _StatType.rating  => (Icons.star_outline_rounded,      'Ma note'),
+      _StatType.gains   => (Icons.monetization_on_outlined,  'Mes gains'),
+    };
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
           colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
           stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      padding: EdgeInsets.fromLTRB(
-        24, 16, 24, MediaQuery.of(context).viewPadding.bottom + 28,
-      ),
+      padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).viewPadding.bottom + 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
           Container(
             width: 36, height: 4,
             margin: const EdgeInsets.only(bottom: 20),
@@ -1230,75 +1289,65 @@ class _StatDetailModal extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          // Icône + titre
-          Row(
-            children: [
-              Container(
-                width: 46, height: 46,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                ),
-                child: Icon(config['icon'] as IconData, color: Colors.white, size: 22),
+          Row(children: [
+            Container(
+              width: 46, height: 46,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
               ),
-              const SizedBox(width: 14),
-              Text(
-                config['title'] as String,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
+              child: Icon(icon, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+          ]),
           const SizedBox(height: 24),
-          // Lignes de stats
-          ...((config['rows'] as List<Map<String, String>>).map(
-            (row) => _StatRow(label: row['label']!, value: row['value']!, sub: row['sub']),
-          )),
+
+          // ── Note : pas de données réelles encore ──
+          if (widget.type == _StatType.rating) ...[
+            _StatRow(label: 'Note moyenne', value: '—',  sub: 'sur 5 étoiles'),
+            _StatRow(label: 'Avis reçus',   value: '0',  sub: 'clients satisfaits'),
+            _StatRow(label: 'Ponctualité',  value: '—',  sub: 'arrivée à temps'),
+            _StatRow(label: 'Colis intact', value: '—',  sub: 'taux de satisfaction'),
+          ] else
+            FutureBuilder<Map<String, int>>(
+              future: _statsFuture,
+              builder: (_, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 28),
+                    child: Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                  );
+                }
+                if (snap.hasError || snap.data == null) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text('Impossible de charger les données.',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 13)),
+                  );
+                }
+                final s = snap.data!;
+                if (widget.type == _StatType.courses) {
+                  return Column(mainAxisSize: MainAxisSize.min, children: [
+                    _StatRow(label: "Aujourd'hui",   value: '${s['cToday']}',     sub: 'courses effectuées'),
+                    _StatRow(label: 'Cette semaine', value: '${s['cWeek']}',      sub: 'courses effectuées'),
+                    _StatRow(label: 'Total',         value: '${s['cTotal']}',     sub: 'depuis le début'),
+                    _StatRow(label: 'Annulées',      value: '${s['cCancelled']}', sub: 'taux ${s['cancelRate']}%'),
+                  ]);
+                } else {
+                  return Column(mainAxisSize: MainAxisSize.min, children: [
+                    _StatRow(label: "Aujourd'hui",   value: '${s['gToday']} FCFA', sub: 'revenus du jour'),
+                    _StatRow(label: 'Cette semaine', value: '${s['gWeek']} FCFA',  sub: 'revenus 7 jours'),
+                    _StatRow(label: 'Ce mois',       value: '${s['gMonth']} FCFA', sub: 'revenus 30 jours'),
+                    _StatRow(label: 'Total cumulé',  value: '${s['gTotal']} FCFA', sub: 'depuis le début'),
+                  ]);
+                }
+              },
+            ),
         ],
       ),
     );
-  }
-
-  Map<String, dynamic> _modalConfig(_StatType type) {
-    switch (type) {
-      case _StatType.courses:
-        return {
-          'icon': Icons.route_outlined,
-          'title': 'Mes courses',
-          'rows': [
-            {'label': "Aujourd'hui",   'value': '0',  'sub': 'courses effectuées'},
-            {'label': 'Cette semaine', 'value': '0',  'sub': 'courses effectuées'},
-            {'label': 'Total',         'value': '0',  'sub': 'depuis le début'},
-            {'label': 'Annulées',      'value': '0',  'sub': 'taux 0%'},
-          ],
-        };
-      case _StatType.rating:
-        return {
-          'icon': Icons.star_outline_rounded,
-          'title': 'Ma note',
-          'rows': [
-            {'label': 'Note moyenne', 'value': '—',  'sub': 'sur 5 étoiles'},
-            {'label': 'Avis reçus',   'value': '0',  'sub': 'clients satisfaits'},
-            {'label': 'Ponctualité',  'value': '—',  'sub': 'arrivée à temps'},
-            {'label': 'Colis intact', 'value': '—',  'sub': 'taux de satisfaction'},
-          ],
-        };
-      case _StatType.gains:
-        return {
-          'icon': Icons.monetization_on_outlined,
-          'title': 'Mes gains',
-          'rows': [
-            {'label': "Aujourd'hui",   'value': '0 FCFA', 'sub': 'revenus du jour'},
-            {'label': 'Cette semaine', 'value': '0 FCFA', 'sub': 'revenus 7 jours'},
-            {'label': 'Ce mois',       'value': '0 FCFA', 'sub': 'revenus 30 jours'},
-            {'label': 'Total cumulé',  'value': '0 FCFA', 'sub': 'depuis le début'},
-          ],
-        };
-    }
   }
 }
 
