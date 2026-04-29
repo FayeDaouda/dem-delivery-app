@@ -36,7 +36,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   String? _mapStyle;
   BitmapDescriptor? _driverIcon;
   double _currentZoom = 15.5;
-  Map<String, BitmapDescriptor> _poiIcons = {};
+  PoiIconSet? _poiIconSet;
 
   // ── Pulse animation ───────────────────────────────────────────────────────
   late final AnimationController _pulseCtrl;
@@ -87,8 +87,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _buildDriverIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
     });
-    buildPoiIcons().then((icons) {
-      if (mounted) setState(() => _poiIcons = icons);
+    buildPoiIconSet().then((set) {
+      if (mounted) setState(() => _poiIconSet = set);
     });
     _startGPS();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -366,19 +366,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
         zIndexInt: 2,
       ));
     }
-    if (_currentZoom >= 13 && _poiIcons.isNotEmpty) {
-      for (final poi in dakarPois) {
-        final icon = _poiIcons[poi.id];
-        if (icon == null) continue;
-        markers.add(Marker(
-          markerId: MarkerId('poi_${poi.id}'),
-          position: poi.position,
-          icon: icon,
-          anchor: const Offset(0.5, 0.5),
-          zIndexInt: 1,
-          infoWindow: InfoWindow(title: poi.name, snippet: poi.category.label),
-        ));
-      }
+    if (_poiIconSet != null) {
+      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom));
     }
     return markers;
   }

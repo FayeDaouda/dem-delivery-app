@@ -32,13 +32,20 @@ class HomeDriverThiakScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeDriverThiakScreenState
-    extends ConsumerState<HomeDriverThiakScreen> {
+    extends ConsumerState<HomeDriverThiakScreen>
+    with TickerProviderStateMixin {
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   String? _mapStyle;
   BitmapDescriptor? _driverIcon;
   double _currentZoom = 15.5;
-  Map<String, BitmapDescriptor> _poiIcons = {};
+  PoiIconSet? _poiIconSet;
+
+  // ── Pulse animation ───────────────────────────────────────────────────────
+  late final AnimationController _pulseCtrl;
+  late final Animation<double>   _pulseScale;
+  late final Animation<double>   _pulseOpacity;
+  ScreenCoordinate? _driverScreenPos;
 
   // ── GPS ──────────────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
@@ -68,12 +75,20 @@ class _HomeDriverThiakScreenState
   @override
   void initState() {
     super.initState();
+
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+    _pulseScale   = Tween<double>(begin: 0.4, end: 2.2).animate(_pulseCtrl);
+    _pulseOpacity = Tween<double>(begin: 0.7, end: 0.0).animate(_pulseCtrl);
+
     _loadMapStyle();
     _buildDriverIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
     });
-    buildPoiIcons().then((icons) {
-      if (mounted) setState(() => _poiIcons = icons);
+    buildPoiIconSet().then((set) {
+      if (mounted) setState(() => _poiIconSet = set);
     });
     _startGPS();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -106,7 +121,9 @@ class _HomeDriverThiakScreenState
 
     // Heartbeat toutes les 30s pour maintenir lastSeenAt à jour côté backend
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (SocketService.instance.isConnected) SocketService.instance.ping();
+      if (!SocketService.instance.isConnected) return;
+      final pos = _driverPosition;
+      SocketService.instance.ping(lat: pos?.latitude, lng: pos?.longitude);
     });
   }
 
@@ -206,6 +223,7 @@ class _HomeDriverThiakScreenState
 
   @override
   void dispose() {
+    _pulseCtrl.dispose();
     _countdownTimer?.cancel();
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();
@@ -236,6 +254,7 @@ class _HomeDriverThiakScreenState
     if (!mounted) return;
     setState(() => _driverPosition = position);
     if (_autoFollow) _centerOn(position);
+    _updateDriverScreenPos();
 
     // Émet la position au backend toutes les 10s pour que le dispatch trouve ce driver
     final now = DateTime.now();
@@ -243,6 +262,14 @@ class _HomeDriverThiakScreenState
       _lastLocationEmit = now;
       SocketService.instance.ping(lat: position.latitude, lng: position.longitude);
     }
+  }
+
+  Future<void> _updateDriverScreenPos() async {
+    if (_driverPosition == null || _mapController == null) return;
+    final coord = await _mapController!.getScreenCoordinate(
+      LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
+    );
+    if (mounted) setState(() => _driverScreenPos = coord);
   }
 
   void _centerOn(Position position) {
@@ -277,19 +304,8 @@ class _HomeDriverThiakScreenState
         zIndexInt: 2,
       ));
     }
-    if (_currentZoom >= 13 && _poiIcons.isNotEmpty) {
-      for (final poi in dakarPois) {
-        final icon = _poiIcons[poi.id];
-        if (icon == null) continue;
-        markers.add(Marker(
-          markerId: MarkerId('poi_${poi.id}'),
-          position: poi.position,
-          icon: icon,
-          anchor: const Offset(0.5, 0.5),
-          zIndexInt: 1,
-          infoWindow: InfoWindow(title: poi.name, snippet: poi.category.label),
-        ));
-      }
+    if (_poiIconSet != null) {
+      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom));
     }
     return markers;
   }
@@ -484,6 +500,7 @@ class _HomeDriverThiakScreenState
                   setState(() => _currentZoom = pos.zoom);
                 }
               },
+              onCameraIdle: _updateDriverScreenPos,
               style: _mapStyle,
               markers: _driverMarkers,
               circles: _heatmapCircles,
@@ -496,6 +513,35 @@ class _HomeDriverThiakScreenState
               mapToolbarEnabled: false,
             ),
           ),
+
+          // ── Pulse animation sur le marqueur driver ──
+          if (_driverScreenPos != null)
+            Positioned(
+              left: _driverScreenPos!.x.toDouble() - 30,
+              top:  _driverScreenPos!.y.toDouble() - 30,
+              child: IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: _pulseCtrl,
+                  builder: (_, _) => Transform.scale(
+                    scale: _pulseScale.value,
+                    child: Opacity(
+                      opacity: _pulseOpacity.value,
+                      child: Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF33BCD4),
+                            width: 2.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // ── Header ──
           SafeArea(
