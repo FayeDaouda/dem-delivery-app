@@ -18,19 +18,21 @@ class OrdersHistoryScreen extends ConsumerWidget {
     final ordersAsync = ref.watch(myOrdersProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF4F6FA),
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: Colors.white,
         elevation: 0,
+        shadowColor: Colors.black12,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new,
-              color: AppColors.textPrimary, size: 20),
+              color: Color(0xFF1A1A2E), size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Mes commandes',
           style: TextStyle(
-            color: AppColors.textPrimary,
+            color: Color(0xFF1A1A2E),
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -80,7 +82,7 @@ class _OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = order['status'] as String? ?? 'UNKNOWN';
-    final type = order['type'] as String? ?? '';
+    final type = (order['orderType'] as String?) ?? (order['type'] as String?) ?? '';
     final price = (order['price'] as num?)?.toInt() ?? 0;
     final pickup = order['pickupAddress'] as String? ?? '—';
     final delivery = order['deliveryAddress'] as String? ?? '—';
@@ -90,12 +92,12 @@ class _OrderCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 12,
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
@@ -121,7 +123,7 @@ class _OrderCard extends StatelessWidget {
                 Text(
                   _typeLabel(type),
                   style: const TextStyle(
-                    color: AppColors.textPrimary,
+                    color: Color(0xFF1A1A2E),
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -173,7 +175,7 @@ class _OrderCard extends StatelessWidget {
                   child: Container(
                     width: 1.5,
                     height: 14,
-                    color: AppColors.card,
+                    color: const Color(0xFFDDE3EC),
                   ),
                 ),
                 _AddressRow(
@@ -192,12 +194,12 @@ class _OrderCard extends StatelessWidget {
             child: Row(
               children: [
                 const Icon(Icons.access_time,
-                    size: 13, color: AppColors.textSecondary),
+                    size: 13, color: Color(0xFF7B8CA0)),
                 const SizedBox(width: 4),
                 Text(
                   createdAt,
                   style: const TextStyle(
-                    color: AppColors.textSecondary,
+                    color: Color(0xFF7B8CA0),
                     fontSize: 12,
                   ),
                 ),
@@ -213,8 +215,7 @@ class _OrderCard extends StatelessWidget {
   IconData _typeIcon(String type) {
     return switch (type) {
       'RIDE' => Icons.directions_car_outlined,
-      'DELIVERY' => Icons.inventory_2_outlined,
-      _ => Icons.local_shipping_outlined,
+      _ => Icons.motorcycle,
     };
   }
 
@@ -288,7 +289,7 @@ class _AddressRow extends StatelessWidget {
               Text(
                 label,
                 style: const TextStyle(
-                  color: AppColors.textSecondary,
+                  color: Color(0xFF7B8CA0),
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                 ),
@@ -296,7 +297,7 @@ class _AddressRow extends StatelessWidget {
               Text(
                 address,
                 style: const TextStyle(
-                  color: AppColors.textPrimary,
+                  color: Color(0xFF1A1A2E),
                   fontSize: 13,
                 ),
                 maxLines: 1,
