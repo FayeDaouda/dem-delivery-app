@@ -153,7 +153,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           // Corps
           Expanded(
             child: Container(
-              color: AppColors.surface,
+              color: const Color(0xFFF4F6FA),
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
@@ -266,7 +266,7 @@ class _DocSlot extends StatelessWidget {
         aspectRatio: 3 / 2,
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.card,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: uploaded
@@ -274,6 +274,7 @@ class _DocSlot extends StatelessWidget {
                   : AppColors.primary.withValues(alpha: 0.30),
               width: uploaded ? 2 : 1,
             ),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2))],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(13),
@@ -305,8 +306,8 @@ class _DocSlot extends StatelessWidget {
                           const SizedBox(height: 6),
                           Text(
                             label,
-                            style: TextStyle(
-                              color: AppColors.textSecondary.withValues(alpha: 0.8),
+                            style: const TextStyle(
+                              color: Color(0xFF7B8CA0),
                               fontSize: 10,
                             ),
                             textAlign: TextAlign.center,
@@ -333,7 +334,7 @@ class _SectionTitle extends StatelessWidget {
         const SizedBox(width: 8),
         Text(label,
             style: const TextStyle(
-              color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E), fontSize: 14, fontWeight: FontWeight.w700,
             )),
       ],
     );

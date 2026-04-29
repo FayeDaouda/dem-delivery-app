@@ -151,7 +151,7 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
 
           // ── Filtres statut ──
           Container(
-            color: AppColors.surface,
+            color: const Color(0xFFF4F6FA),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -165,14 +165,14 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                       margin: const EdgeInsets.only(right: 8, bottom: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
-                        color: active ? AppColors.primary : AppColors.card,
+                        color: active ? AppColors.primary : const Color(0xFFEEF0F5),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: active ? AppColors.primary : Colors.transparent),
                       ),
                       child: Text(
                         f['label']!,
                         style: TextStyle(
-                          color: active ? Colors.white : AppColors.textSecondary,
+                          color: active ? Colors.white : const Color(0xFF7B8CA0),
                           fontSize: 13,
                           fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                         ),
@@ -186,7 +186,7 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
 
           // ── Filtres période ──
           Container(
-            color: AppColors.surface,
+            color: const Color(0xFFF4F6FA),
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -207,7 +207,7 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                         border: Border.all(
                           color: active
                               ? AppColors.primary.withValues(alpha: 0.6)
-                              : AppColors.textSecondary.withValues(alpha: 0.25),
+                              : const Color(0xFFDDE3EC),
                         ),
                       ),
                       child: Row(
@@ -216,13 +216,13 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                           Icon(
                             Icons.calendar_today_outlined,
                             size: 11,
-                            color: active ? AppColors.primary : AppColors.textSecondary,
+                            color: active ? AppColors.primary : const Color(0xFF7B8CA0),
                           ),
                           const SizedBox(width: 5),
                           Text(
                             f['label']!,
                             style: TextStyle(
-                              color: active ? AppColors.primary : AppColors.textSecondary,
+                              color: active ? AppColors.primary : const Color(0xFF7B8CA0),
                               fontSize: 12,
                               fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                             ),
@@ -239,7 +239,7 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
           // ── Liste ──
           Expanded(
             child: Container(
-              color: AppColors.surface,
+              color: const Color(0xFFF4F6FA),
               child: async.when(
                 loading: () => const Center(
                   child: CircularProgressIndicator(color: AppColors.primary),
@@ -248,10 +248,10 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.wifi_off_outlined, color: AppColors.textSecondary, size: 48),
+                      const Icon(Icons.wifi_off_outlined, color: Color(0xFF7B8CA0), size: 48),
                       const SizedBox(height: 12),
                       Text(e.toString(),
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                          style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
                           textAlign: TextAlign.center),
                       const SizedBox(height: 16),
                       TextButton(
@@ -268,11 +268,11 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.history,
-                              color: AppColors.textSecondary.withValues(alpha: 0.4), size: 64),
+                          const Icon(Icons.history,
+                              color: Color(0xFFBCC5D0), size: 64),
                           const SizedBox(height: 12),
                           const Text('Aucune course trouvée',
-                              style: TextStyle(color: AppColors.textSecondary, fontSize: 15)),
+                              style: TextStyle(color: Color(0xFF7B8CA0), fontSize: 15)),
                         ],
                       ),
                     );
@@ -311,14 +311,15 @@ class _OrderCard extends StatelessWidget {
     final date     = rawDate != null ? _formatDate(DateTime.tryParse(rawDate)) : '—';
     final pickup   = order['pickupAddress'] as String? ?? '—';
     final delivery = order['deliveryAddress'] as String? ?? '—';
-    final color    = _statusColor[status] ?? AppColors.textSecondary;
+    final color    = _statusColor[status] ?? const Color(0xFF7B8CA0);
     final label    = _statusLabel[status] ?? status;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -329,7 +330,7 @@ class _OrderCard extends StatelessWidget {
               children: [
                 Text('# $shortId',
                     style: const TextStyle(
-                      color: AppColors.textPrimary,
+                      color: Color(0xFF1A1A2E),
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       fontFamily: 'monospace',
@@ -353,9 +354,9 @@ class _OrderCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.access_time, color: AppColors.textSecondary, size: 13),
+                const Icon(Icons.access_time, color: Color(0xFF7B8CA0), size: 13),
                 const SizedBox(width: 4),
-                Text(date, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                Text(date, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 12)),
                 const Spacer(),
                 Text('$price FCFA',
                     style: const TextStyle(
@@ -392,7 +393,7 @@ class _AddrLine extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(text,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 12),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ],
