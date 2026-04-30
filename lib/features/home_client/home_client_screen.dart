@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,8 +41,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   String? _mapStyle;
-  BitmapDescriptor? _clientIcon;
   double _currentZoom = 17;
+  ScreenCoordinate? _clientScreenPos;
 
   // ── POI ───────────────────────────────────────────────────────────────────
   PoiIconSet? _poiIconSet;
@@ -71,9 +70,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     );
     _sheetSlide = CurvedAnimation(parent: _sheetAnim, curve: Curves.easeInOut);
     _loadMapStyle();
-    _buildClientIcon().then((icon) {
-      if (mounted) setState(() => _clientIcon = icon);
-    });
     buildPoiIconSet().then((set) {
       if (mounted) setState(() => _poiIconSet = set);
     });
@@ -154,47 +150,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     await _loadMapStyle();
   }
 
-  // ── Marqueur client (point cyan + halo) ───────────────────────────────────
-  static Future<BitmapDescriptor> _buildClientIcon() async {
-    const double size = 96;
-    const double cx = size / 2;
-    const double cy = size / 2;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    // Halo semi-transparent
-    canvas.drawCircle(
-      const Offset(cx, cy),
-      38,
-      Paint()..color = const Color(0x4033BCD4),
-    );
-    // Point plein
-    canvas.drawCircle(
-      const Offset(cx, cy),
-      14,
-      Paint()..color = const Color(0xFF33BCD4),
-    );
-    // Bordure blanche
-    canvas.drawCircle(
-      const Offset(cx, cy),
-      14,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3,
-    );
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(size.toInt(), size.toInt());
-    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(
-      bytes!.buffer.asUint8List(),
-      width: size / 2,
-      height: size / 2,
-    );
-  }
-
   // ── GPS ──────────────────────────────────────────────────────────────────
   Future<void> _startGPS() async {
     final initial = await NavigationService.requestAndGetPosition();
@@ -209,6 +164,15 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     if (!mounted) return;
     setState(() => _clientPosition = position);
     if (_autoFollow) _centerOn(position);
+    _updateScreenPos();
+  }
+
+  Future<void> _updateScreenPos() async {
+    if (_clientPosition == null || _mapController == null) return;
+    final coord = await _mapController!.getScreenCoordinate(
+      LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
+    );
+    if (mounted) setState(() => _clientScreenPos = coord);
   }
 
   void _centerOn(Position position) {
@@ -230,29 +194,12 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     _centerOn(_clientPosition!);
   }
 
-  // ── Marqueur client ───────────────────────────────────────────────────────
+  // ── Marqueurs POI uniquement (le dot client est un widget overlay) ────────
   Set<Marker> get _clientMarkers {
-    final markers = <Marker>{};
-
-    // Position client
-    if (_clientPosition != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('client'),
-        position: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
-        icon: _clientIcon ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        flat: true,
-        anchor: const Offset(0.5, 0.5),
-        zIndexInt: 2,
-      ));
-    }
-
-    // POI — affichage progressif par zoom + collision detection
     if (_poiIconSet != null) {
-      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom));
+      return buildPoiMarkersForZoom(_poiIconSet!, _currentZoom);
     }
-
-    return markers;
+    return {};
   }
 
   // ── User ──────────────────────────────────────────────────────────────────
@@ -543,6 +490,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                   setState(() => _currentZoom = pos.zoom);
                 }
               },
+              onCameraIdle: _updateScreenPos,
               markers: _clientMarkers,
               myLocationEnabled: false,
               myLocationButtonEnabled: false,
@@ -552,6 +500,18 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               buildingsEnabled: true,
             ),
           ),
+
+          // ── Dot position client (widget animé overlay) ──────────────────
+          if (_clientPosition != null)
+            _autoFollow
+                ? const Center(child: _PulsingLocationDot())
+                : _clientScreenPos != null
+                    ? Positioned(
+                        left: _clientScreenPos!.x.toDouble() - 24,
+                        top:  _clientScreenPos!.y.toDouble() - 24,
+                        child: const _PulsingLocationDot(),
+                      )
+                    : const SizedBox.shrink(),
 
           // ── Header ──
           SafeArea(
@@ -971,6 +931,97 @@ class _NavItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Dot de position animé (overlay Flutter sur la carte) ─────────────────────
+class _PulsingLocationDot extends StatefulWidget {
+  const _PulsingLocationDot();
+
+  @override
+  State<_PulsingLocationDot> createState() => _PulsingLocationDotState();
+}
+
+class _PulsingLocationDotState extends State<_PulsingLocationDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+    _pulse = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const cyan = Color(0xFF00D4FF);
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Anneau pulsé
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (_, _) => Opacity(
+              opacity: (1.0 - _pulse.value).clamp(0.0, 1.0),
+              child: Container(
+                width: 12 + 32 * _pulse.value,
+                height: 12 + 32 * _pulse.value,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: cyan.withValues(alpha: 0.35),
+                ),
+              ),
+            ),
+          ),
+          // Ombre sous le dot
+          Positioned(
+            bottom: 9,
+            child: AnimatedBuilder(
+              animation: _ctrl,
+              builder: (_, _) => Container(
+                width: 14,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cyan.withValues(alpha: 0.20 + 0.15 * _ctrl.value),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+          // Dot central cyan lumineux
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: cyan,
+              border: Border.all(color: Colors.white, width: 2.5),
+              boxShadow: [
+                BoxShadow(
+                  color: cyan.withValues(alpha: 0.65),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
