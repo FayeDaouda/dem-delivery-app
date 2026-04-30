@@ -259,14 +259,43 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     if (mounted) setState(() => _user = user);
   }
 
-  // ── Vérifie si une commande PENDING existe ─────────────────────────────────
+  // ── Vérifie l'état des commandes au retour/connexion ──────────────────────
   Future<void> _checkPendingOrder() async {
     if (!mounted) return;
     setState(() => _loadingOrders = true);
     try {
       final orders = await ref.read(ordersRepositoryProvider).getMyOrders();
-      final pendingList = orders.where((o) => o['status'] == 'PENDING').toList();
-      
+
+      // Priorité 1 : course active (driver en route) → redirect tracking
+      const activeStatuses = ['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'];
+      final active = orders.firstWhere(
+        (o) => activeStatuses.contains((o['status'] as String? ?? '').toUpperCase()),
+        orElse: () => {},
+      );
+
+      if (active.isNotEmpty && mounted) {
+        final orderId = active['id'] as String?;
+        final driverId = (active['driver'] as Map?)?['id'] as String?
+            ?? active['driverId'] as String?;
+        if (orderId != null && driverId != null) {
+          if (mounted) setState(() => _loadingOrders = false);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              context.push('/orders/tracking', extra: {
+                'orderId': orderId,
+                'driverId': driverId,
+              });
+            }
+          });
+          return;
+        }
+      }
+
+      // Priorité 2 : commandes PENDING → badge
+      final pendingList = orders
+          .where((o) => (o['status'] as String? ?? '').toUpperCase() == 'PENDING')
+          .toList();
+
       if (mounted) {
         setState(() {
           _pendingOrders = pendingList;
