@@ -36,6 +36,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>> _pendingOrders = [];
   bool _loadingOrders = false;
+  final Set<String> _shownDeliveredIds = {};
 
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
@@ -324,84 +325,115 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── Dialog commande livrée ─────────────────────────────────────────────────
   void _showDeliveredDialog(Map<String, dynamic> order) {
-    final price = (order['price'] as num?)?.toInt() ?? 0;
+    final orderId = order['id'] as String? ?? '';
+    // N'afficher qu'une seule fois par commande
+    if (_shownDeliveredIds.contains(orderId)) return;
+    _shownDeliveredIds.add(orderId);
+
+    final price    = (order['price'] as num?)?.toInt() ?? 0;
     final delivery = order['deliveryAddress'] as String? ?? '—';
+
+    Timer? autoClose;
 
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF22C55E),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
+      barrierDismissible: true,
+      builder: (ctx) {
+        // Auto-dismiss après 30 secondes
+        autoClose = Timer(const Duration(seconds: 30), () {
+          if (ctx.mounted) Navigator.of(ctx).pop();
+        });
+
+        void dismiss() {
+          autoClose?.cancel();
+          Navigator.of(ctx).pop();
+        }
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Commande livrée !',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                delivery,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$price FCFA',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    context.push('/orders/my');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+              borderRadius: BorderRadius.all(Radius.circular(24)),
+            ),
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
                   ),
-                  child: const Text('Voir mes commandes',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Fermer',
-                    style: TextStyle(color: Color(0xFF7B8CA0))),
-              ),
-            ],
+                const SizedBox(height: 16),
+                const Text(
+                  'Commande livrée !',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  delivery,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75), fontSize: 13),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$price FCFA',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      dismiss();
+                      context.push('/orders/my');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: const Text('Voir mes commandes',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: dismiss,
+                  child: Text('Fermer',
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.70))),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
-    );
+        );
+      },
+    ).then((_) => autoClose?.cancel());
   }
 
   // ── Affiche un sélecteur s'il y a plusieurs commandes en attente ─────────
