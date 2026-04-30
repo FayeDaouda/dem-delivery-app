@@ -550,28 +550,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.location_on,
-                            color: Colors.white, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          _user?['name'] ?? 'Mon compte',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                   const Spacer(),
                   GestureDetector(
                     onTap: () => context.go('/client/profile'),
