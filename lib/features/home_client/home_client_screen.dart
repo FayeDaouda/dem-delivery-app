@@ -291,7 +291,22 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         }
       }
 
-      // Priorité 2 : commandes PENDING → badge
+      // Priorité 2 : commande récemment livrée → dialog confirmation
+      const doneStatuses = ['DELIVERED', 'PAYMENT_CONFIRMED'];
+      final delivered = orders.firstWhere(
+        (o) => doneStatuses.contains((o['status'] as String? ?? '').toUpperCase()),
+        orElse: () => {},
+      );
+
+      if (delivered.isNotEmpty && mounted) {
+        setState(() => _loadingOrders = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showDeliveredDialog(delivered);
+        });
+        return;
+      }
+
+      // Priorité 3 : commandes PENDING → badge
       final pendingList = orders
           .where((o) => (o['status'] as String? ?? '').toUpperCase() == 'PENDING')
           .toList();
@@ -305,6 +320,88 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     } catch (_) {
       if (mounted) setState(() => _loadingOrders = false);
     }
+  }
+
+  // ── Dialog commande livrée ─────────────────────────────────────────────────
+  void _showDeliveredDialog(Map<String, dynamic> order) {
+    final price = (order['price'] as num?)?.toInt() ?? 0;
+    final delivery = order['deliveryAddress'] as String? ?? '—';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF22C55E),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Commande livrée !',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A2E),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                delivery,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$price FCFA',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push('/orders/my');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Voir mes commandes',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Fermer',
+                    style: TextStyle(color: Color(0xFF7B8CA0))),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Affiche un sélecteur s'il y a plusieurs commandes en attente ─────────
