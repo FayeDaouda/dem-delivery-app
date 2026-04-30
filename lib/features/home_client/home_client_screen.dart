@@ -36,7 +36,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>> _pendingOrders = [];
   bool _loadingOrders = false;
-  final Set<String> _shownDeliveredIds = {};
+  static final Set<String> _shownDeliveredIds = {};
 
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
