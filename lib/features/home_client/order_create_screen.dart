@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/data/orders_repository.dart';
@@ -238,16 +239,67 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     _surgeDebounce = Timer(const Duration(milliseconds: 800), _computeEstimate);
   }
 
-  Future<Map<String, dynamic>?> _fetchRouteAndDistance(double lat1, double lng1, double lat2, double lng2) async {
+  Future<Map<String, dynamic>?> _fetchRouteAndDistance(
+      double lat1, double lng1, double lat2, double lng2) async {
+    // Essaie Google Directions en premier (clé déjà configurée)
+    final googleResult = await _fetchGoogleDirections(lat1, lng1, lat2, lng2);
+    if (googleResult != null) return googleResult;
+    // Fallback OSRM si la clé n'est pas dispo en Dart
+    return _fetchOsrmRoute(lat1, lng1, lat2, lng2);
+  }
+
+  Future<Map<String, dynamic>?> _fetchGoogleDirections(
+      double lat1, double lng1, double lat2, double lng2) async {
+    final key = AppConfig.mapsApiKey;
+    if (key.isEmpty) return null;
     try {
-      final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
-      final res = await dio.get('https://router.project-osrm.org/route/v1/driving/$lng1,$lat1;$lng2,$lat2?overview=full&geometries=geojson');
-      if (res.statusCode == 200 && res.data['routes'] != null && (res.data['routes'] as List).isNotEmpty) {
-        final route = res.data['routes'][0];
-        final distance = (route['distance'] as num) / 1000.0; // in km
-        final coords = route['geometry']['coordinates'] as List;
-        final points = coords.map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())).toList();
-        return {'distance': distance, 'points': points};
+      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8)));
+      final res = await dio.get(
+        'https://maps.googleapis.com/maps/api/directions/json',
+        queryParameters: {
+          'origin': '$lat1,$lng1',
+          'destination': '$lat2,$lng2',
+          'key': key,
+        },
+      );
+      if (res.statusCode == 200 && res.data['status'] == 'OK') {
+        final route = (res.data['routes'] as List).first as Map<String, dynamic>;
+        final legs  = route['legs'] as List;
+        double distM = 0;
+        for (final leg in legs) {
+          distM += ((leg['distance'] as Map)['value'] as num).toDouble();
+        }
+        final encoded = route['overview_polyline']['points'] as String;
+        return {'distance': distM / 1000.0, 'points': _decodePolyline(encoded)};
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _fetchOsrmRoute(
+      double lat1, double lng1, double lat2, double lng2) async {
+    try {
+      final dio = Dio(BaseOptions(
+        headers: {'User-Agent': 'DEM-App/1.0'},
+        connectTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 8),
+      ));
+      final res = await dio.get(
+        'https://router.project-osrm.org/route/v1/driving/$lng1,$lat1;$lng2,$lat2',
+        queryParameters: {'overview': 'full', 'geometries': 'geojson'},
+      );
+      if (res.statusCode == 200) {
+        final routes = res.data['routes'] as List?;
+        if (routes != null && routes.isNotEmpty) {
+          final route = routes[0] as Map<String, dynamic>;
+          final distance = (route['distance'] as num) / 1000.0;
+          final coords = (route['geometry']['coordinates'] as List);
+          final points = coords.map((c) {
+            final coord = c as List;
+            return LatLng((coord[1] as num).toDouble(), (coord[0] as num).toDouble());
+          }).toList();
+          return {'distance': distance, 'points': points};
+        }
       }
     } catch (_) {}
     return null;
@@ -275,6 +327,22 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     } catch (_) {
       if (mounted) setState(() => _loadingSurge = false);
     }
+  }
+
+  // Décode le format encoded polyline de Google Maps
+  List<LatLng> _decodePolyline(String encoded) {
+    final result = <LatLng>[];
+    int index = 0, lat = 0, lng = 0;
+    while (index < encoded.length) {
+      int b, shift = 0, res = 0;
+      do { b = encoded.codeUnitAt(index++) - 63; res |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      lat += (res & 1) != 0 ? ~(res >> 1) : (res >> 1);
+      shift = 0; res = 0;
+      do { b = encoded.codeUnitAt(index++) - 63; res |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      lng += (res & 1) != 0 ? ~(res >> 1) : (res >> 1);
+      result.add(LatLng(lat / 1e5, lng / 1e5));
+    }
+    return result;
   }
 
   double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
@@ -485,6 +553,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
             initialCameraPosition: const CameraPosition(target: _dakar, zoom: 17, tilt: 55),
             onMapCreated: (c) => _mapController = c,
             style: _mapStyle,
+            onTap: (_) => FocusScope.of(context).unfocus(),
             onCameraMoveStarted: () => setState(() => _isMapMoving = true),
             onCameraMove: (p) => _currentCameraPos = p.target,
             onCameraIdle: () => setState(() => _isMapMoving = false),
@@ -555,7 +624,10 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
                     active: _isSelectingPickup && !_isMapPlacementMode,
                     onTap: () => setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; }),
                     onChanged: (v) => _onAddressChanged(v, forPickup: true),
-                    onMapTap: () => setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; }),
+                    onMapTap: () {
+                      FocusScope.of(context).unfocus();
+                      setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; });
+                    },
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
@@ -570,7 +642,10 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
                     active: !_isSelectingPickup && !_isMapPlacementMode,
                     onTap: () => setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; }),
                     onChanged: (v) => _onAddressChanged(v, forPickup: false),
-                    onMapTap: () => setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; }),
+                    onMapTap: () {
+                      FocusScope.of(context).unfocus();
+                      setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
+                    },
                   ),
 
                   // Autocomplete dropdown
