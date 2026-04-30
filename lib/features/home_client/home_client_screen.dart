@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
@@ -36,7 +37,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>> _pendingOrders = [];
   bool _loadingOrders = false;
-  static final Set<String> _shownDeliveredIds = {};
+  static const _kDeliveredKey = 'dem_shown_delivered_ids';
 
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
@@ -292,7 +293,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         }
       }
 
-      // Priorité 2 : commande récemment livrée → dialog confirmation
+      // Priorité 2 : commande récemment livrée → dialog confirmation (une seule fois)
       const doneStatuses = ['DELIVERED', 'PAYMENT_CONFIRMED'];
       final delivered = orders.firstWhere(
         (o) => doneStatuses.contains((o['status'] as String? ?? '').toUpperCase()),
@@ -300,11 +301,16 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       );
 
       if (delivered.isNotEmpty && mounted) {
-        setState(() => _loadingOrders = false);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _showDeliveredDialog(delivered);
-        });
-        return;
+        final orderId = delivered['id'] as String? ?? '';
+        final prefs = await SharedPreferences.getInstance();
+        final shownIds = prefs.getStringList(_kDeliveredKey) ?? [];
+        if (!shownIds.contains(orderId)) {
+          setState(() => _loadingOrders = false);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _showDeliveredDialog(delivered, prefs, shownIds);
+          });
+          return;
+        }
       }
 
       // Priorité 3 : commandes PENDING → badge
@@ -324,14 +330,18 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   }
 
   // ── Dialog commande livrée ─────────────────────────────────────────────────
-  void _showDeliveredDialog(Map<String, dynamic> order) {
-    final orderId = order['id'] as String? ?? '';
-    // N'afficher qu'une seule fois par commande
-    if (_shownDeliveredIds.contains(orderId)) return;
-    _shownDeliveredIds.add(orderId);
-
+  void _showDeliveredDialog(
+    Map<String, dynamic> order,
+    SharedPreferences prefs,
+    List<String> shownIds,
+  ) {
+    final orderId  = order['id'] as String? ?? '';
     final price    = (order['price'] as num?)?.toInt() ?? 0;
     final delivery = order['deliveryAddress'] as String? ?? '—';
+
+    // Persiste immédiatement l'ID pour ne plus jamais afficher ce dialog
+    shownIds.add(orderId);
+    prefs.setStringList(_kDeliveredKey, shownIds);
 
     Timer? autoClose;
 
