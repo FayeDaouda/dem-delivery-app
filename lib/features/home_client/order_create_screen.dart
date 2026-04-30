@@ -505,12 +505,10 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
             child: Padding(
               padding: const EdgeInsets.only(bottom: 35),
               child: AnimatedScale(
-                scale: _isMapMoving ? 1.2 : 1.0,
+                scale: _isMapMoving ? 1.15 : 1.0,
                 duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  Icons.location_on, size: 44,
+                child: _FloatingPin(
                   color: _isSelectingPickup ? AppColors.success : AppColors.error,
-                  shadows: [Shadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 4))],
                 ),
               ),
             ),
@@ -739,14 +737,23 @@ class _AddressField extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          gradient: AppColors.gradientSplash,
+          color: active
+              ? dotColor.withValues(alpha: 0.10)
+              : Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: active ? dotColor.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.15), width: 1.5),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+          border: Border.all(
+            color: active ? dotColor.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.06),
+            width: active ? 1.4 : 1.0,
+          ),
+          boxShadow: active
+              ? [BoxShadow(color: dotColor.withValues(alpha: 0.20), blurRadius: 20, spreadRadius: 0)]
+              : [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6)],
         ),
         child: Row(children: [
           const SizedBox(width: 12),
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: dotColor, borderRadius: BorderRadius.circular(4))),
+          active
+              ? _PulsingDot(color: dotColor)
+              : Container(width: 10, height: 10, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
@@ -774,6 +781,145 @@ class _AddressField extends StatelessWidget {
             constraints: const BoxConstraints(),
           ),
         ]),
+      ),
+    );
+  }
+}
+
+// ── Dot vert pulsé ────────────────────────────────────────────────────────────
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+  const _PulsingDot({required this.color});
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, _) => Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: widget.color,
+          boxShadow: [
+            BoxShadow(
+              color: widget.color.withValues(alpha: 0.4 + 0.3 * _ctrl.value),
+              blurRadius: 8 + 6 * _ctrl.value,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Pin flottant (mode placement carte) ───────────────────────────────────────
+class _FloatingPin extends StatefulWidget {
+  final Color color;
+  const _FloatingPin({required this.color});
+
+  @override
+  State<_FloatingPin> createState() => _FloatingPinState();
+}
+
+class _FloatingPinState extends State<_FloatingPin> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _floatAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2800))
+      ..repeat(reverse: true);
+    _floatAnim = Tween<double>(begin: 0, end: -6).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _floatAnim,
+      builder: (_, _) => Transform.translate(
+        offset: Offset(0, _floatAnim.value),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Transform.rotate(
+              angle: -pi / 4,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: widget.color,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(18),
+                    topRight: Radius.circular(18),
+                    bottomRight: Radius.circular(18),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.color.withValues(alpha: 0.5),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Transform.rotate(
+                    angle: pi / 4,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF080D1A),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            AnimatedBuilder(
+              animation: _ctrl,
+              builder: (_, _) => Container(
+                width: 18,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: widget.color.withValues(alpha: 0.25 + 0.15 * _ctrl.value),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1163,15 +1309,15 @@ class _NextButton extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: active
               ? const LinearGradient(
-                  colors: [Color(0xFF00D2FF), Color(0xFF0086C8)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
+                  colors: [Color(0xFF00D4FF), Color(0xFF0099CC)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 )
               : null,
-          color: active ? null : Colors.white.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(14),
+          color: active ? null : Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: active
-              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 12, offset: const Offset(0, 4))]
+              ? [BoxShadow(color: const Color(0xFF00D4FF).withValues(alpha: 0.30), blurRadius: 28, offset: const Offset(0, 8))]
               : [],
         ),
         child: Center(
@@ -1183,15 +1329,15 @@ class _NextButton extends StatelessWidget {
                     Text(
                       label,
                       style: TextStyle(
-                        color: active ? Colors.white : Colors.white.withValues(alpha: 0.45),
+                        color: active ? Colors.black : const Color(0xFF5A6A8A),
                         fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: 0.3,
                       ),
                     ),
                     if (icon != null) ...[
                       const SizedBox(width: 8),
-                      Icon(icon, color: active ? Colors.white : Colors.white.withValues(alpha: 0.45), size: 16),
+                      Icon(icon, color: active ? Colors.black : const Color(0xFF5A6A8A), size: 16),
                     ],
                   ],
                 ),
