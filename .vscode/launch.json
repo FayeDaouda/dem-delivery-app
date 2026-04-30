@@ -6,7 +6,7 @@
       "request": "launch",
       "type": "dart",
       "args": [
-        "--dart-define=MAPS_API_KEY=AIzaSyB2RJF0_3UXw5NqTm29UU1vM6wASW_Lfjk"
+        "--dart-define=MAPS_API_KEY=AIzaSyB2RJfO_3UXw5NqTm29UU1vM6wASW_Lfjk"
       ]
     }
   ]
