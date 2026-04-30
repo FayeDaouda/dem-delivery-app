@@ -1,4 +1,4 @@
-package com.dem.dem_app
+package sn.dem.demapp
 
 import io.flutter.embedding.android.FlutterActivity
 

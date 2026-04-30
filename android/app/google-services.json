@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:75751133767:android:f1d22e7e0894fedacd1762",
+        "mobilesdk_app_id": "1:75751133767:android:44bff2755a4346becd1762",
         "android_client_info": {
-          "package_name": "com.dem.demapp"
+          "package_name": "sn.dem.demapp"
         }
       },
       "oauth_client": [],
