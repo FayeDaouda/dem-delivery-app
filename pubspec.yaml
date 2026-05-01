@@ -23,8 +23,9 @@ dependencies:
   # Stockage local (token JWT)
   shared_preferences: ^2.2.3
 
-  # Localisation
+  # Localisation + boussole
   geolocator: ^13.0.1
+  flutter_compass: ^0.7.0
 
   # Carte
   google_maps_flutter: ^2.9.0

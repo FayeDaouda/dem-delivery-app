@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +22,8 @@ import '../home_driver/navigation/navigation_service.dart';
 
 // Centre par défaut : Dakar
 const _dakar = LatLng(14.6937, -17.4441);
+
+enum _LocationMode { free, follow, compass }
 
 // Hauteur de la navbar
 const double _navBarHeight = 64;
@@ -51,10 +55,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _orderAcceptedSub;
 
-  // ── GPS ──────────────────────────────────────────────────────────────────
+  // ── GPS + boussole ────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
+  StreamSubscription<CompassEvent>? _compassSub;
   Position? _clientPosition;
-  bool _autoFollow = true;
+  _LocationMode _locationMode = _LocationMode.follow;
+  double _compassBearing = 0;
+  bool _programmaticMove = false;
+  Timer? _programmaticMoveTimer;
 
   // ── Sheet rétractable ──────────────────────────────────────────────────────
   bool _sheetExpanded = true;
@@ -102,7 +110,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     routeObserver.unsubscribe(this);
     _orderAcceptedSub?.cancel();
     _locationSub?.cancel();
+    _compassSub?.cancel();
     _screenPosThrottle?.cancel();
+    _programmaticMoveTimer?.cancel();
     _mapController?.dispose();
     _sheetAnim.dispose();
     super.dispose();
@@ -157,7 +167,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     final initial = await NavigationService.requestAndGetPosition();
     if (initial != null && mounted) {
       setState(() => _clientPosition = initial);
-      _centerOn(initial);
+      _setCamera(position: initial);
     }
     _locationSub = NavigationService.positionStream.listen(_onPosition);
   }
@@ -165,7 +175,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   void _onPosition(Position position) {
     if (!mounted) return;
     setState(() => _clientPosition = position);
-    if (_autoFollow) _centerOn(position);
+    if (_locationMode != _LocationMode.free) _setCamera(position: position);
     _scheduleScreenPos();
   }
 
@@ -182,23 +192,57 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     if (mounted) setState(() => _clientScreenPos = coord);
   }
 
-  void _centerOn(Position position) {
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: LatLng(position.latitude, position.longitude),
-          zoom: 15,
-          bearing: 0,
-          tilt: 40,
-        ),
-      ),
+  // ── Caméra contrôlée (marque le mouvement comme programmatique) ──────────
+  void _setCamera({Position? position, double? bearing}) {
+    final pos = position ?? _clientPosition;
+    if (pos == null || _mapController == null) return;
+    _programmaticMove = true;
+    _programmaticMoveTimer?.cancel();
+    _programmaticMoveTimer = Timer(const Duration(milliseconds: 500), () {
+      _programmaticMove = false;
+    });
+    _mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(
+        target: LatLng(pos.latitude, pos.longitude),
+        zoom: _currentZoom < 13 ? 15 : _currentZoom,
+        bearing: bearing ?? (_locationMode == _LocationMode.compass ? _compassBearing : 0),
+        tilt: _locationMode == _LocationMode.compass ? 50 : 40,
+      )),
     );
   }
 
-  void _recenter() {
-    if (_clientPosition == null) return;
-    setState(() => _autoFollow = true);
-    _centerOn(_clientPosition!);
+  // ── Cycle : libre → suivi → boussole → libre ──────────────────────────────
+  void _cycleLocationMode() {
+    switch (_locationMode) {
+      case _LocationMode.free:
+        setState(() => _locationMode = _LocationMode.follow);
+        _setCamera();
+      case _LocationMode.follow:
+        setState(() => _locationMode = _LocationMode.compass);
+        _startCompassMode();
+        _setCamera();
+      case _LocationMode.compass:
+        _stopCompassMode();
+        setState(() => _locationMode = _LocationMode.free);
+    }
+  }
+
+  void _startCompassMode() {
+    _compassSub ??= FlutterCompass.events?.listen(_onCompassEvent);
+  }
+
+  void _stopCompassMode() {
+    _compassSub?.cancel();
+    _compassSub = null;
+    // Remet le nord en haut
+    if (_clientPosition != null) _setCamera(bearing: 0);
+  }
+
+  void _onCompassEvent(CompassEvent event) {
+    final heading = event.heading;
+    if (heading == null || !mounted || _locationMode != _LocationMode.compass) return;
+    setState(() => _compassBearing = heading);
+    _setCamera(bearing: heading);
   }
 
   // ── Marqueurs POI uniquement (le dot client est un widget overlay) ────────
@@ -488,11 +532,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               ),
               onMapCreated: (controller) {
                 _mapController = controller;
-                if (_clientPosition != null) _centerOn(_clientPosition!);
+                if (_clientPosition != null) _setCamera();
               },
               style: _mapStyle,
               onCameraMove: (pos) {
-                if (_autoFollow) setState(() => _autoFollow = false);
+                if (!_programmaticMove && _locationMode != _LocationMode.free) {
+                  _stopCompassMode();
+                  setState(() => _locationMode = _LocationMode.free);
+                }
                 if ((pos.zoom - _currentZoom).abs() > 0.5) {
                   setState(() => _currentZoom = pos.zoom);
                 }
@@ -511,7 +558,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
           // ── Dot position client (widget animé overlay) ──────────────────
           if (_clientPosition != null)
-            _autoFollow
+            _locationMode != _LocationMode.free
                 ? const Center(child: _PulsingLocationDot())
                 : _clientScreenPos != null
                     ? Positioned(
@@ -562,33 +609,50 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      // Bouton re-centrer
-                      if (!_autoFollow)
-                        GestureDetector(
-                          onTap: _recenter,
-                          child: Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppColors.card, width: 1.5),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  blurRadius: 12,
-                                ),
-                              ],
+                      // ── Bouton localisation 3 états (style Google Maps) ──
+                      GestureDetector(
+                        onTap: _cycleLocationMode,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: _locationMode == _LocationMode.free
+                                ? AppColors.surface
+                                : AppColors.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _locationMode == _LocationMode.free
+                                  ? AppColors.card
+                                  : AppColors.primary,
+                              width: 1.5,
                             ),
-                            child: const Icon(
-                              Icons.my_location,
-                              color: AppColors.primary,
-                              size: 22,
-                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _locationMode == _LocationMode.free
+                                    ? Colors.black.withValues(alpha: 0.25)
+                                    : AppColors.primary.withValues(alpha: 0.45),
+                                blurRadius: 12,
+                              ),
+                            ],
                           ),
-                        )
-                      else
-                        const SizedBox(width: 52),
+                          child: _locationMode == _LocationMode.compass
+                              ? Transform.rotate(
+                                  angle: -_compassBearing * pi / 180,
+                                  child: const Icon(Icons.navigation,
+                                      color: Colors.white, size: 22),
+                                )
+                              : Icon(
+                                  _locationMode == _LocationMode.follow
+                                      ? Icons.navigation
+                                      : Icons.navigation_outlined,
+                                  color: _locationMode == _LocationMode.free
+                                      ? AppColors.primary
+                                      : Colors.white,
+                                  size: 22,
+                                ),
+                        ),
+                      ),
 
                       // Bouton toggle jour/nuit
                       GestureDetector(
