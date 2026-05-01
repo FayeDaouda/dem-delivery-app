@@ -184,7 +184,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     await _reverseGeocode(_currentCameraPos, forPickup: _isSelectingPickup);
   }
 
-  // ── Autocomplete ─────────────────────────────────────────────────────────
+  // ── Autocomplete Google Places ────────────────────────────────────────────
   void _onAddressChanged(String query, {required bool forPickup}) {
     setState(() => _isSelectingPickup = forPickup);
     _searchDebounce?.cancel();
@@ -192,19 +192,26 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
       if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
       return;
     }
-    _searchDebounce = Timer(const Duration(milliseconds: 600), () async {
+    _searchDebounce = Timer(const Duration(milliseconds: 450), () async {
       setState(() => _isSearching = true);
       try {
-        final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
-        final res = await dio.get(
-          'https://nominatim.openstreetmap.org/search',
-          queryParameters: {'q': query, 'format': 'json', 'limit': 5, 'countrycodes': 'sn'},
+        final res = await Dio().get(
+          'https://maps.googleapis.com/maps/api/place/autocomplete/json',
+          queryParameters: {
+            'input': query,
+            'location': '14.6937,-17.4441',
+            'radius': '60000',
+            'components': 'country:sn',
+            'language': 'fr',
+            'key': AppConfig.mapsApiKey,
+          },
         );
-        if (mounted) {
-          setState(() {
-            _suggestions = List<Map<String, dynamic>>.from(res.data);
-            _isSearching = false;
-          });
+        if (mounted && res.statusCode == 200) {
+          final status = res.data['status'] as String?;
+          final preds = status == 'OK'
+              ? List<Map<String, dynamic>>.from(res.data['predictions'])
+              : <Map<String, dynamic>>[];
+          setState(() { _suggestions = preds; _isSearching = false; });
         }
       } catch (_) {
         if (mounted) setState(() => _isSearching = false);
@@ -213,23 +220,37 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
   }
 
   Future<void> _selectSuggestion(Map<String, dynamic> place) async {
-    final lat = double.tryParse(place['lat']?.toString() ?? '');
-    final lng = double.tryParse(place['lon']?.toString() ?? '');
-    if (lat == null || lng == null) return;
-    final name = (place['name'] as String?) ?? place['display_name'] as String? ?? '';
+    final placeId = place['place_id'] as String?;
+    if (placeId == null) return;
     FocusScope.of(context).unfocus();
-    setState(() {
-      _suggestions = [];
-      if (_isSelectingPickup) {
-        _pickupLat = lat; _pickupLng = lng;
-        _pickupCtrl.text = name;
-      } else {
-        _deliveryLat = lat; _deliveryLng = lng;
-        _deliveryCtrl.text = name;
+    setState(() => _suggestions = []);
+    try {
+      final res = await Dio().get(
+        'https://maps.googleapis.com/maps/api/place/details/json',
+        queryParameters: {
+          'place_id': placeId,
+          'fields': 'geometry,name,formatted_address',
+          'language': 'fr',
+          'key': AppConfig.mapsApiKey,
+        },
+      );
+      if (res.statusCode == 200 && res.data['status'] == 'OK') {
+        final loc = res.data['result']['geometry']['location'];
+        final lat = (loc['lat'] as num).toDouble();
+        final lng = (loc['lng'] as num).toDouble();
+        final name = (place['structured_formatting']?['main_text'] as String?)
+            ?? place['description'] as String? ?? '';
+        setState(() {
+          if (_isSelectingPickup) {
+            _pickupLat = lat; _pickupLng = lng; _pickupCtrl.text = name;
+          } else {
+            _deliveryLat = lat; _deliveryLng = lng; _deliveryCtrl.text = name;
+          }
+        });
+        _centerMap(LatLng(lat, lng));
+        _updateEstimate();
       }
-    });
-    _centerMap(LatLng(lat, lng));
-    _updateEstimate();
+    } catch (_) {}
   }
 
   // ── Pricing ──────────────────────────────────────────────────────────────
@@ -1006,34 +1027,99 @@ class _AutocompleteDropdown extends StatelessWidget {
   final ValueChanged<Map<String, dynamic>> onSelect;
   const _AutocompleteDropdown({required this.suggestions, required this.loading, required this.onSelect});
 
+  IconData _iconForTypes(List<dynamic> types) {
+    if (types.any((t) => t.toString().contains('transit') || t.toString().contains('bus') || t.toString().contains('station'))) {
+      return Icons.directions_bus_outlined;
+    }
+    if (types.any((t) => t.toString().contains('hospital') || t.toString().contains('health'))) {
+      return Icons.local_hospital_outlined;
+    }
+    if (types.any((t) => t.toString().contains('airport'))) return Icons.flight_outlined;
+    if (types.any((t) => t.toString().contains('school') || t.toString().contains('university'))) {
+      return Icons.school_outlined;
+    }
+    if (types.any((t) => t.toString().contains('park') || t.toString().contains('natural'))) {
+      return Icons.park_outlined;
+    }
+    if (types.any((t) => t.toString().contains('restaurant') || t.toString().contains('food'))) {
+      return Icons.restaurant_outlined;
+    }
+    return Icons.place_outlined;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 200),
+      constraints: const BoxConstraints(maxHeight: 320),
       decoration: BoxDecoration(
-        gradient: AppColors.gradientSplash,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 16)],
+        color: const Color(0xFF1A2540),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 20)],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: loading
-            ? const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
+            ? const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
             : ListView.separated(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
                 itemCount: suggestions.length,
-                separatorBuilder: (context, idx) => Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
+                separatorBuilder: (_, _) =>
+                    Divider(height: 1, color: Colors.white.withValues(alpha: 0.07)),
                 itemBuilder: (_, i) {
                   final p = suggestions[i];
-                  final name = p['name']?.toString() ?? '';
-                  final sub  = (p['display_name']?.toString() ?? '').replaceAll('$name, ', '');
-                  return ListTile(
-                    dense: true,
-                    leading: Icon(Icons.place_outlined, color: Colors.white.withValues(alpha: 0.80), size: 18),
-                    title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: sub.isNotEmpty ? Text(sub, style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+                  final fmt = p['structured_formatting'] as Map<String, dynamic>?;
+                  final main = fmt?['main_text'] as String?
+                      ?? p['description'] as String? ?? '';
+                  final secondary = fmt?['secondary_text'] as String? ?? '';
+                  final types = p['types'] as List<dynamic>? ?? [];
+                  final icon = _iconForTypes(types);
+                  return InkWell(
                     onTap: () => onSelect(p),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(icon,
+                                color: Colors.white.withValues(alpha: 0.75), size: 16),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(main,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                if (secondary.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(secondary,
+                                      style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.50),
+                                          fontSize: 11),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 },
               ),
