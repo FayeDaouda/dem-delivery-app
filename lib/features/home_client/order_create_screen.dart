@@ -1268,31 +1268,46 @@ class _ContactMini extends StatelessWidget {
             child: Icon(Icons.contacts_rounded, color: Colors.white.withValues(alpha: 0.90), size: 26),
           ),
         ]),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         TextField(
           controller: nameCtrl,
           style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: InputDecoration(
-            hintText: 'Nom',
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14),
-            fillColor: Colors.white.withValues(alpha: 0.10), filled: true, isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            hintText: 'Nom complet',
+            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 8),
+              child: Icon(Icons.person_outline_rounded,
+                  color: Colors.white.withValues(alpha: 0.55), size: 18),
+            ),
+            prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+            fillColor: Colors.white.withValues(alpha: 0.08), filled: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         TextField(
           controller: phoneCtrl,
           keyboardType: TextInputType.phone,
           style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: InputDecoration(
-            hintText: 'Téléphone',
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14),
+            hintText: 'Numéro de téléphone',
+            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 8),
+              child: Icon(Icons.phone_outlined,
+                  color: visibleDot.withValues(alpha: 0.80), size: 18),
+            ),
+            prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
             prefixText: '+221 ',
-            prefixStyle: TextStyle(color: visibleDot, fontWeight: FontWeight.w700, fontSize: 14),
-            fillColor: Colors.white.withValues(alpha: 0.10), filled: true, isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            prefixStyle: TextStyle(
+                color: visibleDot, fontWeight: FontWeight.w700, fontSize: 14),
+            fillColor: Colors.white.withValues(alpha: 0.08), filled: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
           ),
         ),
       ]),
@@ -1336,22 +1351,69 @@ class _Step3Panel extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 10),
-        // Price row
-        Row(children: [
-          const Text('Prix estimé', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-          const Spacer(),
-          if (loadingSurge)
-            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-          else if (estimatedPrice != null) ...[
-            if (surgeMultiplier > 1.0) ...[
-              const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 14),
-              const SizedBox(width: 4),
+        // Price card
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'PRIX ESTIMÉ',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  if (loadingSurge)
+                    const SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                  else if (estimatedPrice != null)
+                    Text(
+                      '${estimatedPrice!.toInt()} FCFA',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  else
+                    const Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 22)),
+                ],
+              ),
+              const Spacer(),
+              if (surgeMultiplier > 1.0 && !loadingSurge)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF9800).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.30)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 13),
+                    const SizedBox(width: 3),
+                    Text('×${surgeMultiplier.toStringAsFixed(1)}',
+                        style: const TextStyle(
+                            color: Color(0xFFFF9800),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
+                  ]),
+                ),
             ],
-            Text('${estimatedPrice!.toInt()} FCFA',
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
-          ] else
-            const Text('—', style: TextStyle(color: AppColors.textSecondary)),
-        ]),
+          ),
+        ),
         const Spacer(),
         _NextButton(
           label: 'Confirmer la commande',
