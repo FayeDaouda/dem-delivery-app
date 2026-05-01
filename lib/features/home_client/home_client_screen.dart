@@ -41,8 +41,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   String? _mapStyle;
-  double _currentZoom = 17;
+  double _currentZoom = 15;
   ScreenCoordinate? _clientScreenPos;
+  Timer? _screenPosThrottle;
 
   // ── POI ───────────────────────────────────────────────────────────────────
   PoiIconSet? _poiIconSet;
@@ -101,6 +102,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     routeObserver.unsubscribe(this);
     _orderAcceptedSub?.cancel();
     _locationSub?.cancel();
+    _screenPosThrottle?.cancel();
     _mapController?.dispose();
     _sheetAnim.dispose();
     super.dispose();
@@ -164,7 +166,12 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     if (!mounted) return;
     setState(() => _clientPosition = position);
     if (_autoFollow) _centerOn(position);
-    _updateScreenPos();
+    _scheduleScreenPos();
+  }
+
+  void _scheduleScreenPos() {
+    if (_screenPosThrottle?.isActive ?? false) return;
+    _screenPosThrottle = Timer(const Duration(milliseconds: 32), _updateScreenPos);
   }
 
   Future<void> _updateScreenPos() async {
@@ -180,9 +187,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: LatLng(position.latitude, position.longitude),
-          zoom: 17,
+          zoom: 15,
           bearing: 0,
-          tilt: 55,
+          tilt: 40,
         ),
       ),
     );
@@ -476,8 +483,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             child: GoogleMap(
               initialCameraPosition: const CameraPosition(
                 target: _dakar,
-                zoom: 17,
-                tilt: 55,
+                zoom: 15,
+                tilt: 40,
               ),
               onMapCreated: (controller) {
                 _mapController = controller;
@@ -489,6 +496,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                 if ((pos.zoom - _currentZoom).abs() > 0.5) {
                   setState(() => _currentZoom = pos.zoom);
                 }
+                _scheduleScreenPos();
               },
               onCameraIdle: _updateScreenPos,
               markers: _clientMarkers,
