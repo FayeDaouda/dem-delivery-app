@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_compass/flutter_compass.dart';
@@ -46,8 +47,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   GoogleMapController? _mapController;
   String? _mapStyle;
   double _currentZoom = 15;
-  ScreenCoordinate? _clientScreenPos;
-  Timer? _screenPosThrottle;
+  BitmapDescriptor? _locationDotIcon;
 
   // ── POI ───────────────────────────────────────────────────────────────────
   PoiIconSet? _poiIconSet;
@@ -59,6 +59,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   StreamSubscription<Position>? _locationSub;
   StreamSubscription<CompassEvent>? _compassSub;
   Position? _clientPosition;
+  double _travelHeading = 0;
   _LocationMode _locationMode = _LocationMode.follow;
   double _compassBearing = 0;
   bool _programmaticMove = false;
@@ -79,6 +80,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     );
     _sheetSlide = CurvedAnimation(parent: _sheetAnim, curve: Curves.easeInOut);
     _loadMapStyle();
+    _buildLocationDotIcon().then((icon) {
+      if (mounted) setState(() => _locationDotIcon = icon);
+    });
     buildPoiIconSet().then((set) {
       if (mounted) setState(() => _poiIconSet = set);
     });
@@ -111,7 +115,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     _orderAcceptedSub?.cancel();
     _locationSub?.cancel();
     _compassSub?.cancel();
-    _screenPosThrottle?.cancel();
     _programmaticMoveTimer?.cancel();
     _mapController?.dispose();
     _sheetAnim.dispose();
@@ -162,6 +165,30 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     await _loadMapStyle();
   }
 
+  // ── Icône dot GPS (mode libre — marker natif, suit la carte sans lag) ──────
+  static Future<BitmapDescriptor> _buildLocationDotIcon() async {
+    const double size = 72;
+    const double cx = size / 2;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawCircle(const Offset(cx, cx), 28,
+        Paint()..color = const Color(0x3300D4FF));
+    canvas.drawCircle(const Offset(cx, cx), 11,
+        Paint()..color = const Color(0xFF00D4FF));
+    canvas.drawCircle(
+        const Offset(cx, cx), 11,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5);
+    final img = await recorder
+        .endRecording()
+        .toImage(size.toInt(), size.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(),
+        width: size / 2, height: size / 2);
+  }
+
   // ── GPS ──────────────────────────────────────────────────────────────────
   Future<void> _startGPS() async {
     final initial = await NavigationService.requestAndGetPosition();
@@ -174,39 +201,42 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   void _onPosition(Position position) {
     if (!mounted) return;
-    setState(() => _clientPosition = position);
+    setState(() {
+      _clientPosition = position;
+      if (position.heading >= 0) _travelHeading = position.heading;
+    });
     if (_locationMode != _LocationMode.free) _setCamera(position: position);
-    _scheduleScreenPos();
   }
 
-  void _scheduleScreenPos() {
-    if (_screenPosThrottle?.isActive ?? false) return;
-    _screenPosThrottle = Timer(const Duration(milliseconds: 32), _updateScreenPos);
-  }
-
-  Future<void> _updateScreenPos() async {
-    if (_clientPosition == null || _mapController == null) return;
-    final coord = await _mapController!.getScreenCoordinate(
-      LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
-    );
-    if (mounted) setState(() => _clientScreenPos = coord);
-  }
-
-  // ── Caméra contrôlée (marque le mouvement comme programmatique) ──────────
+  // ── Caméra GPS follow (animée, lisse) ─────────────────────────────────────
   void _setCamera({Position? position, double? bearing}) {
     final pos = position ?? _clientPosition;
     if (pos == null || _mapController == null) return;
     _programmaticMove = true;
     _programmaticMoveTimer?.cancel();
-    _programmaticMoveTimer = Timer(const Duration(milliseconds: 500), () {
+    _programmaticMoveTimer = Timer(const Duration(milliseconds: 600), () {
       _programmaticMove = false;
     });
     _mapController!.animateCamera(
       CameraUpdate.newCameraPosition(CameraPosition(
         target: LatLng(pos.latitude, pos.longitude),
         zoom: _currentZoom < 13 ? 15 : _currentZoom,
-        bearing: bearing ?? (_locationMode == _LocationMode.compass ? _compassBearing : 0),
-        tilt: _locationMode == _LocationMode.compass ? 50 : 40,
+        bearing: bearing ?? 0,
+        tilt: 40,
+      )),
+    );
+  }
+
+  // ── Caméra boussole (instantanée, pas d'animation qui s'empile) ───────────
+  void _compassCamera(double heading) {
+    if (_clientPosition == null || _mapController == null) return;
+    _programmaticMove = true;
+    _mapController!.moveCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(
+        target: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
+        zoom: _currentZoom < 13 ? 15 : _currentZoom,
+        bearing: heading,
+        tilt: 50,
       )),
     );
   }
@@ -234,23 +264,37 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   void _stopCompassMode() {
     _compassSub?.cancel();
     _compassSub = null;
-    // Remet le nord en haut
-    if (_clientPosition != null) _setCamera(bearing: 0);
+    _programmaticMove = false;
   }
 
   void _onCompassEvent(CompassEvent event) {
     final heading = event.heading;
     if (heading == null || !mounted || _locationMode != _LocationMode.compass) return;
+    // Filtre : ignorer si changement < 2° pour éviter le tremblement
+    if ((_compassBearing - heading).abs() < 2.0) return;
     setState(() => _compassBearing = heading);
-    _setCamera(bearing: heading);
+    _compassCamera(heading);
   }
 
-  // ── Marqueurs POI uniquement (le dot client est un widget overlay) ────────
+  // ── Marqueurs : GPS natif (free) + POI ────────────────────────────────────
   Set<Marker> get _clientMarkers {
-    if (_poiIconSet != null) {
-      return buildPoiMarkersForZoom(_poiIconSet!, _currentZoom);
+    final markers = <Marker>{};
+    // En mode libre : marker natif Google Maps (suit la carte sans lag)
+    if (_locationMode == _LocationMode.free && _clientPosition != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('client'),
+        position: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
+        icon: _locationDotIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        flat: true,
+        anchor: const Offset(0.5, 0.5),
+        zIndexInt: 10,
+      ));
     }
-    return {};
+    if (_poiIconSet != null) {
+      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom));
+    }
+    return markers;
   }
 
   // ── User ──────────────────────────────────────────────────────────────────
@@ -543,9 +587,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                 if ((pos.zoom - _currentZoom).abs() > 0.5) {
                   setState(() => _currentZoom = pos.zoom);
                 }
-                _scheduleScreenPos();
               },
-              onCameraIdle: _updateScreenPos,
+              onCameraIdle: () => _programmaticMove = false,
               markers: _clientMarkers,
               myLocationEnabled: false,
               myLocationButtonEnabled: false,
@@ -556,17 +599,15 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             ),
           ),
 
-          // ── Dot position client (widget animé overlay) ──────────────────
-          if (_clientPosition != null)
-            _locationMode != _LocationMode.free
-                ? const Center(child: _PulsingLocationDot())
-                : _clientScreenPos != null
-                    ? Positioned(
-                        left: _clientScreenPos!.x.toDouble() - 24,
-                        top:  _clientScreenPos!.y.toDouble() - 24,
-                        child: const _PulsingLocationDot(),
-                      )
-                    : const SizedBox.shrink(),
+          // ── Dot overlay (follow/compass uniquement — free utilise un Marker) ──
+          if (_clientPosition != null && _locationMode != _LocationMode.free)
+            Center(
+              child: _PulsingLocationDot(
+                heading: _locationMode == _LocationMode.compass
+                    ? _compassBearing
+                    : (_travelHeading > 0 ? _travelHeading : null),
+              ),
+            ),
 
           // ── Header ──
           SafeArea(
@@ -1010,7 +1051,8 @@ class _NavItem extends StatelessWidget {
 
 // ── Dot de position animé (overlay Flutter sur la carte) ─────────────────────
 class _PulsingLocationDot extends StatefulWidget {
-  const _PulsingLocationDot();
+  final double? heading; // degrés depuis le nord, null = pas de direction
+  const _PulsingLocationDot({this.heading});
 
   @override
   State<_PulsingLocationDot> createState() => _PulsingLocationDotState();
@@ -1040,9 +1082,11 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
   @override
   Widget build(BuildContext context) {
     const cyan = Color(0xFF00D4FF);
+    final hasHeading = widget.heading != null;
+
     return SizedBox(
-      width: 48,
-      height: 48,
+      width: 64,
+      height: 64,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -1052,31 +1096,36 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
             builder: (_, _) => Opacity(
               opacity: (1.0 - _pulse.value).clamp(0.0, 1.0),
               child: Container(
-                width: 12 + 32 * _pulse.value,
-                height: 12 + 32 * _pulse.value,
+                width: 14 + 42 * _pulse.value,
+                height: 14 + 42 * _pulse.value,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: cyan.withValues(alpha: 0.35),
+                  color: cyan.withValues(alpha: 0.30),
                 ),
               ),
             ),
           ),
-          // Ombre sous le dot
-          Positioned(
-            bottom: 9,
-            child: AnimatedBuilder(
-              animation: _ctrl,
-              builder: (_, _) => Container(
-                width: 14,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: cyan.withValues(alpha: 0.20 + 0.15 * _ctrl.value),
-                  borderRadius: BorderRadius.circular(8),
-                ),
+          // Flèche directionnelle (tourne selon heading)
+          if (hasHeading)
+            Transform.rotate(
+              angle: widget.heading! * pi / 180,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Pointe de la flèche au-dessus du dot
+                  Icon(Icons.navigation,
+                      color: Colors.white,
+                      size: 22,
+                      shadows: [
+                        Shadow(
+                            color: cyan.withValues(alpha: 0.9),
+                            blurRadius: 10)
+                      ]),
+                  const SizedBox(height: 2),
+                ],
               ),
             ),
-          ),
-          // Dot central cyan lumineux
+          // Dot central cyan
           Container(
             width: 14,
             height: 14,
@@ -1086,10 +1135,9 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
               border: Border.all(color: Colors.white, width: 2.5),
               boxShadow: [
                 BoxShadow(
-                  color: cyan.withValues(alpha: 0.65),
-                  blurRadius: 10,
-                  spreadRadius: 2,
-                ),
+                    color: cyan.withValues(alpha: 0.65),
+                    blurRadius: 10,
+                    spreadRadius: 2),
               ],
             ),
           ),
