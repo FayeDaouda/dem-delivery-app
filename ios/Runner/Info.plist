@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -24,6 +26,26 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>DEM utilise l'appareil photo pour photographier vos documents d'identité et votre permis de conduire lors de l'inscription.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>DEM utilise votre position en arrière-plan pour assurer le suivi de livraison en temps réel lorsque vous êtes en course.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>DEM utilise votre position en arrière-plan pour assurer le suivi de livraison en temps réel lorsque vous êtes en course.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>DEM utilise votre position pour afficher votre localisation sur la carte et trouver les livreurs disponibles près de vous.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>DEM peut enregistrer des photos dans votre galerie.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>DEM accède à votre galerie pour importer vos documents d'identité, votre permis de conduire ou votre photo de profil.</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -40,34 +62,6 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-
-	<!-- ── Permissions localisation ── -->
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>DEM utilise votre position pour afficher votre localisation sur la carte et trouver les livreurs disponibles près de vous.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>DEM utilise votre position en arrière-plan pour assurer le suivi de livraison en temps réel lorsque vous êtes en course.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>DEM utilise votre position en arrière-plan pour assurer le suivi de livraison en temps réel lorsque vous êtes en course.</string>
-
-	<!-- ── Permissions caméra / photos ── -->
-	<key>NSCameraUsageDescription</key>
-	<string>DEM utilise l'appareil photo pour photographier vos documents d'identité et votre permis de conduire lors de l'inscription.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>DEM accède à votre galerie pour importer vos documents d'identité, votre permis de conduire ou votre photo de profil.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>DEM peut enregistrer des photos dans votre galerie.</string>
-
-	<!-- ── Background modes ── -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>location</string>
-		<string>remote-notification</string>
-		<string>fetch</string>
 	</array>
 </dict>
 </plist>
