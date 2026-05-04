@@ -51,4 +51,13 @@ class ProfileRepository {
       );
     }
   }
+
+  Future<Map<String, dynamic>?> getForfaitStatus() async {
+    try {
+      final response = await _dio.get('/users/driver/forfait-status');
+      return response.data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
 }

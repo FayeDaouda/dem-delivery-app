@@ -11,6 +11,7 @@ import '../../../core/services/badge_service.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/referral_card.dart';
+import '../data/profile_repository.dart';
 import 'document_upload_screen.dart';
 import 'driver_order_history_screen.dart';
 
@@ -22,8 +23,10 @@ class DriverProfileScreen extends StatefulWidget {
 
 class _DriverProfileScreenState extends State<DriverProfileScreen> {
   Map<String, dynamic>? _user;
+  Map<String, dynamic>? _forfaitStatus;
   String? _photoPath;
   static const _photoKey = 'driver_profile_photo';
+  final _profileRepo = ProfileRepository();
 
   @override
   void initState() {
@@ -45,6 +48,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final user  = await AuthStorage.getUser();
     final prefs = await SharedPreferences.getInstance();
     if (mounted) setState(() { _user = user; _photoPath = prefs.getString(_photoKey); });
+    final forfait = await _profileRepo.getForfaitStatus();
+    if (mounted) setState(() => _forfaitStatus = forfait);
   }
 
   Future<void> _pickProfilePhoto() async {
@@ -521,6 +526,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   ]),
                   const SizedBox(height: 16),
 
+                  // Forfait journalier
+                  if (_forfaitStatus != null) ...[
+                    _ForfaitCard(status: _forfaitStatus!),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Parrainage
                   Text('PARRAINAGE',
                       style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 11,
@@ -931,6 +942,127 @@ class _BadgeCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Carte forfait journalier ──────────────────────────────────────────────────
+class _ForfaitCard extends StatelessWidget {
+  final Map<String, dynamic> status;
+  const _ForfaitCard({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final active       = status['active'] as bool? ?? false;
+    final amount       = (status['amount'] as num?)?.toInt() ?? 480;
+    final totalOwed    = (status['totalOwed'] as num?)?.toInt() ?? 0;
+    final todayCharged = status['todayCharged'] as bool? ?? false;
+
+    // Si forfait inactif → petite bannière info discrète
+    if (!active) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
+        ),
+        child: Row(children: [
+          const Icon(Icons.info_outline, color: AppColors.primary, size: 18),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Forfait journalier non encore activé (S4)',
+              style: TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
+            ),
+          ),
+        ]),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Column(children: [
+        // En-tête
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: const BoxDecoration(
+            gradient: AppColors.gradientSplash,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.receipt_long_outlined, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            const Text('Forfait journalier',
+                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text('$amount FCFA/jour',
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+        ),
+        // Corps
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            // Total dû
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('TOTAL DÛ',
+                    style: TextStyle(color: Color(0xFF7B8CA0), fontSize: 10,
+                        fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                const SizedBox(height: 4),
+                Text('$totalOwed FCFA',
+                    style: TextStyle(
+                      color: totalOwed > 0 ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
+                      fontSize: 20, fontWeight: FontWeight.w800,
+                    )),
+              ]),
+            ),
+            // Statut aujourd'hui
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: (todayCharged ? const Color(0xFFEF4444) : const Color(0xFF22C55E))
+                    .withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: (todayCharged ? const Color(0xFFEF4444) : const Color(0xFF22C55E))
+                      .withValues(alpha: 0.30),
+                ),
+              ),
+              child: Column(children: [
+                Icon(
+                  todayCharged ? Icons.check_circle_outline : Icons.radio_button_unchecked,
+                  size: 16,
+                  color: todayCharged ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  todayCharged ? 'Débité' : 'Non débité',
+                  style: TextStyle(
+                    color: todayCharged ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
+                    fontSize: 10, fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text("Aujourd'hui",
+                    style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 9)),
+              ]),
+            ),
+          ]),
+        ),
+      ]),
     );
   }
 }
