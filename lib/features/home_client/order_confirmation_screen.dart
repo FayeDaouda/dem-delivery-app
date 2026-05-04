@@ -205,7 +205,8 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   @override
   Widget build(BuildContext context) {
     final order           = widget.order;
-    final price           = order['price'] as num?;
+    final price           = (order['price'] as num?)?.toDouble();
+    final demFee          = (order['demFee'] as num?)?.toDouble() ?? 0.0;
     final surge           = (order['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
     final pickupAddress   = order['pickupAddress'] as String? ?? 'Départ';
     final deliveryAddress = order['deliveryAddress'] as String? ?? 'Arrivée';
@@ -322,17 +323,44 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                             ),
                             const SizedBox(height: 16),
 
-                            // ── Price row ──
-                            Row(children: [
-                              Text('Prix estimé', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13)),
-                              const Spacer(),
-                              if (surge > 1.0) ...[
-                                const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 14),
-                                const SizedBox(width: 4),
-                              ],
-                              Text('${price?.toInt() ?? '—'} FCFA',
-                                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                            ]),
+                            // ── Price breakdown ──
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(children: [
+                                Row(children: [
+                                  Text('Course', style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
+                                  const Spacer(),
+                                  if (surge > 1.0) ...[
+                                    const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 13),
+                                    const SizedBox(width: 3),
+                                  ],
+                                  Text('${price?.toInt() ?? '—'} FCFA',
+                                      style: const TextStyle(color: Colors.white, fontSize: 13)),
+                                ]),
+                                if (demFee > 0) ...[
+                                  const SizedBox(height: 4),
+                                  Row(children: [
+                                    Text('Frais DEM', style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
+                                    const Spacer(),
+                                    Text('+${demFee.toInt()} FCFA',
+                                        style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
+                                  ]),
+                                  Divider(color: Colors.white.withValues(alpha: 0.15), height: 14),
+                                ],
+                                Row(children: [
+                                  const Text('TOTAL', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                                  const Spacer(),
+                                  Text(
+                                    '${((price ?? 0) + demFee).toInt()} FCFA',
+                                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                                  ),
+                                ]),
+                              ]),
+                            ),
                             const SizedBox(height: 20),
 
                             // ── Boutons Action ──

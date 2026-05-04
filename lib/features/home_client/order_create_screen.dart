@@ -12,6 +12,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/services/pricing_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/data/orders_repository.dart';
@@ -70,7 +71,8 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
 
   // ── Pricing ──────────────────────────────────────────────────────────────
   double _surgeMultiplier = 1.0;
-  double? _estimatedPrice;
+  double? _estimatedPrice; // prix course (= ce que le livreur gagne)
+  double _demFee = 0.0;    // frais DEM prélevés en sus au client
   bool _loadingSurge = false;
   bool _loadingGps   = false;
   bool _submitting   = false;
@@ -344,7 +346,14 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
       }
 
       final price = (_baseFare + dist * _pricePerKm) * surge;
-      if (mounted) setState(() { _surgeMultiplier = surge; _estimatedPrice = price.roundToDouble(); _loadingSurge = false; });
+      final rounded = price.roundToDouble();
+      final fee = PricingService.computeFee(rounded);
+      if (mounted) setState(() {
+        _surgeMultiplier = surge;
+        _estimatedPrice = rounded;
+        _demFee = fee;
+        _loadingSurge = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _loadingSurge = false);
     }
@@ -513,12 +522,11 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
         if (widget.orderType == 'DELIVERY')
           'description': _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
         if (_estimatedPrice != null) 'price': _estimatedPrice,
+        if (_demFee > 0) 'demFee': _demFee,
       });
-      
-      // Assure que le prix affiché sur la confirmation est exactement le même que l'estimé
-      if (_estimatedPrice != null) {
-        order['price'] = _estimatedPrice;
-      }
+
+      if (_estimatedPrice != null) order['price'] = _estimatedPrice;
+      if (_demFee > 0) order['demFee'] = _demFee;
       
       if (mounted) context.pushReplacement('/orders/confirmation', extra: order);
     } catch (e) {
@@ -747,6 +755,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
                               pickupLabel: _pickupCtrl.text.isNotEmpty ? _pickupCtrl.text : 'Départ',
                               deliveryLabel: _deliveryCtrl.text.isNotEmpty ? _deliveryCtrl.text : 'Destination',
                               estimatedPrice: _estimatedPrice,
+                              demFee: _demFee,
                               surgeMultiplier: _surgeMultiplier,
                               loadingSurge: _loadingSurge,
                               submitting: _submitting,
@@ -1405,6 +1414,7 @@ class _Step3Panel extends StatelessWidget {
   final String pickupLabel;
   final String deliveryLabel;
   final double? estimatedPrice;
+  final double demFee;
   final double surgeMultiplier;
   final bool loadingSurge;
   final bool submitting;
@@ -1413,7 +1423,8 @@ class _Step3Panel extends StatelessWidget {
 
   const _Step3Panel({
     required this.pickupLabel, required this.deliveryLabel,
-    required this.estimatedPrice, required this.surgeMultiplier,
+    required this.estimatedPrice, required this.demFee,
+    required this.surgeMultiplier,
     required this.loadingSurge, required this.submitting,
     required this.canSubmit, required this.onSubmit,
   });
@@ -1445,60 +1456,64 @@ class _Step3Panel extends StatelessWidget {
             color: AppColors.card,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'PRIX ESTIMÉ',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.0,
+          child: loadingSurge
+              ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Ligne : prix course + surge badge
+                    Row(
+                      children: [
+                        const Text('Course', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        const Spacer(),
+                        if (surgeMultiplier > 1.0) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF9800).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.30)),
+                            ),
+                            child: Row(children: [
+                              const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 11),
+                              const SizedBox(width: 2),
+                              Text('×${surgeMultiplier.toStringAsFixed(1)}',
+                                  style: const TextStyle(color: Color(0xFFFF9800), fontSize: 10, fontWeight: FontWeight.bold)),
+                            ]),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(
+                          estimatedPrice != null ? '${estimatedPrice!.toInt()} FCFA' : '—',
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  if (loadingSurge)
-                    const SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-                  else if (estimatedPrice != null)
-                    Text(
-                      '${estimatedPrice!.toInt()} FCFA',
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  else
-                    const Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 22)),
-                ],
-              ),
-              const Spacer(),
-              if (surgeMultiplier > 1.0 && !loadingSurge)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF9800).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.30)),
-                  ),
-                  child: Row(children: [
-                    const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 13),
-                    const SizedBox(width: 3),
-                    Text('×${surgeMultiplier.toStringAsFixed(1)}',
-                        style: const TextStyle(
-                            color: Color(0xFFFF9800),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold)),
-                  ]),
+                    // Ligne : frais DEM (visible uniquement si > 0)
+                    if (estimatedPrice != null && demFee > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(children: [
+                        const Text('Frais DEM', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        const Spacer(),
+                        Text('+${demFee.toInt()} FCFA',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      ]),
+                      Divider(color: Colors.white.withValues(alpha: 0.10), height: 14),
+                    ],
+                    // Ligne : total client
+                    if (estimatedPrice != null) ...[
+                      Row(children: [
+                        const Text('TOTAL', style: TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                        const Spacer(),
+                        Text(
+                          '${(estimatedPrice! + demFee).toInt()} FCFA',
+                          style: const TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.bold),
+                        ),
+                      ]),
+                    ] else
+                      const Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 22)),
+                  ],
                 ),
-            ],
-          ),
         ),
         const Spacer(),
         _NextButton(

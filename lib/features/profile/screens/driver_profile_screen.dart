@@ -7,8 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/l10n/app_strings.dart';
+import '../../../core/services/badge_service.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/referral_card.dart';
 import 'document_upload_screen.dart';
 import 'driver_order_history_screen.dart';
 
@@ -455,7 +457,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     child: Text(_isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
                         style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  // ── Carte badge ──
+                  if (_user != null) _BadgeCard(user: _user!),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -514,6 +519,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     _ActionRow(icon: Icons.history, label: s.historyTitle,
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverOrderHistoryScreen()))),
                   ]),
+                  const SizedBox(height: 16),
+
+                  // Parrainage
+                  Text('PARRAINAGE',
+                      style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 11,
+                          fontWeight: FontWeight.w700, letterSpacing: 1.2)),
+                  const SizedBox(height: 8),
+                  ReferralCard(referralCode: _user?['referralCode'] as String?),
                   const SizedBox(height: 16),
 
                   // Paramètres
@@ -808,6 +821,143 @@ class _DragHandle extends StatelessWidget {
     decoration: BoxDecoration(
       color: AppColors.textSecondary.withValues(alpha: 0.35),
       borderRadius: BorderRadius.circular(2),
+    ),
+  );
+}
+
+// ── Carte badge driver ────────────────────────────────────────────────────────
+class _BadgeCard extends StatelessWidget {
+  final Map<String, dynamic> user;
+  const _BadgeCard({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final courses   = (user['completedCourses'] as num?)?.toInt() ?? 0;
+    final referrals = (user['referralCount']    as num?)?.toInt() ?? 0;
+    final rating    = (user['averageRating']    as num?)?.toDouble() ?? 0.0;
+
+    final badge     = BadgeService.compute(courses: courses, referrals: referrals, rating: rating);
+    final nextBadge = BadgeService.next(badge.tier);
+    final progress  = BadgeService.progressToCourses(courses: courses, current: badge.tier);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          children: [
+            // Badge actuel
+            Row(
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: badge.color.withValues(alpha: 0.25),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(badge.icon, color: badge.color, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(badge.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
+                      Text(badge.subtitle,
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Stats ligne
+            Row(
+              children: [
+                _StatChip(icon: Icons.two_wheeler, value: '$courses', label: 'courses'),
+                const SizedBox(width: 8),
+                _StatChip(icon: Icons.person_add_outlined, value: '$referrals', label: 'parrainages'),
+                const SizedBox(width: 8),
+                _StatChip(
+                  icon: Icons.star_rounded,
+                  value: rating > 0 ? rating.toStringAsFixed(1) : '—',
+                  label: 'note',
+                  iconColor: const Color(0xFFFFD700),
+                ),
+              ],
+            ),
+
+            // Barre de progression vers le prochain badge
+            if (nextBadge != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Text('Prochain : ', style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 10)),
+                          Text(nextBadge.name,
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          Text('${nextBadge.coursesRequired} courses',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 10)),
+                        ]),
+                        const SizedBox(height: 5),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 5,
+                            backgroundColor: Colors.white.withValues(alpha: 0.15),
+                            valueColor: AlwaysStoppedAnimation<Color>(nextBadge.color),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color? iconColor;
+  const _StatChip({required this.icon, required this.value, required this.label, this.iconColor});
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 14, color: iconColor ?? Colors.white.withValues(alpha: 0.80)),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800)),
+          Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 9)),
+        ],
+      ),
     ),
   );
 }

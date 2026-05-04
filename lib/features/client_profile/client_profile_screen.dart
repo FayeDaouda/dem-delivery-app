@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../core/storage/auth_storage.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
+import '../../core/storage/auth_storage.dart';
+import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/referral_card.dart';
 
 class ClientProfileScreen extends StatefulWidget {
   const ClientProfileScreen({super.key});
@@ -176,6 +177,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     title: 'Mes commandes',
                     onTap: () => context.push('/orders/my'),
                   ),
+                  const SizedBox(height: 20),
+
+                  _SectionLabel(label: 'PARRAINAGE'),
+                  ReferralCard(referralCode: _user?['referralCode'] as String?),
                   const SizedBox(height: 20),
 
                   _SectionLabel(label: 'INFORMATIONS'),
