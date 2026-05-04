@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../admin_session.dart';
+import 'admin_acquisition_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -10,7 +11,9 @@ class AdminPanelScreen extends StatefulWidget {
   State<AdminPanelScreen> createState() => _AdminPanelScreenState();
 }
 
-class _AdminPanelScreenState extends State<AdminPanelScreen> {
+class _AdminPanelScreenState extends State<AdminPanelScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabCtrl;
   List<Map<String, dynamic>> _requests = [];
   bool _loading = true;
   String? _error;
@@ -18,7 +21,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl.addListener(() => setState(() {}));
     _fetch();
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _fetch() async {
@@ -121,55 +132,81 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // Compteur
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
+                    // Compteur demandes
+                    if (_tabCtrl.index == 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.phone_forwarded_outlined,
+                                color: Colors.white, size: 16),
+                            const SizedBox(width: 8),
+                            Text(
+                              _loading
+                                  ? 'Chargement…'
+                                  : '${_requests.length} demande${_requests.length != 1 ? 's' : ''} en attente',
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.phone_forwarded_outlined,
-                              color: Colors.white, size: 16),
-                          const SizedBox(width: 8),
-                          Text(
-                            _loading
-                                ? 'Chargement…'
-                                : '${_requests.length} demande${_requests.length != 1 ? 's' : ''} en attente',
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
               ),
             ),
           ),
 
+          // ── TabBar ──
+          Container(
+            color: AppColors.surface,
+            child: TabBar(
+              controller: _tabCtrl,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white54,
+              indicatorColor: Colors.white,
+              indicatorSize: TabBarIndicatorSize.label,
+              labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              tabs: const [
+                Tab(text: 'DEMANDES'),
+                Tab(text: 'ACQUISITION'),
+              ],
+            ),
+          ),
+
           // ── Corps ──
           Expanded(
-            child: Container(
-              color: AppColors.surface,
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                  : _error != null
-                      ? _buildError()
-                      : _requests.isEmpty
-                          ? _buildEmpty()
-                          : RefreshIndicator(
-                              color: AppColors.primary,
-                              onRefresh: _fetch,
-                              child: ListView.builder(
-                                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                                itemCount: _requests.length,
-                                itemBuilder: (_, i) =>
-                                    _RequestCard(driver: _requests[i], onResolve: _resolve),
-                              ),
-                            ),
+            child: TabBarView(
+              controller: _tabCtrl,
+              children: [
+                // Onglet 1 : demandes changement numéro
+                Container(
+                  color: AppColors.surface,
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                      : _error != null
+                          ? _buildError()
+                          : _requests.isEmpty
+                              ? _buildEmpty()
+                              : RefreshIndicator(
+                                  color: AppColors.primary,
+                                  onRefresh: _fetch,
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                                    itemCount: _requests.length,
+                                    itemBuilder: (_, i) =>
+                                        _RequestCard(driver: _requests[i], onResolve: _resolve),
+                                  ),
+                                ),
+                ),
+                // Onglet 2 : acquisition
+                const AdminAcquisitionScreen(),
+              ],
             ),
           ),
         ],
