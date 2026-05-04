@@ -178,4 +178,13 @@ class OrdersRepository {
       await _dio.patch('/users/driver/location', data: {'lat': lat, 'lng': lng});
     } catch (_) {}
   }
+
+  Future<bool> checkFreeCourse() async {
+    try {
+      final response = await _dio.get('/orders/free-course-check');
+      return response.data['eligible'] as bool? ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

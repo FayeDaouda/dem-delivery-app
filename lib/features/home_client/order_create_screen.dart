@@ -73,6 +73,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
   double _surgeMultiplier = 1.0;
   double? _estimatedPrice; // prix course (= ce que le livreur gagne)
   double _demFee = 0.0;    // frais DEM prélevés en sus au client
+  bool _freeCourseEligible = false; // 2ème course gratuite (100 premiers clients)
   bool _loadingSurge = false;
   bool _loadingGps   = false;
   bool _submitting   = false;
@@ -87,11 +88,17 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     _loadMapStyle();
     _fetchGpsInit();
     _loadUser();
+    _checkFreeCourse();
   }
 
   Future<void> _loadUser() async {
     final user = await AuthStorage.getUser();
     if (mounted) setState(() => _currentUser = user);
+  }
+
+  Future<void> _checkFreeCourse() async {
+    final eligible = await _repo.checkFreeCourse();
+    if (mounted) setState(() => _freeCourseEligible = eligible);
   }
 
   void _fillMe(TextEditingController nameCtrl, TextEditingController phoneCtrl) {
@@ -523,10 +530,12 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
           'description': _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
         if (_estimatedPrice != null) 'price': _estimatedPrice,
         if (_demFee > 0) 'demFee': _demFee,
+        if (_freeCourseEligible) 'freeCourse': true,
       });
 
       if (_estimatedPrice != null) order['price'] = _estimatedPrice;
       if (_demFee > 0) order['demFee'] = _demFee;
+      if (_freeCourseEligible) order['freeCourse'] = true;
       
       if (mounted) context.pushReplacement('/orders/confirmation', extra: order);
     } catch (e) {
@@ -756,6 +765,7 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
                               deliveryLabel: _deliveryCtrl.text.isNotEmpty ? _deliveryCtrl.text : 'Destination',
                               estimatedPrice: _estimatedPrice,
                               demFee: _demFee,
+                              freeCourse: _freeCourseEligible,
                               surgeMultiplier: _surgeMultiplier,
                               loadingSurge: _loadingSurge,
                               submitting: _submitting,
@@ -1415,6 +1425,7 @@ class _Step3Panel extends StatelessWidget {
   final String deliveryLabel;
   final double? estimatedPrice;
   final double demFee;
+  final bool freeCourse;
   final double surgeMultiplier;
   final bool loadingSurge;
   final bool submitting;
@@ -1424,6 +1435,7 @@ class _Step3Panel extends StatelessWidget {
   const _Step3Panel({
     required this.pickupLabel, required this.deliveryLabel,
     required this.estimatedPrice, required this.demFee,
+    required this.freeCourse,
     required this.surgeMultiplier,
     required this.loadingSurge, required this.submitting,
     required this.canSubmit, required this.onSubmit,
@@ -1448,6 +1460,31 @@ class _Step3Panel extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 10),
+
+        // Bannière 2ème course gratuite
+        if (freeCourse) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00C853).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.40)),
+            ),
+            child: const Row(children: [
+              Text('🎁', style: TextStyle(fontSize: 16)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '2ème course offerte — vous faites partie des 100 premiers !',
+                  style: TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 8),
+        ],
+
         // Price card
         Container(
           width: double.infinity,
@@ -1505,10 +1542,17 @@ class _Step3Panel extends StatelessWidget {
                       Row(children: [
                         const Text('TOTAL', style: TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
                         const Spacer(),
-                        Text(
-                          '${(estimatedPrice! + demFee).toInt()} FCFA',
-                          style: const TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.bold),
-                        ),
+                        if (freeCourse)
+                          const Row(children: [
+                            Text('0 FCFA', style: TextStyle(color: Color(0xFF00C853), fontSize: 22, fontWeight: FontWeight.bold)),
+                            SizedBox(width: 6),
+                            Text('🎁', style: TextStyle(fontSize: 16)),
+                          ])
+                        else
+                          Text(
+                            '${(estimatedPrice! + demFee).toInt()} FCFA',
+                            style: const TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.bold),
+                          ),
                       ]),
                     ] else
                       const Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 22)),
