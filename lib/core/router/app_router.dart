@@ -24,6 +24,8 @@ import '../../features/admin/screens/admin_panel_screen.dart';
 import '../../features/ambassador/screens/ambassador_onboarding_screen.dart';
 import '../../features/ambassador/screens/ambassador_pending_screen.dart';
 import '../../features/ambassador/screens/ambassador_dashboard_screen.dart';
+import '../../features/ambassador/screens/ambassador_add_driver_screen.dart';
+import '../../features/ambassador/screens/ambassador_rejected_screen.dart';
 
 import 'package:flutter/widgets.dart';
 
@@ -148,6 +150,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/ambassador/dashboard',
       builder: (context, state) => const AmbassadorDashboardScreen(),
+    ),
+    GoRoute(
+      path: '/ambassador/add-driver',
+      builder: (context, state) => const AmbassadorAddDriverScreen(),
+    ),
+    GoRoute(
+      path: '/ambassador/rejected',
+      builder: (context, state) => const AmbassadorRejectedScreen(),
     ),
 
     // ── Admin ──

@@ -60,6 +60,23 @@ class AmbassadorRepository {
     return res.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> resubmitOnboarding({
+    required String cniRecto,
+    required String cniVerso,
+    String? companyName,
+    String? ninea,
+    String? rccm,
+  }) async {
+    final res = await _dio.post('/ambassadors/onboarding/resubmit', data: {
+      'cniRecto': cniRecto,
+      'cniVerso': cniVerso,
+      if (companyName != null) 'companyName': companyName,
+      if (ninea != null) 'ninea': ninea,
+      if (rccm != null) 'rccm': rccm,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> requestFleetExtension({
     required int requestedSize,
     required String justification,

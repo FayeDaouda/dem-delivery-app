@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../data/ambassador_repository.dart';
 
@@ -80,7 +81,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
               IconButton(
                 icon: const Icon(Icons.add_circle_outline),
                 tooltip: 'Ajouter un livreur',
-                onPressed: () => Navigator.of(context).pushNamed('/ambassador/add-driver').then((_) => _loadDrivers()),
+                onPressed: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
               ),
             ],
           ),
@@ -151,7 +152,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
                           ElevatedButton.icon(
                             icon: const Icon(Icons.add),
                             label: const Text('Ajouter un livreur'),
-                            onPressed: () => Navigator.of(context).pushNamed('/ambassador/add-driver').then((_) => _loadDrivers()),
+                            onPressed: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
                             style: ElevatedButton.styleFrom(backgroundColor: _purple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
                           ),
                         ]),
@@ -169,7 +170,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).pushNamed('/ambassador/add-driver').then((_) => _loadDrivers()),
+        onPressed: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
         icon: const Icon(Icons.add),
         label: const Text('Ajouter livreur'),
         backgroundColor: _purple,
