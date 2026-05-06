@@ -24,6 +24,7 @@ class DriverProfileScreen extends StatefulWidget {
 class _DriverProfileScreenState extends State<DriverProfileScreen> {
   Map<String, dynamic>? _user;
   Map<String, dynamic>? _forfaitStatus;
+  List<Map<String, dynamic>>? _badgesConfig;
   String? _photoPath;
   static const _photoKey = 'driver_profile_photo';
   final _profileRepo = ProfileRepository();
@@ -32,7 +33,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   void initState() {
     super.initState();
     _load();
-    // Rebuild quand la langue change
     LocaleService.notifier.addListener(_onLangChange);
   }
 
@@ -48,8 +48,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final user  = await AuthStorage.getUser();
     final prefs = await SharedPreferences.getInstance();
     if (mounted) setState(() { _user = user; _photoPath = prefs.getString(_photoKey); });
-    final forfait = await _profileRepo.getForfaitStatus();
-    if (mounted) setState(() => _forfaitStatus = forfait);
+    final results = await Future.wait([
+      _profileRepo.getForfaitStatus(),
+      _profileRepo.getBadgesConfig(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _forfaitStatus = results[0] as Map<String, dynamic>?;
+        _badgesConfig  = results[1] as List<Map<String, dynamic>>?;
+      });
+    }
   }
 
   Future<void> _pickProfilePhoto() async {
@@ -464,7 +472,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   // ── Carte badge ──
-                  if (_user != null) _BadgeCard(user: _user!),
+                  if (_user != null) _BadgeCard(user: _user!, badgesConfig: _badgesConfig),
                   const SizedBox(height: 20),
                 ],
               ),
@@ -839,7 +847,8 @@ class _DragHandle extends StatelessWidget {
 // ── Carte badge driver ────────────────────────────────────────────────────────
 class _BadgeCard extends StatelessWidget {
   final Map<String, dynamic> user;
-  const _BadgeCard({required this.user});
+  final List<Map<String, dynamic>>? badgesConfig;
+  const _BadgeCard({required this.user, this.badgesConfig});
 
   @override
   Widget build(BuildContext context) {
@@ -847,7 +856,7 @@ class _BadgeCard extends StatelessWidget {
     final referrals = (user['referralCount']    as num?)?.toInt() ?? 0;
     final rating    = (user['averageRating']    as num?)?.toDouble() ?? 0.0;
 
-    final badge     = BadgeService.compute(courses: courses, referrals: referrals, rating: rating);
+    final badge     = BadgeService.compute(courses: courses, referrals: referrals, rating: rating, remoteConfig: badgesConfig);
     final nextBadge = BadgeService.next(badge.tier);
     final progress  = BadgeService.progressToCourses(courses: courses, current: badge.tier);
 

@@ -60,4 +60,14 @@ class ProfileRepository {
       return null;
     }
   }
+
+  Future<List<Map<String, dynamic>>?> getBadgesConfig() async {
+    try {
+      final response = await _dio.get('/users/badges/config');
+      final list = response.data['badges'] as List<dynamic>;
+      return list.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return null; // Fallback sur les valeurs hardcodées dans BadgeService
+    }
+  }
 }
