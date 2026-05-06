@@ -15,7 +15,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
-  // 3 animations décalées : slide up + fade
+  // 4 animations décalées : slide up + fade
   late final List<Animation<double>>  _fades;
   late final List<Animation<Offset>>  _slides;
 
@@ -27,21 +27,21 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
       duration: const Duration(milliseconds: 700),
     );
 
-    // Chaque carte démarre 120ms après la précédente
-    _fades = List.generate(3, (i) {
-      final start = 0.10 + i * 0.18;
+    // Chaque carte démarre 100ms après la précédente
+    _fades = List.generate(4, (i) {
+      final start = 0.08 + i * 0.15;
       return CurvedAnimation(
         parent: _ctrl,
-        curve: Interval(start, (start + 0.45).clamp(0.0, 1.0), curve: Curves.easeOut),
+        curve: Interval(start, (start + 0.40).clamp(0.0, 1.0), curve: Curves.easeOut),
       );
     });
 
-    _slides = List.generate(3, (i) {
-      final start = 0.10 + i * 0.18;
+    _slides = List.generate(4, (i) {
+      final start = 0.08 + i * 0.15;
       return Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(
         CurvedAnimation(
           parent: _ctrl,
-          curve: Interval(start, (start + 0.45).clamp(0.0, 1.0), curve: Curves.easeOutCubic),
+          curve: Interval(start, (start + 0.40).clamp(0.0, 1.0), curve: Curves.easeOutCubic),
         ),
       );
     });
@@ -61,6 +61,8 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
       if (!mounted) return;
       if (role == 'DRIVER') {
         context.go('/driver/onboarding?type=$vehicleType');
+      } else if (role == 'AMBASSADOR') {
+        context.go('/ambassador/onboarding');
       } else {
         context.go('/client/onboarding');
       }
@@ -155,6 +157,19 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                         color: AppColors.primaryDark,
                         loading: loading,
                         onTap: () => _select('DRIVER', vehicleType: 'TAXI'),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    _AnimatedCard(
+                      fade: _fades[3], slide: _slides[3],
+                      child: _RoleCard(
+                        icon: Icons.handshake_outlined,
+                        title: 'Ambassadeur DEM',
+                        subtitle: 'Je recrute et gère une flotte de livreurs',
+                        color: const Color(0xFF7C3AED),
+                        loading: loading,
+                        onTap: () => _select('AMBASSADOR'),
                       ),
                     ),
                   ],

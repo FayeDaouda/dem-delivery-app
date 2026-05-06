@@ -93,6 +93,12 @@ class _SplashScreenState extends State<SplashScreen>
     if (role == 'DRIVER' && vehicleType == 'TAXI') return '/driver/thiak/home';
     if (role == 'DRIVER') return '/driver/home';
     if (role == 'CLIENT') return '/client/home';
+    if (role == 'AMBASSADOR') {
+      final status = user?['ambassadorStatus'] as String?;
+      if (status == 'ACTIVE') return '/ambassador/dashboard';
+      if (status == 'PENDING') return '/ambassador/pending';
+      return '/ambassador/onboarding';
+    }
     return '/phone';
   }
 

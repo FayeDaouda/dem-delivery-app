@@ -21,6 +21,9 @@ import '../../features/profile/screens/driver_profile_screen.dart';
 import '../../features/home_driver/active_order_screen.dart';
 import '../../features/admin/screens/admin_login_screen.dart';
 import '../../features/admin/screens/admin_panel_screen.dart';
+import '../../features/ambassador/screens/ambassador_onboarding_screen.dart';
+import '../../features/ambassador/screens/ambassador_pending_screen.dart';
+import '../../features/ambassador/screens/ambassador_dashboard_screen.dart';
 
 import 'package:flutter/widgets.dart';
 
@@ -131,6 +134,20 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/driver/profile',
       builder: (context, state) => const DriverProfileScreen(),
+    ),
+
+    // ── Ambassadeur ──
+    GoRoute(
+      path: '/ambassador/onboarding',
+      builder: (context, state) => const AmbassadorOnboardingScreen(),
+    ),
+    GoRoute(
+      path: '/ambassador/pending',
+      builder: (context, state) => const AmbassadorPendingScreen(),
+    ),
+    GoRoute(
+      path: '/ambassador/dashboard',
+      builder: (context, state) => const AmbassadorDashboardScreen(),
     ),
 
     // ── Admin ──
