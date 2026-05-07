@@ -89,11 +89,16 @@ class _SplashScreenState extends State<SplashScreen>
 
     final role        = user?['role'] as String?;
     final vehicleType = user?['vehicleType'] as String?;
+    final isActive    = user?['isActive'] as bool? ?? true;
 
-    if (role == 'DRIVER' && vehicleType == 'TAXI') return '/driver/thiak/home';
-    if (role == 'DRIVER') return '/driver/home';
+    if (role == 'DRIVER') {
+      if (!isActive) return '/driver/suspended';
+      if (vehicleType == 'TAXI') return '/driver/thiak/home';
+      return '/driver/home';
+    }
     if (role == 'CLIENT') return '/client/home';
     if (role == 'AMBASSADOR') {
+      if (!isActive) return '/ambassador/suspended';
       final status = user?['ambassadorStatus'] as String?;
       if (status == 'ACTIVE')   return '/ambassador/dashboard';
       if (status == 'PENDING')  return '/ambassador/pending';

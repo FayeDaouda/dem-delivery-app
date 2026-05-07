@@ -107,12 +107,14 @@ class NotificationService {
   static String? _routeForType(String? type) => switch (type) {
     'AMBASSADOR_VALIDATED'      => '/ambassador/dashboard',
     'AMBASSADOR_REJECTED'       => '/ambassador/rejected',
+    'AMBASSADOR_SUSPENDED'      => '/ambassador/suspended',
     'DRIVER_VALIDATED_FOR_AM'   => '/ambassador/dashboard',
     'DRIVER_REJECTED_FOR_AM'    => '/ambassador/dashboard',
     'FLEET_EXTENSION_APPROVED'  => '/ambassador/dashboard',
     'FLEET_EXTENSION_REJECTED'  => '/ambassador/dashboard',
     'DRIVER_VALIDATED'          => '/driver/home',
     'DRIVER_REJECTED'           => '/phone',
+    'DRIVER_SUSPENDED'          => '/driver/suspended',
     _ => null,
   };
 
