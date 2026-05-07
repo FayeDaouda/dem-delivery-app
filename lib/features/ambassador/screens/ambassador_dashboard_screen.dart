@@ -77,6 +77,11 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
             ),
             actions: [
               IconButton(
+                icon: const Icon(Icons.person_outline),
+                tooltip: 'Mon profil',
+                onPressed: () => context.push('/ambassador/profile'),
+              ),
+              IconButton(
                 icon: const Icon(Icons.add_circle_outline),
                 tooltip: 'Ajouter un livreur',
                 onPressed: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
@@ -96,7 +101,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(children: [
-                const Text('Mes livreurs', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                const Text('Mes livreurs', style: TextStyle(color: Color.fromARGB(179, 0, 143, 252),fontSize: 16, fontWeight: FontWeight.w800)),
                 const Spacer(),
                 IconButton(icon: const Icon(Icons.refresh, size: 18), onPressed: _loadDrivers),
               ]),
