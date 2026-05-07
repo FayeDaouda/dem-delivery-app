@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
+import '../../../core/theme/app_theme.dart';
 import '../data/ambassador_repository.dart';
-
-const _purple = Color(0xFF7C3AED);
-const _purple2 = Color(0xFF5B21B6);
 
 class AmbassadorDashboardScreen extends StatefulWidget {
   const AmbassadorDashboardScreen({super.key});
@@ -52,18 +50,18 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F3FF),
+      backgroundColor: const Color(0xFFF5F9FF),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: 160,
             pinned: true,
-            backgroundColor: _purple,
+            backgroundColor: AppColors.primaryDark,
             foregroundColor: Colors.white,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [_purple, _purple2], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                  gradient: AppColors.gradientSplash,
                 ),
                 padding: const EdgeInsets.fromLTRB(20, 60, 20, 16),
                 child: Column(
@@ -89,7 +87,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
           // Stats cards
           SliverToBoxAdapter(
             child: _loadingStats
-                ? const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: _purple)))
+                ? const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: AppColors.primaryMid)))
                 : _buildStats(),
           ),
 
@@ -123,13 +121,24 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
-                        label: Text(f.$2, style: TextStyle(fontSize: 12, color: _driverFilter == f.$1 ? Colors.white : _purple)),
+                        label: Text(f.$2, style: TextStyle(
+                          fontSize: 12,
+                          color: _driverFilter == f.$1 ? Colors.white : AppColors.primaryMid,
+                          fontWeight: _driverFilter == f.$1 ? FontWeight.w700 : FontWeight.w500,
+                        )),
                         selected: _driverFilter == f.$1,
                         onSelected: (_) { setState(() => _driverFilter = f.$1); _loadDrivers(); },
-                        selectedColor: _purple,
-                        backgroundColor: _purple.withValues(alpha: 0.08),
+                        selectedColor: AppColors.primaryMid,
+                        backgroundColor: Colors.white,
                         showCheckmark: false,
-                        side: BorderSide(color: _purple.withValues(alpha: 0.25)),
+                        side: BorderSide(
+                          color: _driverFilter == f.$1
+                              ? AppColors.primaryMid
+                              : AppColors.primary.withValues(alpha: 0.40),
+                          width: 1.5,
+                        ),
+                        elevation: 0,
+                        pressElevation: 0,
                       ),
                     ),
                 ],
@@ -139,7 +148,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
 
           // Driver list
           _loadingDrivers
-              ? const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: _purple))))
+              ? const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: AppColors.primaryMid))))
               : _drivers.isEmpty
                   ? SliverToBoxAdapter(
                       child: Padding(
@@ -153,7 +162,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
                             icon: const Icon(Icons.add),
                             label: const Text('Ajouter un livreur'),
                             onPressed: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
-                            style: ElevatedButton.styleFrom(backgroundColor: _purple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMid, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
                           ),
                         ]),
                       ),
@@ -169,12 +178,32 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
                     ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
-        icon: const Icon(Icons.add),
-        label: const Text('Ajouter livreur'),
-        backgroundColor: _purple,
-        foregroundColor: Colors.white,
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.40), blurRadius: 12, offset: const Offset(0, 4))],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.add, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Ajouter livreur', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+              ]),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -190,7 +219,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
             const SizedBox(width: 10),
             _StatCard(label: 'En attente',      value: '${s['pendingCount'] ?? 0}', icon: Icons.hourglass_top_rounded, color: Colors.orange),
             const SizedBox(width: 10),
-            _StatCard(label: 'Courses total',   value: '${s['totalCourses'] ?? 0}', icon: Icons.motorcycle, color: _purple),
+            _StatCard(label: 'Courses total',   value: '${s['totalCourses'] ?? 0}', icon: Icons.motorcycle, color: AppColors.primaryMid),
           ]),
           const SizedBox(height: 10),
           Container(
@@ -198,7 +227,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)]),
             child: Row(children: [
-              const Icon(Icons.directions_bike, color: _purple, size: 20),
+              const Icon(Icons.directions_bike, color: AppColors.primaryMid, size: 20),
               const SizedBox(width: 10),
               Text('Flotte : ${s['fleetSize'] ?? 0} / ${s['fleetMax'] ?? 10} motos', style: const TextStyle(fontWeight: FontWeight.w700)),
               const Spacer(),
@@ -207,8 +236,8 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
                   onTap: _showFleetExtensionDialog,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: _purple.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                    child: const Text('+ Extension', style: TextStyle(color: _purple, fontWeight: FontWeight.w700, fontSize: 12)),
+                    decoration: BoxDecoration(color: AppColors.primaryMid.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                    child: const Text('+ Extension', style: TextStyle(color: AppColors.primaryMid, fontWeight: FontWeight.w700, fontSize: 12)),
                   ),
                 ),
             ]),
@@ -246,7 +275,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _purple, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMid, foregroundColor: Colors.white),
             onPressed: () async {
               final size = int.tryParse(sizeCtrl.text.trim());
               if (size == null || justCtrl.text.trim().isEmpty) return;
@@ -320,8 +349,8 @@ class _DriverTile extends StatelessWidget {
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)]),
       child: Row(children: [
         CircleAvatar(
-          backgroundColor: _purple.withValues(alpha: 0.12),
-          child: Text((driver['name'] ?? '?').toString()[0].toUpperCase(), style: const TextStyle(color: _purple, fontWeight: FontWeight.w700)),
+          backgroundColor: AppColors.primaryMid.withValues(alpha: 0.12),
+          child: Text((driver['name'] ?? '?').toString()[0].toUpperCase(), style: const TextStyle(color: AppColors.primaryMid, fontWeight: FontWeight.w700)),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
