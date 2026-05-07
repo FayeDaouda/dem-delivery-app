@@ -814,17 +814,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         ),
         const SizedBox(height: 16),
         _ServiceCard(
-          icon: Icons.motorcycle,
-          label: 'Transport',
-          subtitle: 'Déplacez-vous en moto',
-          color: const Color(0xFF1A6B7A),
-          onTap: () async {
-            await context.push('/orders/create?type=RIDE');
-            _checkPendingOrder();
-          },
-        ),
-        const SizedBox(height: 16),
-        _ServiceCard(
           icon: Icons.inventory_2_outlined,
           label: 'Livraison',
           subtitle: 'Envoyez ou recevez des colis',

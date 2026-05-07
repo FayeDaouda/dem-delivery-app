@@ -28,7 +28,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
     );
 
     // Chaque carte démarre 100ms après la précédente
-    _fades = List.generate(4, (i) {
+    _fades = List.generate(3, (i) {
       final start = 0.08 + i * 0.15;
       return CurvedAnimation(
         parent: _ctrl,
@@ -36,7 +36,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
       );
     });
 
-    _slides = List.generate(4, (i) {
+    _slides = List.generate(3, (i) {
       final start = 0.08 + i * 0.15;
       return Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(
         CurvedAnimation(
@@ -150,19 +150,6 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
 
                     _AnimatedCard(
                       fade: _fades[2], slide: _slides[2],
-                      child: _RoleCard(
-                        icon: Icons.directions_car_outlined,
-                        title: 'Chauffeur — Thiak Thiak',
-                        subtitle: 'Je transporte des passagers en taxi / clando',
-                        color: AppColors.primaryDark,
-                        loading: loading,
-                        onTap: () => _select('DRIVER', vehicleType: 'TAXI'),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    _AnimatedCard(
-                      fade: _fades[3], slide: _slides[3],
                       child: _RoleCard(
                         icon: Icons.handshake_outlined,
                         title: 'Ambassadeur DEM',
