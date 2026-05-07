@@ -79,11 +79,18 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
     final role        = user['role'] as String;
     final vehicleType = user['vehicleType'] as String?;
+    final isActive    = user['isActive'] as bool? ?? true;
 
-    if (role == 'DRIVER' && vehicleType == 'TAXI') {
-      context.go('/driver/thiak/home');
-    } else if (role == 'DRIVER') {
-      context.go('/driver/home');
+    if (role == 'DRIVER') {
+      if (!isActive) { context.go('/driver/suspended'); return; }
+      context.go(vehicleType == 'TAXI' ? '/driver/thiak/home' : '/driver/home');
+    } else if (role == 'AMBASSADOR') {
+      if (!isActive) { context.go('/ambassador/suspended'); return; }
+      final status = user['ambassadorStatus'] as String?;
+      if (status == 'ACTIVE')   { context.go('/ambassador/dashboard'); }
+      else if (status == 'PENDING')  { context.go('/ambassador/pending'); }
+      else if (status == 'REJECTED') { context.go('/ambassador/rejected'); }
+      else { context.go('/ambassador/onboarding'); }
     } else {
       context.go('/client/home');
     }
