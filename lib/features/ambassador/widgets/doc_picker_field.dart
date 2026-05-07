@@ -126,14 +126,14 @@ class _DocPickerFieldState extends State<DocPickerField> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: _url != null
-                  ? AppColors.primary.withValues(alpha: 0.06)
+                  ? Colors.green.shade50
                   : const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _error != null
                     ? Colors.red.shade300
                     : _url != null
-                        ? AppColors.primary.withValues(alpha: 0.40)
+                        ? Colors.green.shade300
                         : Colors.grey.shade200,
                 width: _url != null ? 1.5 : 1,
               ),
@@ -208,9 +208,9 @@ class _DoneState extends StatelessWidget {
     Expanded(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Icon(Icons.check_circle, color: AppColors.primary, size: 14),
+          Icon(Icons.check_circle, color: Colors.green.shade600, size: 14),
           const SizedBox(width: 4),
-          const Text('Document ajouté', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1F2937))),
+          Text('Document ajouté', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.green.shade800)),
         ]),
         const SizedBox(height: 2),
         Text(
