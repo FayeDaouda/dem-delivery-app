@@ -14,13 +14,15 @@ class ClientOnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen> {
-  final _nameController = TextEditingController();
+  final _nameController   = TextEditingController();
+  final _refCodeController = TextEditingController();
   bool    _loading   = false;
   String? _nameError;
 
   @override
   void dispose() {
     _nameController.dispose();
+    _refCodeController.dispose();
     super.dispose();
   }
 
@@ -37,7 +39,11 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
 
     setState(() { _loading = true; _nameError = null; });
     try {
-      final response = await ApiClient.dio.post('/users/client/onboarding', data: {'name': name});
+      final code = _refCodeController.text.trim().toUpperCase();
+      final response = await ApiClient.dio.post('/users/client/onboarding', data: {
+        'name': name,
+        if (code.isNotEmpty) 'usedReferralCode': code,
+      });
       final user = response.data['user'] as Map<String, dynamic>;
       await AuthStorage.saveUser(user);
       if (!mounted) return;
@@ -110,6 +116,25 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                   ),
                   onChanged: (_) { if (_nameError != null) setState(() => _nameError = null); },
                   onSubmitted: (_) => _submit(),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _refCodeController,
+                  textCapitalization: TextCapitalization.characters,
+                  style: const TextStyle(color: Colors.white, fontSize: 15, letterSpacing: 1.5),
+                  decoration: InputDecoration(
+                    hintText: 'Code de parrainage (optionnel)',
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.40), fontSize: 13, letterSpacing: 0),
+                    prefixIcon: const Icon(Icons.card_giftcard_outlined, color: Colors.white70),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 28),
                 SizedBox(

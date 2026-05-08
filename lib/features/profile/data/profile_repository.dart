@@ -23,11 +23,13 @@ class ProfileRepository {
   Future<Map<String, dynamic>> completeOnboarding({
     required String name,
     String? vehiclePlate,
+    String? usedReferralCode,
   }) async {
     try {
       final response = await _dio.post('/users/driver/onboarding', data: {
         'name': name,
         if (vehiclePlate != null && vehiclePlate.isNotEmpty) 'vehiclePlate': vehiclePlate,
+        if (usedReferralCode?.isNotEmpty == true) 'usedReferralCode': usedReferralCode,
       });
       final user = response.data['user'] as Map<String, dynamic>;
       await AuthStorage.saveUser(user);

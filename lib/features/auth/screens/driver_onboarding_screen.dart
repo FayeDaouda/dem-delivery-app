@@ -60,8 +60,9 @@ class DriverOnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen> {
-  final _nameController  = TextEditingController();
-  final _plateController = TextEditingController();
+  final _nameController   = TextEditingController();
+  final _plateController  = TextEditingController();
+  final _refCodeController = TextEditingController();
   bool    _loading   = false;
   String? _nameError;
 
@@ -71,6 +72,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   void dispose() {
     _nameController.dispose();
     _plateController.dispose();
+    _refCodeController.dispose();
     super.dispose();
   }
 
@@ -89,9 +91,11 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
 
     setState(() { _loading = true; _nameError = null; });
     try {
+      final code = _refCodeController.text.trim().toUpperCase();
       await ref.read(profileRepositoryProvider).completeOnboarding(
             name: name,
             vehiclePlate: _plateController.text.trim().replaceAll(' ', '').toUpperCase(),
+            usedReferralCode: code.isNotEmpty ? code : null,
           );
       await ref.read(profileProvider.notifier).fetchProfile();
       if (!mounted) return;
@@ -220,6 +224,20 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                           _isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
                           color: AppColors.textSecondary, size: 20,
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Code de parrainage ──
+                    _InputLabel('Code de parrainage (optionnel)'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _refCodeController,
+                      textCapitalization: TextCapitalization.characters,
+                      style: const TextStyle(color: AppColors.textPrimary, letterSpacing: 1.5, fontSize: 14),
+                      decoration: const InputDecoration(
+                        hintText: 'Ex : DEMD26AB34XY',
+                        prefixIcon: Icon(Icons.card_giftcard_outlined, color: AppColors.textSecondary, size: 20),
                       ),
                     ),
                     const SizedBox(height: 36),
