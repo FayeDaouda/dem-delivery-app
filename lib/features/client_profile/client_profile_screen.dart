@@ -6,6 +6,7 @@ import '../../core/config/app_config.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/referral_card.dart';
+import '../home_client/widgets/client_badge_card.dart';
 
 class ClientProfileScreen extends StatefulWidget {
   const ClientProfileScreen({super.key});
@@ -16,6 +17,7 @@ class ClientProfileScreen extends StatefulWidget {
 
 class _ClientProfileScreenState extends State<ClientProfileScreen> {
   Map<String, dynamic>? _user;
+  Map<String, dynamic>? _badgeData;
   bool _isLoading = false;
 
   @override
@@ -34,11 +36,44 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     try {
       final response = await ApiClient.dio.get('/users/me');
       if (response.statusCode == 200) {
-        final userData = response.data['data'] ?? response.data;
+        final userData = response.data['data'] ?? response.data as Map<String, dynamic>;
         await AuthStorage.saveUser(userData);
-        if (mounted) setState(() => _user = userData);
+        if (mounted) {
+          setState(() {
+            _user      = userData;
+            _badgeData = userData['clientBadgeData'] as Map<String, dynamic>?;
+          });
+        }
       }
     } catch (_) {}
+  }
+
+  void _showSupport() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          gradient: AppColors.gradientSplash,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 40, height: 4,
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          const Icon(Icons.support_agent_outlined, color: Colors.white, size: 40),
+          const SizedBox(height: 8),
+          const Text('Support DEM', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 20),
+          _SupportTile(icon: Icons.phone_outlined,      label: 'Appeler le support', sub: '+221 78 000 00 00', onTap: () => _launch('tel:+221780000000')),
+          const SizedBox(height: 10),
+          _SupportTile(icon: Icons.email_outlined,      label: 'Envoyer un e-mail',  sub: 'support@dem.sn',   onTap: () => _launch('mailto:support@dem.sn')),
+          const SizedBox(height: 10),
+          _SupportTile(icon: Icons.chat_bubble_outline, label: 'WhatsApp',           sub: '+221 78 000 00 00', onTap: () => _launch('https://wa.me/221780000000')),
+        ]),
+      ),
+    );
   }
 
   Future<void> _launch(String url) async {
@@ -179,8 +214,25 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   ),
                   const SizedBox(height: 20),
 
+                  // ── Badge ──
+                  if (_badgeData != null) ...[
+                    _SectionLabel(label: 'MON BADGE'),
+                    ClientBadgeCard(badgeData: _badgeData!),
+                    const SizedBox(height: 20),
+                  ],
+
                   _SectionLabel(label: 'PARRAINAGE'),
                   ReferralCard(referralCode: _user?['referralCode'] as String?),
+                  const SizedBox(height: 20),
+
+                  _SectionLabel(label: 'SUPPORT'),
+                  _MenuGroup(items: [
+                    _MenuItemData(
+                      icon: Icons.support_agent_outlined,
+                      title: 'Contacter DEM',
+                      onTap: _showSupport,
+                    ),
+                  ]),
                   const SizedBox(height: 20),
 
                   _SectionLabel(label: 'INFORMATIONS'),
@@ -224,6 +276,36 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       ),
     );
   }
+}
+
+// ── Support tile (utilisé dans le bottom sheet) ───────────────────────────────
+class _SupportTile extends StatelessWidget {
+  final IconData icon;
+  final String label, sub;
+  final VoidCallback onTap;
+  const _SupportTile({required this.icon, required this.label, required this.sub, required this.onTap});
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.white.withValues(alpha: 0.15),
+    borderRadius: BorderRadius.circular(14),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          Icon(icon, color: Colors.white, size: 22),
+          const SizedBox(width: 14),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+            Text(sub,   style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 12)),
+          ]),
+          const Spacer(),
+          Icon(Icons.chevron_right, color: Colors.white.withValues(alpha: 0.50), size: 20),
+        ]),
+      ),
+    ),
+  );
 }
 
 // ── Section label ─────────────────────────────────────────────────────────────

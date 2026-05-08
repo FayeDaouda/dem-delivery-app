@@ -21,7 +21,7 @@ import '../../core/theme/map_theme_provider.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
-import 'widgets/client_badge_card.dart';
+
 
 // Centre par défaut : Dakar
 const _dakar = LatLng(14.6937, -17.4441);
@@ -41,7 +41,6 @@ class HomeClientScreen extends ConsumerStatefulWidget {
 class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     with SingleTickerProviderStateMixin, RouteAware {
   Map<String, dynamic>? _user;
-  Map<String, dynamic>? _badgeData;
   List<Map<String, dynamic>> _pendingOrders = [];
   bool _loadingOrders = false;
   static const _kDeliveredKey = 'dem_shown_delivered_ids';
@@ -308,12 +307,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       final res  = await ApiClient.dio.get('/users/me');
       final user = res.data as Map<String, dynamic>;
       await AuthStorage.saveUser(user);
-      if (mounted) {
-        setState(() {
-          _user      = user;
-          _badgeData = user['clientBadgeData'] as Map<String, dynamic>?;
-        });
-      }
+      if (mounted) setState(() => _user = user);
     } catch (_) {}
   }
 
@@ -819,12 +813,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               ),
             ),
           ),
-        // Badge card
-        if (_badgeData != null) ...[
-          const SizedBox(height: 12),
-          ClientBadgeCard(badgeData: _badgeData!),
-        ],
-
         const Text(
           'Que voulez-vous faire ?',
           style: TextStyle(
