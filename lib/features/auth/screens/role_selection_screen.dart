@@ -86,12 +86,26 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
               bottom: false,
               child: SizedBox(
                 width: double.infinity,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    Image.asset('assets/DEM.png', width: 72, height: 72),
-                    const SizedBox(height: 32),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onTap: () => context.go('/phone'),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 16),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Center(child: Image.asset('assets/DEM.png', width: 72, height: 72)),
+                    ],
+                  ),
                 ),
               ),
             ),

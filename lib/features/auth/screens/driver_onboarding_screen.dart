@@ -121,9 +121,24 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
               bottom: false,
               child: SizedBox(
                 width: double.infinity,
-                child: Column(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Column(
                   children: [
-                    const SizedBox(height: 20),
+                    Row(children: [
+                      GestureDetector(
+                        onTap: () => context.go('/role-selection'),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 16),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
                     Container(
                       width: 72, height: 72,
                       decoration: BoxDecoration(
@@ -156,6 +171,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                     ),
                     const SizedBox(height: 24),
                   ],
+                  ),
                 ),
               ),
             ),

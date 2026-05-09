@@ -64,11 +64,23 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
         decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 48),
+                // Bouton retour
+                GestureDetector(
+                  onTap: () => context.go('/role-selection'),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 16),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 Image.asset('assets/DEM.png', width: 56, height: 56),
                 const SizedBox(height: 32),
                 const Text(
