@@ -116,7 +116,28 @@ class OrdersRepository {
       final response = await _dio.get('/orders/surge', queryParameters: {'lat': lat, 'lng': lng});
       return ((response.data['surgeMultiplier'] as num?) ?? 1.0).toDouble();
     } on DioException {
-      return 1.0; // fallback silencieux
+      return 1.0;
+    }
+  }
+
+  /// Estimation officielle depuis le backend (source de vérité unique).
+  /// Retourne null si hors ligne — l'appelant affiche un fallback.
+  Future<Map<String, dynamic>?> getEstimate({
+    required double pickupLat, required double pickupLng,
+    required double deliveryLat, required double deliveryLng,
+    String orderType = 'DELIVERY',
+  }) async {
+    try {
+      final res = await _dio.get('/orders/estimate', queryParameters: {
+        'pickupLat':   pickupLat,
+        'pickupLng':   pickupLng,
+        'deliveryLat': deliveryLat,
+        'deliveryLng': deliveryLng,
+        'orderType':   orderType,
+      });
+      return res.data as Map<String, dynamic>;
+    } on DioException {
+      return null;
     }
   }
 

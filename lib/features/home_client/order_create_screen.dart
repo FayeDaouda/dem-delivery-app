@@ -12,7 +12,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/config/app_config.dart';
-import '../../core/services/pricing_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/data/orders_repository.dart';
@@ -33,8 +32,6 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
   final _repo = OrdersRepository();
 
   // ── Constants ────────────────────────────────────────────────────────────
-  static const double _baseFare = 500;
-  static const double _pricePerKm = 200;
   static const LatLng _dakar = LatLng(14.6937, -17.4441);
 
   // ── Step wizard ──────────────────────────────────────────────────────────
@@ -339,28 +336,31 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     if (_pickupLat == null || _deliveryLat == null) return;
     setState(() => _loadingSurge = true);
     try {
-      final surge = await _repo.getSurgeMultiplier(_pickupLat!, _pickupLng!);
-      
+      // Trace de route (affichage visuel uniquement)
       final routeData = await _fetchRouteAndDistance(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
-      double dist = 0.0;
-      
       if (routeData != null && mounted) {
-        dist = routeData['distance'] as double;
         setState(() => _routePoints = routeData['points'] as List<LatLng>);
-      } else {
-        dist = _haversineKm(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
-        if (mounted) setState(() => _routePoints = [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)]);
+      } else if (mounted) {
+        setState(() => _routePoints = [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)]);
       }
 
-      final price = (_baseFare + dist * _pricePerKm) * surge;
-      final rounded = price.roundToDouble();
-      final fee = PricingService.computeFee(rounded);
-      if (mounted) setState(() {
-        _surgeMultiplier = surge;
-        _estimatedPrice = rounded;
-        _demFee = fee;
-        _loadingSurge = false;
-      });
+      // Estimation officielle depuis le backend — source de vérité unique
+      final estimate = await _repo.getEstimate(
+        pickupLat: _pickupLat!, pickupLng: _pickupLng!,
+        deliveryLat: _deliveryLat!, deliveryLng: _deliveryLng!,
+        orderType: widget.orderType,
+      );
+
+      if (estimate != null && mounted) {
+        setState(() {
+          _surgeMultiplier = (estimate['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
+          _estimatedPrice  = (estimate['price']           as num?)?.toDouble();
+          _demFee          = (estimate['demFee']          as num?)?.toDouble() ?? 0.0;
+          _loadingSurge    = false;
+        });
+      } else if (mounted) {
+        setState(() => _loadingSurge = false);
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingSurge = false);
     }
@@ -382,14 +382,6 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     return result;
   }
 
-  double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
-    const r = 6371.0;
-    final dLat = (lat2 - lat1) * pi / 180;
-    final dLng = (lng2 - lng1) * pi / 180;
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLng / 2) * sin(dLng / 2);
-    return r * 2 * atan2(sqrt(a), sqrt(1 - a));
-  }
 
   // ── Step navigation ───────────────────────────────────────────────────────
   bool get _routeComplete => _pickupLat != null && _deliveryLat != null;

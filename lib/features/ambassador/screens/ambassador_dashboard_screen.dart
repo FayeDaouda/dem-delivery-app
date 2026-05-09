@@ -9,7 +9,6 @@ class AmbassadorDashboardScreen extends StatefulWidget {
   @override
   State<AmbassadorDashboardScreen> createState() => _State();
 }
-
 class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderStateMixin {
   final _repo     = AmbassadorRepository(ApiClient.dio);
   late TabController _tabs;
