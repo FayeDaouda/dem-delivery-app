@@ -21,13 +21,13 @@ import '../../features/profile/screens/driver_profile_screen.dart';
 import '../../features/home_driver/active_order_screen.dart';
 import '../../features/admin/screens/admin_login_screen.dart';
 import '../../features/admin/screens/admin_panel_screen.dart';
-import '../../features/ambassador/screens/ambassador_onboarding_screen.dart';
-import '../../features/ambassador/screens/ambassador_pending_screen.dart';
-import '../../features/ambassador/screens/ambassador_dashboard_screen.dart';
-import '../../features/ambassador/screens/ambassador_add_driver_screen.dart';
-import '../../features/ambassador/screens/ambassador_rejected_screen.dart';
-import '../../features/ambassador/screens/ambassador_suspended_screen.dart';
-import '../../features/ambassador/screens/ambassador_profile_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_onboarding_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_pending_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_dashboard_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_add_driver_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_rejected_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_suspended_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_profile_screen.dart';
 import '../../features/profile/screens/driver_suspended_screen.dart';
 
 import 'package:flutter/widgets.dart';
@@ -141,34 +141,34 @@ final appRouter = GoRouter(
       builder: (context, state) => const DriverProfileScreen(),
     ),
 
-    // ── Ambassadeur ──
+    // ── Chef de flotte ──
     GoRoute(
-      path: '/ambassador/onboarding',
-      builder: (context, state) => const AmbassadorOnboardingScreen(),
+      path: '/chef-de-flotte/onboarding',
+      builder: (context, state) => const ChefDeFlotteOnboardingScreen(),
     ),
     GoRoute(
-      path: '/ambassador/pending',
-      builder: (context, state) => const AmbassadorPendingScreen(),
+      path: '/chef-de-flotte/pending',
+      builder: (context, state) => const ChefDeFlottePendingScreen(),
     ),
     GoRoute(
-      path: '/ambassador/dashboard',
-      builder: (context, state) => const AmbassadorDashboardScreen(),
+      path: '/chef-de-flotte/dashboard',
+      builder: (context, state) => const ChefDeFlotteDashboardScreen(),
     ),
     GoRoute(
-      path: '/ambassador/add-driver',
-      builder: (context, state) => const AmbassadorAddDriverScreen(),
+      path: '/chef-de-flotte/add-driver',
+      builder: (context, state) => const ChefDeFlotteAddDriverScreen(),
     ),
     GoRoute(
-      path: '/ambassador/rejected',
-      builder: (context, state) => const AmbassadorRejectedScreen(),
+      path: '/chef-de-flotte/rejected',
+      builder: (context, state) => const ChefDeFlotteRejectedScreen(),
     ),
     GoRoute(
-      path: '/ambassador/suspended',
-      builder: (context, state) => const AmbassadorSuspendedScreen(),
+      path: '/chef-de-flotte/suspended',
+      builder: (context, state) => const ChefDeFlotteSuspendedScreen(),
     ),
     GoRoute(
-      path: '/ambassador/profile',
-      builder: (context, state) => const AmbassadorProfileScreen(),
+      path: '/chef-de-flotte/profile',
+      builder: (context, state) => const ChefDeFlotteProfileScreen(),
     ),
     GoRoute(
       path: '/driver/suspended',

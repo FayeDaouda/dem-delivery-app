@@ -3,17 +3,17 @@ import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/profile/data/profile_repository.dart';
-import '../data/ambassador_repository.dart';
+import '../data/chef_de_flotte_repository.dart';
 import '../widgets/doc_picker_field.dart';
 
-class AmbassadorRejectedScreen extends StatefulWidget {
-  const AmbassadorRejectedScreen({super.key});
+class ChefDeFlotteRejectedScreen extends StatefulWidget {
+  const ChefDeFlotteRejectedScreen({super.key});
   @override
-  State<AmbassadorRejectedScreen> createState() => _State();
+  State<ChefDeFlotteRejectedScreen> createState() => _State();
 }
 
-class _State extends State<AmbassadorRejectedScreen> {
-  final _repo        = AmbassadorRepository(ApiClient.dio);
+class _State extends State<ChefDeFlotteRejectedScreen> {
+  final _repo        = ChefDeFlotteRepository(ApiClient.dio);
   final _profileRepo = ProfileRepository();
 
   String? _cniRecto;
@@ -66,7 +66,7 @@ class _State extends State<AmbassadorRejectedScreen> {
         ninea:       _nineaCtrl.text.trim().isEmpty   ? null : _nineaCtrl.text.trim(),
         rccm:        _rccmCtrl.text.trim().isEmpty    ? null : _rccmCtrl.text.trim(),
       );
-      if (mounted) context.go('/ambassador/pending');
+      if (mounted) context.go('/chef-de-flotte/pending');
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {

@@ -7,17 +7,17 @@ import '../../../core/api/api_client.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/profile/data/profile_repository.dart';
-import '../data/ambassador_repository.dart';
+import '../data/chef_de_flotte_repository.dart';
 
-class AmbassadorProfileScreen extends StatefulWidget {
-  const AmbassadorProfileScreen({super.key});
+class ChefDeFlotteProfileScreen extends StatefulWidget {
+  const ChefDeFlotteProfileScreen({super.key});
   @override
-  State<AmbassadorProfileScreen> createState() => _State();
+  State<ChefDeFlotteProfileScreen> createState() => _State();
 }
 
-class _State extends State<AmbassadorProfileScreen> {
+class _State extends State<ChefDeFlotteProfileScreen> {
   final _profileRepo = ProfileRepository();
-  final _amRepo      = AmbassadorRepository(ApiClient.dio);
+  final _amRepo      = ChefDeFlotteRepository(ApiClient.dio);
   final _picker      = ImagePicker();
 
   Map<String, dynamic>?       _user;
@@ -182,7 +182,7 @@ class _State extends State<AmbassadorProfileScreen> {
 
     final name         = _user?['name']            as String? ?? '—';
     final phone        = _user?['phone']           as String? ?? '—';
-    final status       = _user?['ambassadorStatus'] as String? ?? 'PENDING';
+    final status       = _user?['chefDeFlotteStatus'] as String? ?? 'PENDING';
     final avatarUrl    = _user?['avatar']          as String?;
     final companyName  = _user?['companyName']     as String?;
     final ninea        = _user?['ninea']            as String?;
@@ -401,7 +401,7 @@ class _DriverCard extends StatelessWidget {
   const _DriverCard({required this.driver, required this.expanded, required this.onToggle});
 
   Color get _statusColor {
-    final s = driver['ambassadorStatus'] as String? ?? '';
+    final s = driver['chefDeFlotteStatus'] as String? ?? '';
     final active = driver['isActive'] as bool? ?? false;
     if (s == 'ACTIVE' && active)  return Colors.green;
     if (s == 'ACTIVE' && !active) return Colors.grey;
@@ -411,7 +411,7 @@ class _DriverCard extends StatelessWidget {
   }
 
   String get _statusLabel {
-    final s = driver['ambassadorStatus'] as String? ?? '';
+    final s = driver['chefDeFlotteStatus'] as String? ?? '';
     final active = driver['isActive'] as bool? ?? false;
     if (s == 'ACTIVE' && active)  return 'Actif';
     if (s == 'ACTIVE' && !active) return 'Suspendu';

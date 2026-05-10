@@ -61,8 +61,8 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
       if (!mounted) return;
       if (role == 'DRIVER') {
         context.go('/driver/onboarding?type=$vehicleType');
-      } else if (role == 'AMBASSADOR') {
-        context.go('/ambassador/onboarding');
+      } else if (role == 'CHEF_DE_FLOTTE') {
+        context.go('/chef-de-flotte/onboarding');
       } else {
         context.go('/client/onboarding');
       }
@@ -166,11 +166,11 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                       fade: _fades[2], slide: _slides[2],
                       child: _RoleCard(
                         icon: Icons.handshake_outlined,
-                        title: 'Ambassadeur DEM',
+                        title: 'Chef de flotte DEM',
                         subtitle: 'Je recrute et gère une flotte de livreurs',
                         color: const Color(0xFF7C3AED),
                         loading: loading,
-                        onTap: () => _select('AMBASSADOR'),
+                        onTap: () => _select('CHEF_DE_FLOTTE'),
                       ),
                     ),
                   ],

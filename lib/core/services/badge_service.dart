@@ -31,7 +31,7 @@ class BadgeService {
     BadgeInfo(
       tier: DriverBadge.gainde,
       name: 'DEM Gainde',
-      subtitle: '12 courses garanties/sem + ambassadeur',
+      subtitle: '12 courses garanties/sem + chef de flotte',
       color: Color(0xFFFFD700),
       bgColor: Color(0xFFFFF8E1),
       icon: Icons.military_tech,

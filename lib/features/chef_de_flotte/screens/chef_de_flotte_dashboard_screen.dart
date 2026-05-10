@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
-import '../data/ambassador_repository.dart';
+import '../data/chef_de_flotte_repository.dart';
 
-class AmbassadorDashboardScreen extends StatefulWidget {
-  const AmbassadorDashboardScreen({super.key});
+class ChefDeFlotteDashboardScreen extends StatefulWidget {
+  const ChefDeFlotteDashboardScreen({super.key});
   @override
-  State<AmbassadorDashboardScreen> createState() => _State();
+  State<ChefDeFlotteDashboardScreen> createState() => _State();
 }
-class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderStateMixin {
-  final _repo     = AmbassadorRepository(ApiClient.dio);
+class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProviderStateMixin {
+  final _repo     = ChefDeFlotteRepository(ApiClient.dio);
   late TabController _tabs;
 
   Map<String, dynamic>? _stats;
@@ -67,9 +67,9 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const Text('Mon espace Ambassadeur', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    const Text('Mon espace Chef de flotte', style: TextStyle(color: Colors.white70, fontSize: 12)),
                     const SizedBox(height: 4),
-                    const Text('DEM Ambassador', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                    const Text('DEM Chef de flotte', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
                   ],
                 ),
               ),
@@ -78,12 +78,12 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
               IconButton(
                 icon: const Icon(Icons.person_outline),
                 tooltip: 'Mon profil',
-                onPressed: () => context.push('/ambassador/profile'),
+                onPressed: () => context.push('/chef-de-flotte/profile'),
               ),
               IconButton(
                 icon: const Icon(Icons.add_circle_outline),
                 tooltip: 'Ajouter un livreur',
-                onPressed: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
+                onPressed: () => context.push('/chef-de-flotte/add-driver').then((_) => _loadDrivers()),
               ),
             ],
           ),
@@ -165,7 +165,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
                           ElevatedButton.icon(
                             icon: const Icon(Icons.add),
                             label: const Text('Ajouter un livreur'),
-                            onPressed: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
+                            onPressed: () => context.push('/chef-de-flotte/add-driver').then((_) => _loadDrivers()),
                             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMid, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
                           ),
                         ]),
@@ -197,7 +197,7 @@ class _State extends State<AmbassadorDashboardScreen> with SingleTickerProviderS
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => context.push('/ambassador/add-driver').then((_) => _loadDrivers()),
+            onTap: () => context.push('/chef-de-flotte/add-driver').then((_) => _loadDrivers()),
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -325,7 +325,7 @@ class _DriverTile extends StatelessWidget {
   const _DriverTile({required this.driver});
 
   Color get _statusColor {
-    final s = driver['ambassadorStatus'] as String? ?? '';
+    final s = driver['chefDeFlotteStatus'] as String? ?? '';
     final active = driver['isActive'] as bool? ?? false;
     if (s == 'ACTIVE' && active) return Colors.green;
     if (s == 'PENDING') return Colors.orange;
@@ -334,7 +334,7 @@ class _DriverTile extends StatelessWidget {
   }
 
   String get _statusLabel {
-    final s = driver['ambassadorStatus'] as String? ?? '';
+    final s = driver['chefDeFlotteStatus'] as String? ?? '';
     final active = driver['isActive'] as bool? ?? false;
     if (s == 'ACTIVE' && active) return 'Actif';
     if (s == 'ACTIVE' && !active) return 'Suspendu';

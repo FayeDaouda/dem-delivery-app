@@ -84,13 +84,13 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (role == 'DRIVER') {
       if (!isActive) { context.go('/driver/suspended'); return; }
       context.go(vehicleType == 'TAXI' ? '/driver/thiak/home' : '/driver/home');
-    } else if (role == 'AMBASSADOR') {
-      if (!isActive) { context.go('/ambassador/suspended'); return; }
-      final status = user['ambassadorStatus'] as String?;
-      if (status == 'ACTIVE')   { context.go('/ambassador/dashboard'); }
-      else if (status == 'PENDING')  { context.go('/ambassador/pending'); }
-      else if (status == 'REJECTED') { context.go('/ambassador/rejected'); }
-      else { context.go('/ambassador/onboarding'); }
+    } else if (role == 'CHEF_DE_FLOTTE') {
+      if (!isActive) { context.go('/chef-de-flotte/suspended'); return; }
+      final status = user['chefDeFlotteStatus'] as String?;
+      if (status == 'ACTIVE')   { context.go('/chef-de-flotte/dashboard'); }
+      else if (status == 'PENDING')  { context.go('/chef-de-flotte/pending'); }
+      else if (status == 'REJECTED') { context.go('/chef-de-flotte/rejected'); }
+      else { context.go('/chef-de-flotte/onboarding'); }
     } else {
       context.go('/client/home');
     }

@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
 
-class AmbassadorRepository {
+class ChefDeFlotteRepository {
   final Dio _dio;
-  const AmbassadorRepository(this._dio);
+  const ChefDeFlotteRepository(this._dio);
 
   Future<Map<String, dynamic>> submitOnboarding({
     required String cniRecto,
@@ -11,7 +11,7 @@ class AmbassadorRepository {
     String? ninea,
     String? rccm,
   }) async {
-    final res = await _dio.post('/ambassadors/onboarding', data: {
+    final res = await _dio.post('/chefs-de-flotte/onboarding', data: {
       'cniRecto': cniRecto,
       'cniVerso': cniVerso,
       if (companyName != null) 'companyName': companyName,
@@ -22,12 +22,12 @@ class AmbassadorRepository {
   }
 
   Future<Map<String, dynamic>> getStats() async {
-    final res = await _dio.get('/ambassadors/me/stats');
+    final res = await _dio.get('/chefs-de-flotte/me/stats');
     return res.data as Map<String, dynamic>;
   }
 
   Future<List<Map<String, dynamic>>> getDrivers({String? status}) async {
-    final res = await _dio.get('/ambassadors/me/drivers',
+    final res = await _dio.get('/chefs-de-flotte/me/drivers',
       queryParameters: status != null ? {'status': status} : null);
     final list = res.data['drivers'] as List<dynamic>;
     return list.cast<Map<String, dynamic>>();
@@ -45,7 +45,7 @@ class AmbassadorRepository {
     String? insuranceExpiry,
     String? casquePhoto,
   }) async {
-    final res = await _dio.post('/ambassadors/me/drivers', data: {
+    final res = await _dio.post('/chefs-de-flotte/me/drivers', data: {
       'phone': phone,
       'name': name,
       'vehicleType': vehicleType,
@@ -67,7 +67,7 @@ class AmbassadorRepository {
     String? ninea,
     String? rccm,
   }) async {
-    final res = await _dio.post('/ambassadors/onboarding/resubmit', data: {
+    final res = await _dio.post('/chefs-de-flotte/onboarding/resubmit', data: {
       'cniRecto': cniRecto,
       'cniVerso': cniVerso,
       if (companyName != null) 'companyName': companyName,
@@ -81,7 +81,7 @@ class AmbassadorRepository {
     required int requestedSize,
     required String justification,
   }) async {
-    final res = await _dio.post('/ambassadors/me/fleet-extension', data: {
+    final res = await _dio.post('/chefs-de-flotte/me/fleet-extension', data: {
       'requestedSize': requestedSize,
       'justification': justification,
     });

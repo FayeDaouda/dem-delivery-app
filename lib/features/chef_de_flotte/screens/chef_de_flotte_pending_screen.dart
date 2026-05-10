@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
-import '../data/ambassador_repository.dart';
+import '../data/chef_de_flotte_repository.dart';
 
-class AmbassadorPendingScreen extends StatefulWidget {
-  const AmbassadorPendingScreen({super.key});
+class ChefDeFlottePendingScreen extends StatefulWidget {
+  const ChefDeFlottePendingScreen({super.key});
   @override
-  State<AmbassadorPendingScreen> createState() => _State();
+  State<ChefDeFlottePendingScreen> createState() => _State();
 }
 
-class _State extends State<AmbassadorPendingScreen> {
-  final _repo = AmbassadorRepository(ApiClient.dio);
+class _State extends State<ChefDeFlottePendingScreen> {
+  final _repo = ChefDeFlotteRepository(ApiClient.dio);
 
   Map<String, dynamic>? _stats;
 
@@ -167,7 +167,7 @@ class _State extends State<AmbassadorPendingScreen> {
               _GradientButton(
                 label: 'Gérer mes livreurs',
                 icon: Icons.group_add_outlined,
-                onTap: () => context.push('/ambassador/dashboard'),
+                onTap: () => context.push('/chef-de-flotte/dashboard'),
               ),
             ],
           ),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
-import '../data/ambassador_repository.dart';
+import '../data/chef_de_flotte_repository.dart';
 import '../widgets/doc_picker_field.dart';
 
 class _PhoneFormatter extends TextInputFormatter {
@@ -20,14 +20,14 @@ class _PhoneFormatter extends TextInputFormatter {
   }
 }
 
-class AmbassadorAddDriverScreen extends StatefulWidget {
-  const AmbassadorAddDriverScreen({super.key});
+class ChefDeFlotteAddDriverScreen extends StatefulWidget {
+  const ChefDeFlotteAddDriverScreen({super.key});
   @override
-  State<AmbassadorAddDriverScreen> createState() => _State();
+  State<ChefDeFlotteAddDriverScreen> createState() => _State();
 }
 
-class _State extends State<AmbassadorAddDriverScreen> {
-  final _repo          = AmbassadorRepository(ApiClient.dio);
+class _State extends State<ChefDeFlotteAddDriverScreen> {
+  final _repo          = ChefDeFlotteRepository(ApiClient.dio);
   final _pageCtrl      = PageController();
   int   _step          = 0;
   static const _total  = 3;

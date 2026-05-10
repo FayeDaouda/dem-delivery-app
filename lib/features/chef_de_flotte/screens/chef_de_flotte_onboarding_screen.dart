@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
-import '../data/ambassador_repository.dart';
+import '../data/chef_de_flotte_repository.dart';
 import '../widgets/doc_picker_field.dart';
 
-class AmbassadorOnboardingScreen extends StatefulWidget {
-  const AmbassadorOnboardingScreen({super.key});
+class ChefDeFlotteOnboardingScreen extends StatefulWidget {
+  const ChefDeFlotteOnboardingScreen({super.key});
   @override
-  State<AmbassadorOnboardingScreen> createState() => _State();
+  State<ChefDeFlotteOnboardingScreen> createState() => _State();
 }
 
-class _State extends State<AmbassadorOnboardingScreen> {
-  final _repo = AmbassadorRepository(ApiClient.dio);
+class _State extends State<ChefDeFlotteOnboardingScreen> {
+  final _repo = ChefDeFlotteRepository(ApiClient.dio);
 
   String? _cniRecto;
   String? _cniVerso;
@@ -38,7 +38,7 @@ class _State extends State<AmbassadorOnboardingScreen> {
         ninea:       _nineaCtrl.text.trim().isEmpty   ? null : _nineaCtrl.text.trim(),
         rccm:        _rccmCtrl.text.trim().isEmpty    ? null : _rccmCtrl.text.trim(),
       );
-      if (mounted) context.go('/ambassador/pending');
+      if (mounted) context.go('/chef-de-flotte/pending');
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -91,7 +91,7 @@ class _State extends State<AmbassadorOnboardingScreen> {
                     child: const Icon(Icons.handshake_outlined, color: Colors.white, size: 30),
                   ),
                   const SizedBox(height: 12),
-                  const Text('Devenir Ambassadeur DEM',
+                  const Text('Devenir Chef de flotte DEM',
                     style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   Text('Soumettez votre dossier — validation sous 24–48h',

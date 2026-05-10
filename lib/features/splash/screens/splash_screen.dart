@@ -97,13 +97,13 @@ class _SplashScreenState extends State<SplashScreen>
       return '/driver/home';
     }
     if (role == 'CLIENT') return '/client/home';
-    if (role == 'AMBASSADOR') {
-      if (!isActive) return '/ambassador/suspended';
-      final status = user?['ambassadorStatus'] as String?;
-      if (status == 'ACTIVE')   return '/ambassador/dashboard';
-      if (status == 'PENDING')  return '/ambassador/pending';
-      if (status == 'REJECTED') return '/ambassador/rejected';
-      return '/ambassador/onboarding';
+    if (role == 'CHEF_DE_FLOTTE') {
+      if (!isActive) return '/chef-de-flotte/suspended';
+      final status = user?['chefDeFlotteStatus'] as String?;
+      if (status == 'ACTIVE')   return '/chef-de-flotte/dashboard';
+      if (status == 'PENDING')  return '/chef-de-flotte/pending';
+      if (status == 'REJECTED') return '/chef-de-flotte/rejected';
+      return '/chef-de-flotte/onboarding';
     }
     return '/phone';
   }

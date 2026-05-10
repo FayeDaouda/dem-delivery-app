@@ -105,16 +105,29 @@ class NotificationService {
   // ── Mapping type → route ──────────────────────────────────────────────────
 
   static String? _routeForType(String? type) => switch (type) {
-    'AMBASSADOR_VALIDATED'      => '/ambassador/dashboard',
-    'AMBASSADOR_REJECTED'       => '/ambassador/rejected',
-    'AMBASSADOR_SUSPENDED'      => '/ambassador/suspended',
-    'DRIVER_VALIDATED_FOR_AM'   => '/ambassador/dashboard',
-    'DRIVER_REJECTED_FOR_AM'    => '/ambassador/dashboard',
-    'FLEET_EXTENSION_APPROVED'  => '/ambassador/dashboard',
-    'FLEET_EXTENSION_REJECTED'  => '/ambassador/dashboard',
+    // ── Admin / validation ──────────────────────────────────────────────────
+    'CHEF_DE_FLOTTE_VALIDATED'      => '/chef-de-flotte/dashboard',
+    'CHEF_DE_FLOTTE_REJECTED'       => '/chef-de-flotte/rejected',
+    'CHEF_DE_FLOTTE_SUSPENDED'      => '/chef-de-flotte/suspended',
+    'DRIVER_VALIDATED_FOR_AM'   => '/chef-de-flotte/dashboard',
+    'DRIVER_REJECTED_FOR_AM'    => '/chef-de-flotte/dashboard',
+    'FLEET_EXTENSION_APPROVED'  => '/chef-de-flotte/dashboard',
+    'FLEET_EXTENSION_REJECTED'  => '/chef-de-flotte/dashboard',
     'DRIVER_VALIDATED'          => '/driver/home',
     'DRIVER_REJECTED'           => '/phone',
     'DRIVER_SUSPENDED'          => '/driver/suspended',
+    // ── Orders — driver ─────────────────────────────────────────────────────
+    'ORDER_OFFER'               => '/driver/home',     // socket affiche le modal d'offre
+    'ORDER_CANCELLED'           => '/driver/home',     // client a annulé avant acceptation
+    // ── Orders — client ─────────────────────────────────────────────────────
+    'ORDER_ACCEPTED'            => '/client/home',
+    'ORDER_PICKED_UP'           => '/client/home',
+    'ORDER_DELIVERED'           => '/orders/my',
+    'ORDER_SEARCHING'           => '/client/home',     // on cherche encore un livreur
+    'ORDER_AUTO_CANCELLED'      => '/client/home',     // annulation auto après 15 min
+    'DISPUTE_OPENED'            => '/orders/my',       // litige signalé → historique
+    // ── Paiement — driver ───────────────────────────────────────────────────
+    'PAYMENT_RESOLVED'          => '/driver/home',     // admin confirme paiement
     _ => null,
   };
 

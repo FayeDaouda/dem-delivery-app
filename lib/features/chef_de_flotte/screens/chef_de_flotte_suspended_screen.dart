@@ -4,13 +4,13 @@ import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../profile/data/profile_repository.dart';
 
-class AmbassadorSuspendedScreen extends StatefulWidget {
-  const AmbassadorSuspendedScreen({super.key});
+class ChefDeFlotteSuspendedScreen extends StatefulWidget {
+  const ChefDeFlotteSuspendedScreen({super.key});
   @override
-  State<AmbassadorSuspendedScreen> createState() => _State();
+  State<ChefDeFlotteSuspendedScreen> createState() => _State();
 }
 
-class _State extends State<AmbassadorSuspendedScreen> {
+class _State extends State<ChefDeFlotteSuspendedScreen> {
   String? _suspensionReason;
   bool    _loading = true;
 
@@ -72,7 +72,7 @@ class _State extends State<AmbassadorSuspendedScreen> {
                         const Text('Espace suspendu',
                             style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        Text('Votre espace ambassadeur est temporairement suspendu',
+                        Text('Votre espace chef de flotte est temporairement suspendu',
                             style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12),
                             textAlign: TextAlign.center),
                       ]),
@@ -120,7 +120,7 @@ class _State extends State<AmbassadorSuspendedScreen> {
                             bgColor: AppColors.primary.withValues(alpha: 0.06),
                             borderColor: AppColors.primary.withValues(alpha: 0.20),
                             title: 'Compte suspendu',
-                            body: 'Votre espace ambassadeur a été suspendu. Votre flotte de livreurs est également suspendue jusqu\'à réactivation.',
+                            body: 'Votre espace chef de flotte a été suspendu. Votre flotte de livreurs est également suspendue jusqu\'à réactivation.',
                           ),
                           const SizedBox(height: 16),
                         ],
