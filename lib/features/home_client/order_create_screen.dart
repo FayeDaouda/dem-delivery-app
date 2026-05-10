@@ -9,7 +9,6 @@ import 'package:geocoding/geocoding.dart' as geo;
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/storage/auth_storage.dart';
@@ -397,18 +396,20 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
     required TextEditingController nameCtrl,
     required TextEditingController phoneCtrl,
   }) async {
-    final status = await Permission.contacts.status;
-    bool granted = status.isGranted || status.isLimited;
-    if (!granted) {
-      final result = await Permission.contacts.request();
-      granted = result.isGranted || result.isLimited;
-    }
+    final status = await FlutterContacts.permissions.request(PermissionType.read);
+    final granted = status == PermissionStatus.granted || status == PermissionStatus.limited;
+
     if (!granted) {
       if (!mounted) return;
+      final canOpenSettings = status == PermissionStatus.permanentlyDenied ||
+          status == PermissionStatus.restricted;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Text('Accès aux contacts refusé'),
-        action: status.isPermanentlyDenied
-            ? SnackBarAction(label: 'Paramètres', onPressed: openAppSettings)
+        action: canOpenSettings
+            ? SnackBarAction(
+                label: 'Paramètres',
+                onPressed: FlutterContacts.permissions.openSettings,
+              )
             : null,
       ));
       return;
