@@ -814,7 +814,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             ),
           ),
         const Text(
-          'Que voulez-vous faire ?',
+          'Votre livraison en quelques clics',
           style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 18,
