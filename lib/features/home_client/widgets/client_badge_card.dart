@@ -20,7 +20,6 @@ class ClientBadgeCard extends StatelessWidget {
     final badge  = badgeData['badge']     as String?;
     final name   = badgeData['badgeName'] as String? ?? 'Nouveau';
     final next   = badgeData['nextProgress'] as Map<String, dynamic>?;
-    final stats  = badgeData['stats']     as Map<String, dynamic>? ?? {};
 
     final visual = badge != null ? _tiers[badge] : null;
     final color  = visual?.color ?? AppColors.primaryMid;
@@ -51,15 +50,6 @@ class ClientBadgeCard extends StatelessWidget {
         Text('Votre niveau fidélité',
           style: TextStyle(fontSize: 12, color: color.withValues(alpha: 0.60)),
           textAlign: TextAlign.center),
-        const SizedBox(height: 16),
-
-        // ── Stats rapides ────────────────────────────────────────────────────
-        Row(children: [
-          Expanded(child: _StatPill(icon: Icons.motorcycle_outlined, value: '${stats['courses'] ?? 0}', label: 'courses', color: color)),
-          const SizedBox(width: 10),
-          Expanded(child: _StatPill(icon: Icons.people_outline,      value: '${stats['referrals'] ?? 0}', label: 'filleuls', color: color)),
-        ]),
-
         // ── Progression vers le prochain badge ───────────────────────────────
         if (next != null) ...[
           const SizedBox(height: 18),
@@ -101,31 +91,6 @@ class _BadgeEmblem extends StatelessWidget {
       child: Center(child: Text(emoji, style: const TextStyle(fontSize: 34))),
     );
   }
-}
-
-// ── Pill de stat ──────────────────────────────────────────────────────────────
-class _StatPill extends StatelessWidget {
-  final IconData icon;
-  final String value, label;
-  final Color color;
-  const _StatPill({required this.icon, required this.value, required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: color.withValues(alpha: 0.15)),
-    ),
-    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(icon, size: 16, color: color.withValues(alpha: 0.75)),
-      const SizedBox(width: 6),
-      Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
-      const SizedBox(width: 4),
-      Text(label, style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.65))),
-    ]),
-  );
 }
 
 // ── Séparateur ────────────────────────────────────────────────────────────────
