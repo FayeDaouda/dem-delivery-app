@@ -676,7 +676,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
           // ── Bouton toggle jour/nuit ──────────────────────────────────────
           Positioned(
             left: 16,
-            bottom: _autoFollow ? 220 : 284,
+            bottom: (_autoFollow ? 220 : 284) + MediaQuery.of(context).viewPadding.bottom,
             child: GestureDetector(
               onTap: _toggleMapTheme,
               child: Container(
@@ -821,7 +821,7 @@ class _NormalSheet extends StatelessWidget {
 
     return _GlassSheet(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 16),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -941,7 +941,7 @@ class _OrderNotificationSheet extends StatelessWidget {
     return _GlassSheet(
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 16),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 24),
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.primary, width: 2)),
         ),

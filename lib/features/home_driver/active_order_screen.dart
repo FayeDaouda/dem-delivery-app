@@ -992,7 +992,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 16),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 24),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,

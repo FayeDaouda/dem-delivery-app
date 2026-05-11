@@ -276,7 +276,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
           // ── MAP THEME TOGGLE ──────────────────────────────────────────────
           Positioned(
             right: 16,
-            bottom: 310,
+            bottom: 310 + MediaQuery.of(context).viewPadding.bottom,
             child: GestureDetector(
               onTap: _toggleMapTheme,
               child: Container(
