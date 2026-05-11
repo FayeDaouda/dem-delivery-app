@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart' as geo;
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/config/app_config.dart';
@@ -249,6 +251,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
   double? _lat, _lng;
   List<Map<String, dynamic>> _suggestions = [];
   bool _searching = false;
+  bool _locating  = false;
   Timer? _debounce;
 
   @override
@@ -276,6 +279,38 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
       _labelCtrl.text.trim().isNotEmpty &&
       _addressCtrl.text.trim().isNotEmpty &&
       _lat != null && _lng != null;
+
+  Future<void> _useCurrentLocation() async {
+    setState(() { _locating = true; _suggestions = []; });
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
+      if (perm == LocationPermission.deniedForever) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Autorisez la localisation dans les réglages.')));
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition();
+      final marks = await geo.placemarkFromCoordinates(pos.latitude, pos.longitude)
+          .timeout(const Duration(seconds: 5));
+      if (!mounted) return;
+      final p = marks.isNotEmpty ? marks.first : null;
+      final street = p?.street ?? p?.name ?? '';
+      final local  = p?.subLocality ?? p?.locality ?? '';
+      final addr   = street.isNotEmpty ? '$street, $local' : local.isNotEmpty
+          ? local : '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
+      setState(() {
+        _lat = pos.latitude;
+        _lng = pos.longitude;
+        _addressCtrl.text = addr;
+      });
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible de récupérer la position.')));
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
 
   void _onAddressChanged(String q) {
     setState(() { _lat = null; _lng = null; });
@@ -392,6 +427,34 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                   ? Icon(Icons.check_circle, color: Colors.green.shade600, size: 18)
                   : (_searching ? const SizedBox(width: 16, height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)) : null)),
+          const SizedBox(height: 8),
+          // Bouton position actuelle
+          GestureDetector(
+            onTap: _locating ? null : _useCurrentLocation,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+              ),
+              child: Row(children: [
+                _locating
+                    ? const SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                    : Icon(Icons.my_location, color: AppColors.primary, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  _locating ? 'Localisation en cours…' : 'Utiliser ma position actuelle',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ]),
+            ),
+          ),
           // Dropdown suggestions
           if (_suggestions.isNotEmpty) ...[
             const SizedBox(height: 4),
