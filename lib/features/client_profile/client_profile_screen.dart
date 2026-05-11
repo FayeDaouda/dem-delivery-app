@@ -21,15 +21,29 @@ class ClientProfileScreen extends StatefulWidget {
 class _ClientProfileScreenState extends State<ClientProfileScreen> {
   Map<String, dynamic>? _user;
   Map<String, dynamic>? _badgeData;
-  bool _isLoading    = false;
+  bool _isLoading       = false;
   bool _uploadingAvatar = false;
-  final _picker = ImagePicker();
+  bool _headerCollapsed = false;
+  final _picker            = ImagePicker();
+  final _scrollController  = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadUser();
     _fetchProfile();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final collapsed = _scrollController.offset > 70;
+    if (collapsed != _headerCollapsed) setState(() => _headerCollapsed = collapsed);
   }
 
   Future<void> _loadUser() async {
@@ -290,75 +304,110 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       backgroundColor: const Color(0xFFF4F6FA),
       body: Column(children: [
 
-        // ── Header ────────────────────────────────────────────────────────────
+        // ── Header collapsible ────────────────────────────────────────────────
         Container(
           decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
           child: SafeArea(
             bottom: false,
-            child: Column(children: [
-              // Top bar
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(children: [
-                  IconButton(
-                    onPressed: () => context.go('/client/home'),
-                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                  ),
-                  const Spacer(),
-                  const Text('Mon compte', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _editProfile,
-                    icon: const Icon(Icons.edit_outlined, color: Colors.white, size: 20),
-                    tooltip: 'Modifier',
-                  ),
-                ]),
-              ),
-              const SizedBox(height: 8),
-
-              // Avatar cliquable
-              GestureDetector(
-                onTap: _uploadingAvatar ? null : _pickAvatar,
-                child: Stack(children: [
-                  Container(
-                    width: 88, height: 88,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                      color: Colors.white.withValues(alpha: 0.15),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top bar — toujours visible
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(children: [
+                    IconButton(
+                      onPressed: () => context.go('/client/home'),
+                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                     ),
-                    child: _uploadingAvatar
-                        ? const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : avatar != null
-                            ? ClipOval(child: Image.network(avatar, fit: BoxFit.cover, width: 88, height: 88,
-                                errorBuilder: (_, __, ___) => Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)))))
-                            : Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800))),
-                  ),
-                  Positioned(
-                    bottom: 0, right: 0,
-                    child: Container(
-                      width: 26, height: 26,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.primaryMid, width: 1.5),
-                      ),
-                      child: const Icon(Icons.camera_alt, size: 13, color: AppColors.primaryMid),
+                    // Petit avatar affiché uniquement quand le header est replié
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeInOut,
+                      child: _headerCollapsed
+                          ? Padding(
+                              padding: const EdgeInsets.only(left: 4, right: 6),
+                              child: ClipOval(
+                                child: Container(
+                                  width: 30, height: 30,
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  child: avatar != null
+                                      ? Image.network(avatar, fit: BoxFit.cover, width: 30, height: 30,
+                                          errorBuilder: (_, e, s) => Center(
+                                            child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800))))
+                                      : Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800))),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
                     ),
-                  ),
-                ]),
-              ),
-              const SizedBox(height: 10),
+                    const Spacer(),
+                    const Text('Mon compte', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _showSupport,
+                      icon: const Icon(Icons.support_agent_outlined, color: Colors.white, size: 22),
+                      tooltip: 'Support',
+                    ),
+                  ]),
+                ),
 
-              Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 2),
-              Text(phone, style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13)),
-              if (email != null) ...[
-                const SizedBox(height: 2),
-                Text(email, style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 12)),
+                // Section dépliable : avatar + nom + téléphone + email
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  child: _headerCollapsed
+                      ? const SizedBox.shrink()
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(height: 8),
+                            // Avatar cliquable
+                            GestureDetector(
+                              onTap: _uploadingAvatar ? null : _pickAvatar,
+                              child: Stack(children: [
+                                Container(
+                                  width: 88, height: 88,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 3),
+                                    color: Colors.white.withValues(alpha: 0.15),
+                                  ),
+                                  child: _uploadingAvatar
+                                      ? const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                      : avatar != null
+                                          ? ClipOval(child: Image.network(avatar, fit: BoxFit.cover, width: 88, height: 88,
+                                              errorBuilder: (_, e, s) => Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)))))
+                                          : Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800))),
+                                ),
+                                Positioned(
+                                  bottom: 0, right: 0,
+                                  child: Container(
+                                    width: 26, height: 26,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: AppColors.primaryMid, width: 1.5),
+                                    ),
+                                    child: const Icon(Icons.camera_alt, size: 13, color: AppColors.primaryMid),
+                                  ),
+                                ),
+                              ]),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 2),
+                            Text(phone, style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13)),
+                            if (email != null) ...[
+                              const SizedBox(height: 2),
+                              Text(email, style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 12)),
+                            ],
+                            const SizedBox(height: 20),
+                          ],
+                        ),
+                ),
               ],
-              const SizedBox(height: 20),
-            ]),
+            ),
           ),
         ),
 
@@ -368,6 +417,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             onRefresh: _fetchProfile,
             color: AppColors.primary,
             child: SingleChildScrollView(
+              controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

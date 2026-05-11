@@ -27,7 +27,7 @@ class ClientBadgeCard extends StatelessWidget {
     final emoji  = visual?.emoji ?? '🚀';
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(20),
@@ -36,28 +36,27 @@ class ClientBadgeCard extends StatelessWidget {
       ),
       child: Column(children: [
 
-        // ── Emblème centré ───────────────────────────────────────────────────
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        // ── Header horizontal : emblème + nom ────────────────────────────────
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           _BadgeEmblem(emoji: emoji, color: color),
+          const SizedBox(width: 14),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(name,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color, letterSpacing: -0.3)),
+            const SizedBox(height: 2),
+            Text('Votre niveau fidélité',
+              style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.60))),
+          ]),
         ]),
-        const SizedBox(height: 12),
 
-        // ── Nom du badge ─────────────────────────────────────────────────────
-        Text(name,
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: color, letterSpacing: -0.3),
-          textAlign: TextAlign.center),
-        const SizedBox(height: 2),
-        Text('Votre niveau fidélité',
-          style: TextStyle(fontSize: 12, color: color.withValues(alpha: 0.60)),
-          textAlign: TextAlign.center),
         // ── Progression vers le prochain badge ───────────────────────────────
         if (next != null) ...[
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           _Separator(color: color),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           _NextSection(next: next, color: color),
         ] else if (badge == 'vip') ...[
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -81,14 +80,14 @@ class _BadgeEmblem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 72, height: 72,
+      width: 54, height: 54,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: color.withValues(alpha: 0.12),
         border: Border.all(color: color.withValues(alpha: 0.30), width: 2),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 12, spreadRadius: 2)],
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 10, spreadRadius: 1)],
       ),
-      child: Center(child: Text(emoji, style: const TextStyle(fontSize: 34))),
+      child: Center(child: Text(emoji, style: const TextStyle(fontSize: 26))),
     );
   }
 }
