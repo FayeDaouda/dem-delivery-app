@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
@@ -13,21 +14,22 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/config/app_config.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/map_theme_provider.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
 
 // ─── Heights par step ────────────────────────────────────────────────────────
 const _kPanelHeights = [180.0, 290.0, 310.0, 260.0]; // step 0, 1, 2, 3
 
-class OrderCreateScreen extends StatefulWidget {
+class OrderCreateScreen extends ConsumerStatefulWidget {
   final String orderType;
   const OrderCreateScreen({super.key, this.orderType = 'DELIVERY'});
 
   @override
-  State<OrderCreateScreen> createState() => _OrderCreateScreenState();
+  ConsumerState<OrderCreateScreen> createState() => _OrderCreateScreenState();
 }
 
-class _OrderCreateScreenState extends State<OrderCreateScreen> {
+class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   final _repo = OrdersRepository();
 
   // ── Constants ────────────────────────────────────────────────────────────
@@ -122,8 +124,14 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
 
   // ── Map style ────────────────────────────────────────────────────────────
   Future<void> _loadMapStyle() async {
-    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    final isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
+  }
+
+  Future<void> _toggleMapTheme() async {
+    await ref.read(mapNightProvider.notifier).toggle();
+    await _loadMapStyle();
   }
 
   // ── GPS ──────────────────────────────────────────────────────────────────
@@ -613,6 +621,27 @@ class _OrderCreateScreenState extends State<OrderCreateScreen> {
               ),
             ),
           ),
+
+        // ── MAP THEME TOGGLE ──────────────────────────────────────────────────
+        Positioned(
+          right: 16,
+          bottom: panelH + 72,
+          child: GestureDetector(
+            onTap: _toggleMapTheme,
+            child: Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.surface, shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
+              ),
+              child: Icon(
+                ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                size: 20,
+              ),
+            ),
+          ),
+        ),
 
         // ── RECENTER BTN ───────────────────────────────────────────────────
         Positioned(

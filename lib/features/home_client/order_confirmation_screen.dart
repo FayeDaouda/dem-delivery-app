@@ -11,6 +11,7 @@ import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../deliveries/providers/orders_provider.dart';
+import '../../core/theme/map_theme_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
 
 /// Affiché après la création d'une commande.
@@ -63,8 +64,14 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   }
 
   Future<void> _loadMapStyle() async {
-    final style = await rootBundle.loadString(MapTheme.styleAsset);
+    final isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
+  }
+
+  Future<void> _toggleMapTheme() async {
+    await ref.read(mapNightProvider.notifier).toggle();
+    await _loadMapStyle();
   }
 
   Future<void> _fetchRoute() async {
@@ -263,6 +270,27 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
               compassEnabled: false,
               mapToolbarEnabled: false,
               buildingsEnabled: true,
+            ),
+          ),
+
+          // ── MAP THEME TOGGLE ──────────────────────────────────────────────
+          Positioned(
+            right: 16,
+            bottom: 310,
+            child: GestureDetector(
+              onTap: _toggleMapTheme,
+              child: Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A1535), shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
+                ),
+                child: Icon(
+                  ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                  color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                  size: 20,
+                ),
+              ),
             ),
           ),
 
