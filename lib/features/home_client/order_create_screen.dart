@@ -397,6 +397,23 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     setState(() => _step = step);
     _pageCtrl.animateToPage(step,
         duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    if (step >= 1 && _pickupLat != null && _deliveryLat != null) {
+      _fitBothPoints();
+    }
+  }
+
+  void _fitBothPoints() {
+    final sw = LatLng(
+      min(_pickupLat!, _deliveryLat!),
+      min(_pickupLng!, _deliveryLng!),
+    );
+    final ne = LatLng(
+      max(_pickupLat!, _deliveryLat!),
+      max(_pickupLng!, _deliveryLng!),
+    );
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(LatLngBounds(southwest: sw, northeast: ne), 90),
+    );
   }
 
   // ── Contacts ─────────────────────────────────────────────────────────────
