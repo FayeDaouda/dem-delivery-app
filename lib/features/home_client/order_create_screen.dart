@@ -625,7 +625,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         // ── MAP THEME TOGGLE ──────────────────────────────────────────────────
         Positioned(
           right: 16,
-          bottom: panelH + 72,
+          bottom: panelH + 116,
           child: GestureDetector(
             onTap: _toggleMapTheme,
             child: Container(
@@ -646,7 +646,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         // ── RECENTER BTN ───────────────────────────────────────────────────
         Positioned(
           right: 16,
-          bottom: panelH + 16,
+          bottom: panelH + 60,
           child: _FloatingBtn(
             icon: _loadingGps ? null : Icons.my_location,
             loading: _loadingGps,
@@ -688,7 +688,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                       FocusScope.of(context).unfocus();
                       setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; });
                     },
-                    onDotDoubleTap: () {
+                    onDotLongPress: () {
                       FocusScope.of(context).unfocus();
                       setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; });
                     },
@@ -710,7 +710,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                       FocusScope.of(context).unfocus();
                       setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
                     },
-                    onDotDoubleTap: () {
+                    onDotLongPress: () {
                       FocusScope.of(context).unfocus();
                       setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
                     },
@@ -870,12 +870,12 @@ class _AddressField extends StatelessWidget {
   final VoidCallback onTap;
   final ValueChanged<String> onChanged;
   final VoidCallback onMapTap;
-  final VoidCallback? onDotDoubleTap;
+  final VoidCallback? onDotLongPress;
 
   const _AddressField({
     required this.controller, required this.hint, required this.dotColor,
     required this.active, required this.onTap, required this.onChanged, required this.onMapTap,
-    this.onDotDoubleTap,
+    this.onDotLongPress,
   });
 
   @override
@@ -884,22 +884,20 @@ class _AddressField extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: active
-              ? dotColor.withValues(alpha: 0.12)
-              : Colors.white.withValues(alpha: 0.10),
+          color: dotColor.withValues(alpha: active ? 0.14 : 0.07),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: active ? dotColor.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.25),
+            color: dotColor.withValues(alpha: active ? 0.85 : 0.45),
             width: active ? 1.4 : 1.0,
           ),
           boxShadow: active
               ? [BoxShadow(color: dotColor.withValues(alpha: 0.22), blurRadius: 20, spreadRadius: 0)]
-              : [BoxShadow(color: Colors.black.withValues(alpha: 0.10), blurRadius: 6)],
+              : [BoxShadow(color: dotColor.withValues(alpha: 0.08), blurRadius: 6)],
         ),
         child: Row(children: [
           const SizedBox(width: 12),
           GestureDetector(
-            onDoubleTap: onDotDoubleTap,
+            onLongPress: onDotLongPress,
             child: active
                 ? _PulsingDot(color: dotColor)
                 : Container(width: 10, height: 10, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
