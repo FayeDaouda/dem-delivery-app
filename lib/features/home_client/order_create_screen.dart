@@ -986,6 +986,7 @@ class _AddressField extends StatelessWidget {
             child: TextField(
               controller: controller,
               onChanged: onChanged,
+              onTap: onTap,
               textInputAction: TextInputAction.search,
               style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
               decoration: InputDecoration(
