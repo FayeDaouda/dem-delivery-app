@@ -11,6 +11,7 @@ import '../../features/home_driver/home_driver_screen.dart';
 import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
 
 import '../../features/client_profile/client_profile_screen.dart';
+import '../../features/client_profile/favorite_addresses_screen.dart';
 import '../../features/home_client/orders_history_screen.dart';
 import '../../features/home_client/order_tracking_screen.dart';
 
@@ -83,6 +84,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/client/profile',
       builder: (context, state) => const ClientProfileScreen(),
+    ),
+    GoRoute(
+      path: '/client/favorite-addresses',
+      builder: (context, state) => const FavoriteAddressesScreen(),
     ),
     GoRoute(
       path: '/orders/create',

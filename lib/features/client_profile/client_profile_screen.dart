@@ -452,6 +452,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     onTap: _editProfile,
                   ),
                   _MenuItemData(
+                    icon: Icons.place_outlined,
+                    title: 'Mes adresses favorites',
+                    onTap: () => context.push('/client/favorite-addresses'),
+                  ),
+                  _MenuItemData(
                     icon: Icons.phone_outlined,
                     title: phoneStatus == 'PENDING'
                         ? 'Changement de numéro en cours…'

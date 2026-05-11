@@ -15,6 +15,7 @@ import '../../core/config/app_config.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/map_theme_provider.dart';
+import '../client_profile/data/favorite_addresses_repository.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
 
@@ -79,6 +80,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   List<LatLng> _routePoints = [];
   Map<String, dynamic>? _currentUser;
 
+  // ── Adresses favorites ───────────────────────────────────────────────────
+  final _favRepo = FavoriteAddressesRepository();
+  List<Map<String, dynamic>> _favorites = [];
+
   @override
   void initState() {
     super.initState();
@@ -87,6 +92,30 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     _fetchGpsInit();
     _loadUser();
     _checkFreeCourse();
+    _loadFavorites();
+  }
+
+  Future<void> _loadFavorites() async {
+    try {
+      final list = await _favRepo.getAll();
+      if (mounted) setState(() => _favorites = list);
+    } catch (_) {}
+  }
+
+  void _applyFavorite(Map<String, dynamic> fav) {
+    final lat = (fav['lat'] as num).toDouble();
+    final lng = (fav['lng'] as num).toDouble();
+    final addr = fav['address'] as String;
+    setState(() {
+      if (_isSelectingPickup) {
+        _pickupCtrl.text = addr; _pickupLat = lat; _pickupLng = lng;
+      } else {
+        _deliveryCtrl.text = addr; _deliveryLat = lat; _deliveryLng = lng;
+      }
+      _suggestions = [];
+    });
+    _centerMap(LatLng(lat, lng));
+    _updateEstimate();
   }
 
   Future<void> _loadUser() async {
@@ -732,6 +761,39 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                       setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
                     },
                   ),
+
+                  // ── Chips adresses favorites ──────────────────────────
+                  if (_favorites.isNotEmpty && !_isMapPlacementMode) ...[
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 32,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _favorites.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 6),
+                        itemBuilder: (_, i) {
+                          final fav = _favorites[i];
+                          return GestureDetector(
+                            onTap: () => _applyFavorite(fav),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
+                              ),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Text(fav['icon'] as String? ?? '📍', style: const TextStyle(fontSize: 13)),
+                                const SizedBox(width: 5),
+                                Text(fav['label'] as String? ?? '',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                              ]),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
 
                   // Autocomplete dropdown
                   if (_isSearching || _suggestions.isNotEmpty) ...[
