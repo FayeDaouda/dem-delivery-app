@@ -688,6 +688,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                       FocusScope.of(context).unfocus();
                       setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; });
                     },
+                    onDotDoubleTap: () {
+                      FocusScope.of(context).unfocus();
+                      setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; });
+                    },
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
@@ -703,6 +707,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                     onTap: () => setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; }),
                     onChanged: (v) => _onAddressChanged(v, forPickup: false),
                     onMapTap: () {
+                      FocusScope.of(context).unfocus();
+                      setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
+                    },
+                    onDotDoubleTap: () {
                       FocusScope.of(context).unfocus();
                       setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
                     },
@@ -862,10 +870,12 @@ class _AddressField extends StatelessWidget {
   final VoidCallback onTap;
   final ValueChanged<String> onChanged;
   final VoidCallback onMapTap;
+  final VoidCallback? onDotDoubleTap;
 
   const _AddressField({
     required this.controller, required this.hint, required this.dotColor,
     required this.active, required this.onTap, required this.onChanged, required this.onMapTap,
+    this.onDotDoubleTap,
   });
 
   @override
@@ -875,22 +885,25 @@ class _AddressField extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: active
-              ? dotColor.withValues(alpha: 0.10)
-              : Colors.white.withValues(alpha: 0.04),
+              ? dotColor.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: active ? dotColor.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.06),
+            color: active ? dotColor.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.25),
             width: active ? 1.4 : 1.0,
           ),
           boxShadow: active
-              ? [BoxShadow(color: dotColor.withValues(alpha: 0.20), blurRadius: 20, spreadRadius: 0)]
-              : [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6)],
+              ? [BoxShadow(color: dotColor.withValues(alpha: 0.22), blurRadius: 20, spreadRadius: 0)]
+              : [BoxShadow(color: Colors.black.withValues(alpha: 0.10), blurRadius: 6)],
         ),
         child: Row(children: [
           const SizedBox(width: 12),
-          active
-              ? _PulsingDot(color: dotColor)
-              : Container(width: 10, height: 10, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+          GestureDetector(
+            onDoubleTap: onDotDoubleTap,
+            child: active
+                ? _PulsingDot(color: dotColor)
+                : Container(width: 10, height: 10, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
@@ -1240,8 +1253,20 @@ class _Step0Panel extends StatelessWidget {
           const Text('Définissez votre trajet',
               style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          Text('Utiliser les champs de recherche ou le bouton 🗺 pour placer un point sur la carte.',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 11), maxLines: 2),
+          RichText(
+            maxLines: 3,
+            text: TextSpan(
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 11, height: 1.4),
+              children: [
+                const TextSpan(text: 'Utiliser les champs de recherche ou le bouton '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Icon(Icons.map_outlined, color: Colors.white.withValues(alpha: 0.70), size: 13),
+                ),
+                const TextSpan(text: ' pour placer un point sur la carte.'),
+              ],
+            ),
+          ),
           const Spacer(),
           _NextButton(
             label: 'Suivant — Contacts',
