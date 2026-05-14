@@ -55,3 +55,4 @@ app.*.map.json
 # CocoaPods
 ios/Pods/
 ios/.symlinks/
+android/build/

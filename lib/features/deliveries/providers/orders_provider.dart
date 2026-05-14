@@ -79,6 +79,9 @@ final orderDetailProvider =
   return ref.read(ordersRepositoryProvider).getOrderById(orderId);
 });
 
+// ─── Tracking minimisé (client revenu à l'accueil pendant une course active) ─
+final trackingMinimizedProvider = StateProvider<bool>((_) => false);
+
 // ─── Active order for driver (in progress) ────────────────────────────────
 class ActiveOrderNotifier extends AsyncNotifier<Map<String, dynamic>?> {
   @override

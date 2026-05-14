@@ -1,4 +1,8 @@
 import 'package:go_router/go_router.dart';
+import 'package:flutter/widgets.dart';
+
+import 'app_startup_notifier.dart';
+
 import '../../features/auth/screens/phone_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/role_selection_screen.dart';
@@ -15,9 +19,9 @@ import '../../features/client_profile/favorite_addresses_screen.dart';
 import '../../features/home_client/orders_history_screen.dart';
 import '../../features/home_client/order_tracking_screen.dart';
 
-
 import '../../features/splash/screens/splash_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
+import '../../features/onboarding/screens/location_disclosure_screen.dart';
 import '../../features/profile/screens/driver_profile_screen.dart';
 import '../../features/home_driver/active_order_screen.dart';
 import '../../features/admin/screens/admin_login_screen.dart';
@@ -31,13 +35,66 @@ import '../../features/chef_de_flotte/screens/chef_de_flotte_suspended_screen.da
 import '../../features/chef_de_flotte/screens/chef_de_flotte_profile_screen.dart';
 import '../../features/profile/screens/driver_suspended_screen.dart';
 
-import 'package:flutter/widgets.dart';
-
 final routeObserver = RouteObserver<ModalRoute<void>>();
+
+// ── Ensemble des routes "publiques" (avant auth) ──────────────────────────────
+const _preAuthRoutes = {'/splash', '/onboarding', '/location-disclosure', '/phone', '/otp'};
+
+// ── Ensemble des routes admin (pas de garde onboarding) ───────────────────────
+const _adminRoutes = {'/admin/login', '/admin/home'};
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
   observers: [routeObserver],
+
+  // ── Notifier : déclenche redirect à chaque changement d'état ─────────────────
+  refreshListenable: appStartupNotifier,
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // REDIRECT — contrôle toutes les routes
+  // ─────────────────────────────────────────────────────────────────────────────
+  redirect: (context, state) {
+    final path = state.matchedLocation;
+    final n    = appStartupNotifier;
+
+    // ── 0. Pas encore initialisé → rester sur /splash ───────────────────────
+    if (!n.isReady) {
+      return path == '/splash' ? null : '/splash';
+    }
+
+    // ── Admin : pas de garde de flux onboarding ──────────────────────────────
+    if (_adminRoutes.contains(path)) return null;
+
+    // ── 1. Utilisateur connecté ──────────────────────────────────────────────
+    if (n.isLoggedIn) {
+      // Si sur une route pré-auth → rediriger vers la home du rôle
+      if (_preAuthRoutes.contains(path)) return n.homeForRole;
+      return null; // toute autre route → OK
+    }
+
+    // ── 2. Utilisateur non connecté ──────────────────────────────────────────
+
+    // Onboarding pas encore vu → forcer /onboarding
+    if (!n.onboardingSeen) {
+      return path == '/onboarding' ? null : '/onboarding';
+    }
+
+    // Divulgation pas encore vue → forcer /location-disclosure
+    if (!n.disclosureSeen) {
+      return path == '/location-disclosure' ? null : '/location-disclosure';
+    }
+
+    // Onboarding + disclosure vus : si encore sur ces pages → /phone
+    if (path == '/splash' || path == '/onboarding' || path == '/location-disclosure') {
+      return '/phone';
+    }
+
+    return null; // laisser passer
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ROUTES
+  // ─────────────────────────────────────────────────────────────────────────────
   routes: [
     GoRoute(
       path: '/splash',
@@ -46,6 +103,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/onboarding',
       builder: (context, state) => const OnboardingScreen(),
+    ),
+    GoRoute(
+      path: '/location-disclosure',
+      builder: (context, state) => const LocationDisclosureScreen(),
     ),
 
     // ── Auth ──

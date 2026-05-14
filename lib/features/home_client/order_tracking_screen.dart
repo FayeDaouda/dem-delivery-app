@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/notifications/notification_service.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
@@ -41,6 +44,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   GoogleMapController? _mapController;
   String? _mapStyle;
   List<LatLng> _routePoints = [];
+  List<LatLng> _displayRoute = [];
+  int _lastTrimIdx = 0;
+
+  BitmapDescriptor? _driverMarkerIcon;
 
   StreamSubscription<Map<String, dynamic>>? _statusSub;
   StreamSubscription<Map<String, dynamic>>? _driverLocationSub;
@@ -53,8 +60,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     _loadMapStyle();
     _fetchOrder();
     _connectSocket();
-    _pollTimer =
-        Timer.periodic(const Duration(seconds: 20), (_) => _fetchOrder());
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) => _fetchOrder());
+    _buildDriverMarkerIcon().then((icon) {
+      if (mounted) setState(() => _driverMarkerIcon = icon);
+    });
   }
 
   @override
@@ -70,6 +79,81 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     final bool isNight = ref.read(mapNightProvider);
     final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
+  }
+
+  // ── Icône driver (cercle orange + silhouette moto) ────────────────────────
+  static Future<BitmapDescriptor> _buildDriverMarkerIcon() async {
+    const double size = 96;
+    const double cx = size / 2;
+    const double cy = size / 2;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Halo
+    canvas.drawCircle(const Offset(cx, cy), 44,
+        Paint()..color = const Color(0x26FF6B00));
+
+    // Cercle orange principal
+    canvas.drawCircle(const Offset(cx, cy), 28,
+        Paint()..color = const Color(0xFFFF6B00));
+    canvas.drawCircle(
+        const Offset(cx, cy), 28,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3);
+
+    // Silhouette moto en blanc (lignes)
+    final moto = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    // Corps principal
+    canvas.drawLine(const Offset(cx - 9, cy - 2), const Offset(cx + 9, cy - 2), moto);
+    // Guidon
+    canvas.drawLine(const Offset(cx + 5, cy - 2), const Offset(cx + 8, cy - 7), moto);
+    // Selle
+    canvas.drawLine(const Offset(cx - 7, cy - 2), const Offset(cx - 7, cy - 5), moto);
+    // Roue avant
+    canvas.drawCircle(const Offset(cx + 9, cy + 5), 5.5, moto);
+    // Roue arrière
+    canvas.drawCircle(const Offset(cx - 9, cy + 5), 5.5, moto);
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.toInt(), size.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(),
+        width: 46, height: 46);
+  }
+
+  // ── Rétrécissement de la route ────────────────────────────────────────────
+  static int _closestPointIdx(List<LatLng> route, LatLng pos, int startIdx) {
+    final end = (startIdx + 60).clamp(0, route.length);
+    int idx = startIdx;
+    double minDist = double.infinity;
+    for (int i = startIdx; i < end; i++) {
+      final dLat = route[i].latitude - pos.latitude;
+      final dLng = route[i].longitude - pos.longitude;
+      final dist = dLat * dLat + dLng * dLng;
+      if (dist < minDist) { minDist = dist; idx = i; }
+    }
+    return idx;
+  }
+
+  void _updateDisplayRoute() {
+    if (_routePoints.isEmpty) { _displayRoute = []; return; }
+    // Avant pickup : route complète (driver n'est pas encore dessus)
+    if (_status != 'PICKED_UP' || _driverLocation == null) {
+      _displayRoute = _routePoints;
+      return;
+    }
+    // Après pickup : on coupe la portion déjà parcourue
+    final idx = _closestPointIdx(_routePoints, _driverLocation!, _lastTrimIdx);
+    _lastTrimIdx = idx;
+    if (mounted) setState(() => _displayRoute = _routePoints.sublist(idx));
   }
 
   Future<void> _fetchOrder() async {
@@ -119,7 +203,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
             .map((c) =>
                 LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
             .toList();
-        if (mounted) setState(() => _routePoints = points);
+        if (mounted) {
+          setState(() {
+            _routePoints = points;
+            _displayRoute = points;
+            _lastTrimIdx = 0;
+          });
+          _updateDisplayRoute();
+        }
       }
     } catch (_) {}
   }
@@ -134,6 +225,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       final newStatus = data['status'] as String?;
       if (newStatus == null) return;
       setState(() => _status = newStatus);
+      _updateDisplayRoute();
       if (newStatus == 'DELIVERED' && !_rated) {
         Future.delayed(const Duration(milliseconds: 300), _showRatingDialog);
       }
@@ -145,8 +237,37 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       final lat = (data['lat'] as num?)?.toDouble();
       final lng = (data['lng'] as num?)?.toDouble();
       if (lat == null || lng == null) return;
-      setState(() => _driverLocation = LatLng(lat, lng));
-      _mapController?.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(lat, lng), zoom: 17, tilt: 55)));
+      final newLoc = LatLng(lat, lng);
+      setState(() => _driverLocation = newLoc);
+      _updateDisplayRoute();
+      _mapController?.animateCamera(CameraUpdate.newCameraPosition(
+          CameraPosition(target: newLoc, zoom: 17, tilt: 55)));
+
+      // Notification persistante avec ETA estimé
+      final isPickedUp = _status == 'PICKED_UP';
+      final targetLat = isPickedUp
+          ? (_order?['deliveryLatitude'] as num?)?.toDouble()
+          : (_order?['pickupLatitude'] as num?)?.toDouble();
+      final targetLng2 = isPickedUp
+          ? (_order?['deliveryLongitude'] as num?)?.toDouble()
+          : (_order?['pickupLongitude'] as num?)?.toDouble();
+      final targetName = isPickedUp
+          ? (_order?['deliveryAddress']?.toString() ?? 'Destination')
+          : (_order?['pickupAddress']?.toString() ?? 'Destination');
+
+      if (targetLat != null && targetLng2 != null) {
+        final dist = Geolocator.distanceBetween(lat, lng, targetLat, targetLng2);
+        final min = (dist / 416).round();
+        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+        final statusText = isPickedUp
+            ? 'Le livreur est en route vers vous'
+            : 'Le livreur récupère votre commande';
+        NotificationService.showOngoingNotification(
+          id: 8888,
+          title: statusText,
+          body: '$targetName$etaText',
+        );
+      }
     });
   }
 
@@ -390,16 +511,19 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         Marker(
           markerId: const MarkerId('driver'),
           position: _driverLocation!,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan),
+          icon: _driverMarkerIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
           infoWindow: const InfoWindow(title: 'Votre livreur'),
+          anchor: const Offset(0.5, 0.5),
+          flat: true,
         ),
     };
 
-    final polylines = _routePoints.isNotEmpty
+    final polylines = _displayRoute.isNotEmpty
         ? {
             Polyline(
               polylineId: const PolylineId('route'),
-              points: _routePoints,
+              points: _displayRoute,
               color: AppColors.primary,
               width: 4,
               startCap: Cap.roundCap,
@@ -460,7 +584,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: GestureDetector(
-                  onTap: () => context.canPop() ? context.pop() : context.go('/client/home'),
+                  onTap: () {
+                    ref.read(trackingMinimizedProvider.notifier).state = true;
+                    context.canPop() ? context.pop() : context.go('/client/home');
+                  },
                   child: Container(
                     width: 40,
                     height: 40,

@@ -18,6 +18,7 @@ import '../deliveries/providers/orders_provider.dart';
 import 'navigation/alert_manager.dart';
 import 'navigation/directions_service.dart';
 import 'navigation/navigation_service.dart';
+import '../../core/notifications/notification_service.dart';
 
 class ActiveOrderScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> order;
@@ -44,6 +45,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
   // ── Route ─────────────────────────────────────────────────────────────────
   List<LatLng> _routePoints = [];
+  List<LatLng> _displayRoute = [];
+  int _lastTrimIdx = 0;
   bool _loadingRoute = true;
   bool _isRerouting  = false;
   int? _etaSeconds;
@@ -56,14 +59,21 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   Timer? _alertTimer;
 
   // ── Getters ───────────────────────────────────────────────────────────────
+  double _parseCoord(dynamic val, [double fallback = 0.0]) {
+    if (val == null) return fallback;
+    if (val is num) return val.toDouble();
+    if (val is String) return double.tryParse(val) ?? fallback;
+    return fallback;
+  }
+
   LatLng get _pickupLatLng => LatLng(
-        (_order['pickupLatitude'] as num).toDouble(),
-        (_order['pickupLongitude'] as num).toDouble(),
+        _parseCoord(_order['pickupLatitude']),
+        _parseCoord(_order['pickupLongitude']),
       );
 
   LatLng get _deliveryLatLng => LatLng(
-        (_order['deliveryLatitude'] as num).toDouble(),
-        (_order['deliveryLongitude'] as num).toDouble(),
+        _parseCoord(_order['deliveryLatitude']),
+        _parseCoord(_order['deliveryLongitude']),
       );
 
   bool get _isPickedUp => _order['status'] == 'PICKED_UP';
@@ -198,10 +208,49 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     if (!mounted) return;
     setState(() {
       _routePoints  = result.points;
+      _displayRoute = result.points;
+      _lastTrimIdx  = 0;
       _etaSeconds   = result.durationSeconds;
       _loadingRoute = false;
       _isRerouting  = false;
     });
+
+    final dist = _distanceToTarget;
+    if (dist != null) {
+      final min = (dist / 416).round();
+      final destName = _isPickedUp ? (_order['deliveryAddress'] ?? 'client') : (_order['pickupAddress'] ?? 'restaurant');
+      final statusText = _isPickedUp ? 'En route vers la livraison' : 'En route vers la récupération';
+      final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+
+      NotificationService.showOngoingNotification(
+        id: 9999,
+        title: statusText,
+        body: '$destName$etaText',
+      );
+    }
+  }
+
+  // Coupe la portion de route déjà parcourue (lookup avant seulement)
+  static int _closestPointIdx(List<LatLng> route, LatLng pos, int startIdx) {
+    final end = (startIdx + 60).clamp(0, route.length);
+    int idx = startIdx;
+    double minDist = double.infinity;
+    for (int i = startIdx; i < end; i++) {
+      final dLat = route[i].latitude - pos.latitude;
+      final dLng = route[i].longitude - pos.longitude;
+      final d = dLat * dLat + dLng * dLng;
+      if (d < minDist) { minDist = d; idx = i; }
+    }
+    return idx;
+  }
+
+  void _trimDisplayRoute() {
+    if (_routePoints.isEmpty || _driverPosition == null) return;
+    final driverLatLng = LatLng(_driverPosition!.latitude, _driverPosition!.longitude);
+    final idx = _closestPointIdx(_routePoints, driverLatLng, _lastTrimIdx);
+    if (idx == _lastTrimIdx) return;
+    _lastTrimIdx = idx;
+    setState(() => _displayRoute = _routePoints.sublist(idx));
   }
 
   // Zoom 18 à l'arrêt → 15 à 120 km/h (décroissance linéaire)
@@ -214,6 +263,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   void _onPosition(Position position) {
     if (!mounted) return;
     setState(() => _driverPosition = position);
+    _trimDisplayRoute();
 
     // Auto-follow : caméra suit le driver avec cap + inclinaison Waze
     if (_autoFollow && _mapController != null) {
@@ -236,6 +286,21 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       final orderId = _order['id'] as String?;
       if (orderId != null) {
         SocketService.instance.emitDriverLocation(position.latitude, position.longitude, orderId);
+      }
+
+      // Mettre à jour la notification persistante en tâche de fond avec le temps restant
+      final dist = _distanceToTarget;
+      if (dist != null) {
+        final min = (dist / 416).round();
+        final destName = _isPickedUp ? (_order['deliveryAddress'] ?? 'client') : (_order['pickupAddress'] ?? 'restaurant');
+        final statusText = _isPickedUp ? 'En route vers la livraison' : 'En route vers la récupération';
+        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+
+        NotificationService.showOngoingNotification(
+          id: 9999,
+          title: statusText,
+          body: '$destName$etaText',
+        );
       }
     }
 
@@ -854,11 +919,11 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
   // ── Carte : polylines ─────────────────────────────────────────────────────
   Set<Polyline> get _polylines {
-    if (_routePoints.isEmpty) return {};
+    if (_displayRoute.isEmpty) return {};
     return {
       Polyline(
         polylineId: const PolylineId('route'),
-        points: _routePoints,
+        points: _displayRoute,
         color: _isRerouting
             ? MapTheme.routeColor.withValues(alpha: 0.4)
             : MapTheme.routeColor,

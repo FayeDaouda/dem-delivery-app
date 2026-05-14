@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui' as ui;
+import '../../../core/notifications/notification_service.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,7 @@ import 'navigation/directions_service.dart';
 import 'navigation/map_theme.dart';
 import 'navigation/navigation_service.dart';
 import '../../core/map/poi_data.dart';
+import '../../core/router/app_router.dart';
 
 const _dakar = LatLng(14.6937, -17.4441);
 
@@ -31,7 +33,7 @@ class HomeDriverScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, RouteAware {
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   String? _mapStyle;
@@ -76,6 +78,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   // ── Stats du jour (pills accueil) ─────────────────────────────────────────
   int _todayCourses = 0;
   int _todayGains   = 0;
+  Map<String, dynamic>? _activeOrder;
 
   @override
   void initState() {
@@ -105,7 +108,27 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is ModalRoute<void>) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPopNext() {
+    // Rechargement auto des stats et des commandes disponibles au retour de la livraison
+    _loadTodayStats();
+    final isAvailable = ref.read(profileProvider).isAvailable;
+    if (isAvailable) {
+      ref.read(availableOrdersProvider.notifier).refresh();
+    }
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     _pulseCtrl.dispose();
     _locationSub?.cancel();
     _mapController?.dispose();
@@ -190,8 +213,12 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       final list = raw is List ? raw : (raw is Map && raw['orders'] != null ? raw['orders'] as List : []);
       final now  = DateTime.now();
       int courses = 0, gains = 0;
+      Map<String, dynamic>? active;
       for (final o in List<Map<String, dynamic>>.from(list)) {
         final status = (o['status'] as String? ?? '').toUpperCase();
+        if (['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].contains(status)) {
+          active = o;
+        }
         if (status != 'DELIVERED' && status != 'PAYMENT_CONFIRMED') continue;
         final dt = DateTime.tryParse(o['createdAt'] as String? ?? '')?.toLocal();
         if (dt == null) continue;
@@ -200,7 +227,25 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
           gains += (o['price'] as num?)?.toInt() ?? 0;
         }
       }
-      if (mounted) setState(() { _todayCourses = courses; _todayGains = gains; });
+      
+      if (active != null) {
+        final delivery = active['deliveryAddress'] as String? ?? 'client';
+        NotificationService.showOngoingNotification(
+          id: 9999,
+          title: 'Course en cours',
+          body: 'En route pour : $delivery',
+        );
+      } else {
+        NotificationService.cancelNotification(9999);
+      }
+
+      if (mounted) {
+        setState(() { 
+          _todayCourses = courses; 
+          _todayGains = gains;
+          _activeOrder = active;
+        });
+      }
     } catch (_) {}
   }
 
@@ -438,7 +483,18 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       final merged = {...notifOrder, ...acceptedOrder};
       // Vide le provider avant de naviguer → évite la réapparition au retour home
       ref.read(availableOrdersProvider.notifier).clear();
-      if (mounted) context.push('/driver/order/active', extra: merged);
+      
+      if (mounted) {
+        final pickup = merged['pickupAddress'] ?? '';
+        
+        // Affiche une vraie notification système
+        NotificationService.showSystemNotification(
+          title: 'Course acceptée !',
+          body: 'Dirigez-vous vers : $pickup',
+        );
+
+        context.push('/driver/order/active', extra: merged);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -696,6 +752,37 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
               ),
             ),
           ),
+
+          // ── Badge Course Active (Vert) ───────────────────────────────────
+          if (_activeOrder != null)
+            Positioned(
+              right: 16,
+              bottom: (_autoFollow ? 220 : 284) + MediaQuery.of(context).viewPadding.bottom,
+              child: GestureDetector(
+                onTap: () => context.push('/driver/order/active', extra: _activeOrder),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF40F0C0), // Vert
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(color: const Color(0xFF40F0C0).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.delivery_dining, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Course en cours',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // ── Bottom sheet — 3 états (toujours visible) ──
           Align(

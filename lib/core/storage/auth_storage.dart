@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthStorage {
-  static const _tokenKey       = 'dem_token';
-  static const _userKey        = 'dem_user';
-  static const _onboardingKey  = 'dem_onboarding_seen';
+  static const _tokenKey        = 'dem_token';
+  static const _userKey         = 'dem_user';
+  static const _onboardingKey   = 'dem_onboarding_seen';
+  static const _disclosureKey   = 'dem_location_disclosure_seen';
 
   static Future<void> saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -47,5 +48,15 @@ class AuthStorage {
   static Future<void> setOnboardingSeen() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_onboardingKey, true);
+  }
+
+  static Future<bool> isLocationDisclosureSeen() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_disclosureKey) ?? false;
+  }
+
+  static Future<void> setLocationDisclosureSeen() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_disclosureKey, true);
   }
 }

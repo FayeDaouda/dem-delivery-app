@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/storage/auth_storage.dart';
+import '../../../core/router/app_startup_notifier.dart';
 
 // ── Données des slides ────────────────────────────────────────────────────────
 class _Slide {
@@ -100,7 +101,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   Future<void> _finish() async {
     await AuthStorage.setOnboardingSeen();
-    if (mounted) context.go('/phone');
+    // Le notifier notifie GoRouter → redirect force /location-disclosure
+    appStartupNotifier.markOnboardingSeen();
   }
 
   @override

@@ -618,6 +618,14 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         markerId: const MarkerId('pickup'),
         position: LatLng(_pickupLat!, _pickupLng!),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        onTap: () {
+          FocusScope.of(context).unfocus();
+          setState(() {
+            _isSelectingPickup = true;
+            _isMapPlacementMode = true;
+          });
+          _centerMap(LatLng(_pickupLat!, _pickupLng!));
+        },
       ));
     }
     if (_deliveryLat != null && (_isSelectingPickup || !_isMapPlacementMode)) {
@@ -625,6 +633,14 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         markerId: const MarkerId('delivery'),
         position: LatLng(_deliveryLat!, _deliveryLng!),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        onTap: () {
+          FocusScope.of(context).unfocus();
+          setState(() {
+            _isSelectingPickup = false;
+            _isMapPlacementMode = true;
+          });
+          _centerMap(LatLng(_deliveryLat!, _deliveryLng!));
+        },
       ));
     }
 
@@ -816,7 +832,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
             curve: Curves.easeInOut,
-            margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            margin: EdgeInsets.zero,
             decoration: BoxDecoration(
               gradient: AppColors.gradientSplash,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -976,6 +992,7 @@ class _AddressField extends StatelessWidget {
         child: Row(children: [
           const SizedBox(width: 12),
           GestureDetector(
+            onTap: onDotLongPress,
             onLongPress: onDotLongPress,
             child: active
                 ? _PulsingDot(color: dotColor)
@@ -1003,7 +1020,7 @@ class _AddressField extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: Icon(Icons.map_outlined, color: Colors.white.withValues(alpha: 0.80), size: 18),
+            icon: Icon(Icons.location_on, color: active ? dotColor : Colors.white.withValues(alpha: 0.80), size: 20),
             onPressed: onMapTap,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             constraints: const BoxConstraints(),
@@ -1328,18 +1345,18 @@ class _Step0Panel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Définissez votre trajet',
-              style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
+          const Text('Astuce',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
           RichText(
             maxLines: 3,
             text: TextSpan(
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 11, height: 1.4),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 14, fontWeight: FontWeight.normal, height: 1.4),
               children: [
                 const TextSpan(text: 'Utiliser les champs de recherche ou le bouton '),
                 WidgetSpan(
                   alignment: PlaceholderAlignment.middle,
-                  child: Icon(Icons.map_outlined, color: Colors.white.withValues(alpha: 0.70), size: 13),
+                  child: Icon(Icons.location_on, color: Colors.white.withValues(alpha: 0.70), size: 13),
                 ),
                 const TextSpan(text: ' pour placer un point sur la carte.'),
               ],

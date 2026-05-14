@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import '../../../core/storage/auth_storage.dart';
+import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../profile/data/profile_repository.dart';
 
+/// Écran de démarrage : affiche l'animation DEM pendant que
+/// [appStartupNotifier.initialize()] charge l'état.
+/// Dès que [isReady] est true, GoRouter.redirect prend le relais.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -21,91 +22,40 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _logoScale;
   late final Animation<double> _logoOpacity;
   late final Animation<double> _taglineOpacity;
-  late final Animation<Offset> _taglineSlide;
+  late final Animation<Offset>  _taglineSlide;
   late final Animation<double> _loaderOpacity;
 
   @override
   void initState() {
     super.initState();
 
-    // Logo : scale élastique + fade — 800ms
+    // ── Animations ──────────────────────────────────────────────────────────
     _logoCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    _logoScale = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _logoCtrl, curve: Curves.elasticOut),
-    );
-    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _logoCtrl, curve: const Interval(0.0, 0.45, curve: Curves.easeIn)),
-    );
+    _logoScale   = Tween<double>(begin: 0.3, end: 1.0).animate(CurvedAnimation(parent: _logoCtrl, curve: Curves.elasticOut));
+    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _logoCtrl, curve: const Interval(0.0, 0.45, curve: Curves.easeIn)));
 
-    // Tagline : slide-up + fade — 500ms
     _taglineCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
-    _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOut),
-    );
-    _taglineSlide = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero).animate(
-      CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOutCubic),
-    );
+    _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOut));
+    _taglineSlide   = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero).animate(CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOutCubic));
 
-    // Loader : fade in discret — 400ms
     _loaderCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
-    _loaderOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _loaderCtrl, curve: Curves.easeIn),
-    );
+    _loaderOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _loaderCtrl, curve: Curves.easeIn));
 
     _runSequence();
   }
 
   Future<void> _runSequence() async {
-    // 1. Logo pop élastique
+    // 1. Animation d'entrée
     await _logoCtrl.forward();
-    // 2. Tagline slide-up + fade
     await _taglineCtrl.forward();
-    // 3. Courte pause puis loader visible pendant l'appel réseau
     await Future.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
     _loaderCtrl.forward();
 
-    // 4. Résolution de la navigation (appel API)
-    final destination = await _resolveDestination();
-    if (!mounted) return;
-
-    // 5. Navigation directe — pas de fade-out pour éviter l'écran noir
-    context.go(destination);
-  }
-
-  Future<String> _resolveDestination() async {
-    final isLoggedIn = await AuthStorage.isLoggedIn();
-    if (!isLoggedIn) {
-      final seen = await AuthStorage.isOnboardingSeen();
-      return seen ? '/phone' : '/onboarding';
-    }
-
-    Map<String, dynamic>? user;
-    try {
-      user = await ProfileRepository().getMe().timeout(const Duration(seconds: 8));
-    } catch (_) {
-      user = await AuthStorage.getUser();
-    }
-
-    final role        = user?['role'] as String?;
-    final vehicleType = user?['vehicleType'] as String?;
-    final isActive    = user?['isActive'] as bool? ?? true;
-
-    if (role == 'DRIVER') {
-      if (!isActive) return '/driver/suspended';
-      if (vehicleType == 'TAXI') return '/driver/thiak/home';
-      return '/driver/home';
-    }
-    if (role == 'CLIENT') return '/client/home';
-    if (role == 'CHEF_DE_FLOTTE') {
-      if (!isActive) return '/chef-de-flotte/suspended';
-      final status = user?['chefDeFlotteStatus'] as String?;
-      if (status == 'ACTIVE')   return '/chef-de-flotte/dashboard';
-      if (status == 'PENDING')  return '/chef-de-flotte/pending';
-      if (status == 'REJECTED') return '/chef-de-flotte/rejected';
-      return '/chef-de-flotte/onboarding';
-    }
-    return '/phone';
+    // 2. Chargement de l'état (await complet — pas de saut possible)
+    //    GoRouter.redirect prend le relais dès que isReady == true.
+    await appStartupNotifier.initialize();
+    // GoRouter reçoit notifyListeners() → redirect se déclenche automatiquement.
   }
 
   @override
@@ -140,7 +90,7 @@ class _SplashScreenState extends State<SplashScreen>
 
               const SizedBox(height: 20),
 
-              // ── Tagline slide-up ──
+              // ── Tagline ──
               AnimatedBuilder(
                 animation: _taglineCtrl,
                 builder: (_, child) => FadeTransition(
@@ -160,7 +110,7 @@ class _SplashScreenState extends State<SplashScreen>
 
               const SizedBox(height: 48),
 
-              // ── Loader discret — visible pendant l'appel réseau ──
+              // ── Loader (visible pendant initialize()) ──
               AnimatedBuilder(
                 animation: _loaderCtrl,
                 builder: (_, _) => Opacity(
