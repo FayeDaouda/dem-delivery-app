@@ -28,6 +28,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   String? _mapStyle;
   List<LatLng> _routePoints = [];
   bool _cancelling = false;
+  GoogleMapController? _mapController;
 
   StreamSubscription<Map<String, dynamic>>? _acceptedSub;
 
@@ -42,6 +43,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   @override
   void dispose() {
     _acceptedSub?.cancel();
+    _mapController?.dispose();
     super.dispose();
   }
 
@@ -260,7 +262,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
           // ── Map Background ──
           SizedBox.expand(
             child: GoogleMap(
-              initialCameraPosition: CameraPosition(target: initialTarget, zoom: 17, tilt: 55),
+              initialCameraPosition: CameraPosition(target: initialTarget, zoom: 14, tilt: 40),
               style: _mapStyle,
               markers: markers,
               polylines: polylines,
@@ -270,6 +272,30 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
               compassEnabled: false,
               mapToolbarEnabled: false,
               buildingsEnabled: true,
+              onMapCreated: (controller) {
+                _mapController = controller;
+                // Zoom pour montrer les deux points dès l'ouverture
+                if (pickupLat != null && pickupLng != null &&
+                    deliveryLat != null && deliveryLng != null) {
+                  Future.delayed(const Duration(milliseconds: 400), () {
+                    _mapController?.animateCamera(
+                      CameraUpdate.newLatLngBounds(
+                        LatLngBounds(
+                          southwest: LatLng(
+                            pickupLat.toDouble() < deliveryLat.toDouble() ? pickupLat.toDouble() : deliveryLat.toDouble(),
+                            pickupLng.toDouble() < deliveryLng.toDouble() ? pickupLng.toDouble() : deliveryLng.toDouble(),
+                          ),
+                          northeast: LatLng(
+                            pickupLat.toDouble() > deliveryLat.toDouble() ? pickupLat.toDouble() : deliveryLat.toDouble(),
+                            pickupLng.toDouble() > deliveryLng.toDouble() ? pickupLng.toDouble() : deliveryLng.toDouble(),
+                          ),
+                        ),
+                        90, // padding en pixels
+                      ),
+                    );
+                  });
+                }
+              },
             ),
           ),
 
@@ -415,7 +441,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: _cancelling ? null : () => context.pop(),
+                                    onTap: _cancelling ? null : () => context.go('/client/home'),
                                     child: Container(
                                       height: 50,
                                       decoration: BoxDecoration(

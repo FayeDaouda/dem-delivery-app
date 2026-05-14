@@ -18,6 +18,7 @@ import '../deliveries/providers/orders_provider.dart';
 import 'navigation/alert_manager.dart';
 import 'navigation/directions_service.dart';
 import 'navigation/navigation_service.dart';
+import '../../core/notifications/notification_service.dart';
 
 class ActiveOrderScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> order;
@@ -56,14 +57,21 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   Timer? _alertTimer;
 
   // ── Getters ───────────────────────────────────────────────────────────────
+  double _parseCoord(dynamic val, [double fallback = 0.0]) {
+    if (val == null) return fallback;
+    if (val is num) return val.toDouble();
+    if (val is String) return double.tryParse(val) ?? fallback;
+    return fallback;
+  }
+
   LatLng get _pickupLatLng => LatLng(
-        (_order['pickupLatitude'] as num).toDouble(),
-        (_order['pickupLongitude'] as num).toDouble(),
+        _parseCoord(_order['pickupLatitude']),
+        _parseCoord(_order['pickupLongitude']),
       );
 
   LatLng get _deliveryLatLng => LatLng(
-        (_order['deliveryLatitude'] as num).toDouble(),
-        (_order['deliveryLongitude'] as num).toDouble(),
+        _parseCoord(_order['deliveryLatitude']),
+        _parseCoord(_order['deliveryLongitude']),
       );
 
   bool get _isPickedUp => _order['status'] == 'PICKED_UP';
@@ -202,6 +210,20 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       _loadingRoute = false;
       _isRerouting  = false;
     });
+
+    final dist = _distanceToTarget;
+    if (dist != null) {
+      final min = (dist / 416).round();
+      final destName = _isPickedUp ? (_order['deliveryAddress'] ?? 'client') : (_order['pickupAddress'] ?? 'restaurant');
+      final statusText = _isPickedUp ? 'En route vers la livraison' : 'En route vers la récupération';
+      final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+
+      NotificationService.showOngoingNotification(
+        id: 9999,
+        title: statusText,
+        body: '$destName$etaText',
+      );
+    }
   }
 
   // Zoom 18 à l'arrêt → 15 à 120 km/h (décroissance linéaire)
@@ -236,6 +258,21 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       final orderId = _order['id'] as String?;
       if (orderId != null) {
         SocketService.instance.emitDriverLocation(position.latitude, position.longitude, orderId);
+      }
+
+      // Mettre à jour la notification persistante en tâche de fond avec le temps restant
+      final dist = _distanceToTarget;
+      if (dist != null) {
+        final min = (dist / 416).round();
+        final destName = _isPickedUp ? (_order['deliveryAddress'] ?? 'client') : (_order['pickupAddress'] ?? 'restaurant');
+        final statusText = _isPickedUp ? 'En route vers la livraison' : 'En route vers la récupération';
+        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+
+        NotificationService.showOngoingNotification(
+          id: 9999,
+          title: statusText,
+          body: '$destName$etaText',
+        );
       }
     }
 

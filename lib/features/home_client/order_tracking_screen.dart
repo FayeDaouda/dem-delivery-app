@@ -4,10 +4,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/notifications/notification_service.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
@@ -145,8 +147,30 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       final lat = (data['lat'] as num?)?.toDouble();
       final lng = (data['lng'] as num?)?.toDouble();
       if (lat == null || lng == null) return;
-      setState(() => _driverLocation = LatLng(lat, lng));
-      _mapController?.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(lat, lng), zoom: 17, tilt: 55)));
+      
+      final newLoc = LatLng(lat, lng);
+      setState(() => _driverLocation = newLoc);
+      _mapController?.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: newLoc, zoom: 17, tilt: 55)));
+
+      // Mettre à jour la notification client avec le temps restant
+      final isPickedUp = _status == 'PICKED_UP';
+      final targetLat = isPickedUp ? (_order?['deliveryLatitude'] as num?)?.toDouble() : (_order?['pickupLatitude'] as num?)?.toDouble();
+      final targetLng = isPickedUp ? (_order?['deliveryLongitude'] as num?)?.toDouble() : (_order?['pickupLongitude'] as num?)?.toDouble();
+      final targetName = isPickedUp ? (_order?['deliveryAddress']?.toString() ?? 'Destination') : (_order?['pickupAddress']?.toString() ?? 'Destination');
+      
+      if (targetLat != null && targetLng != null) {
+        final dist = Geolocator.distanceBetween(lat, lng, targetLat, targetLng);
+        // Vitesse moyenne en ville ~ 25 km/h = 416 m/min
+        final min = (dist / 416).round();
+        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+        final statusText = isPickedUp ? 'Le livreur est en route vers vous' : 'Le livreur récupère votre commande';
+
+        NotificationService.showOngoingNotification(
+          id: 8888,
+          title: statusText,
+          body: '$targetName$etaText',
+        );
+      }
     });
   }
 

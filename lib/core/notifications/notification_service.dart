@@ -1,5 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../api/api_client.dart';
 import '../router/app_router.dart';
 
@@ -11,6 +12,7 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
 
 class NotificationService {
   static final _messaging = FirebaseMessaging.instance;
+  static final _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   /// À appeler une seule fois dans main(), après Firebase.initializeApp().
   static Future<void> init() async {
@@ -20,7 +22,27 @@ class NotificationService {
         alert: true, badge: true, sound: true,
       ).timeout(const Duration(seconds: 5));
 
-      // 2. iOS : affiche en foreground
+      // 1.b Initialisation Local Notifications (pour afficher en foreground)
+      const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosInitSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
+      const initSettings = InitializationSettings(android: androidInitSettings, iOS: iosInitSettings);
+      await _localNotificationsPlugin.initialize(settings: initSettings);
+
+      // Création du channel Android haute importance
+      const channel = AndroidNotificationChannel(
+        'dem_high_importance',
+        'Notifications Importantes DEM',
+        description: 'Notifications de courses en temps réel',
+        importance: Importance.max,
+        enableVibration: true,
+      );
+      await _localNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+
+      // 2. iOS : affiche en foreground nativement via Firebase
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: true, badge: true, sound: true,
       );
@@ -137,5 +159,62 @@ class NotificationService {
     try {
       await ApiClient.dio.put('/users/fcm-token', data: {'token': token});
     } catch (_) {}
+  }
+
+  // ── Notifications système locales ─────────────────────────────────────────
+  static Future<void> showSystemNotification({required String title, required String body}) async {
+    const androidDetails = AndroidNotificationDetails(
+      'dem_high_importance',
+      'Notifications Importantes DEM',
+      channelDescription: 'Notifications de courses en temps réel',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    
+    await _localNotificationsPlugin.show(
+      id: DateTime.now().millisecond, // ID unique
+      title: title,
+      body: body,
+      notificationDetails: details,
+    );
+  }
+
+  // ── Notifications système persistantes (en cours) ─────────────────────────
+  static Future<void> showOngoingNotification({required int id, required String title, required String body}) async {
+    const androidDetails = AndroidNotificationDetails(
+      'dem_ongoing_course',
+      'Course en cours',
+      channelDescription: 'Suivi de la course active',
+      importance: Importance.low, // Pour ne pas sonner à chaque maj
+      priority: Priority.low,
+      icon: '@mipmap/ic_launcher',
+      ongoing: true,      // Reste dans la barre
+      autoCancel: false,  // Ne se ferme pas au clic
+      showWhen: false,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: false, // Pas d'alerte agaçante sur iOS pour l'ongoing
+      presentBadge: false,
+      presentSound: false,
+    );
+    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    
+    await _localNotificationsPlugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: details,
+    );
+  }
+
+  static Future<void> cancelNotification(int id) async {
+    await _localNotificationsPlugin.cancel(id: id);
   }
 }

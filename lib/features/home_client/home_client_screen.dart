@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import '../../../core/notifications/notification_service.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -42,6 +43,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     with SingleTickerProviderStateMixin, RouteAware {
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>> _pendingOrders = [];
+  List<Map<String, dynamic>> _activeOrders = [];
   bool _loadingOrders = false;
   static const _kDeliveredKey = 'dem_shown_delivered_ids';
 
@@ -56,6 +58,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _orderAcceptedSub;
+  StreamSubscription<Map<String, dynamic>>? _driverLocationSub;
 
   // ── GPS + boussole ────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
@@ -71,6 +74,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   bool _sheetExpanded = true;
   late AnimationController _sheetAnim;
   late Animation<double> _sheetSlide;
+
+  // ── Polling timer pour s'assurer que le badge est à jour ───────────────────
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -93,6 +99,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPendingOrder();
       _connectSocket();
+      // Polling de secours toutes les 10s pour être sûr d'avoir le badge à jour
+      _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+        _checkPendingOrder();
+      });
     });
   }
 
@@ -115,9 +125,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   void dispose() {
     routeObserver.unsubscribe(this);
     _orderAcceptedSub?.cancel();
+    _driverLocationSub?.cancel();
     _locationSub?.cancel();
     _compassSub?.cancel();
     _programmaticMoveTimer?.cancel();
+    _pollTimer?.cancel();
     _mapController?.dispose();
     _sheetAnim.dispose();
     super.dispose();
@@ -137,11 +149,54 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         _pendingOrders.removeWhere((o) => o['id'] == acceptedId);
       });
       if (acceptedId != null && driverId != null) {
+        final eta = data['etaPickupMin'] as int?;
+        
+        // Affiche une vraie notification système locale
+        NotificationService.showSystemNotification(
+          title: 'Course acceptée !',
+          body: 'Un livreur est en route' + (eta != null ? ' (~$eta min)' : '.'),
+        );
+
         context.push('/orders/tracking', extra: {
           'orderId': acceptedId,
           'driverId': driverId,
-          'etaPickupMin': data['etaPickupMin'] as int?,
+          'etaPickupMin': eta,
         });
+      }
+    });
+
+    _driverLocationSub = SocketService.instance.onDriverLocation.listen((data) {
+      if (!mounted || _activeOrders.isEmpty) return;
+      final active = _activeOrders.first;
+      if (data['orderId'] != active['id']) return;
+
+      final lat = (data['lat'] as num?)?.toDouble();
+      final lng = (data['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) return;
+
+      double? parseCoord(dynamic v) {
+        if (v == null) return null;
+        if (v is num) return v.toDouble();
+        if (v is String) return double.tryParse(v);
+        return null;
+      }
+
+      final isPickedUp = (active['status'] as String? ?? '').toUpperCase() == 'PICKED_UP';
+      final targetLat = parseCoord(isPickedUp ? active['deliveryLatitude'] : active['pickupLatitude']);
+      final targetLng = parseCoord(isPickedUp ? active['deliveryLongitude'] : active['pickupLongitude']);
+      final targetName = ((isPickedUp ? active['deliveryAddress'] : active['pickupAddress']) ?? 'Destination').toString();
+
+      if (targetLat != null && targetLng != null) {
+        final dist = Geolocator.distanceBetween(lat, lng, targetLat, targetLng);
+        final min = (dist / 416).round();
+        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+        final statusText = isPickedUp ? 'Le livreur est en route vers vous' : 'Le livreur récupère votre commande';
+
+        NotificationService.showOngoingNotification(
+          id: 8888,
+          title: statusText,
+          body: '$targetName$etaText',
+        );
       }
     });
   }
@@ -318,29 +373,22 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     try {
       final orders = await ref.read(ordersRepositoryProvider).getMyOrders();
 
-      // Priorité 1 : course active (driver en route) → redirect tracking
+      // Priorité 1 : course active (driver en route) → badge vert
       const activeStatuses = ['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'];
-      final active = orders.firstWhere(
-        (o) => activeStatuses.contains((o['status'] as String? ?? '').toUpperCase()),
-        orElse: () => {},
-      );
+      final activeList = orders
+          .where((o) => activeStatuses.contains((o['status'] as String? ?? '').toUpperCase()))
+          .toList();
 
-      if (active.isNotEmpty && mounted) {
-        final orderId = active['id'] as String?;
-        final driverId = (active['driver'] as Map?)?['id'] as String?
-            ?? active['driverId'] as String?;
-        if (orderId != null && driverId != null) {
-          if (mounted) setState(() => _loadingOrders = false);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              context.push('/orders/tracking', extra: {
-                'orderId': orderId,
-                'driverId': driverId,
-              });
-            }
-          });
-          return;
-        }
+      if (activeList.isNotEmpty) {
+        final orderId = activeList.first['id'] as String? ?? '';
+        final delivery = activeList.first['deliveryAddress'] as String? ?? 'votre destination';
+        NotificationService.showOngoingNotification(
+          id: 8888,
+          title: 'Course en cours',
+          body: 'En route vers : $delivery',
+        );
+      } else {
+        NotificationService.cancelNotification(8888);
       }
 
       // Priorité 2 : commande récemment livrée → dialog confirmation (une seule fois)
@@ -355,7 +403,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         final prefs = await SharedPreferences.getInstance();
         final shownIds = prefs.getStringList(_kDeliveredKey) ?? [];
         if (!shownIds.contains(orderId)) {
-          setState(() => _loadingOrders = false);
+          setState(() {
+             _loadingOrders = false;
+             _activeOrders = activeList;
+          });
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _showDeliveredDialog(delivered, prefs, shownIds);
           });
@@ -370,6 +421,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
       if (mounted) {
         setState(() {
+          _activeOrders = activeList;
           _pendingOrders = pendingList;
           _loadingOrders = false;
         });
@@ -723,41 +775,79 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                         ),
                       ),
 
-                      // Badge Commandes en attente
-                      if (_pendingOrders.isNotEmpty)
-                        GestureDetector(
-                          onTap: () {
-                            if (_pendingOrders.length == 1) {
-                              context.push('/orders/confirmation', extra: _pendingOrders.first);
-                            } else {
-                              _showPendingOrdersSelection();
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFB300),
-                              borderRadius: BorderRadius.circular(30),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFFFB300).withValues(alpha: 0.4),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                )
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.timer, color: Colors.white, size: 20),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _pendingOrders.length == 1 ? '1 commande en cours' : '${_pendingOrders.length} commandes en cours',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      // Badges Actif / En attente
+                      if (_activeOrders.isNotEmpty || _pendingOrders.isNotEmpty)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Badge Actif (Vert)
+                            if (_activeOrders.isNotEmpty)
+                              GestureDetector(
+                                onTap: () {
+                                  final active = _activeOrders.first;
+                                  context.push('/orders/tracking', extra: {
+                                    'orderId': active['id'],
+                                    'driverId': (active['driver'] as Map?)?['id'] ?? active['driverId'],
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  margin: EdgeInsets.only(bottom: _pendingOrders.isNotEmpty ? 8 : 0),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF40F0C0), // Vert
+                                    borderRadius: BorderRadius.circular(30),
+                                    boxShadow: [
+                                      BoxShadow(color: const Color(0xFF40F0C0).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.delivery_dining, color: Colors.white, size: 20),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _activeOrders.length == 1 ? '1 course en cours' : '${_activeOrders.length} courses en cours',
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ],
-                            ),
-                          ),
+                              ),
+
+                            // Badge En attente (Jaune)
+                            if (_pendingOrders.isNotEmpty)
+                              GestureDetector(
+                                onTap: () {
+                                  if (_pendingOrders.length == 1) {
+                                    context.push('/orders/confirmation', extra: _pendingOrders.first);
+                                  } else {
+                                    _showPendingOrdersSelection();
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFB300), // Jaune
+                                    borderRadius: BorderRadius.circular(30),
+                                    boxShadow: [
+                                      BoxShadow(color: const Color(0xFFFFB300).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.timer, color: Colors.white, size: 20),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _pendingOrders.length == 1 ? '1 commande en attente' : '${_pendingOrders.length} commandes en attente',
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                     ],
                   ),
