@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
@@ -48,11 +49,18 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   int _lastTrimIdx = 0;
 
   BitmapDescriptor? _driverMarkerIcon;
+  double _driverHeading = 0;
+  LatLng? _prevDriverLocation;
 
   StreamSubscription<Map<String, dynamic>>? _statusSub;
   StreamSubscription<Map<String, dynamic>>? _driverLocationSub;
   LatLng? _driverLocation;
   Timer? _pollTimer;
+  Timer? _routeRefreshTimer;
+  DateTime? _lastNotifUpdate; // throttle notifications persistantes
+
+  // Autres commandes actives du client (multi-commandes)
+  List<Map<String, dynamic>> _otherActiveOrders = [];
 
   @override
   void initState() {
@@ -71,6 +79,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     _statusSub?.cancel();
     _driverLocationSub?.cancel();
     _pollTimer?.cancel();
+    _routeRefreshTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
@@ -81,52 +90,82 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     if (mounted) setState(() => _mapStyle = style);
   }
 
-  // ── Icône driver (cercle orange + silhouette moto) ────────────────────────
+  // ── Icône driver 3D : flèche de navigation orientable ────────────────────
   static Future<BitmapDescriptor> _buildDriverMarkerIcon() async {
-    const double size = 96;
+    const double size = 120;
     const double cx = size / 2;
     const double cy = size / 2;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    // Halo
-    canvas.drawCircle(const Offset(cx, cy), 44,
-        Paint()..color = const Color(0x26FF6B00));
+    // Halo externe pulsé
+    canvas.drawCircle(const Offset(cx, cy), 56,
+        Paint()..color = const Color(0x18FF6B00));
+    canvas.drawCircle(const Offset(cx, cy), 42,
+        Paint()..color = const Color(0x30FF6B00));
 
-    // Cercle orange principal
-    canvas.drawCircle(const Offset(cx, cy), 28,
+    // Ombre portée de la flèche
+    final shadowPaint = Paint()
+      ..color = const Color(0x70C85000)
+      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 7);
+    final shadowPath = Path()
+      ..moveTo(cx, cy - 26 + 5)
+      ..lineTo(cx + 16, cy + 14 + 5)
+      ..lineTo(cx, cy + 7 + 5)
+      ..lineTo(cx - 16, cy + 14 + 5)
+      ..close();
+    canvas.drawPath(shadowPath, shadowPaint);
+
+    // Cercle de base blanc (effet 3D)
+    canvas.drawCircle(const Offset(cx, cy + 4), 22,
+        Paint()..color = Colors.white);
+    canvas.drawCircle(const Offset(cx, cy + 4), 20,
         Paint()..color = const Color(0xFFFF6B00));
-    canvas.drawCircle(
-        const Offset(cx, cy), 28,
-        Paint()
-          ..color = Colors.white
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3);
 
-    // Silhouette moto en blanc (lignes)
-    final moto = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
+    // Flèche pointant vers le haut (nord = 0°)
+    // La rotation est appliquée via Marker.rotation au niveau de la carte
+    final arrowPath = Path()
+      ..moveTo(cx, cy - 26)        // pointe
+      ..lineTo(cx + 16, cy + 13)   // coin droit
+      ..lineTo(cx, cy + 7)         // encoche centrale
+      ..lineTo(cx - 16, cy + 13)   // coin gauche
+      ..close();
 
-    // Corps principal
-    canvas.drawLine(const Offset(cx - 9, cy - 2), const Offset(cx + 9, cy - 2), moto);
-    // Guidon
-    canvas.drawLine(const Offset(cx + 5, cy - 2), const Offset(cx + 8, cy - 7), moto);
-    // Selle
-    canvas.drawLine(const Offset(cx - 7, cy - 2), const Offset(cx - 7, cy - 5), moto);
-    // Roue avant
-    canvas.drawCircle(const Offset(cx + 9, cy + 5), 5.5, moto);
-    // Roue arrière
-    canvas.drawCircle(const Offset(cx - 9, cy + 5), 5.5, moto);
+    canvas.drawPath(
+      arrowPath,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(cx, cy - 26),
+          const Offset(cx, cy + 13),
+          [const Color(0xFFFFB347), const Color(0xFFE65100)],
+        ),
+    );
+    // Contour blanc brillant
+    canvas.drawPath(
+      arrowPath,
+      Paint()
+        ..color = const Color(0xCCFFFFFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0,
+    );
 
     final picture = recorder.endRecording();
     final img = await picture.toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(),
-        width: 46, height: 46);
+        width: 54, height: 54);
+  }
+
+  // ── Cap du livreur (bearing entre deux positions consécutives) ────────────
+  static double _calculateBearing(LatLng from, LatLng to) {
+    final lat1 = from.latitude  * math.pi / 180;
+    final lat2 = to.latitude    * math.pi / 180;
+    final dLng = (to.longitude - from.longitude) * math.pi / 180;
+    final y = math.sin(dLng) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) -
+              math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+    return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 
   // ── Rétrécissement de la route ────────────────────────────────────────────
@@ -144,14 +183,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   }
 
   void _updateDisplayRoute() {
-    if (_routePoints.isEmpty) { _displayRoute = []; return; }
-    // Avant pickup : route complète (driver n'est pas encore dessus)
-    if (_status != 'PICKED_UP' || _driverLocation == null) {
-      _displayRoute = _routePoints;
+    if (_routePoints.isEmpty || _driverLocation == null) {
+      if (_routePoints.isNotEmpty) setState(() => _displayRoute = _routePoints);
       return;
     }
-    // Après pickup : on coupe la portion déjà parcourue
+    // Les deux phases : la route part toujours de la position du driver → on coupe le début parcouru
     final idx = _closestPointIdx(_routePoints, _driverLocation!, _lastTrimIdx);
+    if (idx == _lastTrimIdx && _displayRoute.isNotEmpty) return;
     _lastTrimIdx = idx;
     if (mounted) setState(() => _displayRoute = _routePoints.sublist(idx));
   }
@@ -159,15 +197,34 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   Future<void> _fetchOrder() async {
     try {
       final repo = ref.read(ordersRepositoryProvider);
-      final order = await repo.getOrderById(widget.orderId);
+      // Charge la commande courante + toutes les commandes pour le multi-suivi
+      final results = await Future.wait([
+        repo.getOrderById(widget.orderId),
+        repo.getMyOrders(),
+      ]);
       if (!mounted) return;
+
+      final order = results[0] as Map<String, dynamic>;
+      final allOrders = results[1] as List<Map<String, dynamic>>;
       final newStatus = order['status'] as String? ?? _status;
+
+      const activeStatuses = ['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'];
+      final others = allOrders.where((o) {
+        final s = (o['status'] as String? ?? '').toUpperCase();
+        return activeStatuses.contains(s) && o['id'] != widget.orderId;
+      }).toList();
+
+      final prevStatus = _status;
       setState(() {
         _order = order;
         _status = newStatus;
         _loading = false;
+        _otherActiveOrders = others;
       });
-      _fetchRoute();
+
+      // Re-fetch route si le statut a changé (ACCEPTED → PICKED_UP)
+      if (prevStatus != newStatus || _routePoints.isEmpty) _fetchRoute();
+
       if (newStatus == 'DELIVERED' && !_rated) {
         Future.delayed(const Duration(milliseconds: 300), _showRatingDialog);
       }
@@ -179,35 +236,46 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   Future<void> _fetchRoute() async {
     final order = _order;
     if (order == null) return;
-    final pickupLat = (order['pickupLatitude'] as num?)?.toDouble();
-    final pickupLng = (order['pickupLongitude'] as num?)?.toDouble();
-    final deliveryLat = (order['deliveryLatitude'] as num?)?.toDouble();
-    final deliveryLng = (order['deliveryLongitude'] as num?)?.toDouble();
-    if (pickupLat == null ||
-        pickupLng == null ||
-        deliveryLat == null ||
-        deliveryLng == null) {
-      return;
+    final pickupLat  = (order['pickupLatitude']   as num?)?.toDouble();
+    final pickupLng  = (order['pickupLongitude']  as num?)?.toDouble();
+    final delivLat   = (order['deliveryLatitude'] as num?)?.toDouble();
+    final delivLng   = (order['deliveryLongitude'] as num?)?.toDouble();
+    if (pickupLat == null || pickupLng == null || delivLat == null || delivLng == null) return;
+
+    // Route selon la phase :
+    //  ACCEPTED  → driver → pickup
+    //  PICKED_UP → driver (ou pickup) → delivery
+    //  autre     → pickup → delivery (preview)
+    final double oLat, oLng, dLat, dLng;
+    if (_status == 'ACCEPTED' && _driverLocation != null) {
+      oLat = _driverLocation!.latitude;  oLng = _driverLocation!.longitude;
+      dLat = pickupLat;                  dLng = pickupLng;
+    } else if (_status == 'PICKED_UP') {
+      oLat = _driverLocation?.latitude  ?? pickupLat;
+      oLng = _driverLocation?.longitude ?? pickupLng;
+      dLat = delivLat;                   dLng = delivLng;
+    } else {
+      oLat = pickupLat; oLng = pickupLng;
+      dLat = delivLat;  dLng = delivLng;
     }
+
 
     try {
       final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
       final res = await dio.get(
-        'https://router.project-osrm.org/route/v1/driving/$pickupLng,$pickupLat;$deliveryLng,$deliveryLat?overview=full&geometries=geojson',
+        'https://router.project-osrm.org/route/v1/driving/$oLng,$oLat;$dLng,$dLat?overview=full&geometries=geojson',
       );
       if (res.statusCode == 200 &&
           (res.data['routes'] as List?)?.isNotEmpty == true) {
-        final coords =
-            res.data['routes'][0]['geometry']['coordinates'] as List;
+        final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
         final points = coords
-            .map((c) =>
-                LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+            .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
             .toList();
         if (mounted) {
           setState(() {
             _routePoints = points;
             _displayRoute = points;
-            _lastTrimIdx = 0;
+            _lastTrimIdx  = 0;
           });
           _updateDisplayRoute();
         }
@@ -225,7 +293,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       final newStatus = data['status'] as String?;
       if (newStatus == null) return;
       setState(() => _status = newStatus);
-      _updateDisplayRoute();
+      // Changement de phase → recalcule la route (driver→delivery au lieu de driver→pickup)
+      _fetchRoute();
       if (newStatus == 'DELIVERED' && !_rated) {
         Future.delayed(const Duration(milliseconds: 300), _showRatingDialog);
       }
@@ -238,35 +307,64 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
       final lng = (data['lng'] as num?)?.toDouble();
       if (lat == null || lng == null) return;
       final newLoc = LatLng(lat, lng);
-      setState(() => _driverLocation = newLoc);
+
+      // Cap : calculé depuis la position précédente
+      if (_prevDriverLocation != null) {
+        final bearing = _calculateBearing(_prevDriverLocation!, newLoc);
+        setState(() { _driverLocation = newLoc; _driverHeading = bearing; });
+      } else {
+        setState(() => _driverLocation = newLoc);
+      }
+      _prevDriverLocation = newLoc;
+
+      // Rétrécissement en temps réel
       _updateDisplayRoute();
+
+      // Recalcul si déviation > 70m depuis la route (ACCEPTED et PICKED_UP)
+      if (_routePoints.isNotEmpty &&
+          (_status == 'ACCEPTED' || _status == 'PICKED_UP')) {
+        double minDist = double.infinity;
+        final end = (_lastTrimIdx + 60).clamp(0, _routePoints.length);
+        for (int i = _lastTrimIdx; i < end; i++) {
+          final d = Geolocator.distanceBetween(
+              lat, lng, _routePoints[i].latitude, _routePoints[i].longitude);
+          if (d < minDist) minDist = d;
+        }
+        if (minDist > 70) _fetchRoute();
+      }
+
+      // Caméra suit le driver
       _mapController?.animateCamera(CameraUpdate.newCameraPosition(
           CameraPosition(target: newLoc, zoom: 17, tilt: 55)));
 
       // Notification persistante avec ETA estimé
       final isPickedUp = _status == 'PICKED_UP';
       final targetLat = isPickedUp
-          ? (_order?['deliveryLatitude'] as num?)?.toDouble()
-          : (_order?['pickupLatitude'] as num?)?.toDouble();
+          ? (_order?['deliveryLatitude']  as num?)?.toDouble()
+          : (_order?['pickupLatitude']    as num?)?.toDouble();
       final targetLng2 = isPickedUp
           ? (_order?['deliveryLongitude'] as num?)?.toDouble()
-          : (_order?['pickupLongitude'] as num?)?.toDouble();
+          : (_order?['pickupLongitude']   as num?)?.toDouble();
       final targetName = isPickedUp
           ? (_order?['deliveryAddress']?.toString() ?? 'Destination')
-          : (_order?['pickupAddress']?.toString() ?? 'Destination');
+          : (_order?['pickupAddress']?.toString()   ?? 'Pickup');
 
       if (targetLat != null && targetLng2 != null) {
-        final dist = Geolocator.distanceBetween(lat, lng, targetLat, targetLng2);
-        final min = (dist / 416).round();
-        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
-        final statusText = isPickedUp
-            ? 'Le livreur est en route vers vous'
-            : 'Le livreur récupère votre commande';
-        NotificationService.showOngoingNotification(
-          id: 8888,
-          title: statusText,
-          body: '$targetName$etaText',
-        );
+        final now = DateTime.now();
+        // Throttle : mise à jour max toutes les 60 secondes
+        if (_lastNotifUpdate == null ||
+            now.difference(_lastNotifUpdate!).inSeconds >= 60) {
+          _lastNotifUpdate = now;
+          final dist = Geolocator.distanceBetween(lat, lng, targetLat, targetLng2);
+          final min = (dist / 416).round();
+          final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+          final statusText = isPickedUp
+              ? 'Le livreur est en route vers vous'
+              : 'Le livreur récupère votre commande';
+          NotificationService.showOngoingNotification(
+            id: 8888, title: statusText, body: '$targetName$etaText',
+          );
+        }
       }
     });
   }
@@ -494,26 +592,41 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     final deliveryAddress = order?['deliveryAddress'] as String? ?? '';
     final price = (order?['price'] as num?)?.toInt() ?? 0;
 
+    // Fallback : dernière position connue du driver depuis l'API si socket pas encore reçu
+    final driverLat = _driverLocation?.latitude
+        ?? (order?['driver'] as Map?)?['lastLatitude'] as double?
+        ?? (order?['driverLatitude'] as num?)?.toDouble();
+    final driverLng = _driverLocation?.longitude
+        ?? (order?['driver'] as Map?)?['lastLongitude'] as double?
+        ?? (order?['driverLongitude'] as num?)?.toDouble();
+    final effectiveDriverLoc = (driverLat != null && driverLng != null)
+        ? LatLng(driverLat, driverLng) : null;
+
     final markers = <Marker>{
-      if (pickupLat != null && pickupLng != null)
+      // Pickup : visible seulement avant prise en charge
+      if (pickupLat != null && pickupLng != null && _status == 'ACCEPTED')
         Marker(
           markerId: const MarkerId('pickup'),
           position: LatLng(pickupLat, pickupLng),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: const InfoWindow(title: 'Point de collecte'),
         ),
+      // Destination : toujours visible
       if (deliveryLat != null && deliveryLng != null)
         Marker(
           markerId: const MarkerId('delivery'),
           position: LatLng(deliveryLat, deliveryLng),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: const InfoWindow(title: 'Destination'),
         ),
-      if (_driverLocation != null)
+      // Livreur : flèche 3D orientée dans sa direction de déplacement
+      if (effectiveDriverLoc != null)
         Marker(
           markerId: const MarkerId('driver'),
-          position: _driverLocation!,
+          position: effectiveDriverLoc,
           icon: _driverMarkerIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-          infoWindow: const InfoWindow(title: 'Votre livreur'),
+          rotation: _driverHeading,
           anchor: const Offset(0.5, 0.5),
           flat: true,
         ),
@@ -576,28 +689,75 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
             ),
           ),
 
-          // Back button (iOS — pas de bouton physique)
+          // Bouton retour + bandeau multi-commandes
           Positioned(
             top: 0,
             left: 0,
+            right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: GestureDetector(
-                  onTap: () {
-                    ref.read(trackingMinimizedProvider.notifier).state = true;
-                    context.canPop() ? context.pop() : context.go('/client/home');
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 8)],
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    // Bouton retour
+                    GestureDetector(
+                      onTap: () {
+                        ref.read(trackingMinimizedProvider.notifier).state = true;
+                        context.canPop() ? context.pop() : context.go('/client/home');
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 8)],
+                        ),
+                        child: const Icon(Icons.arrow_back, size: 20, color: Colors.black87),
+                      ),
                     ),
-                    child: const Icon(Icons.arrow_back, size: 20, color: Colors.black87),
-                  ),
+                    // Chips des autres commandes actives
+                    if (_otherActiveOrders.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: _otherActiveOrders.map((o) {
+                              final idx = _otherActiveOrders.indexOf(o) + 2;
+                              final dId = (o['driver'] as Map?)?['id'] as String?
+                                  ?? o['driverId'] as String?;
+                              final oId = o['id'] as String?;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    if (oId == null || dId == null) return;
+                                    context.pushReplacement('/orders/tracking', extra: {
+                                      'orderId': oId,
+                                      'driverId': dId,
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0CB8DE),
+                                      borderRadius: BorderRadius.circular(20),
+                                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6)],
+                                    ),
+                                    child: Text(
+                                      'Commande $idx',
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),

@@ -42,6 +42,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   Position? _driverPosition;
   bool _autoFollow = true;
   DateTime? _lastLocationEmit;
+  DateTime? _lastNotifUpdate;
+  double _smoothedHeading = 0;
+  DateTime? _lastCameraUpdate;
 
   // ── Route ─────────────────────────────────────────────────────────────────
   List<LatLng> _routePoints = [];
@@ -192,12 +195,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   }
 
   Future<void> _loadRoute() async {
-    // Phase 1 : driver → pickup | Phase 2 : pickup → delivery
-    final origin = _isPickedUp
-        ? _pickupLatLng
-        : (_driverPosition != null
-            ? LatLng(_driverPosition!.latitude, _driverPosition!.longitude)
-            : _pickupLatLng);
+    // Toujours partir de la position actuelle du driver (les deux phases)
+    final origin = _driverPosition != null
+        ? LatLng(_driverPosition!.latitude, _driverPosition!.longitude)
+        : (_isPickedUp ? _pickupLatLng : _pickupLatLng);
     final destination = _isPickedUp ? _deliveryLatLng : _pickupLatLng;
 
     final result = await DirectionsService.getRoute(
@@ -248,9 +249,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     if (_routePoints.isEmpty || _driverPosition == null) return;
     final driverLatLng = LatLng(_driverPosition!.latitude, _driverPosition!.longitude);
     final idx = _closestPointIdx(_routePoints, driverLatLng, _lastTrimIdx);
-    if (idx == _lastTrimIdx) return;
+    if (idx <= _lastTrimIdx) return; // avance seulement, ne recule pas
     _lastTrimIdx = idx;
-    setState(() => _displayRoute = _routePoints.sublist(idx));
+    if (mounted) setState(() => _displayRoute = _routePoints.sublist(idx));
   }
 
   // Zoom 18 à l'arrêt → 15 à 120 km/h (décroissance linéaire)
@@ -260,23 +261,39 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     return 18.0 - (kmh / 120.0) * 3.0;
   }
 
+  // Lissage du cap : filtre passe-bas + gestion du wrap 0°/360°
+  double _smoothHeading(double target) {
+    if (target < 0) return _smoothedHeading; // heading invalide (arrêt) → on garde
+    double diff = target - _smoothedHeading;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    return (_smoothedHeading + diff * 0.25) % 360;
+  }
+
   void _onPosition(Position position) {
     if (!mounted) return;
     setState(() => _driverPosition = position);
     _trimDisplayRoute();
 
-    // Auto-follow : caméra suit le driver avec cap + inclinaison Waze
+    // Auto-follow : caméra orientée dans la direction de déplacement
     if (_autoFollow && _mapController != null) {
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(position.latitude, position.longitude),
-            zoom: _zoomForSpeed(position.speed),
-            bearing: position.heading,
-            tilt: 65,
+      final now = DateTime.now();
+      // Throttle à 350ms — évite d'annuler l'animation précédente
+      if (_lastCameraUpdate == null ||
+          now.difference(_lastCameraUpdate!).inMilliseconds >= 350) {
+        _lastCameraUpdate = now;
+        _smoothedHeading = _smoothHeading(position.heading);
+        _mapController!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(position.latitude, position.longitude),
+              zoom: _zoomForSpeed(position.speed),
+              bearing: _smoothedHeading,
+              tilt: 65,
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
 
     // Émet la position au client toutes les 10s
@@ -288,19 +305,25 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
         SocketService.instance.emitDriverLocation(position.latitude, position.longitude, orderId);
       }
 
-      // Mettre à jour la notification persistante en tâche de fond avec le temps restant
-      final dist = _distanceToTarget;
-      if (dist != null) {
-        final min = (dist / 416).round();
-        final destName = _isPickedUp ? (_order['deliveryAddress'] ?? 'client') : (_order['pickupAddress'] ?? 'restaurant');
-        final statusText = _isPickedUp ? 'En route vers la livraison' : 'En route vers la récupération';
-        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
-
-        NotificationService.showOngoingNotification(
-          id: 9999,
-          title: statusText,
-          body: '$destName$etaText',
-        );
+      // Notification persistante — throttle 60s
+      final now2 = DateTime.now();
+      if (_lastNotifUpdate == null ||
+          now2.difference(_lastNotifUpdate!).inSeconds >= 60) {
+        _lastNotifUpdate = now2;
+        final dist2 = _distanceToTarget;
+        if (dist2 != null) {
+          final min = (dist2 / 416).round();
+          final destName = _isPickedUp
+              ? (_order['deliveryAddress'] ?? 'client')
+              : (_order['pickupAddress'] ?? 'restaurant');
+          final statusText = _isPickedUp
+              ? 'En route vers la livraison'
+              : 'En route vers la récupération';
+          final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+          NotificationService.showOngoingNotification(
+            id: 9999, title: statusText, body: '$destName$etaText',
+          );
+        }
       }
     }
 
@@ -311,19 +334,24 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       if (alert != null) _showAlert(alert.message, alert.priority);
     }
 
-    // Recalcul de route si déviation > 50m et dernier recalcul > 20s
+    // Recalcul si déviation > 60m depuis la route (couvre demi-tour et chemin alternatif)
+    // Limité à 1 recalcul / 15s pour éviter les appels en rafale
     if (_routePoints.isNotEmpty && !_loadingRoute) {
       final now2 = DateTime.now();
-      if (_lastReroute == null || now2.difference(_lastReroute!).inSeconds >= 20) {
+      if (_lastReroute == null || now2.difference(_lastReroute!).inSeconds >= 15) {
         final driverLatLng = LatLng(position.latitude, position.longitude);
+        // Chercher uniquement dans la portion de route restante (pas derrière)
         double minDist = double.infinity;
-        for (final pt in _routePoints) {
+        final searchEnd = (_lastTrimIdx + 80).clamp(0, _routePoints.length);
+        for (int i = _lastTrimIdx; i < searchEnd; i++) {
           final d = Geolocator.distanceBetween(
-              driverLatLng.latitude, driverLatLng.longitude, pt.latitude, pt.longitude);
+              driverLatLng.latitude, driverLatLng.longitude,
+              _routePoints[i].latitude, _routePoints[i].longitude);
           if (d < minDist) minDist = d;
         }
-        if (minDist > 50) {
+        if (minDist > 60) {
           _lastReroute = now2;
+          _lastTrimIdx = 0; // reset trim pour nouvelle route
           setState(() => _isRerouting = true);
           _loadRoute();
         }
@@ -339,7 +367,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
         CameraPosition(
           target: LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
           zoom: 17.5,
-          bearing: _driverPosition!.heading,
+          bearing: _smoothedHeading,
           tilt: 55,
         ),
       ),

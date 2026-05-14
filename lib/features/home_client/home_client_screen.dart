@@ -46,6 +46,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   List<Map<String, dynamic>> _activeOrders = [];
   Map<String, dynamic>? _activeOrder; // course en cours minimisée (tracking minimisé)
   bool _loadingOrders = false;
+  bool _isInitialLoad = true; // redirection auto tracking seulement au premier chargement
   static const _kDeliveredKey = 'dem_shown_delivered_ids';
 
   // ── Map ──────────────────────────────────────────────────────────────────
@@ -397,13 +398,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           body: 'En route vers : $delivery',
         );
 
-        // Si l'utilisateur a minimisé le tracking → afficher la bannière, ne pas forcer redirect
-        if (ref.read(trackingMinimizedProvider)) {
-          if (mounted) setState(() { _activeOrder = active; _activeOrders = activeList; _loadingOrders = false; });
-          return;
-        }
+        // Redirection automatique vers le tracking UNIQUEMENT au premier chargement
+        // (cold start / retour de notification). Après ça : toujours bannière.
+        final shouldRedirect = _isInitialLoad &&
+            !ref.read(trackingMinimizedProvider) &&
+            orderId != null && driverId != null;
+        _isInitialLoad = false; // désactive la redirection auto pour les appels suivants
 
-        if (orderId != null && driverId != null && mounted) {
+        if (shouldRedirect && mounted) {
           setState(() { _activeOrders = activeList; _loadingOrders = false; });
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -415,6 +417,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           });
           return;
         }
+
+        // Sinon : bannière "Course en cours" sur l'accueil
+        if (mounted) setState(() { _activeOrder = active; _activeOrders = activeList; _loadingOrders = false; });
+        return;
       } else {
         NotificationService.cancelNotification(8888);
       }

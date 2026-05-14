@@ -1,6 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../api/api_client.dart';
 import '../router/app_router.dart';
@@ -158,6 +159,7 @@ class NotificationService {
 
     _activeBanner = entry;
     Overlay.of(context).insert(entry);
+    playAlertSound();
     Future.delayed(const Duration(seconds: 6), dismiss);
   }
 
@@ -223,30 +225,46 @@ class NotificationService {
     );
   }
 
+  // ── Son d'alerte (accompagne la bannière in-app) ─────────────────────────
+  static Future<void> playAlertSound() async {
+    HapticFeedback.mediumImpact();
+    // iOS : notification silencieuse (pas de bannière) qui joue juste le son
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await _localNotificationsPlugin.show(
+        id: 6666,
+        title: '',
+        body: '',
+        notificationDetails: const NotificationDetails(
+          iOS: DarwinNotificationDetails(
+            presentAlert: false,
+            presentBadge: false,
+            presentSound: true,
+          ),
+        ),
+      );
+    }
+  }
+
   // ── Notifications système persistantes (en cours) ─────────────────────────
   static Future<void> showOngoingNotification({required int id, required String title, required String body}) async {
-    const androidDetails = AndroidNotificationDetails(
-      'dem_ongoing_course',
-      'Course en cours',
-      channelDescription: 'Suivi de la course active',
-      importance: Importance.low, // Pour ne pas sonner à chaque maj
-      priority: Priority.low,
-      icon: '@mipmap/ic_launcher',
-      ongoing: true,      // Reste dans la barre
-      autoCancel: false,  // Ne se ferme pas au clic
-      showWhen: false,
+    // iOS ne supporte pas les notifications "ongoing" — on ne les affiche que sur Android
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'dem_ongoing_course',
+        'Course en cours',
+        channelDescription: 'Suivi de la course active',
+        importance: Importance.low,
+        priority: Priority.low,
+        icon: '@mipmap/ic_launcher',
+        ongoing: true,
+        autoCancel: false,
+        showWhen: false,
+      ),
     );
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: false, // Pas d'alerte agaçante sur iOS pour l'ongoing
-      presentBadge: false,
-      presentSound: false,
-    );
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-    
     await _localNotificationsPlugin.show(
-      id: id,
-      title: title,
-      body: body,
+      id: id, title: title, body: body,
       notificationDetails: details,
     );
   }

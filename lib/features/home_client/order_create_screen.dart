@@ -1588,6 +1588,10 @@ class _Step3Panel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(children: [
+        // Contenu scrollable (s'adapte si bannière promo présente)
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(children: [
         // Route recap
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1701,7 +1705,11 @@ class _Step3Panel extends StatelessWidget {
                   ],
                 ),
         ),
-        const Spacer(),
+        const SizedBox(height: 8),
+            ]),
+          ),
+        ),
+        // Bouton toujours visible en bas
         _NextButton(
           label: 'Confirmer la commande',
           onTap: (canSubmit && !submitting) ? onSubmit : null,
