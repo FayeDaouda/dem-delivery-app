@@ -176,6 +176,7 @@ final appRouter = GoRouter(
           orderId: extra['orderId'] as String,
           driverId: extra['driverId'] as String,
           etaPickupMin: extra['etaPickupMin'] as int?,
+          initialOrder: extra['initialOrder'] as Map<String, dynamic>?,
         );
       },
     ),

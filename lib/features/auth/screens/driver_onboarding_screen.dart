@@ -1,3 +1,5 @@
+import '../../../core/error/app_exception.dart';
+import '../../../core/utils/input_formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -102,7 +104,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
       _isMoto ? context.go('/driver/home') : context.go('/driver/thiak/home');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -198,7 +200,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Ces informations seront visibles par vos clients',
+                      'Ces informations seront visibles par les clients.',
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
                     ),
                     const SizedBox(height: 32),
@@ -210,6 +212,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                       controller: _nameController,
                       style: const TextStyle(color: AppColors.textPrimary),
                       textCapitalization: TextCapitalization.words,
+                      inputFormatters: [NameInputFormatter()],
                       decoration: InputDecoration(
                         hintText: 'Ex : Mamadou Diallo',
                         prefixIcon: const Icon(Icons.person_outline, color: AppColors.textSecondary, size: 20),
@@ -235,7 +238,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                       textCapitalization: TextCapitalization.characters,
                       inputFormatters: [_PlateFormatter()],
                       decoration: InputDecoration(
-                        hintText: _isMoto ? 'Ex : DK 1234 AB' : 'Ex : DK 5678 CD',
+                        hintText: _isMoto ? 'Plaque d\'immatriculation de votre moto' : 'Plaque d\'immatriculation de votre véhicule',
                         prefixIcon: Icon(
                           _isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
                           color: AppColors.textSecondary, size: 20,
@@ -252,7 +255,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                       textCapitalization: TextCapitalization.characters,
                       style: const TextStyle(color: AppColors.textPrimary, letterSpacing: 1.5, fontSize: 14),
                       decoration: const InputDecoration(
-                        hintText: 'Ex : DEMD26AB34XY',
+                        hintText: 'Si vous avez un code de parrainage, renseignez-le ici',
                         prefixIcon: Icon(Icons.card_giftcard_outlined, color: AppColors.textSecondary, size: 20),
                       ),
                     ),
@@ -263,7 +266,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                     const SizedBox(height: 16),
                     const Center(
                       child: Text(
-                        'Vous pourrez compléter votre profil plus tard',
+                        'Vous devrez télécharger les pièces justificatives de ces informations plus tard.',
                         style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                         textAlign: TextAlign.center,
                       ),

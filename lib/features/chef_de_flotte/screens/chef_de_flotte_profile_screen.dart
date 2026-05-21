@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import '../../../core/error/app_exception.dart';
+import '../../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -104,7 +106,20 @@ class _State extends State<ChefDeFlotteProfileScreen> {
 
   Future<void> _launch(String url) async {
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) { await launchUrl(uri, mode: LaunchMode.externalApplication); }
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
+        );
+      }
+    }
   }
 
   void _showSupport() {
@@ -121,11 +136,11 @@ class _State extends State<ChefDeFlotteProfileScreen> {
           const SizedBox(height: 8),
           const Text('Support DEM', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 20),
-          _SupportTile(icon: Icons.phone_outlined,      label: 'Appeler le support', sub: '+221 78 000 00 00', onTap: () => _launch('tel:+221780000000')),
+          _SupportTile(icon: Icons.phone_outlined,      label: 'Appeler le support', sub: '+221 78 444 85 24', onTap: () => _launch('tel:+221784448524')),
           const SizedBox(height: 10),
           _SupportTile(icon: Icons.email_outlined,      label: 'Envoyer un e-mail',  sub: 'support@dem.sn',   onTap: () => _launch('mailto:support@dem.sn')),
           const SizedBox(height: 10),
-          _SupportTile(icon: Icons.chat_bubble_outline, label: 'WhatsApp',           sub: '+221 78 000 00 00', onTap: () => _launch('https://wa.me/221780000000')),
+          _SupportTile(icon: Icons.chat_bubble_outline, label: 'WhatsApp',           sub: '+221 78 444 85 24', onTap: () => _launch('https://wa.me/221784448524')),
         ]),
       ),
     );
@@ -137,6 +152,7 @@ class _State extends State<ChefDeFlotteProfileScreen> {
     final ok = await _confirm(title: 'Déconnexion', message: 'Vous allez être déconnecté.', actionLabel: 'Déconnexion', danger: false);
     if (ok != true) return;
     await AuthStorage.clear();
+    appStartupNotifier.markLoggedOut();
     if (mounted) { context.go('/phone'); }
   }
 
@@ -146,10 +162,11 @@ class _State extends State<ChefDeFlotteProfileScreen> {
     try {
       await ApiClient.dio.delete('/users/me');
       await AuthStorage.clear();
-      if (mounted) { context.go('/phone'); }
+      appStartupNotifier.markLoggedOut();
+    if (mounted) { context.go('/phone'); }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red));
       }
     }
   }

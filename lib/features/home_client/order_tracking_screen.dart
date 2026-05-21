@@ -11,24 +11,31 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/notifications/notification_service.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/support_report_sheet.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
+import 'providers/order_state.dart';
+import 'providers/order_state_provider.dart';
+
+const _kSupportPhone    = '+221784448524';
+const _kSupportWhatsApp = '221784448524';
 
 class OrderTrackingScreen extends ConsumerStatefulWidget {
   final String orderId;
   final String driverId;
   final int? etaPickupMin;
+  final Map<String, dynamic>? initialOrder; // données pré-chargées → zéro latence
 
   const OrderTrackingScreen({
     super.key,
     required this.orderId,
     required this.driverId,
     this.etaPickupMin,
+    this.initialOrder,
   });
 
   @override
@@ -37,9 +44,7 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
 }
 
 class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
-  Map<String, dynamic>? _order;
-  String _status = 'ACCEPTED';
-  bool _loading = true;
+  // ── État vue (map, rendu, UX) — reste local ──────────────────────────────
   bool _rated = false;
 
   GoogleMapController? _mapController;
@@ -47,28 +52,28 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   List<LatLng> _routePoints = [];
   List<LatLng> _displayRoute = [];
   int _lastTrimIdx = 0;
+  bool _isRerouting = false;
 
   BitmapDescriptor? _driverMarkerIcon;
   double _driverHeading = 0;
   LatLng? _prevDriverLocation;
 
-  StreamSubscription<Map<String, dynamic>>? _statusSub;
-  StreamSubscription<Map<String, dynamic>>? _driverLocationSub;
-  LatLng? _driverLocation;
-  Timer? _pollTimer;
   Timer? _routeRefreshTimer;
-  DateTime? _lastNotifUpdate; // throttle notifications persistantes
 
-  // Autres commandes actives du client (multi-commandes)
-  List<Map<String, dynamic>> _otherActiveOrders = [];
+  bool _autoFollow = true;
+  bool _nearbyAlerted = false;
+  bool _arrivedOverlayVisible = false;
+
+  // ── État métier → clientOrderStateProvider ────────────────────────────────
+  // _order, _status, _loading, _driverLocation, _liveEtaMin,
+  // _driverOffline, _driverUnreachable, _searchingNewDriver,
+  // _otherActiveOrders — tous lus via ref.watch(clientOrderStateProvider)
 
   @override
   void initState() {
     super.initState();
     _loadMapStyle();
-    _fetchOrder();
     _connectSocket();
-    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) => _fetchOrder());
     _buildDriverMarkerIcon().then((icon) {
       if (mounted) setState(() => _driverMarkerIcon = icon);
     });
@@ -76,9 +81,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
   @override
   void dispose() {
-    _statusSub?.cancel();
-    _driverLocationSub?.cancel();
-    _pollTimer?.cancel();
     _routeRefreshTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
@@ -182,83 +184,45 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     return idx;
   }
 
-  void _updateDisplayRoute() {
-    if (_routePoints.isEmpty || _driverLocation == null) {
-      if (_routePoints.isNotEmpty) setState(() => _displayRoute = _routePoints);
+  void _updateDisplayRoute(LatLng driverLoc) {
+    if (_routePoints.isEmpty) {
       return;
     }
-    // Les deux phases : la route part toujours de la position du driver → on coupe le début parcouru
-    final idx = _closestPointIdx(_routePoints, _driverLocation!, _lastTrimIdx);
+    final idx = _closestPointIdx(_routePoints, driverLoc, _lastTrimIdx);
     if (idx == _lastTrimIdx && _displayRoute.isNotEmpty) return;
     _lastTrimIdx = idx;
     if (mounted) setState(() => _displayRoute = _routePoints.sublist(idx));
   }
 
-  Future<void> _fetchOrder() async {
-    try {
-      final repo = ref.read(ordersRepositoryProvider);
-      // Charge la commande courante + toutes les commandes pour le multi-suivi
-      final results = await Future.wait([
-        repo.getOrderById(widget.orderId),
-        repo.getMyOrders(),
-      ]);
-      if (!mounted) return;
-
-      final order = results[0] as Map<String, dynamic>;
-      final allOrders = results[1] as List<Map<String, dynamic>>;
-      final newStatus = order['status'] as String? ?? _status;
-
-      const activeStatuses = ['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'];
-      final others = allOrders.where((o) {
-        final s = (o['status'] as String? ?? '').toUpperCase();
-        return activeStatuses.contains(s) && o['id'] != widget.orderId;
-      }).toList();
-
-      final prevStatus = _status;
-      setState(() {
-        _order = order;
-        _status = newStatus;
-        _loading = false;
-        _otherActiveOrders = others;
-      });
-
-      // Re-fetch route si le statut a changé (ACCEPTED → PICKED_UP)
-      if (prevStatus != newStatus || _routePoints.isEmpty) _fetchRoute();
-
-      if (newStatus == 'DELIVERED' && !_rated) {
-        Future.delayed(const Duration(milliseconds: 300), _showRatingDialog);
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
   Future<void> _fetchRoute() async {
-    final order = _order;
+    if (_isRerouting) return;
+    final s = ref.read(clientOrderStateProvider(widget.orderId));
+    final order = s.orderData;
     if (order == null) return;
-    final pickupLat  = (order['pickupLatitude']   as num?)?.toDouble();
-    final pickupLng  = (order['pickupLongitude']  as num?)?.toDouble();
-    final delivLat   = (order['deliveryLatitude'] as num?)?.toDouble();
-    final delivLng   = (order['deliveryLongitude'] as num?)?.toDouble();
-    if (pickupLat == null || pickupLng == null || delivLat == null || delivLng == null) return;
+    _isRerouting = true;
 
-    // Route selon la phase :
-    //  ACCEPTED  → driver → pickup
-    //  PICKED_UP → driver (ou pickup) → delivery
-    //  autre     → pickup → delivery (preview)
+    final pickupLat = (order['pickupLatitude']   as num?)?.toDouble();
+    final pickupLng = (order['pickupLongitude']  as num?)?.toDouble();
+    final delivLat  = (order['deliveryLatitude'] as num?)?.toDouble();
+    final delivLng  = (order['deliveryLongitude'] as num?)?.toDouble();
+    if (pickupLat == null || pickupLng == null || delivLat == null || delivLng == null) {
+      _isRerouting = false;
+      return;
+    }
+
+    final driverLoc = s.driverLocation;
     final double oLat, oLng, dLat, dLng;
-    if (_status == 'ACCEPTED' && _driverLocation != null) {
-      oLat = _driverLocation!.latitude;  oLng = _driverLocation!.longitude;
-      dLat = pickupLat;                  dLng = pickupLng;
-    } else if (_status == 'PICKED_UP') {
-      oLat = _driverLocation?.latitude  ?? pickupLat;
-      oLng = _driverLocation?.longitude ?? pickupLng;
-      dLat = delivLat;                   dLng = delivLng;
+    if (s.phase == 'ACCEPTED' && driverLoc != null) {
+      oLat = driverLoc.latitude;  oLng = driverLoc.longitude;
+      dLat = pickupLat;           dLng = pickupLng;
+    } else if (s.phase == 'PICKED_UP') {
+      oLat = driverLoc?.latitude  ?? pickupLat;
+      oLng = driverLoc?.longitude ?? pickupLng;
+      dLat = delivLat;            dLng = delivLng;
     } else {
       oLat = pickupLat; oLng = pickupLng;
       dLat = delivLat;  dLng = delivLng;
     }
-
 
     try {
       final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
@@ -275,98 +239,30 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           setState(() {
             _routePoints = points;
             _displayRoute = points;
-            _lastTrimIdx  = 0;
+            _lastTrimIdx = 0;
+            _isRerouting = false;
           });
-          _updateDisplayRoute();
+          if (driverLoc != null) _updateDisplayRoute(driverLoc);
+        } else {
+          _isRerouting = false;
         }
+      } else {
+        _isRerouting = false;
       }
-    } catch (_) {}
+    } catch (_) {
+      _isRerouting = false;
+    }
   }
 
   Future<void> _connectSocket() async {
     final token = await AuthStorage.getToken();
     if (token == null) return;
     SocketService.instance.connect(token);
-    _statusSub = SocketService.instance.onOrderStatusUpdated.listen((data) {
-      if (!mounted) return;
-      if (data['orderId'] != widget.orderId) return;
-      final newStatus = data['status'] as String?;
-      if (newStatus == null) return;
-      setState(() => _status = newStatus);
-      // Changement de phase → recalcule la route (driver→delivery au lieu de driver→pickup)
-      _fetchRoute();
-      if (newStatus == 'DELIVERED' && !_rated) {
-        Future.delayed(const Duration(milliseconds: 300), _showRatingDialog);
-      }
+    // Demande la dernière position connue (utile si le driver est stationnaire)
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) SocketService.instance.requestDriverLocation(widget.orderId);
     });
-
-    _driverLocationSub = SocketService.instance.onDriverLocation.listen((data) {
-      if (!mounted) return;
-      if (data['orderId'] != widget.orderId) return;
-      final lat = (data['lat'] as num?)?.toDouble();
-      final lng = (data['lng'] as num?)?.toDouble();
-      if (lat == null || lng == null) return;
-      final newLoc = LatLng(lat, lng);
-
-      // Cap : calculé depuis la position précédente
-      if (_prevDriverLocation != null) {
-        final bearing = _calculateBearing(_prevDriverLocation!, newLoc);
-        setState(() { _driverLocation = newLoc; _driverHeading = bearing; });
-      } else {
-        setState(() => _driverLocation = newLoc);
-      }
-      _prevDriverLocation = newLoc;
-
-      // Rétrécissement en temps réel
-      _updateDisplayRoute();
-
-      // Recalcul si déviation > 70m depuis la route (ACCEPTED et PICKED_UP)
-      if (_routePoints.isNotEmpty &&
-          (_status == 'ACCEPTED' || _status == 'PICKED_UP')) {
-        double minDist = double.infinity;
-        final end = (_lastTrimIdx + 60).clamp(0, _routePoints.length);
-        for (int i = _lastTrimIdx; i < end; i++) {
-          final d = Geolocator.distanceBetween(
-              lat, lng, _routePoints[i].latitude, _routePoints[i].longitude);
-          if (d < minDist) minDist = d;
-        }
-        if (minDist > 70) _fetchRoute();
-      }
-
-      // Caméra suit le driver
-      _mapController?.animateCamera(CameraUpdate.newCameraPosition(
-          CameraPosition(target: newLoc, zoom: 17, tilt: 55)));
-
-      // Notification persistante avec ETA estimé
-      final isPickedUp = _status == 'PICKED_UP';
-      final targetLat = isPickedUp
-          ? (_order?['deliveryLatitude']  as num?)?.toDouble()
-          : (_order?['pickupLatitude']    as num?)?.toDouble();
-      final targetLng2 = isPickedUp
-          ? (_order?['deliveryLongitude'] as num?)?.toDouble()
-          : (_order?['pickupLongitude']   as num?)?.toDouble();
-      final targetName = isPickedUp
-          ? (_order?['deliveryAddress']?.toString() ?? 'Destination')
-          : (_order?['pickupAddress']?.toString()   ?? 'Pickup');
-
-      if (targetLat != null && targetLng2 != null) {
-        final now = DateTime.now();
-        // Throttle : mise à jour max toutes les 60 secondes
-        if (_lastNotifUpdate == null ||
-            now.difference(_lastNotifUpdate!).inSeconds >= 60) {
-          _lastNotifUpdate = now;
-          final dist = Geolocator.distanceBetween(lat, lng, targetLat, targetLng2);
-          final min = (dist / 416).round();
-          final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
-          final statusText = isPickedUp
-              ? 'Le livreur est en route vers vous'
-              : 'Le livreur récupère votre commande';
-          NotificationService.showOngoingNotification(
-            id: 8888, title: statusText, body: '$targetName$etaText',
-          );
-        }
-      }
-    });
+    // Tous les listeners socket sont maintenant dans clientOrderStateProvider
   }
 
   void _showRatingDialog() {
@@ -411,7 +307,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                         color: Colors.white)),
                 const SizedBox(height: 6),
                 Text(
-                    '${((_order?['price'] as num?)?.toInt() ?? 0)} FCFA',
+                    '${(_s.orderData?['price'] as num?)?.toInt() ?? 0} FCFA',
                     style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -519,16 +415,25 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   }
 
   Future<void> _callDriver() async {
-    final phone = (_order?['driver'] as Map<String, dynamic>?)?['phone']
+    final phone = (_s.orderData?['driver'] as Map<String, dynamic>?)?['phone']
         as String?;
     if (phone == null || phone.isEmpty) return;
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
-  bool get _isDelivery => (_order?['orderType'] as String?) == 'DELIVERY';
+  ClientOrderState get _s => ref.read(clientOrderStateProvider(widget.orderId));
+  bool get _isDelivery => (_s.orderData?['orderType'] as String?) == 'DELIVERY';
 
-  String get _statusLabel => switch (_status) {
+  String? get _etaText {
+    final min = _s.etaMin ?? widget.etaPickupMin;
+    if (min == null) return null;
+    if (min <= 1) return 'Le livreur approche !';
+    if (min <= 3) return 'Arrive dans ~$min min';
+    return '~$min min';
+  }
+
+  String get _statusLabel => switch (_s.phase) {
         'ACCEPTED' => _isDelivery
             ? 'Livreur en route pour récupérer votre colis'
             : 'Chauffeur en route vers vous',
@@ -539,14 +444,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
         _ => 'Commande en cours',
       };
 
-  IconData get _statusIcon => switch (_status) {
+  IconData get _statusIcon => switch (_s.phase) {
         'ACCEPTED' => _isDelivery ? Icons.inventory_2_outlined : Icons.directions_bike,
         'PICKED_UP' => Icons.two_wheeler,
         'DELIVERED' => Icons.check_circle,
         _ => Icons.access_time,
       };
 
-  Color get _statusColor => switch (_status) {
+  Color get _statusColor => switch (_s.phase) {
         'ACCEPTED' => Colors.orange,
         'PICKED_UP' => AppColors.primary,
         'DELIVERED' => const Color(0xFF00C853),
@@ -570,41 +475,458 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
     ));
   }
 
+  Widget _buildArrivalBanner() {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF00C853), Color(0xFF00E676)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.location_on, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Le livreur est arrivé !',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ),
+            GestureDetector(
+              onTap: _callDriver,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('Appeler', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => setState(() => _arrivedOverlayVisible = false),
+              child: const Icon(Icons.close, color: Colors.white70, size: 18),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDriverStatusBadge() {
+    final driverStatus = _s.driverStatus;
+    final since = _s.driverOfflineSince;
+    // Cas critique : livreur introuvable depuis 10 min, colis en transit, admin alerté
+    if (driverStatus == DriverStatus.unreachable) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFFF3D00)),
+                SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Livreur introuvable · Notre équipe a été alertée',
+                    style: TextStyle(color: Color(0xFFFF3D00), fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _showReportSheet,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF3D00).withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFF3D00).withValues(alpha: 0.45)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.support_agent, color: Color(0xFFFF3D00), size: 16),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text('Contacter le support',
+                          style: TextStyle(color: Color(0xFFFF3D00), fontSize: 13, fontWeight: FontWeight.w600)),
+                    ),
+                    Icon(Icons.chevron_right, color: const Color(0xFFFF3D00).withValues(alpha: 0.7), size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Re-dispatch automatique : l'ancien livreur a disparu avant la récupération
+    if (driverStatus == DriverStatus.searching) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 10, height: 10,
+              child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFFFFB300)),
+            ),
+            SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Recherche d\'un nouveau livreur en cours…',
+                style: TextStyle(color: Color(0xFFFFB300), fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (driverStatus == DriverStatus.offline) {
+      final diff = since != null ? DateTime.now().difference(since) : null;
+      final mins  = diff?.inMinutes ?? 0;
+      final timeLabel = (diff == null || mins < 1) ? 'À l\'instant' : 'Il y a $mins min';
+      // ACCEPTED + offline : re-dispatch automatique après 5 min
+      final isAccepted = _s.phase == 'ACCEPTED';
+      final minsUntilRedispatch = isAccepted ? (5 - mins).clamp(0, 5) : null;
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Statut hors-ligne
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off, size: 12, color: Color(0xFFFFB300)),
+                const SizedBox(width: 6),
+                Text(
+                  'Le livreur est hors ligne · $timeLabel',
+                  style: const TextStyle(color: Color(0xFFFFB300), fontSize: 11),
+                ),
+              ],
+            ),
+            // Info re-dispatch automatique (uniquement phase ACCEPTED)
+            if (minsUntilRedispatch != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                minsUntilRedispatch > 0
+                    ? 'Un nouveau livreur sera cherché automatiquement dans ~$minsUntilRedispatch min'
+                    : 'Recherche d\'un nouveau livreur en cours…',
+                style: TextStyle(color: const Color(0xFFFFB300).withValues(alpha: 0.70), fontSize: 10),
+              ),
+            ],
+            const SizedBox(height: 8),
+            // Bouton signaler
+            GestureDetector(
+              onTap: _showReportSheet,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFB300).withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFFB300).withValues(alpha: 0.45)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.flag_outlined, color: Color(0xFFFFB300), size: 16),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text('Signaler le problème',
+                          style: TextStyle(color: Color(0xFFFFB300), fontSize: 13, fontWeight: FontWeight.w600)),
+                    ),
+                    Icon(Icons.chevron_right, color: const Color(0xFFFFB300).withValues(alpha: 0.7), size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_s.driverLocation == null) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 10, height: 10,
+              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white38),
+            ),
+            SizedBox(width: 8),
+            Text('Localisation du livreur en cours…',
+                style: TextStyle(color: Colors.white38, fontSize: 11)),
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  void _showReportSheet() {
+    final orderId = widget.orderId;
+    final since   = _s.driverOfflineSince;
+    final mins    = since != null ? DateTime.now().difference(since).inMinutes : 0;
+    final msg     = Uri.encodeComponent(
+      'Bonjour, j\'ai un problème avec ma livraison #$orderId. '
+      'Le livreur est hors ligne depuis $mins min.',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: BoxDecoration(
+          gradient: AppColors.gradientSplash,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, -4))],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle
+                Center(
+                  child: Container(
+                    width: 36, height: 3,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Icône warning
+                Container(
+                  width: 60, height: 60,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFB300).withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFFFB300).withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFB300), size: 30),
+                ),
+                const SizedBox(height: 14),
+
+                const Text('Signaler un problème',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Text(
+                  'Le livreur est hors ligne depuis $mins min.\nNotre équipe est disponible pour vous aider.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13, height: 1.5),
+                ),
+                const SizedBox(height: 28),
+
+                // Appeler le support
+                _SupportAction(
+                  icon: Icons.phone_rounded,
+                  color: const Color(0xFF00C853),
+                  label: 'Appeler le support',
+                  subtitle: _kSupportPhone,
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final uri = Uri.parse('tel:$_kSupportPhone');
+                    if (await canLaunchUrl(uri)) await launchUrl(uri);
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // WhatsApp
+                _SupportAction(
+                  icon: Icons.chat_rounded,
+                  color: const Color(0xFF25D366),
+                  label: 'WhatsApp support',
+                  subtitle: 'Message direct avec le texte pré-rempli',
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final uri = Uri.parse('https://wa.me/$_kSupportWhatsApp?text=$msg');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Fermer', style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 14)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _updateSmartCamera(LatLng driverLoc) {
+    if (_mapController == null) return;
+    final s = _s;
+    final order = s.orderData;
+    LatLng? destination;
+    if (s.phase == 'ACCEPTED') {
+      final pLat = (order?['pickupLatitude']  as num?)?.toDouble();
+      final pLng = (order?['pickupLongitude'] as num?)?.toDouble();
+      if (pLat != null && pLng != null) destination = LatLng(pLat, pLng);
+    } else if (s.phase == 'PICKED_UP' || s.phase == 'IN_TRANSIT') {
+      final dLat = (order?['deliveryLatitude']  as num?)?.toDouble();
+      final dLng = (order?['deliveryLongitude'] as num?)?.toDouble();
+      if (dLat != null && dLng != null) destination = LatLng(dLat, dLng);
+    }
+    if (destination != null) {
+      _mapController!.animateCamera(CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(
+            driverLoc.latitude  < destination.latitude  ? driverLoc.latitude  : destination.latitude,
+            driverLoc.longitude < destination.longitude ? driverLoc.longitude : destination.longitude,
+          ),
+          northeast: LatLng(
+            driverLoc.latitude  > destination.latitude  ? driverLoc.latitude  : destination.latitude,
+            driverLoc.longitude > destination.longitude ? driverLoc.longitude : destination.longitude,
+          ),
+        ),
+        90,
+      ));
+    } else {
+      _mapController!.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(target: driverLoc, zoom: 17, tilt: 55),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final order = _order;
+    // ── Source unique de vérité pour l'état métier ──────────────────────────
+    final orderState = ref.watch(clientOrderStateProvider(widget.orderId));
+
+    // ── Side effects (carte, haptic, dialog) réagissant aux changements ─────
+    ref.listen<ClientOrderState>(clientOrderStateProvider(widget.orderId),
+        (prev, next) {
+      final newLoc = next.driverLocation;
+
+      // Changement de position driver
+      if (newLoc != null && newLoc != prev?.driverLocation) {
+        // Bearing
+        if (_prevDriverLocation != null) {
+          final bearing = _calculateBearing(_prevDriverLocation!, newLoc);
+          setState(() => _driverHeading = bearing);
+        }
+        _prevDriverLocation = newLoc;
+
+        // Rétrécissement de la route
+        _updateDisplayRoute(newLoc);
+
+        // Recalcul si déviation > 70 m
+        if (_routePoints.isNotEmpty &&
+            (next.phase == 'ACCEPTED' || next.phase == 'PICKED_UP')) {
+          double minDist = double.infinity;
+          final end = (_lastTrimIdx + 60).clamp(0, _routePoints.length);
+          for (int i = _lastTrimIdx; i < end; i++) {
+            final d = Geolocator.distanceBetween(newLoc.latitude, newLoc.longitude,
+                _routePoints[i].latitude, _routePoints[i].longitude);
+            if (d < minDist) minDist = d;
+          }
+          if (minDist > 70) _fetchRoute();
+        }
+
+        // Caméra intelligente
+        if (_autoFollow) _updateSmartCamera(newLoc);
+      }
+
+      // Haptic : proximité driver ≤ 1 min
+      if (next.etaMin != prev?.etaMin) {
+        if (next.etaMin != null && next.etaMin! <= 1 && !_nearbyAlerted) {
+          _nearbyAlerted = true;
+          HapticFeedback.mediumImpact();
+        }
+        if (next.etaMin != null && next.etaMin == 0 && !_arrivedOverlayVisible) {
+          setState(() => _arrivedOverlayVisible = true);
+          HapticFeedback.heavyImpact();
+        }
+      }
+
+      // Changement de phase
+      if (next.phase != prev?.phase) {
+        _fetchRoute();
+        if (next.phase == 'DELIVERED' && !_rated) {
+          Future.delayed(const Duration(milliseconds: 300), _showRatingDialog);
+        }
+        // Annulation admin : retour automatique à l'accueil après 5s
+        // GoRouter capturé avant le gap async pour éviter l'accès au BuildContext après await
+        if (next.phase == 'CANCELLED') {
+          final router = GoRouter.of(context);
+          Future.delayed(const Duration(seconds: 5), () {
+            if (mounted) router.go('/client/home');
+          });
+        }
+      }
+
+      // Re-dispatch → efface la route (le nouveau driver n'est pas encore localisé)
+      if (next.driverStatus == DriverStatus.searching &&
+          prev?.driverStatus != DriverStatus.searching) {
+        setState(() {
+          _routePoints = [];
+          _displayRoute = [];
+          _lastTrimIdx = 0;
+        });
+      }
+    });
+
+    // ── Extraction des données pour le build ─────────────────────────────────
+    final order = orderState.orderData;
     final pickupLat = (order?['pickupLatitude'] as num?)?.toDouble();
     final pickupLng = (order?['pickupLongitude'] as num?)?.toDouble();
     final deliveryLat = (order?['deliveryLatitude'] as num?)?.toDouble();
     final deliveryLng = (order?['deliveryLongitude'] as num?)?.toDouble();
-    final initialTarget =
-        pickupLat != null && pickupLng != null
-            ? LatLng(pickupLat, pickupLng)
-            : const LatLng(14.6937, -17.4441);
+    final initialTarget = pickupLat != null && pickupLng != null
+        ? LatLng(pickupLat, pickupLng)
+        : const LatLng(14.6937, -17.4441);
 
-    final driverMap =
-        order?['driver'] as Map<String, dynamic>?;
+    final driverMap = order?['driver'] as Map<String, dynamic>?;
     final driverName = driverMap?['name'] as String? ?? 'Livreur';
-    final hasDriverPhone =
-        (driverMap?['phone'] as String?)?.isNotEmpty == true;
+    final hasDriverPhone = (driverMap?['phone'] as String?)?.isNotEmpty == true;
     final driverRating = (driverMap?['averageRating'] as num?)?.toDouble();
     final pickupAddress = order?['pickupAddress'] as String? ?? '';
     final deliveryAddress = order?['deliveryAddress'] as String? ?? '';
     final price = (order?['price'] as num?)?.toInt() ?? 0;
 
-    // Fallback : dernière position connue du driver depuis l'API si socket pas encore reçu
-    final driverLat = _driverLocation?.latitude
-        ?? (order?['driver'] as Map?)?['lastLatitude'] as double?
+    // Fallback : position DB si socket pas encore reçu
+    final socketLoc = orderState.driverLocation;
+    final driverLat = socketLoc?.latitude
+        ?? (driverMap?['latitude'] as num?)?.toDouble()
         ?? (order?['driverLatitude'] as num?)?.toDouble();
-    final driverLng = _driverLocation?.longitude
-        ?? (order?['driver'] as Map?)?['lastLongitude'] as double?
+    final driverLng = socketLoc?.longitude
+        ?? (driverMap?['longitude'] as num?)?.toDouble()
         ?? (order?['driverLongitude'] as num?)?.toDouble();
     final effectiveDriverLoc = (driverLat != null && driverLng != null)
-        ? LatLng(driverLat, driverLng) : null;
+        ? LatLng(driverLat, driverLng)
+        : null;
 
     final markers = <Marker>{
-      // Pickup : visible seulement avant prise en charge
-      if (pickupLat != null && pickupLng != null && _status == 'ACCEPTED')
+      if (pickupLat != null && pickupLng != null && orderState.phase == 'ACCEPTED')
         Marker(
           markerId: const MarkerId('pickup'),
           position: LatLng(pickupLat, pickupLng),
@@ -645,7 +967,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           }
         : <Polyline>{};
 
-    if (_loading) {
+    if (orderState.isLoading) {
       return Scaffold(
         body: Container(
           decoration: const BoxDecoration(
@@ -657,6 +979,70 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
           ),
           child: const Center(
               child: CircularProgressIndicator(color: Colors.white)),
+        ),
+      );
+    }
+
+    // ── Commande annulée par l'admin ─────────────────────────────────────────
+    if (orderState.phase == 'CANCELLED') {
+      final notifier = ref.read(clientOrderStateProvider(widget.orderId).notifier);
+      final reason   = notifier.cancelReason ?? 'Votre commande a été annulée par l\'administration DEM.';
+      return Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF0CB8DE), Color(0xFF04317C)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 80, height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.40), width: 2),
+                    ),
+                    child: const Icon(Icons.cancel_outlined, color: Colors.white, size: 40),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Commande annulée',
+                    style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    reason,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.80), fontSize: 14, height: 1.5),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 36),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => context.go('/client/home'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF0077B6),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      child: const Text('Retour à l\'accueil',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -677,6 +1063,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
               compassEnabled: false,
               mapToolbarEnabled: false,
               buildingsEnabled: true,
+              onCameraMove: (_) {
+                if (_autoFollow) setState(() => _autoFollow = false);
+              },
               onMapCreated: (c) {
                 _mapController = c;
                 if (pickupLat != null && deliveryLat != null) {
@@ -717,14 +1106,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                       ),
                     ),
                     // Chips des autres commandes actives
-                    if (_otherActiveOrders.isNotEmpty) ...[
+                    if (orderState.otherActiveOrders.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       Expanded(
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
-                            children: _otherActiveOrders.map((o) {
-                              final idx = _otherActiveOrders.indexOf(o) + 2;
+                            children: orderState.otherActiveOrders.map((o) {
+                              final idx = orderState.otherActiveOrders.indexOf(o) + 2;
                               final dId = (o['driver'] as Map?)?['id'] as String?
                                   ?? o['driverId'] as String?;
                               final oId = o['id'] as String?;
@@ -758,6 +1147,58 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                       ),
                     ],
                   ],
+                ),
+              ),
+            ),
+          ),
+
+          // Bouton "Recentrer" quand l'user a bougé la carte manuellement
+          if (!_autoFollow)
+            Positioned(
+              bottom: 220,
+              right: 16,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _autoFollow = true);
+                  if (_s.driverLocation != null) _updateSmartCamera(_s.driverLocation!);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.my_location, size: 16, color: Color(0xFF0CB8DE)),
+                      SizedBox(width: 6),
+                      Text('Recentrer', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF0CB8DE))),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // Overlay "arrivée imminente" — slide in depuis le haut
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: AnimatedSlide(
+              offset: _arrivedOverlayVisible ? Offset.zero : const Offset(0, -2),
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: _arrivedOverlayVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 60, left: 16, right: 16, bottom: 8),
+                    child: _buildArrivalBanner(),
+                  ),
                 ),
               ),
             ),
@@ -799,29 +1240,67 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Status chip
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color:
-                              _statusColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
+                      // Statut : DELIVERED → carte animée, sinon chip + timeline
+                      if (orderState.phase == 'DELIVERED')
+                        TweenAnimationBuilder<double>(
+                          key: const ValueKey('delivered_card'),
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          duration: const Duration(milliseconds: 700),
+                          curve: Curves.elasticOut,
+                          builder: (ctx, v, child) => Transform.scale(
+                            scale: v.clamp(0.0, 1.2),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00C853).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFF00C853).withValues(alpha: 0.5),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: const Column(
+                                children: [
+                                  Icon(Icons.check_circle_rounded,
+                                      color: Color(0xFF00C853), size: 46),
+                                  SizedBox(height: 6),
+                                  Text('Livraison effectuée !',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      else ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _statusColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(_statusIcon, color: _statusColor, size: 16),
+                              const SizedBox(width: 8),
+                              Flexible(child: Text(_statusLabel,
+                                  style: TextStyle(
+                                      color: _statusColor,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600))),
+                            ],
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(_statusIcon, color: _statusColor, size: 16),
-                            const SizedBox(width: 8),
-                            Flexible(child: Text(_statusLabel,
-                                style: TextStyle(
-                                    color: _statusColor,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600))),
-                          ],
-                        ),
-                      ),
+                      ],
                       const SizedBox(height: 14),
+
+                      // Indicateur état connexion driver
+                      if (orderState.phase != 'DELIVERED')
+                        _buildDriverStatusBadge(),
 
                       // Driver info row
                       Row(
@@ -858,14 +1337,18 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                                           style: const TextStyle(
                                               color: Colors.white70,
                                               fontSize: 12)),
-                                      if (widget.etaPickupMin != null && _status == 'ACCEPTED')
+                                      if (_etaText != null)
                                         const Text(' · ', style: TextStyle(color: Colors.white38, fontSize: 12)),
                                     ],
-                                    if (widget.etaPickupMin != null && _status == 'ACCEPTED')
-                                      Text('${widget.etaPickupMin} min',
-                                          style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 12)),
+                                    if (_etaText != null)
+                                      Text(_etaText!,
+                                          style: TextStyle(
+                                              color: (orderState.etaMin != null && orderState.etaMin! <= 3)
+                                                  ? const Color(0xFF69F0AE)
+                                                  : Colors.white70,
+                                              fontSize: 12,
+                                              fontWeight: (orderState.etaMin != null && orderState.etaMin! <= 3)
+                                                  ? FontWeight.w700 : FontWeight.normal)),
                                   ],
                                 ),
                               ],
@@ -928,29 +1411,66 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                                 color: Colors.white,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        // Bouton signaler un problème (visible pendant la course)
+                        if (!['DELIVERED', 'CANCELLED'].contains(orderState.phase))
+                          GestureDetector(
+                            onTap: () => SupportReportSheet.show(
+                              context,
+                              orderId: widget.orderId,
+                              role: 'CLIENT',
+                              repo: ref.read(ordersRepositoryProvider),
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                              ),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.flag_outlined,
+                                    size: 13, color: Colors.white.withValues(alpha: 0.70)),
+                                const SizedBox(width: 5),
+                                Text('Signaler',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.80),
+                                      fontSize: 12, fontWeight: FontWeight.w600,
+                                    )),
+                              ]),
+                            ),
+                          ),
                       ]),
 
-                      if (_status == 'DELIVERED' && !_rated) ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _showRatingDialog,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  const Color(0xFF00C853),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(14)),
-                              elevation: 0,
+                      if (orderState.phase == 'DELIVERED' && !_rated) ...[
+                        const SizedBox(height: 14),
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF00C853).withValues(alpha: 0.5),
+                                blurRadius: 20,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _showRatingDialog,
+                              icon: const Icon(Icons.star_rounded, size: 20),
+                              label: const Text('Noter le livreur',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF00C853),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                                elevation: 0,
+                              ),
                             ),
-                            child: const Text('Noter le livreur',
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
@@ -986,5 +1506,60 @@ class _RouteRow extends StatelessWidget {
             overflow: TextOverflow.ellipsis),
       ),
     ]);
+  }
+}
+
+class _SupportAction extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _SupportAction({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42, height: 42,
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: color.withValues(alpha: 0.6), size: 14),
+          ],
+        ),
+      ),
+    );
   }
 }

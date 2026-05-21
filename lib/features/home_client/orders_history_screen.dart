@@ -1,5 +1,7 @@
+import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
@@ -258,7 +260,7 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
                       const Icon(Icons.wifi_off_outlined,
                           color: Color(0xFF7B8CA0), size: 48),
                       const SizedBox(height: 12),
-                      Text(e.toString(),
+                      Text(friendlyError(e),
                           style: const TextStyle(
                               color: Color(0xFF7B8CA0), fontSize: 13),
                           textAlign: TextAlign.center),
@@ -307,10 +309,30 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
   }
 }
 
+// ── Statuts actifs / en attente ───────────────────────────────────────────────
+const _activeStatuses  = {'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'};
+
 // ── Carte commande ────────────────────────────────────────────────────────────
 class _OrderCard extends StatelessWidget {
   final Map<String, dynamic> order;
   const _OrderCard({required this.order});
+
+  void _onTap(BuildContext context, String status) {
+    if (status == 'PENDING') {
+      context.push('/orders/confirmation', extra: order);
+      return;
+    }
+    if (_activeStatuses.contains(status)) {
+      final driverId = (order['driver'] as Map?)?['id'] as String?
+          ?? order['driverId'] as String?;
+      if (driverId == null) return;
+      context.push('/orders/tracking', extra: {
+        'orderId': order['id'] as String,
+        'driverId': driverId,
+        'initialOrder': order,
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -326,77 +348,86 @@ class _OrderCard extends StatelessWidget {
     final color    = _statusColor[status] ?? const Color(0xFF7B8CA0);
     final label    = _statusLabel[status] ?? status;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(_typeIcon(type), color: AppColors.primary, size: 16),
-                const SizedBox(width: 6),
-                Text('# $shortId',
-                    style: const TextStyle(
-                      color: Color(0xFF1A1A2E),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      fontFamily: 'monospace',
-                    )),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(label,
-                      style: TextStyle(
-                          color: color,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _AddrLine(
-                icon: Icons.circle,
-                color: const Color(0xFF22C55E),
-                text: pickup),
-            const SizedBox(height: 4),
-            _AddrLine(
-                icon: Icons.location_on,
-                color: AppColors.primary,
-                text: delivery),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(Icons.access_time,
-                    color: Color(0xFF7B8CA0), size: 13),
-                const SizedBox(width: 4),
-                Text(date,
-                    style: const TextStyle(
-                        color: Color(0xFF7B8CA0), fontSize: 12)),
-                const Spacer(),
-                Text('$price FCFA',
-                    style: const TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700)),
-              ],
-            ),
+    final tappable = status == 'PENDING' || _activeStatuses.contains(status);
+
+    return GestureDetector(
+      onTap: tappable ? () => _onTap(context, status) : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: tappable
+              ? Border.all(color: color.withValues(alpha: 0.35), width: 1.2)
+              : null,
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2))
           ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(_typeIcon(type), color: AppColors.primary, size: 16),
+                  const SizedBox(width: 6),
+                  Text('# $shortId',
+                      style: const TextStyle(
+                        color: Color(0xFF1A1A2E),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'monospace',
+                      )),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(label,
+                        style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _AddrLine(icon: Icons.circle, color: const Color(0xFF22C55E), text: pickup),
+              const SizedBox(height: 4),
+              _AddrLine(icon: Icons.location_on, color: AppColors.primary, text: delivery),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.access_time, color: Color(0xFF7B8CA0), size: 13),
+                  const SizedBox(width: 4),
+                  Text(date, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 12)),
+                  const Spacer(),
+                  if (tappable)
+                    Row(
+                      children: [
+                        Text(
+                          status == 'PENDING' ? 'Voir →' : 'Suivre →',
+                          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ),
+                  Text('$price FCFA',
+                      style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,8 @@
+import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 
@@ -59,6 +61,8 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
     try {
       await ref.read(authProvider.notifier).setupProfile(role: role, vehicleType: vehicleType);
       if (!mounted) return;
+      // Notifie le router que le rôle est maintenant connu
+      appStartupNotifier.markLoggedIn(userRole: role, vehicle: vehicleType);
       if (role == 'DRIVER') {
         context.go('/driver/onboarding?type=$vehicleType');
       } else if (role == 'CHEF_DE_FLOTTE') {
@@ -68,7 +72,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }
@@ -103,7 +107,12 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Center(child: Image.asset('assets/DEM.png', width: 72, height: 72)),
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.asset('assets/DEM.png', width: 72, height: 72),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -123,7 +132,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Qui êtes-vous ?',
+                      'Je suis …',
                       style: TextStyle(
                         color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.w800,
                       ),
@@ -153,20 +162,20 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                       fade: _fades[1], slide: _slides[1],
                       child: _RoleCard(
                         icon: Icons.motorcycle,
-                        title: 'Livreur — DEM Livraison',
-                        subtitle: 'Je livre des colis à moto dans la ville',
+                        title: 'Livreur — DEM',
+                        subtitle: 'Je récupère et livre des colis à moto.',
                         color: AppColors.primaryMid,
                         loading: loading,
                         onTap: () => _select('DRIVER', vehicleType: 'MOTO'),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 32),
 
                     _AnimatedCard(
                       fade: _fades[2], slide: _slides[2],
                       child: _RoleCard(
                         icon: Icons.handshake_outlined,
-                        title: 'Chef de flotte DEM',
+                        title: 'Chef de flotte - DEM',
                         subtitle: 'Je recrute et gère une flotte de livreurs',
                         color: const Color(0xFF7C3AED),
                         loading: loading,

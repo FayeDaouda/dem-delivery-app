@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_theme.dart';
 
 class DocPickerField extends StatefulWidget {
@@ -57,9 +58,9 @@ class _DocPickerFieldState extends State<DocPickerField> {
         widget.onChanged(url);
       }
     } on DioException catch (e) {
-      setState(() => _error = e.response?.data?['message'] ?? 'Erreur lors de l\'envoi.');
-    } catch (_) {
-      setState(() => _error = 'Erreur lors de l\'envoi.');
+      setState(() => _error = friendlyError(e));
+    } catch (e) {
+      setState(() => _error = friendlyError(e));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -119,34 +120,38 @@ class _DocPickerFieldState extends State<DocPickerField> {
         const SizedBox(height: 6),
 
         // Container principal
-        GestureDetector(
-          onTap: _uploading ? null : _showPicker,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _url != null
-                  ? Colors.green.shade50
-                  : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _error != null
-                    ? Colors.red.shade300
-                    : _url != null
-                        ? Colors.green.shade300
-                        : Colors.grey.shade200,
-                width: _url != null ? 1.5 : 1,
+        Semantics(
+          label: 'Appuyer pour ajouter ${widget.label}',
+          button: !_uploading,
+          child: GestureDetector(
+            onTap: _uploading ? null : _showPicker,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _url != null
+                    ? Colors.green.shade50
+                    : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _error != null
+                      ? Colors.red.shade300
+                      : _url != null
+                          ? Colors.green.shade300
+                          : Colors.grey.shade200,
+                  width: _url != null ? 1.5 : 1,
+                ),
               ),
+              child: _uploading
+                  ? const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                      SizedBox(width: 10),
+                      Text('Envoi en cours…', style: TextStyle(color: AppColors.primaryMid, fontSize: 13)),
+                    ])
+                  : _url != null
+                      ? _DoneState(url: _url!, onEdit: _showPicker)
+                      : _EmptyState(label: widget.label),
             ),
-            child: _uploading
-                ? const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
-                    SizedBox(width: 10),
-                    Text('Envoi en cours…', style: TextStyle(color: AppColors.primaryMid, fontSize: 13)),
-                  ])
-                : _url != null
-                    ? _DoneState(url: _url!, onEdit: _showPicker)
-                    : _EmptyState(label: widget.label),
           ),
         ),
 
@@ -225,8 +230,7 @@ class _DoneState extends StatelessWidget {
       style: TextButton.styleFrom(
         foregroundColor: AppColors.primaryMid,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        minimumSize: const Size(48, 48),
       ),
       child: const Text('Modifier', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
     ),

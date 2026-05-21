@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -10,8 +11,7 @@ class AuthRepository {
     try {
       await _dio.post('/auth/send-otp', data: {'phone': phone});
     } on DioException catch (e) {
-      // ignore: avoid_print
-      print('[AUTH] sendOtp error — type: ${e.type}, status: ${e.response?.statusCode}, msg: ${e.message}');
+      if (kDebugMode) debugPrint('[AUTH] sendOtp error — type: ${e.type}, status: ${e.response?.statusCode}, msg: ${e.message}');
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible d\'envoyer le code.',
         e.response?.statusCode,

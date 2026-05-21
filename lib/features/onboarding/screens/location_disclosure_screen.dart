@@ -1,6 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/notifications/notification_service.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
@@ -14,6 +17,7 @@ class LocationDisclosureScreen extends StatelessWidget {
     await Permission.locationAlways.request();
     await AuthStorage.setLocationDisclosureSeen();
     await AuthStorage.setOnboardingSeen();
+    await NotificationService.requestPermissionAndToken();
     appStartupNotifier.markDisclosureSeen();  // → GoRouter redirect → /phone
   }
 
@@ -21,6 +25,7 @@ class LocationDisclosureScreen extends StatelessWidget {
   Future<void> _decline(BuildContext context) async {
     await AuthStorage.setLocationDisclosureSeen();
     await AuthStorage.setOnboardingSeen();
+    await NotificationService.requestPermissionAndToken();
     appStartupNotifier.markDisclosureSeen();  // → GoRouter redirect → /phone
   }
 
@@ -119,7 +124,7 @@ class LocationDisclosureScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'DEM collecte vos données de localisation pour permettre le suivi continu de vos livraisons par les clients, même lorsque l\'application est fermée ou non utilisée.',
+                        'DEM utilise votre localisation pour permettre le suivi des livraisons en direct, même lorsque l\'application fonctionne en arrière-plan.',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.88),
                           fontSize: 15,
@@ -195,7 +200,7 @@ class LocationDisclosureScreen extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                           recognizer: TapGestureRecognizer()..onTap = () {
-                            // TODO: ouvrir la politique de confidentialité
+                            launchUrl(Uri.parse(AppConfig.privacyPolicyUrl), mode: LaunchMode.inAppBrowserView);
                           },
                         ),
                         const TextSpan(text: ' et nos '),
@@ -207,7 +212,7 @@ class LocationDisclosureScreen extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                           recognizer: TapGestureRecognizer()..onTap = () {
-                            // TODO: ouvrir les conditions d'utilisation
+                            launchUrl(Uri.parse(AppConfig.termsUrl), mode: LaunchMode.inAppBrowserView);
                           },
                         ),
                         const TextSpan(text: '.'),

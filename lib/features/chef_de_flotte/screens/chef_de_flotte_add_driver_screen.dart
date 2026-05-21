@@ -1,7 +1,9 @@
+import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/input_formatters.dart';
 import '../data/chef_de_flotte_repository.dart';
 import '../widgets/doc_picker_field.dart';
 
@@ -107,7 +109,7 @@ class _State extends State<ChefDeFlotteAddDriverScreen> {
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      setState(() => _error = friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -402,6 +404,7 @@ class _Step1 extends StatelessWidget {
       TextField(
         controller: nameCtrl,
         textCapitalization: TextCapitalization.words,
+        inputFormatters: [NameInputFormatter()],
         style: const TextStyle(color: Color(0xFF1F2937), fontSize: 15),
         decoration: _inputDec('Ex : Mamadou Diallo', Icons.badge_outlined,
           error: nameError),

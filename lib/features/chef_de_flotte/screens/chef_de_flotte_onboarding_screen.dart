@@ -1,3 +1,4 @@
+import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
@@ -40,7 +41,7 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
       );
       if (mounted) context.go('/chef-de-flotte/pending');
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      setState(() => _error = friendlyError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

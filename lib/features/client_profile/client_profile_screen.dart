@@ -1,4 +1,7 @@
 import 'package:dio/dio.dart';
+import '../../core/error/app_exception.dart';
+import '../../core/utils/input_formatters.dart';
+import '../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -120,7 +123,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           const SizedBox(height: 16),
           const Text('Modifier mon profil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 20),
-          _EditField(ctrl: nameCtrl,  label: 'Nom complet', icon: Icons.person_outline),
+          _EditField(ctrl: nameCtrl,  label: 'Nom complet', icon: Icons.person_outline, formatters: [NameInputFormatter()]),
           const SizedBox(height: 12),
           _EditField(ctrl: emailCtrl, label: 'Email',       icon: Icons.email_outlined, keyboard: TextInputType.emailAddress),
           const SizedBox(height: 20),
@@ -153,7 +156,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         setState(() => _user = updated);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
     }
   }
 
@@ -213,7 +216,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         const SnackBar(content: Text('Demande envoyée. Vous serez contacté sous 24–48h.')),
       );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
     }
   }
 
@@ -236,11 +239,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           const SizedBox(height: 8),
           const Text('Support DEM', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 20),
-          _SupportTile(icon: Icons.phone_outlined,      label: 'Appeler le support', sub: '+221 78 000 00 00', onTap: () => _launch('tel:+221780000000')),
+          _SupportTile(icon: Icons.phone_outlined,      label: 'Appeler le support', sub: '+221 78 444 85 24', onTap: () => _launch('tel:+221784448524')),
           const SizedBox(height: 10),
           _SupportTile(icon: Icons.email_outlined,      label: 'Envoyer un e-mail',  sub: 'support@dem.sn',   onTap: () => _launch('mailto:support@dem.sn')),
           const SizedBox(height: 10),
-          _SupportTile(icon: Icons.chat_bubble_outline, label: 'WhatsApp',           sub: '+221 78 000 00 00', onTap: () => _launch('https://wa.me/221780000000')),
+          _SupportTile(icon: Icons.chat_bubble_outline, label: 'WhatsApp',           sub: '+221 78 444 85 24', onTap: () => _launch('https://wa.me/221784448524')),
         ]),
       ),
     );
@@ -248,11 +251,25 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
   Future<void> _launch(String url) async {
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
+        );
+      }
+    }
   }
 
   Future<void> _handleLogout() async {
     await AuthStorage.clear();
+    appStartupNotifier.markLoggedOut();
     if (mounted) context.go('/phone');
   }
 
@@ -278,6 +295,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       await ApiClient.dio.delete('/users/me');
     } catch (_) {}
     await AuthStorage.clear();
+    appStartupNotifier.markLoggedOut();
     if (mounted) context.go('/phone');
   }
 
@@ -524,11 +542,13 @@ class _EditField extends StatelessWidget {
   final String label;
   final IconData icon;
   final TextInputType keyboard;
-  const _EditField({required this.ctrl, required this.label, required this.icon, this.keyboard = TextInputType.text});
+  final List<TextInputFormatter>? formatters;
+  const _EditField({required this.ctrl, required this.label, required this.icon, this.keyboard = TextInputType.text, this.formatters});
   @override
   Widget build(BuildContext context) => TextField(
     controller: ctrl,
     keyboardType: keyboard,
+    inputFormatters: formatters,
     style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A2E)),
     decoration: InputDecoration(
       labelText: label,

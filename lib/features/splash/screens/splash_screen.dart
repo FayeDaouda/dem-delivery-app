@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Écran de démarrage : affiche l'animation DEM pendant que
-/// [appStartupNotifier.initialize()] charge l'état.
-/// Dès que [isReady] est true, GoRouter.redirect prend le relais.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -19,43 +16,71 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _taglineCtrl;
   late final AnimationController _loaderCtrl;
 
+  // Logo
   late final Animation<double> _logoScale;
   late final Animation<double> _logoOpacity;
+  late final Animation<double> _logoOffsetY;
+
+  // Tagline
   late final Animation<double> _taglineOpacity;
-  late final Animation<Offset>  _taglineSlide;
+  late final Animation<double> _taglineScale;
+  late final Animation<double> _taglineOffsetY;
+  late final Animation<double> _letterSpacing;
+
+  // Loader
   late final Animation<double> _loaderOpacity;
 
   @override
   void initState() {
     super.initState();
 
-    // ── Animations ──────────────────────────────────────────────────────────
-    _logoCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    _logoScale   = Tween<double>(begin: 0.3, end: 1.0).animate(CurvedAnimation(parent: _logoCtrl, curve: Curves.elasticOut));
-    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _logoCtrl, curve: const Interval(0.0, 0.45, curve: Curves.easeIn)));
+    // ── Logo (700ms) — easeOutBack donne un léger rebond élastique ───────────
+    _logoCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
 
-    _taglineCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
-    _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOut));
-    _taglineSlide   = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero).animate(CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOutCubic));
+    _logoScale = Tween<double>(begin: 0.60, end: 1.0).animate(
+      CurvedAnimation(parent: _logoCtrl, curve: Curves.easeOutBack),
+    );
+    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _logoCtrl, curve: const Interval(0.0, 0.50, curve: Curves.easeIn)),
+    );
+    _logoOffsetY = Tween<double>(begin: 24.0, end: 0.0).animate(
+      CurvedAnimation(parent: _logoCtrl, curve: Curves.easeOutCubic),
+    );
 
+    // ── Tagline (600ms) — lettrines qui se resserrent (effet cinématique) ────
+    _taglineCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+
+    _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOut),
+    );
+    _taglineScale = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOutCubic),
+    );
+    _taglineOffsetY = Tween<double>(begin: 14.0, end: 0.0).animate(
+      CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOutCubic),
+    );
+    // Les lettres se resserrent progressivement → effet signature
+    _letterSpacing = Tween<double>(begin: 9.0, end: 3.5).animate(
+      CurvedAnimation(parent: _taglineCtrl, curve: Curves.easeOutCubic),
+    );
+
+    // ── Loader ────────────────────────────────────────────────────────────────
     _loaderCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
-    _loaderOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _loaderCtrl, curve: Curves.easeIn));
+    _loaderOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _loaderCtrl, curve: Curves.easeIn),
+    );
 
     _runSequence();
   }
 
   Future<void> _runSequence() async {
-    // 1. Animation d'entrée
     await _logoCtrl.forward();
+    await Future.delayed(const Duration(milliseconds: 120));
     await _taglineCtrl.forward();
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 180));
     if (!mounted) return;
     _loaderCtrl.forward();
-
-    // 2. Chargement de l'état (await complet — pas de saut possible)
-    //    GoRouter.redirect prend le relais dès que isReady == true.
     await appStartupNotifier.initialize();
-    // GoRouter reçoit notifyListeners() → redirect se déclenche automatiquement.
   }
 
   @override
@@ -76,41 +101,70 @@ class _SplashScreenState extends State<SplashScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
 
-              // ── Logo ──
+              // ── Logo arrondi + ombre animée ──
               AnimatedBuilder(
                 animation: _logoCtrl,
                 builder: (_, _) => Opacity(
                   opacity: _logoOpacity.value,
-                  child: Transform.scale(
-                    scale: _logoScale.value,
-                    child: Image.asset('assets/DEM.png', width: 140, height: 140),
+                  child: Transform.translate(
+                    offset: Offset(0, _logoOffsetY.value),
+                    child: Transform.scale(
+                      scale: _logoScale.value,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(26),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.30 * _logoOpacity.value),
+                              blurRadius: 48,
+                              spreadRadius: 4,
+                              offset: const Offset(0, 14),
+                            ),
+                            BoxShadow(
+                              color: const Color(0xFF00C8FF).withValues(alpha: 0.20 * _logoOpacity.value),
+                              blurRadius: 70,
+                              spreadRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(26),
+                          child: Image.asset('assets/DEM.png', width: 118, height: 118),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 28),
 
-              // ── Tagline ──
+              // ── Tagline avec lettrines qui se resserrent ──
               AnimatedBuilder(
                 animation: _taglineCtrl,
-                builder: (_, child) => FadeTransition(
-                  opacity: _taglineOpacity,
-                  child: SlideTransition(position: _taglineSlide, child: child),
-                ),
-                child: const Text(
-                  'DELIVERY · EXPRESS · MOBILITY',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 3,
+                builder: (_, _) => Opacity(
+                  opacity: _taglineOpacity.value,
+                  child: Transform.translate(
+                    offset: Offset(0, _taglineOffsetY.value),
+                    child: Transform.scale(
+                      scale: _taglineScale.value,
+                      child: Text(
+                        'DELIVERY · EXPRESS · MOBILITY',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.88),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: _letterSpacing.value,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 48),
+              const SizedBox(height: 56),
 
-              // ── Loader (visible pendant initialize()) ──
+              // ── Loader ──
               AnimatedBuilder(
                 animation: _loaderCtrl,
                 builder: (_, _) => Opacity(
@@ -119,7 +173,7 @@ class _SplashScreenState extends State<SplashScreen>
                     width: 20, height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white.withValues(alpha: 0.50),
+                      color: Colors.white.withValues(alpha: 0.45),
                     ),
                   ),
                 ),

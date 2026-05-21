@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
@@ -69,7 +70,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
         );
       }
     } finally {

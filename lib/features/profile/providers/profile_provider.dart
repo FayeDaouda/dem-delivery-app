@@ -1,3 +1,4 @@
+import '../../../core/error/app_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/profile_repository.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -62,7 +63,7 @@ class ProfileNotifier extends Notifier<ProfileState> {
         await toggleAvailability();
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: friendlyError(e));
     }
   }
 
@@ -75,7 +76,7 @@ class ProfileNotifier extends Notifier<ProfileState> {
       state = state.copyWith(user: updatedUser);
       return isAvailable;
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: friendlyError(e));
       rethrow;
     }
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import '../../../core/notifications/notification_service.dart';
 
+import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -143,7 +144,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   Future<void> _connectSocket() async {
     final token = await AuthStorage.getToken();
-    if (token == null) return;
+    if (token == null || !mounted) return;
 
     SocketService.instance.connect(token);
 
@@ -305,13 +306,14 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       _centerOn(initial);
     }
 
+    if (!mounted) return;
     _locationSub = NavigationService.positionStream.listen(_onPosition);
   }
 
   bool _firstPositionSent = false;
 
   void _onPosition(Position position) {
-    if (!mounted) return;
+    if (!mounted || position.accuracy > NavigationService.maxAccuracyMeters) return;
     setState(() => _driverPosition = position);
     if (_autoFollow) _centerOn(position);
     _updateDriverScreenPos();
@@ -455,12 +457,26 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }
 
   Future<void> _acceptOrder(String orderId) async {
+    // GPS obligatoire — sans position le tracking client sera vide
+    if (_driverPosition == null && !orderId.startsWith('dev-')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('GPS indisponible — activez la localisation pour accepter une course.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
     // Mode DEV — commande simulée, pas d'appel API
     if (orderId.startsWith('dev-')) {
       final devOrder = ref.read(availableOrdersProvider).value?.firstWhere(
@@ -499,7 +515,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }
@@ -663,7 +679,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                                   ),
                                   inactiveThumbColor: AppColors.textSecondary,
                                   materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
+                                      MaterialTapTargetSize.padded,
                                 ),
                         ],
                       ),
@@ -671,26 +687,30 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                   ),
                   const Spacer(),
                   // Profil
-                  GestureDetector(
-                    onTap: () => context.push('/driver/profile'),
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.45),
-                            blurRadius: 12,
-                            spreadRadius: 1,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.person_outline,
-                        color: Colors.white,
-                        size: 22,
+                  Semantics(
+                    label: 'Mon profil',
+                    button: true,
+                    child: GestureDetector(
+                      onTap: () => context.push('/driver/profile'),
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.45),
+                              blurRadius: 12,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.person_outline,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                       ),
                     ),
                   ),
@@ -704,26 +724,30 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
             Positioned(
               left: 16,
               bottom: 220,
-              child: GestureDetector(
-                onTap: _recenter,
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.card, width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 12,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.my_location,
-                    color: AppColors.primary,
-                    size: 22,
+              child: Semantics(
+                label: 'Recentrer sur ma position',
+                button: true,
+                child: GestureDetector(
+                  onTap: _recenter,
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.card, width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.my_location,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
                   ),
                 ),
               ),
@@ -733,21 +757,25 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
           Positioned(
             left: 16,
             bottom: (_autoFollow ? 220 : 284) + MediaQuery.of(context).viewPadding.bottom,
-            child: GestureDetector(
-              onTap: _toggleMapTheme,
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.card, width: 1.5),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
-                ),
-                child: Icon(
-                  ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                  color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                  size: 22,
+            child: Semantics(
+              label: ref.watch(mapNightProvider) ? 'Passer en mode jour' : 'Passer en mode nuit',
+              button: true,
+              child: GestureDetector(
+                onTap: _toggleMapTheme,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.card, width: 1.5),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                  ),
+                  child: Icon(
+                    ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                    color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                    size: 22,
+                  ),
                 ),
               ),
             ),
@@ -1479,46 +1507,50 @@ class _StatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.80),
-              fontSize: 14,
-            ),
-          ),
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+    return Semantics(
+      label: sub != null ? '$label : $value, $sub' : '$label : $value',
+      excludeSemantics: true,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+        ),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.80),
+                fontSize: 14,
               ),
-              if (sub != null)
+            ),
+            const Spacer(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
                 Text(
-                  sub!,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.55),
-                    fontSize: 10,
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-            ],
-          ),
-        ],
+                if (sub != null)
+                  Text(
+                    sub!,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 10,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

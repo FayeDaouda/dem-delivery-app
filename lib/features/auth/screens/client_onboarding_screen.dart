@@ -1,3 +1,5 @@
+import '../../../core/error/app_exception.dart';
+import '../../../core/utils/input_formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -50,7 +52,7 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
       context.go('/client/home');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -69,22 +71,31 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Bouton retour
-                GestureDetector(
-                  onTap: () => context.go('/role-selection'),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
+                Semantics(
+                  label: 'Retour',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () => context.go('/role-selection'),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                     ),
-                    child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 16),
                   ),
                 ),
                 const SizedBox(height: 24),
-                Image.asset('assets/DEM.png', width: 56, height: 56),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset('assets/DEM.png', width: 56, height: 56),
+                ),
                 const SizedBox(height: 32),
                 const Text(
-                  'Comment vous\nappelle-t-on ?',
+                  'Entrez votre nom complet',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -94,7 +105,7 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Votre nom sera visible par le livreur.',
+                  'Ces informations seront visibles par les livreurs.',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 15),
                 ),
                 const SizedBox(height: 36),
@@ -102,10 +113,11 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                   controller: _nameController,
                   textCapitalization: TextCapitalization.words,
                   keyboardType: TextInputType.name,
+                  inputFormatters: [NameInputFormatter()],
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                   decoration: InputDecoration(
-                    hintText: 'Ex : Fatou Diallo',
-                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
+                    hintText: 'Ex : Fatou Ndiaye',
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.65)),
                     errorText: _nameError,
                     errorStyle: const TextStyle(color: Color(0xFFFFCDD2)),
                     prefixIcon: const Icon(Icons.person_outline, color: Colors.white70),
@@ -135,8 +147,8 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                   textCapitalization: TextCapitalization.characters,
                   style: const TextStyle(color: Colors.white, fontSize: 15, letterSpacing: 1.5),
                   decoration: InputDecoration(
-                    hintText: 'Code de parrainage (optionnel)',
-                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.40), fontSize: 13, letterSpacing: 0),
+                    hintText: 'Si vous avez un code de parrainage, renseignez-le ici',
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 12, letterSpacing: 0),
                     prefixIcon: const Icon(Icons.card_giftcard_outlined, color: Colors.white70),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -167,6 +179,12 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                           )
                         : const Text('Continuer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                   ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Vous devrez télécharger les pièces justificatives de ces informations plus tard.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 12),
                 ),
               ],
             ),

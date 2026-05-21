@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 const _serverUrl = 'https://api.dem.sn';
@@ -17,19 +18,33 @@ class SocketService {
   io.Socket? _socket;
 
   // ── Streams publics ────────────────────────────────────────────────────────
-  final _newOrderController           = StreamController<Map<String, dynamic>>.broadcast();
-  final _expiredOrderController       = StreamController<String>.broadcast();
-  final _reconnectController          = StreamController<void>.broadcast();
-  final _orderAcceptedController      = StreamController<Map<String, dynamic>>.broadcast();
-  final _orderStatusUpdatedController = StreamController<Map<String, dynamic>>.broadcast();
-  final _driverLocationController     = StreamController<Map<String, dynamic>>.broadcast();
+  final _newOrderController             = StreamController<Map<String, dynamic>>.broadcast();
+  final _expiredOrderController         = StreamController<String>.broadcast();
+  final _reconnectController            = StreamController<void>.broadcast();
+  final _orderAcceptedController        = StreamController<Map<String, dynamic>>.broadcast();
+  final _orderStatusUpdatedController   = StreamController<Map<String, dynamic>>.broadcast();
+  final _driverLocationController       = StreamController<Map<String, dynamic>>.broadcast();
+  final _driverOfflineController        = StreamController<Map<String, dynamic>>.broadcast();
+  final _driverOnlineController         = StreamController<Map<String, dynamic>>.broadcast();
+  final _orderSearchingController       = StreamController<Map<String, dynamic>>.broadcast();
+  final _driverUnreachableController    = StreamController<Map<String, dynamic>>.broadcast();
+  final _orderCancelledController       = StreamController<Map<String, dynamic>>.broadcast();
+  final _orderAdminCancelledController  = StreamController<Map<String, dynamic>>.broadcast();
 
-  Stream<Map<String, dynamic>> get onNewOrder           => _newOrderController.stream;
-  Stream<String>               get onOrderExpired        => _expiredOrderController.stream;
-  Stream<void>                 get onReconnect           => _reconnectController.stream;
-  Stream<Map<String, dynamic>> get onOrderAccepted       => _orderAcceptedController.stream;
-  Stream<Map<String, dynamic>> get onOrderStatusUpdated  => _orderStatusUpdatedController.stream;
-  Stream<Map<String, dynamic>> get onDriverLocation      => _driverLocationController.stream;
+  Stream<Map<String, dynamic>> get onNewOrder             => _newOrderController.stream;
+  Stream<String>               get onOrderExpired          => _expiredOrderController.stream;
+  Stream<void>                 get onReconnect             => _reconnectController.stream;
+  Stream<Map<String, dynamic>> get onOrderAccepted         => _orderAcceptedController.stream;
+  Stream<Map<String, dynamic>> get onOrderStatusUpdated    => _orderStatusUpdatedController.stream;
+  Stream<Map<String, dynamic>> get onDriverLocation        => _driverLocationController.stream;
+  Stream<Map<String, dynamic>> get onDriverOffline         => _driverOfflineController.stream;
+  Stream<Map<String, dynamic>> get onDriverOnline          => _driverOnlineController.stream;
+  // Incidents driver — manque de heartbeat prolongé
+  Stream<Map<String, dynamic>> get onOrderSearching        => _orderSearchingController.stream;
+  Stream<Map<String, dynamic>> get onDriverUnreachable     => _driverUnreachableController.stream;
+  // Annulations (client + driver)
+  Stream<Map<String, dynamic>> get onOrderCancelled        => _orderCancelledController.stream;
+  Stream<Map<String, dynamic>> get onOrderAdminCancelled   => _orderAdminCancelledController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -40,6 +55,10 @@ class SocketService {
 
   void emitDriverLocation(double lat, double lng, String orderId) {
     _socket?.emit('driver:location', {'lat': lat, 'lng': lng, 'orderId': orderId});
+  }
+
+  void requestDriverLocation(String orderId) {
+    _socket?.emit('client:requestDriverLocation', {'orderId': orderId});
   }
 
   // ── Connexion ──────────────────────────────────────────────────────────────
@@ -62,21 +81,17 @@ class SocketService {
 
     _socket!
       ..on('connect', (_) {
-        // ignore: avoid_print
-        print('[SOCKET] Connecté à $_serverUrl');
+        if (kDebugMode) debugPrint('[SOCKET] Connecté à $_serverUrl');
       })
       ..on('reconnect', (_) {
-        // ignore: avoid_print
-        print('[SOCKET] Reconnecté — rafraîchissement des courses');
+        if (kDebugMode) debugPrint('[SOCKET] Reconnecté — rafraîchissement des courses');
         _reconnectController.add(null);
       })
       ..on('disconnect', (reason) {
-        // ignore: avoid_print
-        print('[SOCKET] Déconnecté — $reason');
+        if (kDebugMode) debugPrint('[SOCKET] Déconnecté — $reason');
       })
       ..on('connect_error', (err) {
-        // ignore: avoid_print
-        print('[SOCKET] Erreur connexion — $err');
+        if (kDebugMode) debugPrint('[SOCKET] Erreur connexion — $err');
       })
       ..on('order:new', (data) {
         if (data is Map) {
@@ -101,6 +116,36 @@ class SocketService {
       ..on('driver:location', (data) {
         if (data is Map) {
           _driverLocationController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('driver:offline', (data) {
+        if (data is Map) {
+          _driverOfflineController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('driver:online', (data) {
+        if (data is Map) {
+          _driverOnlineController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('order:searching', (data) {
+        if (data is Map) {
+          _orderSearchingController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('order:driver_unreachable', (data) {
+        if (data is Map) {
+          _driverUnreachableController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('order:cancelled', (data) {
+        if (data is Map) {
+          _orderCancelledController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('order:admin_cancelled', (data) {
+        if (data is Map) {
+          _orderAdminCancelledController.add(Map<String, dynamic>.from(data));
         }
       })
       ..connect();

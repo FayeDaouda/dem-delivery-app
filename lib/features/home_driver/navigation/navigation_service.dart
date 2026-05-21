@@ -2,12 +2,17 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class NavigationService {
+  /// Précision maximale acceptée en mètres.
+  /// Les positions avec accuracy > 50m (réseau/WiFi) sont ignorées.
+  static const maxAccuracyMeters = 50.0;
+
   static const _settings = LocationSettings(
     accuracy: LocationAccuracy.bestForNavigation,
     distanceFilter: 5, // mise à jour toutes les 5 m
   );
 
-  /// Demande la permission et retourne la position initiale.
+  /// Demande la permission et retourne la première position précise (≤ 50 m).
+  /// Attend jusqu'à 8s pour un fix GPS propre, sinon fallback sur ce qui est disponible.
   /// Retourne null si l'accès est refusé.
   static Future<Position?> requestAndGetPosition() async {
     LocationPermission permission = await Geolocator.checkPermission();
@@ -18,11 +23,24 @@ class NavigationService {
         permission == LocationPermission.deniedForever) {
       return null;
     }
-    return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-      ),
-    );
+    try {
+      return await Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0,
+        ),
+      )
+          .where((p) => p.accuracy <= maxAccuracyMeters)
+          .first
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // Timeout ou pas de GPS (intérieur) : prendre la meilleure position disponible
+      return Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+        ),
+      );
+    }
   }
 
   /// Stream de positions GPS en temps réel.

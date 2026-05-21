@@ -1,3 +1,4 @@
+import '../../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -34,6 +35,7 @@ class _State extends State<DriverSuspendedScreen> {
 
   Future<void> _logout() async {
     await AuthStorage.clear();
+    appStartupNotifier.markLoggedOut();
     if (mounted) context.go('/phone');
   }
 

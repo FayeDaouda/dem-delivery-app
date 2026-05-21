@@ -16,25 +16,20 @@ class NotificationService {
   static final _messaging = FirebaseMessaging.instance;
   static final _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
-  /// À appeler une seule fois dans main(), après Firebase.initializeApp().
-  static Future<void> init() async {
+  /// À appeler dans main() : initialise les canaux et listeners, sans demander la permission.
+  static Future<void> setup() async {
     try {
-      // 1. Permission (iOS + Android 13+)
-      await _messaging.requestPermission(
-        alert: true, badge: true, sound: true,
-      ).timeout(const Duration(seconds: 5));
-
-      // 1.b Initialisation Local Notifications (pour afficher en foreground)
+      // Local notifications — pas de demande de permission ici (false sur iOS)
       const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
       const iosInitSettings = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
       );
       const initSettings = InitializationSettings(android: androidInitSettings, iOS: iosInitSettings);
       await _localNotificationsPlugin.initialize(settings: initSettings);
 
-      // Création du channel Android haute importance
+      // Channel Android haute importance
       const channel = AndroidNotificationChannel(
         'dem_high_importance',
         'Notifications Importantes DEM',
@@ -42,17 +37,41 @@ class NotificationService {
         importance: Importance.max,
         enableVibration: true,
       );
-      await _localNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+      await _localNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
 
-      // 2. iOS : affiche en foreground nativement via Firebase
+      // iOS : affiche en foreground nativement via Firebase
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: true, badge: true, sound: true,
       );
 
-      // 3. Handler background
+      // Handler background
       FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
 
-      // 4. iOS : attendre le token APNs avant de demander le token FCM (obligatoire v15+)
+      // Message reçu en foreground → banner in-app
+      FirebaseMessaging.onMessage.listen(_handleForeground);
+
+      // Tap sur notification depuis background
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
+
+      // Tap sur notification depuis app terminée
+      final initial = await _messaging.getInitialMessage();
+      if (initial != null) _handleTap(initial);
+
+    } catch (_) {
+      // Silencieux sur émulateur sans Google Play Services
+    }
+  }
+
+  /// À appeler après l'onboarding : demande la permission et enregistre le token FCM.
+  static Future<void> requestPermissionAndToken() async {
+    try {
+      await _messaging.requestPermission(
+        alert: true, badge: true, sound: true,
+      ).timeout(const Duration(seconds: 5));
+
+      // iOS : attendre le token APNs avant le token FCM (obligatoire v15+)
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         String? apnsToken;
         for (int i = 0; i < 10 && apnsToken == null; i++) {
@@ -61,23 +80,12 @@ class NotificationService {
         }
       }
 
-      // 5. Token FCM → backend
       final token = await _messaging.getToken().timeout(const Duration(seconds: 10));
       if (token != null) await _saveToken(token);
       _messaging.onTokenRefresh.listen(_saveToken);
 
-      // 6. Message reçu en foreground → banner in-app
-      FirebaseMessaging.onMessage.listen(_handleForeground);
-
-      // 7. Tap sur notification depuis background
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
-
-      // 8. Tap sur notification depuis app terminée
-      final initial = await _messaging.getInitialMessage();
-      if (initial != null) _handleTap(initial);
-
     } catch (_) {
-      // Silencieux sur émulateur sans Google Play Services
+      // Silencieux si pas de Google Play Services ou refus utilisateur
     }
   }
 

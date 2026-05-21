@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 
+import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +21,7 @@ import 'navigation/alert_manager.dart';
 import 'navigation/directions_service.dart';
 import 'navigation/navigation_service.dart';
 import '../../core/notifications/notification_service.dart';
+import '../../shared/widgets/support_report_sheet.dart';
 
 class ActiveOrderScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> order;
@@ -61,6 +64,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   AlertPriority? _alertPriority;
   Timer? _alertTimer;
 
+  StreamSubscription<Map<String, dynamic>>? _cancelledSub;
+
   // ── Getters ───────────────────────────────────────────────────────────────
   double _parseCoord(dynamic val, [double fallback = 0.0]) {
     if (val == null) return fallback;
@@ -99,6 +104,40 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       if (mounted) setState(() => _driverIcon = icon);
     });
     _startNavigation();
+
+    final orderId = _order['id'] as String?;
+    _cancelledSub = SocketService.instance.onOrderCancelled.listen((data) {
+      if (!mounted || data['orderId'] != orderId) return;
+      final reason = data['reason'] as String? ?? 'Cette course a été annulée par l\'administration DEM.';
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(children: [
+            Icon(Icons.cancel_outlined, color: Color(0xFFEF4444), size: 22),
+            SizedBox(width: 8),
+            Text('Course annulée', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ]),
+          content: Text(reason, style: const TextStyle(fontSize: 14, height: 1.5)),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                ref.read(availableOrdersProvider.notifier).clear();
+                context.go('/driver/home');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0CB8DE),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Retour à l\'accueil'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   static Future<BitmapDescriptor> _buildDriverIcon() async {
@@ -162,6 +201,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
   @override
   void dispose() {
+    _cancelledSub?.cancel();
     _locationSub?.cancel();
     _alertTimer?.cancel();
     _mapController?.dispose();
@@ -178,6 +218,11 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     final initial = await NavigationService.requestAndGetPosition();
     if (initial != null && mounted) {
       setState(() => _driverPosition = initial);
+      // Émet immédiatement la position au client — ne pas attendre le premier tick des 10s
+      final orderId = _order['id'] as String?;
+      if (orderId != null) {
+        SocketService.instance.emitDriverLocation(initial.latitude, initial.longitude, orderId);
+      }
     }
 
     // Route calculée depuis la vraie position du driver
@@ -195,39 +240,43 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   }
 
   Future<void> _loadRoute() async {
-    // Toujours partir de la position actuelle du driver (les deux phases)
     final origin = _driverPosition != null
         ? LatLng(_driverPosition!.latitude, _driverPosition!.longitude)
         : (_isPickedUp ? _pickupLatLng : _pickupLatLng);
     final destination = _isPickedUp ? _deliveryLatLng : _pickupLatLng;
 
-    final result = await DirectionsService.getRoute(
-      origin: origin,
-      destination: destination,
-      apiKey: AppConfig.mapsApiKey,
-    );
-    if (!mounted) return;
-    setState(() {
-      _routePoints  = result.points;
-      _displayRoute = result.points;
-      _lastTrimIdx  = 0;
-      _etaSeconds   = result.durationSeconds;
-      _loadingRoute = false;
-      _isRerouting  = false;
-    });
-
-    final dist = _distanceToTarget;
-    if (dist != null) {
-      final min = (dist / 416).round();
-      final destName = _isPickedUp ? (_order['deliveryAddress'] ?? 'client') : (_order['pickupAddress'] ?? 'restaurant');
-      final statusText = _isPickedUp ? 'En route vers la livraison' : 'En route vers la récupération';
-      final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
-
-      NotificationService.showOngoingNotification(
-        id: 9999,
-        title: statusText,
-        body: '$destName$etaText',
+    try {
+      final result = await DirectionsService.getRoute(
+        origin: origin,
+        destination: destination,
+        apiKey: AppConfig.mapsApiKey,
       );
+      if (!mounted) return;
+      setState(() {
+        _routePoints  = result.points;
+        _displayRoute = result.points;
+        _lastTrimIdx  = 0;
+        _etaSeconds   = result.durationSeconds;
+        _loadingRoute = false;
+      });
+
+      final dist = _distanceToTarget;
+      if (dist != null) {
+        final min = (dist / 416).round();
+        final destName = _isPickedUp ? (_order['deliveryAddress'] ?? 'client') : (_order['pickupAddress'] ?? 'restaurant');
+        final statusText = _isPickedUp ? 'En route vers la livraison' : 'En route vers la récupération';
+        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
+        NotificationService.showOngoingNotification(
+          id: 9999,
+          title: statusText,
+          body: '$destName$etaText',
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ROUTE] Erreur calcul itinéraire: $e');
+    } finally {
+      // Garanti quoi qu'il arrive : exception, !mounted, succès
+      if (mounted) setState(() { _loadingRoute = false; _isRerouting = false; });
     }
   }
 
@@ -296,9 +345,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       }
     }
 
-    // Émet la position au client toutes les 10s
+    // Émet la position au client toutes les 10s — stop après livraison
     final now = DateTime.now();
-    if (_lastLocationEmit == null || now.difference(_lastLocationEmit!).inSeconds >= 10) {
+    if (!_isDelivered &&
+        (_lastLocationEmit == null || now.difference(_lastLocationEmit!).inSeconds >= 10)) {
       _lastLocationEmit = now;
       final orderId = _order['id'] as String?;
       if (orderId != null) {
@@ -422,7 +472,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }
@@ -442,7 +492,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }
@@ -723,7 +773,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
           confirmed = true;
           break;
         } catch (e) {
-          debugPrint('[PAYMENT] Erreur confirmPayment tentative $attempt: $e');
+          if (kDebugMode) debugPrint('[PAYMENT] Erreur confirmPayment tentative $attempt: $e');
         }
       }
       if (!confirmed) {
@@ -859,9 +909,26 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      context.go(_homeRoute);
+                    onPressed: () async {
+                      // Capturer avant le gap asynchrone
+                      final nav       = Navigator.of(context);
+                      final router    = GoRouter.of(context);
+                      final homeRoute = _homeRoute;
+                      final orderId   = _order['id'] as String?;
+                      final clientId  = (_order['client'] as Map<String, dynamic>?)?['id'] as String?;
+
+                      if (orderId != null && clientId != null && selectedRating > 0) {
+                        try {
+                          await ref.read(ordersRepositoryProvider).rateDriver(
+                            orderId:  orderId,
+                            driverId: clientId,  // driver note le client
+                            score:    selectedRating,
+                          );
+                        } catch (_) {}
+                      }
+                      if (!mounted) return;
+                      nav.pop();
+                      router.go(homeRoute);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF00C853),
@@ -1032,7 +1099,38 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                 children: [
                   if (_currentAlert == null) // masqué quand alerte visible
                     GestureDetector(
-                      onTap: () => context.go(_homeRoute),
+                      onTap: () async {
+                        final router    = GoRouter.of(context);
+                        final homeRoute = _homeRoute;
+                        if (!_isDelivered) {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              backgroundColor: AppColors.card,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                              title: const Text('Quitter la navigation ?',
+                                  style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+                              content: const Text(
+                                'La course est toujours en cours.\nVous pourrez y revenir depuis l\'accueil.',
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: const Text('Rester', style: TextStyle(color: AppColors.primary)),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Quitter',
+                                      style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true || !mounted) return;
+                        }
+                        router.go(homeRoute);
+                      },
                       child: Container(
                         width: 44,
                         height: 44,
@@ -1219,7 +1317,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
                   const SizedBox(height: 12),
 
-                  // Prix
+                  // Prix + bouton signaler
                   Row(
                     children: [
                       const Icon(Icons.payments_outlined,
@@ -1233,6 +1331,34 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                           color: Colors.white,
                         ),
                       ),
+                      const Spacer(),
+                      if (!_isDelivered)
+                        GestureDetector(
+                          onTap: () => SupportReportSheet.show(
+                            context,
+                            orderId: _order['id'] as String? ?? '',
+                            role: 'DRIVER',
+                            repo: ref.read(ordersRepositoryProvider),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                            ),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.flag_outlined,
+                                  size: 13, color: Colors.white.withValues(alpha: 0.70)),
+                              const SizedBox(width: 5),
+                              Text('Signaler',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.80),
+                                    fontSize: 12, fontWeight: FontWeight.w600,
+                                  )),
+                            ]),
+                          ),
+                        ),
                     ],
                   ),
 

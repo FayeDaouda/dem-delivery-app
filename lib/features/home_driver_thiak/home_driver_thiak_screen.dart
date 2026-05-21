@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +12,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/config/app_config.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
-import '../../features/deliveries/data/orders_repository.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
@@ -415,7 +415,7 @@ class _HomeDriverThiakScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }
@@ -445,7 +445,7 @@ class _HomeDriverThiakScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }

@@ -1,7 +1,9 @@
+import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/network_error_widget.dart';
 import '../../../features/profile/data/profile_repository.dart';
 import '../data/chef_de_flotte_repository.dart';
 import '../widgets/doc_picker_field.dart';
@@ -25,6 +27,7 @@ class _State extends State<ChefDeFlotteRejectedScreen> {
 
   String? _rejectionReason;
   bool    _loadingProfile = true;
+  bool    _loadFailed     = false;
   bool    _submitting     = false;
   String? _error;
 
@@ -47,8 +50,8 @@ class _State extends State<ChefDeFlotteRejectedScreen> {
         _rccmCtrl.text    = user['rccm']        as String? ?? '';
         _loadingProfile   = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loadingProfile = false);
+    } catch (e) {
+      if (mounted) setState(() { _loadingProfile = false; _loadFailed = true; _error = friendlyError(e); });
     }
   }
 
@@ -68,7 +71,7 @@ class _State extends State<ChefDeFlotteRejectedScreen> {
       );
       if (mounted) context.go('/chef-de-flotte/pending');
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      setState(() => _error = friendlyError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -88,7 +91,12 @@ class _State extends State<ChefDeFlotteRejectedScreen> {
       backgroundColor: Colors.white,
       body: _loadingProfile
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : Column(
+          : _loadFailed
+              ? NetworkErrorWidget(
+                  message: _error!,
+                  onRetry: () { setState(() { _loadingProfile = true; _loadFailed = false; _error = null; }); _loadProfile(); },
+                )
+              : Column(
               children: [
                 // ── Header gradient ──────────────────────────────────────
                 Container(

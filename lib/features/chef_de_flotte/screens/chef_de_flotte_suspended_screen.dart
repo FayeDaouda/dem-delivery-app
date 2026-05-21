@@ -1,7 +1,10 @@
+import '../../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/network_error_widget.dart';
 import '../../profile/data/profile_repository.dart';
 
 class ChefDeFlotteSuspendedScreen extends StatefulWidget {
@@ -13,6 +16,7 @@ class ChefDeFlotteSuspendedScreen extends StatefulWidget {
 class _State extends State<ChefDeFlotteSuspendedScreen> {
   String? _suspensionReason;
   bool    _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -29,13 +33,14 @@ class _State extends State<ChefDeFlotteSuspendedScreen> {
           _loading = false;
         });
       }
-    } catch (_) {
-      if (mounted) { setState(() => _loading = false); }
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = friendlyError(e); });
     }
   }
 
   Future<void> _logout() async {
     await AuthStorage.clear();
+    appStartupNotifier.markLoggedOut();
     if (mounted) { context.go('/phone'); }
   }
 
@@ -49,7 +54,12 @@ class _State extends State<ChefDeFlotteSuspendedScreen> {
       backgroundColor: Colors.white,
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : Column(
+          : _error != null
+              ? NetworkErrorWidget(
+                  message: _error!,
+                  onRetry: () { setState(() { _loading = true; _error = null; }); _load(); },
+                )
+              : Column(
               children: [
                 // Header
                 Container(

@@ -44,8 +44,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>> _pendingOrders = [];
   List<Map<String, dynamic>> _activeOrders = [];
-  Map<String, dynamic>? _activeOrder; // course en cours minimisée (tracking minimisé)
-  bool _loadingOrders = false;
   bool _isInitialLoad = true; // redirection auto tracking seulement au premier chargement
   static const _kDeliveredKey = 'dem_shown_delivered_ids';
 
@@ -60,7 +58,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _orderAcceptedSub;
-  StreamSubscription<Map<String, dynamic>>? _driverLocationSub;
+  // _driverLocationSub supprimé : géré par ClientOrderNotifier (tracking provider)
 
   // ── GPS + boussole ────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
@@ -79,6 +77,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── Polling timer pour s'assurer que le badge est à jour ───────────────────
   Timer? _pollTimer;
+  bool _checkingOrders = false;
 
   @override
   void initState() {
@@ -123,11 +122,13 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     _checkPendingOrder();
   }
 
+  StreamSubscription<void>? _reconnectSub;
+
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
     _orderAcceptedSub?.cancel();
-    _driverLocationSub?.cancel();
+    _reconnectSub?.cancel();
     _locationSub?.cancel();
     _compassSub?.cancel();
     _programmaticMoveTimer?.cancel();
@@ -143,6 +144,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
     SocketService.instance.connect(token);
 
+    // Reconnexion socket (backend restart, app retour réseau) → resync immédiat
+    _reconnectSub = SocketService.instance.onReconnect.listen((_) {
+      if (mounted) _checkPendingOrder();
+    });
+
     _orderAcceptedSub = SocketService.instance.onOrderAccepted.listen((data) {
       if (!mounted) return;
       final acceptedId = data['orderId'] as String?;
@@ -156,7 +162,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         // Affiche une vraie notification système locale
         NotificationService.showSystemNotification(
           title: 'Course acceptée !',
-          body: 'Un livreur est en route' + (eta != null ? ' (~$eta min)' : '.'),
+          body: 'Un livreur est en route${eta != null ? ' (~$eta min)' : '.'}',
         );
 
         context.push('/orders/tracking', extra: {
@@ -167,40 +173,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       }
     });
 
-    _driverLocationSub = SocketService.instance.onDriverLocation.listen((data) {
-      if (!mounted || _activeOrders.isEmpty) return;
-      final active = _activeOrders.first;
-      if (data['orderId'] != active['id']) return;
-
-      final lat = (data['lat'] as num?)?.toDouble();
-      final lng = (data['lng'] as num?)?.toDouble();
-      if (lat == null || lng == null) return;
-
-      double? parseCoord(dynamic v) {
-        if (v == null) return null;
-        if (v is num) return v.toDouble();
-        if (v is String) return double.tryParse(v);
-        return null;
-      }
-
-      final isPickedUp = (active['status'] as String? ?? '').toUpperCase() == 'PICKED_UP';
-      final targetLat = parseCoord(isPickedUp ? active['deliveryLatitude'] : active['pickupLatitude']);
-      final targetLng = parseCoord(isPickedUp ? active['deliveryLongitude'] : active['pickupLongitude']);
-      final targetName = ((isPickedUp ? active['deliveryAddress'] : active['pickupAddress']) ?? 'Destination').toString();
-
-      if (targetLat != null && targetLng != null) {
-        final dist = Geolocator.distanceBetween(lat, lng, targetLat, targetLng);
-        final min = (dist / 416).round();
-        final etaText = min > 0 ? ' (~$min min)' : ' (Proche)';
-        final statusText = isPickedUp ? 'Le livreur est en route vers vous' : 'Le livreur récupère votre commande';
-
-        NotificationService.showOngoingNotification(
-          id: 8888,
-          title: statusText,
-          body: '$targetName$etaText',
-        );
-      }
-    });
+    // Notifications de position gérées par ClientOrderNotifier (tracking provider)
+    // → pas de listener driverLocation ici pour éviter les doublons
   }
 
   void _toggleSheet() {
@@ -259,7 +233,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   }
 
   void _onPosition(Position position) {
-    if (!mounted) return;
+    if (!mounted || position.accuracy > NavigationService.maxAccuracyMeters) return;
     setState(() {
       _clientPosition = position;
       if (position.heading >= 0) _travelHeading = position.heading;
@@ -370,11 +344,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── Vérifie l'état des commandes au retour/connexion ──────────────────────
   Future<void> _checkPendingOrder() async {
-    if (!mounted) return;
-    setState(() {
-      _loadingOrders = true;
-      _activeOrder = null;
-    });
+    if (!mounted || _checkingOrders) return;
+    _checkingOrders = true;
     try {
       final orders = await ref.read(ordersRepositoryProvider).getMyOrders();
 
@@ -386,27 +357,24 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
       if (activeList.isNotEmpty) {
         final active = activeList.first;
-        final orderId = active['id'] as String?;
+        final orderId  = active['id'] as String?;
         final driverId = (active['driver'] as Map?)?['id'] as String?
             ?? active['driverId'] as String?;
         final delivery = active['deliveryAddress'] as String? ?? 'votre destination';
 
-        // Notification persistante (Android) pendant la course
         NotificationService.showOngoingNotification(
           id: 8888,
           title: 'Course en cours',
           body: 'En route vers : $delivery',
         );
 
-        // Redirection automatique vers le tracking UNIQUEMENT au premier chargement
-        // (cold start / retour de notification). Après ça : toujours bannière.
         final shouldRedirect = _isInitialLoad &&
             !ref.read(trackingMinimizedProvider) &&
             orderId != null && driverId != null;
-        _isInitialLoad = false; // désactive la redirection auto pour les appels suivants
+        _isInitialLoad = false;
 
         if (shouldRedirect && mounted) {
-          setState(() { _activeOrders = activeList; _loadingOrders = false; });
+          setState(() => _activeOrders = activeList);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               context.push('/orders/tracking', extra: {
@@ -418,19 +386,17 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           return;
         }
 
-        // Sinon : bannière "Course en cours" sur l'accueil
-        if (mounted) setState(() { _activeOrder = active; _activeOrders = activeList; _loadingOrders = false; });
+        if (mounted) setState(() => _activeOrders = activeList);
         return;
       } else {
         NotificationService.cancelNotification(8888);
       }
 
-      // Plus de course active → effacer l'état minimisé si présent
       if (ref.read(trackingMinimizedProvider)) {
         ref.read(trackingMinimizedProvider.notifier).state = false;
       }
 
-      // Priorité 2 : commande récemment livrée → dialog confirmation (une seule fois)
+      // Priorité 2 : commande récemment livrée → dialog (une seule fois)
       const doneStatuses = ['DELIVERED', 'PAYMENT_CONFIRMED'];
       final delivered = orders.firstWhere(
         (o) => doneStatuses.contains((o['status'] as String? ?? '').toUpperCase()),
@@ -439,13 +405,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
       if (delivered.isNotEmpty && mounted) {
         final orderId = delivered['id'] as String? ?? '';
-        final prefs = await SharedPreferences.getInstance();
+        final prefs   = await SharedPreferences.getInstance();
+        if (!mounted) return;
         final shownIds = prefs.getStringList(_kDeliveredKey) ?? [];
         if (!shownIds.contains(orderId)) {
-          setState(() {
-             _loadingOrders = false;
-             _activeOrders = activeList;
-          });
+          setState(() => _activeOrders = activeList);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _showDeliveredDialog(delivered, prefs, shownIds);
           });
@@ -460,13 +424,13 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
       if (mounted) {
         setState(() {
-          _activeOrders = activeList;
+          _activeOrders  = activeList;
           _pendingOrders = pendingList;
-          _loadingOrders = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingOrders = false);
+    } finally {
+      _checkingOrders = false;
     }
   }
 
@@ -587,89 +551,195 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     ).then((_) => autoClose?.cancel());
   }
 
-  // ── Reprend le suivi de course minimisé ───────────────────────────────────
-  void _resumeTracking() {
-    final order = _activeOrder;
-    if (order == null) return;
-    final orderId = order['id'] as String?;
-    final driverId = (order['driver'] as Map?)?['id'] as String?
-        ?? order['driverId'] as String?;
-    if (orderId == null || driverId == null) return;
-    ref.read(trackingMinimizedProvider.notifier).state = false;
+  // ── Badge unique intelligent (priorité métier) ──────────────────────────
+  Widget? _buildSmartBadge() {
+    final allOrders = [..._activeOrders, ..._pendingOrders];
+    if (allOrders.isEmpty) return null;
+
+    // Couleur/icône selon la priorité la plus haute présente
+    final hasEnRoute  = _activeOrders.any((o) {
+      final s = (o['status'] as String? ?? '').toUpperCase();
+      return s == 'PICKED_UP' || s == 'IN_TRANSIT';
+    });
+    final hasAccepted = _activeOrders.any((o) =>
+        (o['status'] as String? ?? '').toUpperCase() == 'ACCEPTED');
+
+    final Color color;
+    final IconData icon;
+    if (hasEnRoute) {
+      color = AppColors.primary;
+      icon  = Icons.delivery_dining;
+    } else if (hasAccepted) {
+      color = const Color(0xFF40F0C0);
+      icon  = Icons.two_wheeler;
+    } else {
+      color = const Color(0xFFFFB300);
+      icon  = Icons.timer;
+    }
+
+    final n     = allOrders.length;
+    final label = n == 1
+        ? (hasEnRoute ? 'Livraison en cours' : hasAccepted ? 'Course en cours' : '1 en attente')
+        : '$n livraisons actives';
+
+    // Tap : direct si 1 seule commande, sheet de choix sinon
+    final VoidCallback onTap;
+    if (n == 1) {
+      final single  = allOrders.first;
+      final sStatus = (single['status'] as String? ?? '').toUpperCase();
+      onTap = sStatus == 'PENDING'
+          ? () => context.push('/orders/confirmation', extra: single)
+          : () => _goToTracking(single);
+    } else {
+      onTap = () => _showAllOrdersSheet(allOrders);
+    }
+
+    return _buildBadge(color: color, icon: icon, label: label, onTap: onTap);
+  }
+
+  Widget _buildBadge({
+    required Color color,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 12, offset: const Offset(0, 4))],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 7),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _goToTracking(Map<String, dynamic> order) {
+    final driverId = (order['driver'] as Map?)?['id'] as String? ?? order['driverId'] as String?;
+    if (driverId == null) return;
     context.push('/orders/tracking', extra: {
-      'orderId': orderId,
+      'orderId': order['id'],
       'driverId': driverId,
+      'initialOrder': order, // données pré-chargées → zéro latence
     });
   }
 
-  // ── Affiche un sélecteur s'il y a plusieurs commandes en attente ─────────
-  void _showPendingOrdersSelection() {
+  // ── Sheet unifiée : toutes les commandes actives + en attente ───────────
+  void _showAllOrdersSheet(List<Map<String, dynamic>> orders) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-             padding: const EdgeInsets.all(16),
-             child: Column(
-               mainAxisSize: MainAxisSize.min,
-               crossAxisAlignment: CrossAxisAlignment.stretch,
-               children: [
-                 // Handle drag
-                 Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(2)))),
-                 const SizedBox(height: 20),
-                 const Text('Vos commandes en attente', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-                 const SizedBox(height: 16),
-                 ..._pendingOrders.map((o) {
-                    final type = o['orderType'] ?? o['type'] ?? '';
-                    final price = (o['price'] as num?)?.toInt() ?? 0;
-                    final pickup = o['pickupAddress'] as String? ?? 'Départ';
-                    final delivery = o['deliveryAddress'] as String? ?? 'Arrivée';
-                    return GestureDetector(
-                       onTap: () {
-                         Navigator.pop(ctx);
-                         context.push('/orders/confirmation', extra: o);
-                       },
-                       child: Container(
-                         margin: const EdgeInsets.only(bottom: 12),
-                         padding: const EdgeInsets.all(16),
-                         decoration: BoxDecoration(
-                           color: AppColors.card,
-                           borderRadius: BorderRadius.circular(16),
-                           border: Border.all(color: const Color(0xFFFFB300).withValues(alpha: 0.3)),
-                         ),
-                         child: Row(
-                           children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: const Color(0xFFFFB300).withValues(alpha: 0.15), shape: BoxShape.circle),
-                                child: const Icon(Icons.timer, color: Color(0xFFFFB300), size: 22)
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(type == 'RIDE' ? 'Transport (Thiak Thiak)' : 'Livraison', style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold)),
-                                    const SizedBox(height: 4),
-                                    Text('$pickup  ➔  $delivery', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  ]
-                                )
-                              ),
-                              const SizedBox(width: 10),
-                              Text('$price CFA', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                           ]
-                         )
-                       )
-                    );
-                 })
-               ]
-             )
-          )
-        );
-      }
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          gradient: AppColors.gradientSplash,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(ctx).viewPadding.bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 36, height: 3,
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            Row(children: [
+              const Icon(Icons.delivery_dining, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text('Choisir une livraison (${orders.length})',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            ]),
+            const SizedBox(height: 14),
+            ...orders.map((o) {
+              final status   = (o['status'] as String? ?? '').toUpperCase();
+              final delivery = o['deliveryAddress'] as String? ?? '—';
+              final pickup   = o['pickupAddress']  as String? ?? '—';
+              final price    = (o['price'] as num?)?.toInt() ?? 0;
+              final isPending = status == 'PENDING';
+
+              final String statusLabel = switch (status) {
+                'PICKED_UP' || 'IN_TRANSIT' => 'En route vers vous',
+                'ACCEPTED'                  => 'Livreur en route',
+                'PENDING'                   => 'En attente de livreur',
+                _                           => 'En traitement',
+              };
+              final Color statusColor = switch (status) {
+                'PICKED_UP' || 'IN_TRANSIT' => const Color(0xFF00C853),
+                'ACCEPTED'                  => AppColors.primary,
+                'PENDING'                   => const Color(0xFFFFB300),
+                _                           => Colors.white54,
+              };
+
+              return GestureDetector(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (isPending) {
+                    context.push('/orders/confirmation', extra: o);
+                  } else {
+                    _goToTracking(o);
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), shape: BoxShape.circle),
+                        child: Icon(isPending ? Icons.timer : Icons.two_wheeler, color: statusColor, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(delivery, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 2),
+                            Text(pickup, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                              child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('$price CFA', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text(isPending ? 'Voir →' : 'Suivre →',
+                              style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 
@@ -732,7 +802,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                 children: [
                   const Spacer(),
                   GestureDetector(
-                    onTap: () => context.go('/client/profile'),
+                    onTap: () => context.push('/client/profile'),
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: const BoxDecoration(
@@ -757,31 +827,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── Bannière course en cours (tracking minimisé) ──
-                if (_activeOrder != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-                    child: GestureDetector(
-                      onTap: _resumeTracking,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(30),
-                          boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))],
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.two_wheeler, color: Colors.white, size: 20),
-                            SizedBox(width: 8),
-                            Expanded(child: Text('Livraison en cours · Appuyer pour reprendre', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
-                            Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 14),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
                 // ── Flottants juste au dessus du bottom sheet ──
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
@@ -789,145 +834,75 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      // ── Bouton localisation 3 états (style Google Maps) ──
-                      GestureDetector(
-                        onTap: _cycleLocationMode,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: _locationMode == _LocationMode.free
-                                ? AppColors.surface
-                                : AppColors.primary,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: _locationMode == _LocationMode.free
-                                  ? AppColors.card
-                                  : AppColors.primary,
-                              width: 1.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
+
+                      // ── GAUCHE : Localisation + Nuit/Jour ─────────────────
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: _cycleLocationMode,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 250),
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
                                 color: _locationMode == _LocationMode.free
-                                    ? Colors.black.withValues(alpha: 0.25)
-                                    : AppColors.primary.withValues(alpha: 0.45),
-                                blurRadius: 12,
-                              ),
-                            ],
-                          ),
-                          child: _locationMode == _LocationMode.compass
-                              ? Transform.rotate(
-                                  angle: -_compassBearing * pi / 180,
-                                  child: const Icon(Icons.navigation,
-                                      color: Colors.white, size: 22),
-                                )
-                              : Icon(
-                                  _locationMode == _LocationMode.follow
-                                      ? Icons.navigation
-                                      : Icons.navigation_outlined,
+                                    ? AppColors.surface : AppColors.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(
                                   color: _locationMode == _LocationMode.free
-                                      ? AppColors.primary
-                                      : Colors.white,
-                                  size: 22,
+                                      ? AppColors.card : AppColors.primary,
+                                  width: 1.5,
                                 ),
-                        ),
+                                boxShadow: [BoxShadow(
+                                  color: _locationMode == _LocationMode.free
+                                      ? Colors.black.withValues(alpha: 0.25)
+                                      : AppColors.primary.withValues(alpha: 0.45),
+                                  blurRadius: 12,
+                                )],
+                              ),
+                              child: _locationMode == _LocationMode.compass
+                                  ? Transform.rotate(
+                                      angle: -_compassBearing * pi / 180,
+                                      child: const Icon(Icons.navigation, color: Colors.white, size: 22),
+                                    )
+                                  : Icon(
+                                      _locationMode == _LocationMode.follow
+                                          ? Icons.navigation : Icons.navigation_outlined,
+                                      color: _locationMode == _LocationMode.free
+                                          ? AppColors.primary : Colors.white,
+                                      size: 22,
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: _toggleMapTheme,
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppColors.card, width: 1.5),
+                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                              ),
+                              child: Icon(
+                                ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                                color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
 
-                      // Bouton toggle jour/nuit
-                      GestureDetector(
-                        onTap: _toggleMapTheme,
-                        child: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.card, width: 1.5),
-                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
-                          ),
-                          child: Icon(
-                            ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                            color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                            size: 22,
-                          ),
-                        ),
-                      ),
+                      // ── DROITE : Badge unique priorité métier ────────────
+                      Builder(builder: (_) {
+                        final badge = _buildSmartBadge();
+                        return badge ?? const SizedBox.shrink();
+                      }),
 
-                      // Badges Actif / En attente
-                      if (_activeOrders.isNotEmpty || _pendingOrders.isNotEmpty)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Badge Actif (Vert)
-                            if (_activeOrders.isNotEmpty)
-                              GestureDetector(
-                                onTap: () {
-                                  final active = _activeOrders.first;
-                                  context.push('/orders/tracking', extra: {
-                                    'orderId': active['id'],
-                                    'driverId': (active['driver'] as Map?)?['id'] ?? active['driverId'],
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  margin: EdgeInsets.only(bottom: _pendingOrders.isNotEmpty ? 8 : 0),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF40F0C0), // Vert
-                                    borderRadius: BorderRadius.circular(30),
-                                    boxShadow: [
-                                      BoxShadow(color: const Color(0xFF40F0C0).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.delivery_dining, color: Colors.white, size: 20),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _activeOrders.length == 1 ? '1 course en cours' : '${_activeOrders.length} courses en cours',
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-
-                            // Badge En attente (Jaune)
-                            if (_pendingOrders.isNotEmpty)
-                              GestureDetector(
-                                onTap: () {
-                                  if (_pendingOrders.length == 1) {
-                                    context.push('/orders/confirmation', extra: _pendingOrders.first);
-                                  } else {
-                                    _showPendingOrdersSelection();
-                                  }
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFB300), // Jaune
-                                    borderRadius: BorderRadius.circular(30),
-                                    boxShadow: [
-                                      BoxShadow(color: const Color(0xFFFFB300).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.timer, color: Colors.white, size: 20),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _pendingOrders.length == 1 ? '1 commande en attente' : '${_pendingOrders.length} commandes en attente',
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
                     ],
                   ),
                 ),
@@ -1161,7 +1136,7 @@ class _ClientNavBar extends StatelessWidget {
               icon: Icons.person_outline_rounded,
               label: 'Profil',
               active: false,
-              onTap: () => context.go('/client/profile'),
+              onTap: () => context.push('/client/profile'),
             ),
           ],
         ),

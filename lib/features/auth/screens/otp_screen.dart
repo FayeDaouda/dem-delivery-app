@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../core/error/app_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
+import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../providers/auth_provider.dart';
@@ -54,7 +56,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   // ── Vérification OTP ───────────────────────────────────────────────────────
   Future<void> _verifyOtp() async {
-    if (_code.length < 6) return;
+    if (_code.length < 6 || ref.read(authProvider).isLoading) return;
     setState(() => _hasError = false);
     try {
       final data = await ref.read(authProvider.notifier).verifyOtp(
@@ -73,6 +75,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     final isNew = data['isNew'] as bool;
 
     if (isNew) {
+      // Nouvel utilisateur : pas encore de rôle — on ne peut pas markLoggedIn
+      // Le rôle sera défini dans RoleSelectionScreen puis markLoggedIn sera appelé
       context.go('/role-selection');
       return;
     }
@@ -80,17 +84,25 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     final role        = user['role'] as String;
     final vehicleType = user['vehicleType'] as String?;
     final isActive    = user['isActive'] as bool? ?? true;
+    final chefStatus  = user['chefDeFlotteStatus'] as String?;
+
+    // Notifie le router que l'utilisateur est connecté → évite les redirects erronés
+    appStartupNotifier.markLoggedIn(
+      userRole: role,
+      vehicle:  vehicleType,
+      active:   isActive,
+      chef:     chefStatus,
+    );
 
     if (role == 'DRIVER') {
       if (!isActive) { context.go('/driver/suspended'); return; }
       context.go(vehicleType == 'TAXI' ? '/driver/thiak/home' : '/driver/home');
     } else if (role == 'CHEF_DE_FLOTTE') {
       if (!isActive) { context.go('/chef-de-flotte/suspended'); return; }
-      final status = user['chefDeFlotteStatus'] as String?;
-      if (status == 'ACTIVE')   { context.go('/chef-de-flotte/dashboard'); }
-      else if (status == 'PENDING')  { context.go('/chef-de-flotte/pending'); }
-      else if (status == 'REJECTED') { context.go('/chef-de-flotte/rejected'); }
-      else { context.go('/chef-de-flotte/onboarding'); }
+      if (chefStatus == 'ACTIVE')        { context.go('/chef-de-flotte/dashboard'); }
+      else if (chefStatus == 'PENDING')  { context.go('/chef-de-flotte/pending'); }
+      else if (chefStatus == 'REJECTED') { context.go('/chef-de-flotte/rejected'); }
+      else                               { context.go('/chef-de-flotte/onboarding'); }
     } else {
       context.go('/client/home');
     }
@@ -108,7 +120,17 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         );
         _startTimer();
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(friendlyError(e)),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    }
     if (mounted) setState(() => _resending = false);
   }
 

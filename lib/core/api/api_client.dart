@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import '../storage/auth_storage.dart';
-import '../router/app_router.dart';
+import '../router/app_startup_notifier.dart';
 
 const _baseUrl = 'https://api.dem.sn';
 
@@ -42,8 +42,8 @@ class ApiClient {
 
         if (!isAuthEndpoint && (status == 401 || (status == 404 && isSelfUserPath))) {
           await AuthStorage.clear();
-          appRouter.go('/phone');
-          return; // ne pas propager l'erreur — la redirection suffit
+          appStartupNotifier.markLoggedOut();
+          return; // markLoggedOut() notifie GoRouter → redirect vers /phone
         }
         handler.next(e);
       },

@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
+import '../../core/utils/input_formatters.dart';
+import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geo;
-import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -18,6 +19,7 @@ import '../../core/theme/map_theme_provider.dart';
 import '../client_profile/data/favorite_addresses_repository.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
+import '../home_driver/navigation/navigation_service.dart';
 
 // ─── Heights par step ────────────────────────────────────────────────────────
 const _kPanelHeights = [180.0, 290.0, 310.0, 260.0]; // step 0, 1, 2, 3
@@ -73,12 +75,20 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   double? _estimatedPrice; // prix course (= ce que le livreur gagne)
   double _demFee = 0.0;    // frais DEM prélevés en sus au client
   bool _freeCourseEligible = false; // 2ème course gratuite (100 premiers clients)
-  bool _loadingSurge = false;
-  bool _loadingGps   = false;
-  bool _submitting   = false;
+  bool _loadingSurge  = false;
+  bool _priceTimedOut = false;
+  bool _loadingGps    = false;
+  bool _submitting    = false;
   Timer? _surgeDebounce;
+  Timer? _priceTimeoutTimer;
   List<LatLng> _routePoints = [];
   Map<String, dynamic>? _currentUser;
+
+  // ── Dio public (Google Places, OSRM) — sans token JWT ────────────────────
+  late final _publicDio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 8),
+    receiveTimeout: const Duration(seconds: 8),
+  ));
 
   // ── Adresses favorites ───────────────────────────────────────────────────
   final _favRepo = FavoriteAddressesRepository();
@@ -140,6 +150,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     _pageCtrl.dispose();
     _searchDebounce?.cancel();
     _surgeDebounce?.cancel();
+    _priceTimeoutTimer?.cancel();
     _pickupCtrl.dispose();
     _deliveryCtrl.dispose();
     _senderNameCtrl.dispose();
@@ -167,15 +178,15 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   Future<void> _fetchGpsInit() async {
     setState(() => _loadingGps = true);
     try {
-      final perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) await Geolocator.requestPermission();
-      final pos = await Geolocator.getCurrentPosition();
-      final ll = LatLng(pos.latitude, pos.longitude);
-      _currentCameraPos = ll;
-      _centerMap(ll);
-      _pickupLat = ll.latitude;
-      _pickupLng = ll.longitude;
-      _reverseGeocode(ll, forPickup: true);
+      final pos = await NavigationService.requestAndGetPosition();
+      if (pos != null && mounted) {
+        final ll = LatLng(pos.latitude, pos.longitude);
+        _currentCameraPos = ll;
+        _centerMap(ll);
+        _pickupLat = ll.latitude;
+        _pickupLng = ll.longitude;
+        _reverseGeocode(ll, forPickup: true);
+      }
     } catch (_) {
       // fallback Dakar
     } finally {
@@ -185,7 +196,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
 
   void _centerMap(LatLng pos) {
     _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 17, tilt: 55)),
+      CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 14, tilt: 30)),
     );
   }
 
@@ -237,7 +248,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     _searchDebounce = Timer(const Duration(milliseconds: 450), () async {
       setState(() => _isSearching = true);
       try {
-        final res = await Dio().get(
+        final res = await _publicDio.get(
           'https://maps.googleapis.com/maps/api/place/autocomplete/json',
           queryParameters: {
             'input': query,
@@ -267,7 +278,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _suggestions = []);
     try {
-      final res = await Dio().get(
+      final res = await _publicDio.get(
         'https://maps.googleapis.com/maps/api/place/details/json',
         queryParameters: {
           'place_id': placeId,
@@ -302,6 +313,47 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     _surgeDebounce = Timer(const Duration(milliseconds: 800), _computeEstimate);
   }
 
+  void _retryEstimate() {
+    setState(() => _priceTimedOut = false);
+    _updateEstimate();
+  }
+
+  void _swapAddresses() {
+    setState(() {
+      final tmpText = _pickupCtrl.text;
+      final tmpLat  = _pickupLat;
+      final tmpLng  = _pickupLng;
+      _pickupCtrl.text   = _deliveryCtrl.text;
+      _pickupLat         = _deliveryLat;
+      _pickupLng         = _deliveryLng;
+      _deliveryCtrl.text = tmpText;
+      _deliveryLat       = tmpLat;
+      _deliveryLng       = tmpLng;
+      _isSelectingPickup = true;
+    });
+    if (_pickupLat != null || _deliveryLat != null) _updateEstimate();
+  }
+
+  // ── Validation téléphone ─────────────────────────────────────────────────
+  bool _validatePhone(TextEditingController ctrl, String label) {
+    final digits = ctrl.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Numéro $label requis'),
+        backgroundColor: AppColors.error,
+      ));
+      return false;
+    }
+    if (digits.length < 9) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Numéro $label invalide — 9 chiffres minimum'),
+        backgroundColor: AppColors.error,
+      ));
+      return false;
+    }
+    return true;
+  }
+
   Future<Map<String, dynamic>?> _fetchRouteAndDistance(
       double lat1, double lng1, double lat2, double lng2) async {
     // Essaie Google Directions en premier (clé déjà configurée)
@@ -316,8 +368,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     final key = AppConfig.mapsApiKey;
     if (key.isEmpty) return null;
     try {
-      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8)));
-      final res = await dio.get(
+      final res = await _publicDio.get(
         'https://maps.googleapis.com/maps/api/directions/json',
         queryParameters: {
           'origin': '$lat1,$lng1',
@@ -342,12 +393,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   Future<Map<String, dynamic>?> _fetchOsrmRoute(
       double lat1, double lng1, double lat2, double lng2) async {
     try {
-      final dio = Dio(BaseOptions(
-        headers: {'User-Agent': 'DEM-App/1.0'},
-        connectTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
-      ));
-      final res = await dio.get(
+      final res = await _publicDio.get(
         'https://router.project-osrm.org/route/v1/driving/$lng1,$lat1;$lng2,$lat2',
         queryParameters: {'overview': 'full', 'geometries': 'geojson'},
       );
@@ -370,35 +416,49 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
 
   Future<void> _computeEstimate() async {
     if (_pickupLat == null || _deliveryLat == null) return;
-    setState(() => _loadingSurge = true);
-    try {
-      // Trace de route (affichage visuel uniquement)
-      final routeData = await _fetchRouteAndDistance(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
-      if (routeData != null && mounted) {
-        setState(() => _routePoints = routeData['points'] as List<LatLng>);
-      } else if (mounted) {
-        setState(() => _routePoints = [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)]);
-      }
+    setState(() { _loadingSurge = true; _priceTimedOut = false; });
 
-      // Estimation officielle depuis le backend — source de vérité unique
-      final estimate = await _repo.getEstimate(
+    _priceTimeoutTimer?.cancel();
+    _priceTimeoutTimer = Timer(const Duration(seconds: 20), () {
+      if (mounted && _loadingSurge) {
+        setState(() { _loadingSurge = false; _priceTimedOut = true; });
+      }
+    });
+
+    try {
+      // Lance route (visuel) et estimation en parallèle — pas séquentiels
+      final routeFuture    = _fetchRouteAndDistance(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
+      final estimateFuture = _repo.getEstimate(
         pickupLat: _pickupLat!, pickupLng: _pickupLng!,
         deliveryLat: _deliveryLat!, deliveryLng: _deliveryLng!,
         orderType: widget.orderType,
       );
 
+      // Affiche le prix dès que l'estimation revient (sans attendre la route)
+      final estimate = await estimateFuture;
       if (estimate != null && mounted) {
         setState(() {
           _surgeMultiplier = (estimate['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
           _estimatedPrice  = (estimate['price']           as num?)?.toDouble();
           _demFee          = (estimate['demFee']          as num?)?.toDouble() ?? 0.0;
           _loadingSurge    = false;
+          _priceTimedOut   = false;
         });
       } else if (mounted) {
-        setState(() => _loadingSurge = false);
+        setState(() { _loadingSurge = false; _priceTimedOut = true; });
+      }
+
+      // Route visuelle — peut arriver après le prix, c'est OK
+      final routeData = await routeFuture;
+      if (routeData != null && mounted) {
+        setState(() => _routePoints = routeData['points'] as List<LatLng>);
+      } else if (mounted && _pickupLat != null && _deliveryLat != null) {
+        setState(() => _routePoints = [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)]);
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingSurge = false);
+      if (mounted) setState(() { _loadingSurge = false; _priceTimedOut = true; });
+    } finally {
+      _priceTimeoutTimer?.cancel();
     }
   }
 
@@ -588,7 +648,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -601,7 +661,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final panelH = _isMapPlacementMode ? 90.0 : _kPanelHeights[_step];
+    final keyboardH     = MediaQuery.of(context).viewInsets.bottom;
+    final bottomSafeArea = MediaQuery.of(context).viewPadding.bottom;
+    // +24px supplémentaires pour les appareils avec indicateur maison (iPhone X+)
+    final extraH    = bottomSafeArea > 20 ? 24.0 : 0.0;
+    final panelH    = _isMapPlacementMode ? 90.0 : _kPanelHeights[_step] + extraH;
 
     // Polyline + inactive markers
     Set<Polyline> polylines = {};
@@ -614,10 +678,15 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
       ));
     }
     if (_pickupLat != null && (!_isSelectingPickup || !_isMapPlacementMode)) {
+      final pickupLabel = _pickupCtrl.text.isNotEmpty ? _pickupCtrl.text : 'Point de départ';
       markers.add(Marker(
         markerId: const MarkerId('pickup'),
         position: LatLng(_pickupLat!, _pickupLng!),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        infoWindow: InfoWindow(
+          title: 'Départ',
+          snippet: pickupLabel.length > 60 ? '${pickupLabel.substring(0, 57)}…' : pickupLabel,
+        ),
         onTap: () {
           FocusScope.of(context).unfocus();
           setState(() {
@@ -629,10 +698,15 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
       ));
     }
     if (_deliveryLat != null && (_isSelectingPickup || !_isMapPlacementMode)) {
+      final deliveryLabel = _deliveryCtrl.text.isNotEmpty ? _deliveryCtrl.text : 'Destination';
       markers.add(Marker(
         markerId: const MarkerId('delivery'),
         position: LatLng(_deliveryLat!, _deliveryLng!),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(
+          title: 'Destination',
+          snippet: deliveryLabel.length > 60 ? '${deliveryLabel.substring(0, 57)}…' : deliveryLabel,
+        ),
         onTap: () {
           FocusScope.of(context).unfocus();
           setState(() {
@@ -651,7 +725,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         // ── MAP ────────────────────────────────────────────────────────────
         SizedBox.expand(
           child: GoogleMap(
-            initialCameraPosition: const CameraPosition(target: _dakar, zoom: 17, tilt: 55),
+            initialCameraPosition: const CameraPosition(target: _dakar, zoom: 14, tilt: 30),
             onMapCreated: (c) => _mapController = c,
             style: _mapStyle,
             onTap: (_) => FocusScope.of(context).unfocus(),
@@ -687,7 +761,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         // ── MAP THEME TOGGLE ──────────────────────────────────────────────────
         Positioned(
           right: 16,
-          bottom: panelH + 116,
+          bottom: panelH + 116 + keyboardH,
           child: GestureDetector(
             onTap: _toggleMapTheme,
             child: Container(
@@ -708,7 +782,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         // ── RECENTER BTN ───────────────────────────────────────────────────
         Positioned(
           right: 16,
-          bottom: panelH + 60,
+          bottom: panelH + 60 + keyboardH,
           child: _FloatingBtn(
             icon: _loadingGps ? null : Icons.my_location,
             loading: _loadingGps,
@@ -756,9 +830,23 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                     },
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                     child: Row(children: [
                       Container(width: 2, height: 16, color: AppColors.textSecondary.withValues(alpha: 0.3)),
+                      const Spacer(),
+                      // ── Swap départ ↔ arrivée ──────────────────────────
+                      GestureDetector(
+                        onTap: _swapAddresses,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.30)),
+                          ),
+                          child: const Icon(Icons.swap_vert, color: AppColors.primary, size: 16),
+                        ),
+                      ),
                     ]),
                   ),
                   _AddressField(
@@ -794,9 +882,17 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF0CB8DE), Color(0xFF0671BA)],
+                                ),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF0CB8DE).withValues(alpha: 0.35),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
                                 Text(fav['icon'] as String? ?? '📍', style: const TextStyle(fontSize: 13)),
@@ -832,7 +928,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
             curve: Curves.easeInOut,
-            margin: EdgeInsets.zero,
+            margin: EdgeInsets.only(bottom: keyboardH),
             decoration: BoxDecoration(
               gradient: AppColors.gradientSplash,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -870,8 +966,15 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                               nameCtrl: _senderNameCtrl,
                               phoneCtrl: _senderPhoneCtrl,
                               onPickContact: () => _pickContact(nameCtrl: _senderNameCtrl, phoneCtrl: _senderPhoneCtrl),
-                              onPickMe: () => _fillMe(_senderNameCtrl, _senderPhoneCtrl),
-                              onNext: () => _goStep(2),
+                              onPickMe: () {
+                                _fillMe(_senderNameCtrl, _senderPhoneCtrl);
+                                if (_senderPhoneCtrl.text.length >= 9) _goStep(2);
+                              },
+                              onPhoneComplete: () => _goStep(2),
+                              onNext: () {
+                                if (!_validatePhone(_senderPhoneCtrl, 'expéditeur')) return;
+                                _goStep(2);
+                              },
                             ),
                             _Step2Panel(
                               orderType: widget.orderType,
@@ -879,8 +982,19 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                               phoneCtrl: _receiverPhoneCtrl,
                               descriptionCtrl: _descriptionCtrl,
                               onPickContact: () => _pickContact(nameCtrl: _receiverNameCtrl, phoneCtrl: _receiverPhoneCtrl),
-                              onPickMe: () => _fillMe(_receiverNameCtrl, _receiverPhoneCtrl),
+                              onPickMe: () {
+                                _fillMe(_receiverNameCtrl, _receiverPhoneCtrl);
+                                if (_receiverPhoneCtrl.text.length >= 9) {
+                                  _updateEstimate();
+                                  _goStep(3);
+                                }
+                              },
+                              onPhoneComplete: () {
+                                _updateEstimate();
+                                _goStep(3);
+                              },
                               onNext: () {
+                                if (!_validatePhone(_receiverPhoneCtrl, 'destinataire')) return;
                                 _updateEstimate();
                                 _goStep(3);
                               },
@@ -893,8 +1007,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                               freeCourse: _freeCourseEligible,
                               surgeMultiplier: _surgeMultiplier,
                               loadingSurge: _loadingSurge,
+                              timedOut: _priceTimedOut,
                               submitting: _submitting,
-                              canSubmit: _routeComplete,
+                              canSubmit: _routeComplete && _estimatedPrice != null,
+                              onRetry: _retryEstimate,
                               onSubmit: _submit,
                             ),
                           ],
@@ -1198,8 +1314,12 @@ class _AutocompleteDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardH  = MediaQuery.of(context).viewInsets.bottom;
+    final safeTop    = MediaQuery.of(context).padding.top;
+    final screenH    = MediaQuery.of(context).size.height;
+    final maxH       = (screenH - keyboardH - safeTop - 160).clamp(100.0, 320.0);
     return Container(
-      constraints: const BoxConstraints(maxHeight: 320),
+      constraints: BoxConstraints(maxHeight: maxH),
       decoration: BoxDecoration(
         color: const Color(0xFF1A2540),
         borderRadius: BorderRadius.circular(14),
@@ -1362,7 +1482,15 @@ class _Step0Panel extends StatelessWidget {
               ],
             ),
           ),
-          const Spacer(),
+          const SizedBox(height: 8),
+          if (!routeComplete) ...[
+            const Text(
+              'Définissez les deux adresses pour continuer',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+          ],
           _NextButton(
             label: 'Suivant — Contacts',
             icon: Icons.arrow_forward,
@@ -1380,12 +1508,14 @@ class _Step1Panel extends StatelessWidget {
   final TextEditingController phoneCtrl;
   final VoidCallback onPickContact;
   final VoidCallback? onPickMe;
+  final VoidCallback? onPhoneComplete;
   final VoidCallback onNext;
 
   const _Step1Panel({
     required this.orderType,
     required this.nameCtrl, required this.phoneCtrl,
     required this.onPickContact, this.onPickMe,
+    this.onPhoneComplete,
     required this.onNext,
   });
 
@@ -1402,6 +1532,7 @@ class _Step1Panel extends StatelessWidget {
             phoneCtrl: phoneCtrl,
             onPick: onPickContact,
             onPickMe: onPickMe,
+            onPhoneComplete: onPhoneComplete,
           ),
           const Spacer(),
           _NextButton(
@@ -1422,6 +1553,7 @@ class _Step2Panel extends StatelessWidget {
   final TextEditingController descriptionCtrl;
   final VoidCallback onPickContact;
   final VoidCallback? onPickMe;
+  final VoidCallback? onPhoneComplete;
   final VoidCallback onNext;
 
   const _Step2Panel({
@@ -1429,39 +1561,49 @@ class _Step2Panel extends StatelessWidget {
     required this.nameCtrl, required this.phoneCtrl,
     required this.descriptionCtrl,
     required this.onPickContact, this.onPickMe,
+    this.onPhoneComplete,
     required this.onNext,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
-          _ContactMini(
-            label: orderType == 'RIDE' ? 'Destination' : 'Destinataire',
-            dotColor: AppColors.error,
-            nameCtrl: nameCtrl,
-            phoneCtrl: phoneCtrl,
-            onPick: onPickContact,
-            onPickMe: onPickMe,
-          ),
-          if (orderType == 'DELIVERY') ...[
-            const SizedBox(height: 12),
-            TextField(
-              controller: descriptionCtrl,
-              style: const TextStyle(fontSize: 14, color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Description du colis (optionnel)...',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.50), fontSize: 14),
-                fillColor: Colors.white.withValues(alpha: 0.10), filled: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                isDense: true,
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _ContactMini(
+                    label: orderType == 'RIDE' ? 'Destination' : 'Destinataire',
+                    dotColor: AppColors.error,
+                    nameCtrl: nameCtrl,
+                    phoneCtrl: phoneCtrl,
+                    onPick: onPickContact,
+                    onPickMe: onPickMe,
+                    onPhoneComplete: onPhoneComplete,
+                  ),
+                  if (orderType == 'DELIVERY') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: descriptionCtrl,
+                      style: const TextStyle(fontSize: 14, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Description du colis (optionnel)...',
+                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.50), fontSize: 14),
+                        fillColor: Colors.white.withValues(alpha: 0.10), filled: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        isDense: true,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-          ],
-          const SizedBox(height: 16),
+          ),
+          const SizedBox(height: 12),
           _NextButton(
             label: 'Suivant — Résumé',
             icon: Icons.arrow_forward,
@@ -1480,7 +1622,8 @@ class _ContactMini extends StatelessWidget {
   final TextEditingController phoneCtrl;
   final VoidCallback onPick;
   final VoidCallback? onPickMe;
-  const _ContactMini({required this.label, required this.dotColor, required this.nameCtrl, required this.phoneCtrl, required this.onPick, this.onPickMe});
+  final VoidCallback? onPhoneComplete;
+  const _ContactMini({required this.label, required this.dotColor, required this.nameCtrl, required this.phoneCtrl, required this.onPick, this.onPickMe, this.onPhoneComplete});
 
   @override
   Widget build(BuildContext context) {
@@ -1518,6 +1661,8 @@ class _ContactMini extends StatelessWidget {
         const SizedBox(height: 10),
         TextField(
           controller: nameCtrl,
+          inputFormatters: [NameInputFormatter()],
+          textCapitalization: TextCapitalization.words,
           style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: InputDecoration(
             hintText: 'Nom complet',
@@ -1538,7 +1683,9 @@ class _ContactMini extends StatelessWidget {
         TextField(
           controller: phoneCtrl,
           keyboardType: TextInputType.phone,
+          inputFormatters: [DigitsOnlyFormatter()],
           style: const TextStyle(color: Colors.white, fontSize: 14),
+          onChanged: (v) { if (v.length >= 9) onPhoneComplete?.call(); },
           decoration: InputDecoration(
             hintText: 'Numéro de téléphone',
             hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
@@ -1570,8 +1717,10 @@ class _Step3Panel extends StatelessWidget {
   final bool freeCourse;
   final double surgeMultiplier;
   final bool loadingSurge;
+  final bool timedOut;
   final bool submitting;
   final bool canSubmit;
+  final VoidCallback onRetry;
   final VoidCallback onSubmit;
 
   const _Step3Panel({
@@ -1579,8 +1728,12 @@ class _Step3Panel extends StatelessWidget {
     required this.estimatedPrice, required this.demFee,
     required this.freeCourse,
     required this.surgeMultiplier,
-    required this.loadingSurge, required this.submitting,
-    required this.canSubmit, required this.onSubmit,
+    required this.loadingSurge,
+    required this.timedOut,
+    required this.submitting,
+    required this.canSubmit,
+    required this.onRetry,
+    required this.onSubmit,
   });
 
   @override
@@ -1641,69 +1794,98 @@ class _Step3Panel extends StatelessWidget {
           ),
           child: loadingSurge
               ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Ligne : prix course + surge badge
-                    Row(
+              : timedOut && estimatedPrice == null
+                  // ── État timeout : impossible de calculer le prix ──
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('Course', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                        const Spacer(),
-                        if (surgeMultiplier > 1.0) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        const Icon(Icons.wifi_off_outlined, color: AppColors.textSecondary, size: 22),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Impossible de calculer le prix',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: onRetry,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFF9800).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.30)),
+                              color: AppColors.primary.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.40)),
                             ),
-                            child: Row(children: [
-                              const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 11),
-                              const SizedBox(width: 2),
-                              Text('×${surgeMultiplier.toStringAsFixed(1)}',
-                                  style: const TextStyle(color: Color(0xFFFF9800), fontSize: 10, fontWeight: FontWeight.bold)),
-                            ]),
+                            child: const Text('Réessayer',
+                                style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600)),
                           ),
-                          const SizedBox(width: 8),
-                        ],
-                        Text(
-                          estimatedPrice != null ? '${estimatedPrice!.toInt()} FCFA' : '—',
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
                         ),
                       ],
+                    )
+                  // ── État normal : affichage du prix ──
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Ligne : prix course + surge badge
+                        Row(
+                          children: [
+                            const Text('Course', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                            const Spacer(),
+                            if (surgeMultiplier > 1.0) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF9800).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.30)),
+                                ),
+                                child: Row(children: [
+                                  const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 11),
+                                  const SizedBox(width: 2),
+                                  Text('×${surgeMultiplier.toStringAsFixed(1)}',
+                                      style: const TextStyle(color: Color(0xFFFF9800), fontSize: 10, fontWeight: FontWeight.bold)),
+                                ]),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(
+                              estimatedPrice != null ? '${estimatedPrice!.toInt()} FCFA' : '—',
+                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                        // Ligne : frais DEM (visible uniquement si > 0)
+                        if (estimatedPrice != null && demFee > 0) ...[
+                          const SizedBox(height: 4),
+                          Row(children: [
+                            const Text('Frais DEM', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                            const Spacer(),
+                            Text('+${demFee.toInt()} FCFA',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                          ]),
+                          Divider(color: Colors.white.withValues(alpha: 0.10), height: 14),
+                        ],
+                        // Ligne : total client
+                        if (estimatedPrice != null) ...[
+                          Row(children: [
+                            const Text('TOTAL', style: TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                            const Spacer(),
+                            if (freeCourse)
+                              const Row(children: [
+                                Text('0 FCFA', style: TextStyle(color: Color(0xFF00C853), fontSize: 22, fontWeight: FontWeight.bold)),
+                                SizedBox(width: 6),
+                                Text('🎁', style: TextStyle(fontSize: 16)),
+                              ])
+                            else
+                              Text(
+                                '${(estimatedPrice! + demFee).toInt()} FCFA',
+                                style: const TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.bold),
+                              ),
+                          ]),
+                        ] else
+                          const Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 22)),
+                      ],
                     ),
-                    // Ligne : frais DEM (visible uniquement si > 0)
-                    if (estimatedPrice != null && demFee > 0) ...[
-                      const SizedBox(height: 4),
-                      Row(children: [
-                        const Text('Frais DEM', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                        const Spacer(),
-                        Text('+${demFee.toInt()} FCFA',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                      ]),
-                      Divider(color: Colors.white.withValues(alpha: 0.10), height: 14),
-                    ],
-                    // Ligne : total client
-                    if (estimatedPrice != null) ...[
-                      Row(children: [
-                        const Text('TOTAL', style: TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
-                        const Spacer(),
-                        if (freeCourse)
-                          const Row(children: [
-                            Text('0 FCFA', style: TextStyle(color: Color(0xFF00C853), fontSize: 22, fontWeight: FontWeight.bold)),
-                            SizedBox(width: 6),
-                            Text('🎁', style: TextStyle(fontSize: 16)),
-                          ])
-                        else
-                          Text(
-                            '${(estimatedPrice! + demFee).toInt()} FCFA',
-                            style: const TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.bold),
-                          ),
-                      ]),
-                    ] else
-                      const Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 22)),
-                  ],
-                ),
         ),
         const SizedBox(height: 8),
             ]),

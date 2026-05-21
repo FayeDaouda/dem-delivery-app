@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'package:geolocator/geolocator.dart';
@@ -58,7 +59,7 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
         });
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
     }
   }
 
@@ -84,7 +85,7 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
       await _repo.delete(addr['id'] as String);
       if (mounted) setState(() => _addresses.removeWhere((a) => a['id'] == addr['id']));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
     }
   }
 
@@ -139,12 +140,30 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
       ]),
 
       floatingActionButton: _addresses.length < _kMax
-          ? FloatingActionButton.extended(
-              onPressed: () => _openForm(),
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.black,
-              icon: const Icon(Icons.add_location_alt_outlined),
-              label: const Text('Ajouter', style: TextStyle(fontWeight: FontWeight.w700)),
+          ? GestureDetector(
+              onTap: () => _openForm(),
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0CB8DE), Color(0xFF0671BA)],
+                  ),
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0CB8DE).withValues(alpha: 0.40),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.add_location_alt_outlined, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text('Ajouter', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                ]),
+              ),
             )
           : null,
     );
@@ -219,16 +238,29 @@ class _EmptyState extends StatelessWidget {
       const Text('Enregistrez vos adresses fréquentes\npour commander plus vite.',
           style: TextStyle(fontSize: 13, color: Color(0xFF7B8CA0)), textAlign: TextAlign.center),
       const SizedBox(height: 24),
-      ElevatedButton.icon(
-        onPressed: onAdd,
-        icon: const Icon(Icons.add_location_alt_outlined),
-        label: const Text('Ajouter une adresse'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.black,
+      GestureDetector(
+        onTap: onAdd,
+        child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          elevation: 0,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA)],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0CB8DE).withValues(alpha: 0.40),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.add_location_alt_outlined, color: Colors.white),
+            SizedBox(width: 8),
+            Text('Ajouter une adresse',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          ]),
         ),
       ),
     ]),

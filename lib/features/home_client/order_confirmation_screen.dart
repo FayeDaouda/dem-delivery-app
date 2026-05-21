@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,7 +25,8 @@ class OrderConfirmationScreen extends ConsumerStatefulWidget {
   ConsumerState<OrderConfirmationScreen> createState() => _OrderConfirmationScreenState();
 }
 
-class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScreen> {
+class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScreen>
+    with SingleTickerProviderStateMixin {
   String? _mapStyle;
   List<LatLng> _routePoints = [];
   bool _cancelling = false;
@@ -32,19 +34,57 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
 
   StreamSubscription<Map<String, dynamic>>? _acceptedSub;
 
+  // Timer d'attente
+  int _waitSeconds = 0;
+  Timer? _waitTimer;
+  Timer? _pollTimer;
+  bool _waitTimedOut = false;
+
+  // Animation radar
+  late final AnimationController _radarCtrl;
+  late final Animation<double> _radarAnim;
+
   @override
   void initState() {
     super.initState();
     _loadMapStyle();
     _fetchRoute();
     _connectSocket();
+
+    // Radar pulsé
+    _radarCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+    _radarAnim = CurvedAnimation(parent: _radarCtrl, curve: Curves.easeOut);
+
+    _startPolling();
+
+    // Timer d'attente visible — déclenche le timeout à 5 min
+    _waitTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _waitSeconds++;
+        if (_waitSeconds >= 300 && !_waitTimedOut) _waitTimedOut = true;
+      });
+    });
   }
 
   @override
   void dispose() {
     _acceptedSub?.cancel();
+    _pollTimer?.cancel();
     _mapController?.dispose();
+    _radarCtrl.dispose();
+    _waitTimer?.cancel();
     super.dispose();
+  }
+
+  String get _waitLabel {
+    if (_waitSeconds < 60) return '$_waitSeconds s';
+    final m = _waitSeconds ~/ 60;
+    final s = _waitSeconds % 60;
+    return '${m}m ${s.toString().padLeft(2, '0')}s';
   }
 
   Future<void> _connectSocket() async {
@@ -57,13 +97,54 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
       if (orderId != null && data['orderId'] != orderId) return;
       final driverId = data['driverId'] as String?;
       if (driverId == null) return;
+      _pollTimer?.cancel();
       context.pushReplacement('/orders/tracking', extra: {
         'orderId': data['orderId'] as String,
         'driverId': driverId,
         'etaPickupMin': data['etaPickupMin'] as int?,
+        'initialOrder': {
+          ...widget.order,
+          'status': 'ACCEPTED',
+          'driverId': driverId,
+        },
       });
     });
   }
+
+  // ── Polling REST fallback (si socket mort au moment de l'acceptation) ────────
+  void _startPolling() {
+    final orderId = widget.order['id'] as String?;
+    if (orderId == null) return;
+
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (!mounted) return;
+      try {
+        final order = await ref.read(ordersRepositoryProvider).getOrderById(orderId);
+        final status = (order['status'] as String? ?? '').toUpperCase();
+        if (!mounted) return;
+
+        if (status == 'ACCEPTED') {
+          _pollTimer?.cancel();
+          final driverId = (order['driver'] as Map?)?['id'] as String?
+              ?? order['driverId'] as String?;
+          if (driverId == null) return;
+          context.pushReplacement('/orders/tracking', extra: {
+            'orderId': orderId,
+            'driverId': driverId,
+            'initialOrder': {...order, 'status': 'ACCEPTED'},
+          });
+        } else if (status == 'CANCELLED') {
+          _pollTimer?.cancel();
+          context.pop();
+        }
+      } catch (_) {
+        // réseau indisponible — on réessaie au prochain tick
+      }
+    });
+  }
+
+  // ── Timeout 5 min — le client choisit de continuer d'attendre ───────────────
+  void _continueWaiting() => setState(() { _waitTimedOut = false; _waitSeconds = 0; });
 
   Future<void> _loadMapStyle() async {
     final isNight = ref.read(mapNightProvider);
@@ -178,7 +259,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
     } catch (e) {
       if (mounted) {
         setState(() => _cancelling = false);
-        _showToast(context, message: e.toString(), icon: Icons.error_outline_rounded, isError: true);
+        _showToast(context, message: friendlyError(e), icon: Icons.error_outline_rounded, isError: true);
       }
     }
   }
@@ -344,16 +425,54 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                         child: Column(
                           children: [
-                            // ── Indicateur de chargement ──
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
-                                const SizedBox(width: 12),
-                                const Text('Recherche d\'un driver en cours…',
-                                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
+                            // ── Header : radar normal OU timeout 5 min ──
+                            if (_waitTimedOut)
+                              _TimeoutBanner(onContinue: _continueWaiting, onCancel: _cancelOrder)
+                            else
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  AnimatedBuilder(
+                                    animation: _radarAnim,
+                                    builder: (ctx, child) => SizedBox(
+                                      width: 36, height: 36,
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          Opacity(
+                                            opacity: (1 - _radarAnim.value).clamp(0.0, 1.0),
+                                            child: Container(
+                                              width: 36 * _radarAnim.value,
+                                              height: 36 * _radarAnim.value,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: AppColors.primary, width: 1.5),
+                                              ),
+                                            ),
+                                          ),
+                                          Container(
+                                            width: 10, height: 10,
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.primary,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Recherche d\'un livreur…',
+                                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                      Text('Attente : $_waitLabel',
+                                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11)),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             const SizedBox(height: 16),
 
                             // ── Route recap ──
@@ -441,7 +560,18 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: _cancelling ? null : () => context.go('/client/home'),
+                                    onTap: _cancelling ? null : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Votre commande est en attente — vous serez notifié dès qu\'un livreur est trouvé.',
+                          ),
+                          duration: Duration(seconds: 5),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      context.go('/client/home');
+                    },
                                     child: Container(
                                       height: 50,
                                       decoration: BoxDecoration(
@@ -495,5 +625,67 @@ class _RouteRow extends StatelessWidget {
             maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
     ]);
+  }
+}
+
+// ── Bannière timeout 5 min ────────────────────────────────────────────────────
+class _TimeoutBanner extends StatelessWidget {
+  final VoidCallback onContinue;
+  final VoidCallback onCancel;
+  const _TimeoutBanner({required this.onContinue, required this.onCancel});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.search_off_rounded, color: Colors.white70, size: 28),
+        const SizedBox(height: 8),
+        const Text(
+          'Aucun livreur disponible pour le moment',
+          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Nous continuons de chercher en arrière-plan.',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 11),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: onCancel,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF5252).withValues(alpha: 0.20),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.60)),
+                ),
+                child: const Text('Annuler',
+                    style: TextStyle(color: Color(0xFFFF5252), fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: onContinue,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.20),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.60)),
+                ),
+                child: const Text('Continuer d\'attendre',
+                    style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }

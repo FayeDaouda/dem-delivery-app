@@ -54,6 +54,13 @@ class AppStartupNotifier extends ChangeNotifier {
       vehicleType = user?['vehicleType'] as String?;
       isActive    = user?['isActive'] as bool? ?? true;
       chefStatus  = user?['chefDeFlotteStatus'] as String?;
+
+      // Si le rôle est null après fetch + cache → état corrompu (token sans profil complet)
+      // On efface la session pour permettre une ré-authentification propre
+      if (role == null) {
+        await AuthStorage.clear();
+        _isLoggedIn = false;
+      }
     }
 
     _isReady = true;
@@ -77,19 +84,21 @@ class AppStartupNotifier extends ChangeNotifier {
   // ── Destination pour utilisateur connecté ───────────────────────────────────
   String get homeForRole {
     if (role == 'DRIVER') {
-      if (!isActive)          return '/driver/suspended';
+      if (!isActive)             return '/driver/suspended';
       if (vehicleType == 'TAXI') return '/driver/thiak/home';
       return '/driver/home';
     }
     if (role == 'CLIENT') return '/client/home';
     if (role == 'CHEF_DE_FLOTTE') {
-      if (!isActive)              return '/chef-de-flotte/suspended';
+      if (!isActive)                return '/chef-de-flotte/suspended';
       if (chefStatus == 'ACTIVE')   return '/chef-de-flotte/dashboard';
       if (chefStatus == 'PENDING')  return '/chef-de-flotte/pending';
       if (chefStatus == 'REJECTED') return '/chef-de-flotte/rejected';
       return '/chef-de-flotte/onboarding';
     }
-    return '/phone';
+    // Ne jamais retourner '/phone' ici — créerait une boucle redirect infinie
+    // L'état corrompu est nettoyé dans initialize() avant d'arriver ici
+    return '/client/home';
   }
 }
 

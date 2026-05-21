@@ -21,8 +21,8 @@ void main() async {
     return true;
   };
 
-  // ── Push notifications ────────────────────────────────────────────────────
-  NotificationService.init().timeout(const Duration(seconds: 5)).catchError((_) {});
+  // ── Push notifications (canaux + listeners uniquement, sans dialog de permission) ─
+  NotificationService.setup().timeout(const Duration(seconds: 5)).catchError((_) {});
 
   // ── Google Maps (Android) ──────────────────────────────────────────────────
   final mapsImplementation = GoogleMapsFlutterPlatform.instance;

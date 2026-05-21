@@ -1,3 +1,4 @@
+import '../../../core/error/app_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth_repository.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -32,7 +33,7 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       await _repo.sendOtp(phone);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: friendlyError(e));
       rethrow;
     }
     state = state.copyWith(isLoading: false);
@@ -48,7 +49,7 @@ class AuthNotifier extends Notifier<AuthState> {
       state = state.copyWith(isLoading: false);
       return data;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: friendlyError(e));
       rethrow;
     }
   }
@@ -63,7 +64,7 @@ class AuthNotifier extends Notifier<AuthState> {
       state = state.copyWith(isLoading: false);
       return data;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: friendlyError(e));
       rethrow;
     }
   }

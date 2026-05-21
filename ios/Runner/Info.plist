@@ -67,5 +67,14 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- url_launcher : schémas autorisés pour canLaunchUrl / launchUrl -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+		<string>mailto</string>
+		<string>whatsapp</string>
+		<string>https</string>
+		<string>http</string>
+	</array>
 </dict>
 </plist>

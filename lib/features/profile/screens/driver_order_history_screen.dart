@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
@@ -250,7 +251,7 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                     children: [
                       const Icon(Icons.wifi_off_outlined, color: Color(0xFF7B8CA0), size: 48),
                       const SizedBox(height: 12),
-                      Text(e.toString(),
+                      Text(friendlyError(e),
                           style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
                           textAlign: TextAlign.center),
                       const SizedBox(height: 16),

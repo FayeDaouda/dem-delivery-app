@@ -1,3 +1,4 @@
+import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -87,7 +88,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Text(friendlyError(e)),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -115,9 +116,10 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight - 48),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const SizedBox(height: 32),
 
                       // ── Logo — disparaît proprement quand clavier s'ouvre ──
                       AnimatedSize(
@@ -134,7 +136,10 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                                   alignment: Alignment.center,
                                   child: GestureDetector(
                                     onLongPress: () => context.push('/admin/login'),
-                                    child: Image.asset('assets/DEM.png', width: 72, height: 72),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Image.asset('assets/DEM.png', width: 72, height: 72),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -163,7 +168,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'Entrez votre numéro pour continuer',
+                        'Renseignez votre numéro pour vous inscrire',
                         style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
                       ),
                       const SizedBox(height: 28),

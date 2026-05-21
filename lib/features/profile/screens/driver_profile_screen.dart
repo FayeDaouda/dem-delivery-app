@@ -1,4 +1,6 @@
 import 'dart:io';
+import '../../../core/error/app_exception.dart';
+import '../../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -23,39 +25,43 @@ class DriverProfileScreen extends StatefulWidget {
 
 class _DriverProfileScreenState extends State<DriverProfileScreen> {
   Map<String, dynamic>? _user;
-  Map<String, dynamic>? _forfaitStatus;
   List<Map<String, dynamic>>? _badgesConfig;
   String? _photoPath;
+  bool _headerCollapsed = false;
   static const _photoKey = 'driver_profile_photo';
-  final _profileRepo = ProfileRepository();
+  final _profileRepo    = ProfileRepository();
+  final _scrollCtrl     = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _load();
     LocaleService.notifier.addListener(_onLangChange);
+    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     LocaleService.notifier.removeListener(_onLangChange);
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
   void _onLangChange() => setState(() {});
 
+  void _onScroll() {
+    final collapsed = _scrollCtrl.offset > 60;
+    if (collapsed != _headerCollapsed) setState(() => _headerCollapsed = collapsed);
+  }
+
   Future<void> _load() async {
     final user  = await AuthStorage.getUser();
     final prefs = await SharedPreferences.getInstance();
     if (mounted) setState(() { _user = user; _photoPath = prefs.getString(_photoKey); });
-    final results = await Future.wait([
-      _profileRepo.getForfaitStatus(),
-      _profileRepo.getBadgesConfig(),
-    ]);
+    final badges = await _profileRepo.getBadgesConfig();
     if (mounted) {
       setState(() {
-        _forfaitStatus = results[0] as Map<String, dynamic>?;
-        _badgesConfig  = results[1] as List<Map<String, dynamic>>?;
+        _badgesConfig = badges;
       });
     }
   }
@@ -87,6 +93,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   Future<void> _logout() async {
     await AuthStorage.clear();
+    appStartupNotifier.markLoggedOut();
     if (mounted) context.go('/phone');
   }
 
@@ -128,6 +135,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     try {
       await ApiClient.dio.delete('/users/me');
       await AuthStorage.clear();
+      appStartupNotifier.markLoggedOut();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -140,7 +148,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
         );
       }
     }
@@ -155,7 +163,20 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   // ── Support ────────────────────────────────────────────────────────────────
   Future<void> _launch(String url) async {
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
+        );
+      }
+    }
   }
 
   void _showSupportSheet() {
@@ -169,11 +190,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         const Text('Support DEM',
             style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 20),
-        _SupportTile(icon: Icons.phone_outlined,      label: s.callSupport, sub: '+221 78 000 00 00', onTap: () => _launch('tel:+221780000000')),
+        _SupportTile(icon: Icons.phone_outlined,      label: s.callSupport, sub: '+221 78 444 85 24', onTap: () => _launch('tel:+221784448524')),
         const SizedBox(height: 10),
         _SupportTile(icon: Icons.email_outlined,      label: s.sendEmail,   sub: 'support@dem.sn',   onTap: () => _launch('mailto:support@dem.sn')),
         const SizedBox(height: 10),
-        _SupportTile(icon: Icons.chat_bubble_outline, label: s.whatsapp,    sub: '+221 78 000 00 00', onTap: () => _launch('https://wa.me/221780000000')),
+        _SupportTile(icon: Icons.chat_bubble_outline, label: s.whatsapp,    sub: '+221 78 444 85 24', onTap: () => _launch('https://wa.me/221784448524')),
       ]),
     );
   }
@@ -338,7 +359,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString()), backgroundColor: Colors.redAccent),
+                            SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
                           );
                         }
                       }
@@ -351,6 +372,103 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     child: Text(s.save,
                         style: const TextStyle(
                             color: Color(0xFF04317C), fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditPlate() {
+    final ctrl = TextEditingController(text: _user?['vehiclePlate'] as String? ?? '');
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
+            ),
+            borderRadius: BorderRadius.all(Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Plaque d\'immatriculation',
+                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                textCapitalization: TextCapitalization.characters,
+                style: const TextStyle(color: Colors.white, letterSpacing: 2, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  hintText: 'Ex : DK 1234 AB',
+                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(AppStrings.current.cancel,
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.65))),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    onPressed: () async {
+                      final plate = ctrl.text.trim().toUpperCase();
+                      if (plate.isEmpty) return;
+                      Navigator.pop(context);
+                      try {
+                        await ApiClient.dio.patch('/users/me/profile', data: {'vehiclePlate': plate});
+                        await _load();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Plaque mise à jour'),
+                              backgroundColor: Color(0xFF22C55E),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
+                          );
+                        }
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    ),
+                    child: Text(AppStrings.current.save,
+                        style: const TextStyle(color: Color(0xFF04317C), fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
@@ -426,54 +544,70 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  // Avatar modifiable
-                  GestureDetector(
-                    onTap: _pickProfilePhoto,
-                    child: Stack(
-                      children: [
-                        Container(
-                          width: 88, height: 88,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2.5),
+                  // Section dépliable : avatar + nom + badge
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    child: _headerCollapsed
+                        ? const SizedBox.shrink()
+                        : Column(
+                            children: [
+                              const SizedBox(height: 4),
+                              // Avatar modifiable
+                              GestureDetector(
+                                onTap: _pickProfilePhoto,
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                      width: 88, height: 88,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.2),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2.5),
+                                      ),
+                                      child: _photoPath != null && File(_photoPath!).existsSync()
+                                          ? ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover))
+                                          : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
+                                              color: Colors.white, size: 40),
+                                    ),
+                                    Positioned(
+                                      right: 0, bottom: 0,
+                                      child: Container(
+                                        width: 28, height: 28,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary, shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                        ),
+                                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(_isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
+                                    style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                              ),
+                              // ── Badge card (espace au-dessus) ──
+                              if (_user != null) ...[
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                                  child: _BadgeCard(user: _user!, badgesConfig: _badgesConfig),
+                                ),
+                              ] else ...[
+                                const SizedBox(height: 16),
+                              ],
+                            ],
                           ),
-                          child: _photoPath != null && File(_photoPath!).existsSync()
-                              ? ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover))
-                              : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
-                                  color: Colors.white, size: 40),
-                        ),
-                        Positioned(
-                          right: 0, bottom: 0,
-                          child: Container(
-                            width: 28, height: 28,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary, shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(_isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
-                        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
-                  ),
-                  const SizedBox(height: 16),
-                  // ── Carte badge ──
-                  if (_user != null) _BadgeCard(user: _user!, badgesConfig: _badgesConfig),
-                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -484,6 +618,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             child: Container(
               color: const Color(0xFFF4F6FA),
               child: ListView(
+                controller: _scrollCtrl,
+                physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 children: [
 
@@ -491,8 +627,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   _Section(title: s.information, children: [
                     _InfoRow(icon: Icons.phone_outlined, label: s.phoneNumber, value: phone),
                     _divider(),
-                    _InfoRow(icon: _isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
-                        label: s.plate, value: plate),
+                    _EditableInfoRow(
+                      icon: _isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
+                      label: s.plate,
+                      value: plate,
+                      onTap: _showEditPlate,
+                    ),
                     _divider(),
                     _InfoRow(icon: Icons.verified_outlined, label: s.statusLabel,
                         value: verified ? s.verified : s.notVerified,
@@ -533,12 +673,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverOrderHistoryScreen()))),
                   ]),
                   const SizedBox(height: 16),
-
-                  // Forfait journalier
-                  if (_forfaitStatus != null) ...[
-                    _ForfaitCard(status: _forfaitStatus!),
-                    const SizedBox(height: 16),
-                  ],
 
                   // Parrainage
                   Text('PARRAINAGE',
@@ -635,6 +769,32 @@ class _InfoRow extends StatelessWidget {
       Text(value, style: TextStyle(
           color: valueColor ?? const Color(0xFF1A1A2E), fontSize: 14, fontWeight: FontWeight.w600)),
     ]),
+  );
+}
+
+class _EditableInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+  const _EditableInfoRow({required this.icon, required this.label, required this.value, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(16),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(children: [
+        Icon(icon, color: AppColors.primary, size: 20),
+        const SizedBox(width: 14),
+        Text(label, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 14)),
+        const Spacer(),
+        Text(value, style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 14, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 8),
+        const Icon(Icons.edit_outlined, color: AppColors.primary, size: 15),
+      ]),
+    ),
   );
 }
 

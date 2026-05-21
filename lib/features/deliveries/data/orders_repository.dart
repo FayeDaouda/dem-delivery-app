@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/error/app_exception.dart';
 
@@ -8,25 +9,43 @@ class OrdersRepository {
   Future<List<Map<String, dynamic>>> getAvailableOrders() async {
     try {
       final response = await _dio.get('/orders/available');
-      return List<Map<String, dynamic>>.from(response.data as List);
+      return _parseList(response.data);
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible de charger les commandes.',
         e.response?.statusCode,
       );
+    } catch (_) {
+      throw const AppException('Impossible de charger les commandes.');
     }
   }
 
   Future<List<Map<String, dynamic>>> getMyOrders() async {
     try {
       final response = await _dio.get('/orders/my');
-      return List<Map<String, dynamic>>.from(response.data as List);
+      return _parseList(response.data);
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible de charger l\'historique.',
         e.response?.statusCode,
       );
+    } catch (_) {
+      throw const AppException('Impossible de charger l\'historique.');
     }
+  }
+
+  /// Parse sûre : accepte une liste directe ou un objet paginé { orders/data: [...] }.
+  static List<Map<String, dynamic>> _parseList(dynamic data) {
+    List<dynamic> raw;
+    if (data is List) {
+      raw = data;
+    } else if (data is Map) {
+      final inner = data['orders'] ?? data['data'] ?? data['items'];
+      raw = inner is List ? inner : [];
+    } else {
+      raw = [];
+    }
+    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   Future<Map<String, dynamic>> getOrderById(String id) async {
@@ -136,7 +155,8 @@ class OrdersRepository {
         'orderType':   orderType,
       });
       return res.data as Map<String, dynamic>;
-    } on DioException {
+    } on DioException catch (e) {
+      debugPrint('[getEstimate] ${e.response?.statusCode} ${e.response?.data}');
       return null;
     }
   }
@@ -144,8 +164,8 @@ class OrdersRepository {
   Future<List<Map<String, dynamic>>> getHeatmap() async {
     try {
       final response = await _dio.get('/orders/heatmap');
-      return List<Map<String, dynamic>>.from(response.data as List);
-    } on DioException {
+      return _parseList(response.data);
+    } catch (_) {
       return [];
     }
   }
@@ -206,6 +226,27 @@ class OrdersRepository {
       return response.data['eligible'] as bool? ?? false;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Signale un problème pendant une course.
+  /// Retourne { message, support: { phone, whatsapp } }
+  Future<Map<String, dynamic>> reportIssue(
+    String orderId, {
+    required String type,
+    String? message,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/orders/$orderId/report',
+        data: { 'type': type, if (message != null && message.isNotEmpty) 'message': message },
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'envoyer le signalement.',
+        e.response?.statusCode,
+      );
     }
   }
 }

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
-// ── Config visuelle par tier ──────────────────────────────────────────────────
+// ── Config visuelle par tier — icônes Flutter au lieu d'emojis ───────────────
 const _tiers = {
-  'vip':     (name: 'DEM VIP',     emoji: '💎', color: Color(0xFF7C3AED), bg: Color(0xFFF5F0FF)),
-  'buur':    (name: 'DEM Buur',    emoji: '👑', color: Color(0xFF7B1FA2), bg: Color(0xFFF3E5F5)),
-  'djambar': (name: 'DEM Djambar', emoji: '🏆', color: Color(0xFF1565C0), bg: Color(0xFFE3F2FD)),
-  'mbokk':   (name: 'DEM Mbokk',  emoji: '⭐', color: Color(0xFF00695C), bg: Color(0xFFE0F2F1)),
-  'xarit':   (name: 'DEM Xarit',  emoji: '🤝', color: Color(0xFF0288D1), bg: Color(0xFFE1F5FE)),
-  'classic': (name: 'DEM Classic', emoji: '✅', color: Color(0xFF00838F), bg: Color(0xFFE0F7FA)),
+  'vip':     (name: 'DEM VIP',     icon: Icons.diamond_outlined,           color: Color(0xFF7C3AED), bg: Color(0xFFF5F0FF)),
+  'buur':    (name: 'DEM Buur',    icon: Icons.workspace_premium_outlined, color: Color(0xFF7B1FA2), bg: Color(0xFFF3E5F5)),
+  'djambar': (name: 'DEM Djambar', icon: Icons.emoji_events_outlined,      color: Color(0xFF1565C0), bg: Color(0xFFE3F2FD)),
+  'mbokk':   (name: 'DEM Mbokk',  icon: Icons.star_outline_rounded,       color: Color(0xFF00695C), bg: Color(0xFFE0F2F1)),
+  'xarit':   (name: 'DEM Xarit',  icon: Icons.handshake_outlined,         color: Color(0xFF0288D1), bg: Color(0xFFE1F5FE)),
+  'classic': (name: 'DEM Classic', icon: Icons.verified_outlined,          color: Color(0xFF00838F), bg: Color(0xFFE0F7FA)),
 };
 
 class ClientBadgeCard extends StatelessWidget {
@@ -17,14 +17,14 @@ class ClientBadgeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badge  = badgeData['badge']     as String?;
-    final name   = badgeData['badgeName'] as String? ?? 'Nouveau';
+    final badge  = badgeData['badge']        as String?;
+    final name   = badgeData['badgeName']    as String? ?? 'Nouveau';
     final next   = badgeData['nextProgress'] as Map<String, dynamic>?;
 
     final visual = badge != null ? _tiers[badge] : null;
     final color  = visual?.color ?? AppColors.primaryMid;
     final bg     = visual?.bg    ?? const Color(0xFFF0F9FF);
-    final emoji  = visual?.emoji ?? '🚀';
+    final icon   = visual?.icon  ?? Icons.rocket_launch_outlined;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -38,7 +38,7 @@ class ClientBadgeCard extends StatelessWidget {
 
         // ── Header horizontal : emblème + nom ────────────────────────────────
         Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          _BadgeEmblem(emoji: emoji, color: color),
+          _BadgeEmblem(icon: icon, color: color),
           const SizedBox(width: 14),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(name,
@@ -61,9 +61,12 @@ class ClientBadgeCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(10)),
-            child: Text('✨ Niveau maximum atteint !',
-              style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w700),
-              textAlign: TextAlign.center),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.auto_awesome_rounded, size: 15, color: color),
+              const SizedBox(width: 6),
+              Text('Niveau maximum atteint !',
+                style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w700)),
+            ]),
           ),
         ],
       ]),
@@ -73,9 +76,9 @@ class ClientBadgeCard extends StatelessWidget {
 
 // ── Emblème du badge ──────────────────────────────────────────────────────────
 class _BadgeEmblem extends StatelessWidget {
-  final String emoji;
+  final IconData icon;
   final Color color;
-  const _BadgeEmblem({required this.emoji, required this.color});
+  const _BadgeEmblem({required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +90,7 @@ class _BadgeEmblem extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.30), width: 2),
         boxShadow: [BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 10, spreadRadius: 1)],
       ),
-      child: Center(child: Text(emoji, style: const TextStyle(fontSize: 26))),
+      child: Icon(icon, size: 26, color: color),
     );
   }
 }
@@ -111,7 +114,7 @@ class _NextSection extends StatelessWidget {
     final nextVisual  = _tiers[next['tierId'] as String? ?? ''];
     final nextName    = next['tierName'] as String? ?? '';
     final nextColor   = nextVisual?.color ?? color;
-    final nextEmoji   = nextVisual?.emoji ?? '🎯';
+    final nextIcon    = nextVisual?.icon  ?? Icons.track_changes_rounded;
     final needsVal    = next['requiresValidation'] as bool? ?? false;
 
     final courses   = next['courses']   as Map<String, dynamic>?;
@@ -124,23 +127,23 @@ class _NextSection extends StatelessWidget {
     final rCur  = (referrals?['current'] as num?)?.toInt() ?? 0;
     final rNeed = (referrals?['needed']  as num?)?.toInt() ?? 1;
 
-    // Message motivant pour le critère le plus proche
+    // Message motivant (sans emoji dans le texte)
     String? motivMsg;
     if (courses != null && cCur < cNeed) {
       final left = cNeed - cCur;
-      motivMsg = 'Plus que $left course${left > 1 ? 's' : ''} pour débloquer $nextEmoji $nextName !';
+      motivMsg = 'Plus que $left course${left > 1 ? 's' : ''} pour débloquer $nextName !';
     } else if (referrals != null && rCur < rNeed) {
       final left = rNeed - rCur;
-      motivMsg = 'Invite $left ami${left > 1 ? 's' : ''} pour débloquer $nextEmoji $nextName !';
+      motivMsg = 'Invite $left ami${left > 1 ? 's' : ''} pour débloquer $nextName !';
     }
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-      // En-tête "Vers …"
+      // En-tête "Prochain niveau"
       Row(children: [
         Text('Prochain niveau', style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.65), fontWeight: FontWeight.w600)),
         const Spacer(),
-        Text(nextEmoji, style: const TextStyle(fontSize: 14)),
+        Icon(nextIcon, size: 14, color: nextColor),
         const SizedBox(width: 5),
         Text(nextName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: nextColor)),
         if (needsVal) ...[
@@ -182,7 +185,7 @@ class _NextSection extends StatelessWidget {
             border: Border.all(color: nextColor.withValues(alpha: 0.20)),
           ),
           child: Row(children: [
-            Text('🎯', style: const TextStyle(fontSize: 14)),
+            Icon(Icons.track_changes_rounded, size: 16, color: nextColor),
             const SizedBox(width: 8),
             Expanded(child: Text(motivMsg,
               style: TextStyle(fontSize: 12, color: nextColor, fontWeight: FontWeight.w700),
@@ -204,8 +207,8 @@ class _ProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ratio     = needed > 0 ? (current / needed).clamp(0.0, 1.0) : 1.0;
-    final done      = current >= needed;
+    final ratio = needed > 0 ? (current / needed).clamp(0.0, 1.0) : 1.0;
+    final done  = current >= needed;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
@@ -246,11 +249,15 @@ class _RatingLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final ok = current >= needed;
     return Row(children: [
-      Icon(ok ? Icons.star : Icons.star_outline, size: 14, color: ok ? Colors.amber.shade600 : color.withValues(alpha: 0.70)),
+      Icon(ok ? Icons.star_rounded : Icons.star_outline_rounded,
+        size: 14, color: ok ? Colors.amber.shade600 : color.withValues(alpha: 0.70)),
       const SizedBox(width: 5),
       Text('Note moyenne', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.80))),
       const Spacer(),
-      Text('$current / $needed ★', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: ok ? Colors.amber.shade600 : color)),
+      Text('$current', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: ok ? Colors.amber.shade600 : color)),
+      Text(' / $needed', style: TextStyle(fontSize: 12, color: color.withValues(alpha: 0.60))),
+      const SizedBox(width: 3),
+      Icon(Icons.star_rounded, size: 12, color: ok ? Colors.amber.shade600 : color.withValues(alpha: 0.60)),
     ]);
   }
 }
@@ -268,6 +275,11 @@ class _ProfileLine extends StatelessWidget {
     const SizedBox(width: 5),
     Text('Profil complet', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.80))),
     const Spacer(),
-    Text(complete ? '✓ Oui' : 'Non (nom + email)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: complete ? Colors.green.shade600 : color)),
+    if (complete) ...[
+      Icon(Icons.check_rounded, size: 13, color: Colors.green.shade600),
+      const SizedBox(width: 3),
+      Text('Oui', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.green.shade600)),
+    ] else
+      Text('Non (nom + email)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
   ]);
 }

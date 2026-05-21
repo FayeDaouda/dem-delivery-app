@@ -1,7 +1,9 @@
+import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/network_error_widget.dart';
 import '../data/chef_de_flotte_repository.dart';
 
 class ChefDeFlotteDashboardScreen extends StatefulWidget {
@@ -15,9 +17,11 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
 
   Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _drivers = [];
-  bool _loadingStats   = true;
-  bool _loadingDrivers = true;
-  String _driverFilter = 'all';
+  bool    _loadingStats   = true;
+  bool    _loadingDrivers = true;
+  String? _statsError;
+  String? _driversError;
+  String  _driverFilter   = 'all';
 
   @override
   void initState() {
@@ -31,19 +35,24 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
   void dispose() { _tabs.dispose(); super.dispose(); }
 
   Future<void> _loadStats() async {
+    if (mounted) setState(() { _loadingStats = true; _statsError = null; });
     try {
       final s = await _repo.getStats();
       if (mounted) setState(() { _stats = s; _loadingStats = false; });
-    } catch (_) { if (mounted) setState(() => _loadingStats = false); }
+    } catch (e) {
+      if (mounted) setState(() { _loadingStats = false; _statsError = friendlyError(e); });
+    }
   }
 
   Future<void> _loadDrivers() async {
-    setState(() => _loadingDrivers = true);
+    if (mounted) setState(() { _loadingDrivers = true; _driversError = null; });
     try {
       final filter = _driverFilter == 'all' ? null : _driverFilter;
       final list = await _repo.getDrivers(status: filter);
       if (mounted) setState(() { _drivers = list; _loadingDrivers = false; });
-    } catch (_) { if (mounted) setState(() => _loadingDrivers = false); }
+    } catch (e) {
+      if (mounted) setState(() { _loadingDrivers = false; _driversError = friendlyError(e); });
+    }
   }
 
   @override
@@ -92,7 +101,9 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
           SliverToBoxAdapter(
             child: _loadingStats
                 ? const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: AppColors.primaryMid)))
-                : _buildStats(),
+                : _statsError != null
+                    ? NetworkErrorWidget(message: _statsError!, onRetry: _loadStats)
+                    : _buildStats(),
           ),
 
           // Drivers section header
@@ -153,7 +164,9 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
           // Driver list
           _loadingDrivers
               ? const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: AppColors.primaryMid))))
-              : _drivers.isEmpty
+              : _driversError != null
+                  ? NetworkErrorWidget(message: _driversError!, onRetry: _loadDrivers, sliver: true)
+                  : _drivers.isEmpty
                   ? SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.all(32),
@@ -287,7 +300,7 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
                 await _repo.requestFleetExtension(requestedSize: size, justification: justCtrl.text.trim());
                 if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Demande envoyée !'))); }
               } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
               }
             },
             child: const Text('Envoyer'),
