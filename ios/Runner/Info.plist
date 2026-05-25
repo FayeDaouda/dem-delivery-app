@@ -40,6 +40,9 @@
 	<string>DEM peut enregistrer des photos dans votre galerie.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>DEM accède à votre galerie pour importer vos documents d'identité, votre permis de conduire ou votre photo de profil.</string>
+	<!-- Clé Maps injectée depuis SecretKeys.xcconfig au build — jamais hardcodée -->
+	<key>MapsApiKey</key>
+	<string>$(MAPS_API_KEY)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -54,11 +57,11 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<!-- App de livraison : portrait uniquement sur iPhone.
+	     Le paysage casse la mise en page GoogleMap + bottom sheet. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>

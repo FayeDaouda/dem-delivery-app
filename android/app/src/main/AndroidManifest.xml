@@ -22,6 +22,15 @@
     <!-- Notifications push (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Wake lock — requis par ForegroundNotificationConfig(enableWakeLock: true).
+         Sans ça, le CPU peut dormir entre deux positions GPS même avec le foreground service. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Exemption batterie — permet de demander à l'utilisateur d'exclure DEM
+         des optimisations agressives de batterie (Xiaomi, Huawei, Samsung…).
+         Sans ça, le foreground service peut être tué sur ~85 % des appareils Android. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -33,6 +42,7 @@
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
+            android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">

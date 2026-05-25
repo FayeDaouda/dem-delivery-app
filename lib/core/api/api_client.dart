@@ -10,8 +10,10 @@ class ApiClient {
   static Dio _buildDio() {
     final dio = Dio(BaseOptions(
       baseUrl: _baseUrl,
-      connectTimeout: const Duration(seconds: 60),
-      receiveTimeout: const Duration(seconds: 60),
+      // 12s pour établir la connexion TCP (couvre les réseaux lents du Sénégal)
+      connectTimeout: const Duration(seconds: 12),
+      // 30s pour recevoir la réponse (uploads documents, calculs backend lourds)
+      receiveTimeout: const Duration(seconds: 30),
       headers: {'Content-Type': 'application/json'},
     ));
 

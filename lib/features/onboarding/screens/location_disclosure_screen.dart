@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -15,6 +16,11 @@ class LocationDisclosureScreen extends StatelessWidget {
   Future<void> _accept(BuildContext context) async {
     await Permission.locationWhenInUse.request();
     await Permission.locationAlways.request();
+    // Android uniquement : demande l'exemption batterie pour que le foreground
+    // service GPS survive aux optimisations agressives (Xiaomi, Samsung, Huawei…)
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
     await AuthStorage.setLocationDisclosureSeen();
     await AuthStorage.setOnboardingSeen();
     await NotificationService.requestPermissionAndToken();

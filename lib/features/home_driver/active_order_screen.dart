@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 
 import '../../core/error/app_exception.dart';
+import '../../core/utils/dem_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/config/app_config.dart';
 import '../../core/services/socket_service.dart';
+import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/map_theme_provider.dart';
 import 'navigation/map_theme.dart';
@@ -32,7 +34,8 @@ class ActiveOrderScreen extends ConsumerStatefulWidget {
   ConsumerState<ActiveOrderScreen> createState() => _ActiveOrderScreenState();
 }
 
-class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
+class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
+    with WidgetsBindingObserver {
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   String? _mapStyle;
@@ -99,6 +102,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _order = widget.order;
     _buildDriverIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
@@ -201,11 +205,56 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cancelledSub?.cancel();
     _locationSub?.cancel();
     _alertTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
+  }
+
+  /// Appelé par Flutter quand l'app change d'état (foreground ↔ background).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _onResumed();
+    }
+  }
+
+  /// Quand l'app revient au premier plan :
+  /// 1. Reconnecte la socket si elle s'est déconnectée.
+  /// 2. Réémet la position immédiatement (pas d'attente du prochain tick GPS).
+  /// 3. Recalcule la route (le driver a peut-être bougé pendant l'absence).
+  Future<void> _onResumed() async {
+    // Reconnexion socket
+    if (!SocketService.instance.isConnected) {
+      final token = await _readToken();
+      if (token != null) SocketService.instance.connect(token);
+    }
+
+    // Position immédiate → client
+    if (_driverPosition != null && !_isDelivered) {
+      final orderId = _order['id'] as String?;
+      if (orderId != null) {
+        SocketService.instance.emitDriverLocation(
+          _driverPosition!.latitude,
+          _driverPosition!.longitude,
+          orderId,
+        );
+      }
+    }
+
+    // Recalcul de la route
+    if (!_isDelivered) _loadRoute();
+  }
+
+  /// Lit le token JWT depuis le stockage local (SharedPreferences).
+  Future<String?> _readToken() async {
+    try {
+      return await AuthStorage.getToken();
+    } catch (_) {
+      return null;
+    }
   }
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -471,8 +520,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       await _loadRoute();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
+        showDemToast(context, friendlyError(e), isError: true);
       }
     }
   }
@@ -491,8 +539,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       if (mounted) _showPaymentDialog();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
+        showDemToast(context, friendlyError(e), isError: true);
       }
     }
   }
@@ -517,8 +564,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
           void confirm() async {
             setDialog(() { confirming = true; errorMsg = null; });
             // Capture avant les await pour éviter l'usage de BuildContext après gap async
-            final nav       = Navigator.of(dialogCtx);
-            final messenger = ScaffoldMessenger.of(context);
+            final nav = Navigator.of(dialogCtx);
             bool ok = false;
             for (int i = 0; i < 2; i++) {
               if (i > 0) await Future.delayed(const Duration(seconds: 2));
@@ -534,17 +580,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
             if (!mounted) return;
             if (ok) {
               nav.pop();
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Row(children: [
-                    const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                    const SizedBox(width: 10),
-                    Text(_isRide ? 'Course effectuée — paiement confirmé !' : 'Livraison effectuée — paiement confirmé !'),
-                  ]),
-                  backgroundColor: const Color(0xFF00C853),
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+              showDemToast(context, _isRide ? 'Course effectuée — paiement confirmé !' : 'Livraison effectuée — paiement confirmé !');
               Future.delayed(const Duration(milliseconds: 300), () {
                 if (mounted) context.go(_homeRoute);
               });
@@ -778,14 +814,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
       }
       if (!confirmed) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Erreur : paiement non enregistré. Contactez le support.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 6),
-            ),
-          );
+          showDemToast(context, 'Erreur : paiement non enregistré. Contactez le support.', isError: true);
         }
         return; // ne pas naviguer tant que non confirmé
       }
@@ -795,13 +824,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
     } else {
       // DISPUTED : message simple + retour accueil
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Problème signalé. L\'admin va prendre en charge.'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
-          ),
-        );
+        showDemToast(context, 'Problème signalé. L\'admin va prendre en charge.');
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) context.go(_homeRoute);
         });
@@ -915,13 +938,14 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                       final router    = GoRouter.of(context);
                       final homeRoute = _homeRoute;
                       final orderId   = _order['id'] as String?;
-                      final clientId  = (_order['client'] as Map<String, dynamic>?)?['id'] as String?;
+                      // Le driver note le client — ratedId = ID du client
+                      final ratedUserId = (_order['client'] as Map<String, dynamic>?)?['id'] as String?;
 
-                      if (orderId != null && clientId != null && selectedRating > 0) {
+                      if (orderId != null && ratedUserId != null && selectedRating > 0) {
                         try {
                           await ref.read(ordersRepositoryProvider).rateDriver(
                             orderId:  orderId,
-                            driverId: clientId,  // driver note le client
+                            driverId: ratedUserId, // ratedId envoyé au backend = client
                             score:    selectedRating,
                           );
                         } catch (_) {}
@@ -1033,6 +1057,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final isNight = ref.watch(mapNightProvider);
     return Scaffold(
       body: Stack(
         children: [
@@ -1135,7 +1160,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: isNight ? const Color(0xFF0CB8DE) : Colors.white,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -1144,8 +1169,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                             )
                           ],
                         ),
-                        child: const Icon(Icons.arrow_back,
-                            color: Colors.black87, size: 20),
+                        child: Icon(Icons.arrow_back,
+                            color: isNight ? Colors.white : const Color(0xFF0CB8DE),
+                            size: 20),
                       ),
                     ),
                 ],
@@ -1249,11 +1275,6 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,
                                 ),
-                              ),
-                              const Text(
-                                'ETA',
-                                style: TextStyle(
-                                    fontSize: 10, color: Colors.white70),
                               ),
                             ],
                           ),
@@ -1374,7 +1395,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _isPickedUp
                                   ? AppColors.primary
-                                  : const Color(0xFF00C853),
+                                  : Colors.orange,
                               foregroundColor: Colors.white,
                               padding:
                                   const EdgeInsets.symmetric(vertical: 16),
@@ -1455,8 +1476,8 @@ class _PhaseChip extends StatelessWidget {
     final (label, color) = isDelivered
         ? (isRide ? 'Course effectuée ✓' : 'Livraison effectuée ✓', const Color(0xFF00C853))
         : isPickedUp
-            ? (isRide ? 'En route vers la destination' : 'En route vers la livraison', AppColors.primary)
-            : (isRide ? 'En route vers le passager' : 'En route vers la collecte', Colors.orange);
+            ? (isRide ? 'En route vers la destination' : 'En route vers la livraison', Colors.white)
+            : (isRide ? 'En route vers le passager' : 'En route pour récupérer le colis', Colors.orange);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

@@ -43,7 +43,8 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
       _OrderTrackingScreenState();
 }
 
-class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
+class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
+    with WidgetsBindingObserver {
   // ── État vue (map, rendu, UX) — reste local ──────────────────────────────
   bool _rated = false;
 
@@ -72,6 +73,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadMapStyle();
     _connectSocket();
     _buildDriverMarkerIcon().then((icon) {
@@ -81,9 +83,35 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _routeRefreshTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
+  }
+
+  /// Au retour au premier plan : reconnecte la socket si perdue
+  /// et redemande la position du driver immédiatement.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!SocketService.instance.isConnected) {
+      AuthStorage.getToken().then((token) {
+        if (token == null || !mounted) return;
+        SocketService.instance.connect(token);
+        // Redemande la dernière position connue du driver après reconnexion
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (mounted) SocketService.instance.requestDriverLocation(widget.orderId);
+        });
+      });
+    } else {
+      // Socket déjà connectée : juste demander la position du driver
+      SocketService.instance.requestDriverLocation(widget.orderId);
+    }
+    // Recalcul de la route si nécessaire
+    final phase = _s.phase;
+    if (phase == 'ACCEPTED' || phase == 'PICKED_UP') {
+      _fetchRoute();
+    }
   }
 
   Future<void> _loadMapStyle() async {
@@ -631,31 +659,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> {
                 style: TextStyle(color: const Color(0xFFFFB300).withValues(alpha: 0.70), fontSize: 10),
               ),
             ],
-            const SizedBox(height: 8),
-            // Bouton signaler
-            GestureDetector(
-              onTap: _showReportSheet,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFB300).withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFFB300).withValues(alpha: 0.45)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.flag_outlined, color: Color(0xFFFFB300), size: 16),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text('Signaler le problème',
-                          style: TextStyle(color: Color(0xFFFFB300), fontSize: 13, fontWeight: FontWeight.w600)),
-                    ),
-                    Icon(Icons.chevron_right, color: const Color(0xFFFFB300).withValues(alpha: 0.7), size: 18),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       );

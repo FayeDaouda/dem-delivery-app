@@ -186,6 +186,22 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     setState(() => _sheetExpanded = !_sheetExpanded);
   }
 
+  void _onSheetDragUpdate(DragUpdateDetails d) {
+    final newVal = (_sheetAnim.value - d.delta.dy / 200).clamp(0.0, 1.0);
+    _sheetAnim.value = newVal;
+  }
+
+  void _onSheetDragEnd(DragEndDetails d) {
+    final v = d.primaryVelocity ?? 0;
+    if (v > 200 || _sheetAnim.value < 0.5) {
+      _sheetAnim.reverse();
+      setState(() => _sheetExpanded = false);
+    } else {
+      _sheetAnim.forward();
+      setState(() => _sheetExpanded = true);
+    }
+  }
+
   // ── Map style ─────────────────────────────────────────────────────────────
   Future<void> _loadMapStyle() async {
     final bool isNight = ref.read(mapNightProvider);
@@ -835,16 +851,44 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
 
-                      // ── GAUCHE : Localisation + Nuit/Jour ─────────────────
+                      // ── GAUCHE : Nuit/Jour ────────────────────────────────
+                      GestureDetector(
+                        onTap: _toggleMapTheme,
+                        child: Container(
+                          width: 52, height: 52,
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.card, width: 1.5),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                          ),
+                          child: Icon(
+                            ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                            color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+
+                      // ── DROITE : Badge + Recenter ────────────────────────
                       Column(
                         mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
+                          Builder(builder: (_) {
+                            final badge = _buildSmartBadge();
+                            return badge != null
+                                ? Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: badge,
+                                  )
+                                : const SizedBox.shrink();
+                          }),
                           GestureDetector(
                             onTap: _cycleLocationMode,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 250),
-                              width: 52,
-                              height: 52,
+                              width: 52, height: 52,
                               decoration: BoxDecoration(
                                 color: _locationMode == _LocationMode.free
                                     ? AppColors.surface : AppColors.primary,
@@ -875,33 +919,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                                     ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: _toggleMapTheme,
-                            child: Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: AppColors.card, width: 1.5),
-                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
-                              ),
-                              child: Icon(
-                                ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                                color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                                size: 22,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
-
-                      // ── DROITE : Badge unique priorité métier ────────────
-                      Builder(builder: (_) {
-                        final badge = _buildSmartBadge();
-                        return badge ?? const SizedBox.shrink();
-                      }),
 
                     ],
                   ),
@@ -912,6 +931,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                   animation: _sheetSlide,
                   onToggle: _toggleSheet,
                   expanded: _sheetExpanded,
+                  onDragUpdate: _onSheetDragUpdate,
+                  onDragEnd: _onSheetDragEnd,
                   child: _buildServiceContent(),
                 ),
 
@@ -951,14 +972,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             child: Text(
               '$greeting $firstName 👋',
               style: const TextStyle(
-                color: AppColors.textSecondary,
+                color: Colors.white,
                 fontSize: 14,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w300,
               ),
             ),
           ),
         const Text(
-          'Votre livraison en quelques clics',
+          'Programmez une livraison en quelques clics.',
           style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 18,
@@ -1024,12 +1045,16 @@ class _AnimatedSheet extends StatelessWidget {
   final Widget child;
   final VoidCallback onToggle;
   final bool expanded;
+  final void Function(DragUpdateDetails) onDragUpdate;
+  final void Function(DragEndDetails) onDragEnd;
 
   const _AnimatedSheet({
     required this.animation,
     required this.child,
     required this.onToggle,
     required this.expanded,
+    required this.onDragUpdate,
+    required this.onDragEnd,
   });
 
   @override
@@ -1049,9 +1074,11 @@ class _AnimatedSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Drag handle — tap pour rétracter/déployer ──
+          // ── Drag handle ──
           GestureDetector(
             onTap: onToggle,
+            onVerticalDragUpdate: onDragUpdate,
+            onVerticalDragEnd: onDragEnd,
             behavior: HitTestBehavior.opaque,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),

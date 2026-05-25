@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -6,10 +7,51 @@ class NavigationService {
   /// Les positions avec accuracy > 50m (réseau/WiFi) sont ignorées.
   static const maxAccuracyMeters = 50.0;
 
-  static const _settings = LocationSettings(
-    accuracy: LocationAccuracy.bestForNavigation,
-    distanceFilter: 5, // mise à jour toutes les 5 m
-  );
+  /// Paramètres GPS adaptés à chaque OS.
+  ///
+  /// Android — `AndroidSettings` avec `foregroundNotificationConfig` :
+  ///   démarre un vrai foreground service visible dans la barre de statut,
+  ///   ce qui empêche Android de tuer le processus quand l'app passe en arrière-plan.
+  ///   Nécessite FOREGROUND_SERVICE + FOREGROUND_SERVICE_LOCATION (déjà dans le manifest)
+  ///   et `GeolocatorService` avec `foregroundServiceType="location"` (déjà déclaré).
+  ///
+  /// iOS — `AppleSettings` avec `pauseLocationUpdatesAutomatically: false` :
+  ///   désactive la suspension automatique du stream GPS par CoreLocation.
+  ///   Nécessite UIBackgroundModes: location + NSLocationAlwaysUsageDescription (déjà en place).
+  static LocationSettings get _settings {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 5,
+        forceLocationManager: false,
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationChannelName: 'Course en cours',
+          notificationTitle: 'DEM · Course en cours',
+          notificationText: 'Votre position est partagée en temps réel.',
+          enableWakeLock: true,
+          notificationIcon: AndroidResource(
+            name: 'ic_launcher',
+            defType: 'mipmap',
+          ),
+        ),
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 5,
+        activityType: ActivityType.automotiveNavigation,
+        pauseLocationUpdatesAutomatically: false,
+        // Indicateur bleu en haut de l'écran — obligatoire sur iOS pour la localisation en fond
+        showBackgroundLocationIndicator: true,
+      );
+    }
+    // Fallback desktop / autre
+    return const LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 5,
+    );
+  }
 
   /// Demande la permission et retourne la première position précise (≤ 50 m).
   /// Attend jusqu'à 8s pour un fix GPS propre, sinon fallback sur ce qui est disponible.

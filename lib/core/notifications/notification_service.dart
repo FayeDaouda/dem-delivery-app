@@ -29,7 +29,7 @@ class NotificationService {
       const initSettings = InitializationSettings(android: androidInitSettings, iOS: iosInitSettings);
       await _localNotificationsPlugin.initialize(settings: initSettings);
 
-      // Channel Android haute importance
+      // Canal Android haute importance (alertes, nouvelles courses)
       const channel = AndroidNotificationChannel(
         'dem_high_importance',
         'Notifications Importantes DEM',
@@ -40,6 +40,22 @@ class NotificationService {
       await _localNotificationsPlugin
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
+
+      // Canal Android discret (notification persistante GPS pendant la course)
+      // Importance.low = pas de son/vibration, mais visible dans la barre de statut.
+      // DOIT être créé ici — Android 8+ refuse d'afficher une notification
+      // sur un canal inexistant (silencieux, sans erreur apparente).
+      const ongoingChannel = AndroidNotificationChannel(
+        'dem_ongoing_course',
+        'Course en cours',
+        description: 'Suivi de la course active en temps réel',
+        importance: Importance.low,
+        playSound: false,
+        enableVibration: false,
+      );
+      await _localNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(ongoingChannel);
 
       // iOS : affiche en foreground nativement via Firebase
       await _messaging.setForegroundNotificationPresentationOptions(

@@ -96,8 +96,8 @@ class BadgeService {
     ),
     BadgeInfo(
       tier: DriverBadge.none,
-      name: 'Nouveau driver',
-      subtitle: 'Effectuez vos premières courses',
+      name: 'Nouveau livreur',
+      subtitle: 'Faites votre première course pour obtenir votre badge',
       color: Color(0xFF90A4AE),
       bgColor: Color(0xFFECEFF1),
       icon: Icons.directions_bike,

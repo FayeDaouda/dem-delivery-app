@@ -43,12 +43,12 @@ class AppStrings {
   // ── Profil ────────────────────────────────────────────────────────────────
   String get myProfile       => _t('Mon profil',               'My profile');
   String get information     => _t('Informations',             'Information');
-  String get documents       => _t('Documents / Vérification', 'Documents / Verification');
-  String get activity        => _t('Activité',                 'Activity');
-  String get settings        => _t('Paramètres',               'Settings');
-  String get account         => _t('Compte',                   'Account');
-  String get phoneNumber     => _t('Téléphone',                'Phone');
-  String get plate           => _t('Plaque',                   'Plate');
+  String get documents       => _t('Documents',                       'Documents');
+  String get activity        => _t('Activité',                         'Activity');
+  String get settings        => _t('Paramètres',                       'Settings');
+  String get account         => _t('Compte',                           'Account');
+  String get phoneNumber     => _t('Téléphone',                        'Phone');
+  String get plate           => _t('Plaque d\'immatriculation',        'Registration plate');
   String get statusLabel     => _t('Statut',                   'Status');
   String get verified        => _t('Vérifié ✓',                'Verified ✓');
   String get notVerified     => _t('Non vérifié',              'Not verified');

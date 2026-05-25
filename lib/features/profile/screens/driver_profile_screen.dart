@@ -156,9 +156,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   bool get _isMoto => _user?['vehicleType'] == 'MOTO';
 
-  // ── Statut documents ───────────────────────────────────────────────────────
-  bool get _hasIdCard  => _user?['idCardFront'] != null && _user?['idCardBack'] != null;
-  bool get _hasLicense => _user?['licenseFront'] != null && _user?['licenseBack'] != null;
+  // ── Statut documents (7 champs, 5 groupes logiques) ──────────────────────────
+  int get _docsUploaded {
+    final fields = ['licenseFront','licenseBack','carteGrise','carteGriseBack','assurance','vehiclePhoto','avatar'];
+    return fields.where((f) => _user?[f] != null).length;
+  }
+  static const int _docsTotal = 7;
 
   // ── Support ────────────────────────────────────────────────────────────────
   Future<void> _launch(String url) async {
@@ -212,11 +215,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             Text(s.language,
                 style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            _LangTile(flag: '🇫🇷', label: s.french,  code: 'fr', selected: cur == 'fr', onTap: () async { final nav = Navigator.of(ctx); await LocaleService.setLang('fr'); setSt(() {}); nav.pop(); }),
+            _LangTile(label: s.french,  code: 'fr', selected: cur == 'fr', onTap: () async { final nav = Navigator.of(ctx); await LocaleService.setLang('fr'); setSt(() {}); nav.pop(); }),
             const SizedBox(height: 8),
-            _LangTile(flag: '🇬🇧', label: s.english, code: 'en', selected: cur == 'en', onTap: () async { final nav = Navigator.of(ctx); await LocaleService.setLang('en'); setSt(() {}); nav.pop(); }),
-            const SizedBox(height: 8),
-            _LangTile(flag: '🇸🇳', label: s.wolof,   code: 'wo', selected: cur == 'wo', onTap: () async { final nav = Navigator.of(ctx); await LocaleService.setLang('wo'); setSt(() {}); nav.pop(); }),
+            _LangTile(label: s.english, code: 'en', selected: cur == 'en', onTap: () async { final nav = Navigator.of(ctx); await LocaleService.setLang('en'); setSt(() {}); nav.pop(); }),
           ]);
         },
       ),
@@ -515,7 +516,27 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final name     = _user?['name']  as String? ?? 'Driver';
     final phone    = _user?['phone'] as String? ?? '';
     final plate    = _user?['vehiclePlate'] as String? ?? '—';
-    final verified = _user?['isVerified'] == true;
+    final driverStatus = _user?['driverStatus'] as String?;
+    final isVerified   = _user?['isVerified'] == true;
+    // Statut affiché : basé sur driverStatus (anciens drivers sans driverStatus → isVerified)
+    final String statusLabel;
+    final Color  statusColor;
+    switch (driverStatus) {
+      case 'VERIFIED':
+        statusLabel = 'Vérifié ✓';         statusColor = const Color(0xFF22C55E);
+      case 'UNDER_REVIEW':
+        statusLabel = 'En cours de vérification'; statusColor = const Color(0xFFF59E0B);
+      case 'PENDING_DOCUMENTS':
+        statusLabel = 'Documents requis ⏰'; statusColor = const Color(0xFFFF9800);
+      case 'SUSPENDED':
+        statusLabel = 'Compte suspendu';    statusColor = const Color(0xFFEF4444);
+      case 'INCOMPLETE':
+        statusLabel = 'Profil incomplet';   statusColor = const Color(0xFF7B8CA0);
+      default:
+        // Ancien driver sans driverStatus → on se base sur isVerified
+        statusLabel = isVerified ? 'Vérifié ✓' : 'Profil incomplet';
+        statusColor = isVerified ? const Color(0xFF22C55E) : const Color(0xFF7B8CA0);
+    }
     final pending  = _user?['pendingPhone'] as String?;
     final phoneChangeStatus = _user?['phoneChangeStatus'] as String?;
 
@@ -593,7 +614,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                   color: Colors.white.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Text(_isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
+                                child: Text(_isMoto ? 'Livreur-DEM' : 'DEM Thiak Thiak',
                                     style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
                               ),
                               // ── Badge card (espace au-dessus) ──
@@ -623,6 +644,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 padding: const EdgeInsets.all(20),
                 children: [
 
+                  // Parrainage
+                  Text('PARRAINAGE',
+                      style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 11,
+                          fontWeight: FontWeight.w700, letterSpacing: 1.2)),
+                  const SizedBox(height: 8),
+                  ReferralCard(referralCode: _user?['referralCode'] as String?),
+                  const SizedBox(height: 16),
+
                   // Informations
                   _Section(title: s.information, children: [
                     _InfoRow(icon: Icons.phone_outlined, label: s.phoneNumber, value: phone),
@@ -635,8 +664,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     ),
                     _divider(),
                     _InfoRow(icon: Icons.verified_outlined, label: s.statusLabel,
-                        value: verified ? s.verified : s.notVerified,
-                        valueColor: verified ? const Color(0xFF22C55E) : const Color(0xFFEF4444)),
+                        value: statusLabel, valueColor: statusColor),
+                    // Mes Documents — ligne unique avec barre de progression
+                    _divider(),
+                    _DocsProgressRow(
+                      uploaded: _docsUploaded,
+                      total:    _docsTotal,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentUploadScreen())).then((_) => _load()),
+                    ),
                     // Badge numéro en attente
                     if (pending != null && phoneChangeStatus == 'PENDING') ...[
                       _divider(),
@@ -657,16 +692,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   ]),
                   const SizedBox(height: 16),
 
-                  // Documents
-                  _Section(title: s.documents, children: [
-                    _DocRow(label: s.idCard,  icon: Icons.badge_outlined,       verified: _hasIdCard,
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentUploadScreen())).then((_) => _load())),
-                    _divider(),
-                    _DocRow(label: s.license, icon: Icons.credit_card_outlined, verified: _hasLicense,
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentUploadScreen())).then((_) => _load())),
-                  ]),
-                  const SizedBox(height: 16),
-
                   // Activité
                   _Section(title: s.activity, children: [
                     _ActionRow(icon: Icons.history, label: s.historyTitle,
@@ -674,20 +699,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   ]),
                   const SizedBox(height: 16),
 
-                  // Parrainage
-                  Text('PARRAINAGE',
-                      style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 11,
-                          fontWeight: FontWeight.w700, letterSpacing: 1.2)),
-                  const SizedBox(height: 8),
-                  ReferralCard(referralCode: _user?['referralCode'] as String?),
-                  const SizedBox(height: 16),
-
                   // Paramètres
                   _Section(title: s.settings, children: [
                     _ActionRow(icon: Icons.edit_outlined,     label: s.editPhone, onTap: _showEditPhone),
                     _divider(),
                     _ActionRow(icon: Icons.language_outlined, label: s.language,
-                        trailing: LocaleService.current == 'en' ? '🇬🇧 EN' : LocaleService.current == 'wo' ? '🇸🇳 WO' : '🇫🇷 FR',
+                        trailing: LocaleService.current == 'en' ? 'EN' : 'FR',
                         onTap: _showLanguageSheet),
                     _divider(),
                     _ActionRow(icon: Icons.support_agent_outlined, label: s.support, onTap: _showSupportSheet),
@@ -701,7 +718,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   const SizedBox(height: 16),
 
                   // Compte
-                  _Section(title: s.account, children: [
+                  _Section(title: 'Gestion du compte', children: [
                     _ActionRow(icon: Icons.logout, label: s.logout,
                         color: Colors.redAccent, onTap: _logout),
                     _divider(),
@@ -798,44 +815,60 @@ class _EditableInfoRow extends StatelessWidget {
   );
 }
 
-class _DocRow extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool verified;
+// ── Ligne "Mes Documents" avec barre de progression ───────────────────────────
+class _DocsProgressRow extends StatelessWidget {
+  final int uploaded;
+  final int total;
   final VoidCallback onTap;
-  const _DocRow({required this.label, required this.icon, required this.verified, required this.onTap});
+  const _DocsProgressRow({required this.uploaded, required this.total, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(16),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(children: [
-        Icon(icon, color: AppColors.primary, size: 20),
-        const SizedBox(width: 14),
-        Expanded(child: Text(label, style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 14))),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: (verified ? const Color(0xFF22C55E) : const Color(0xFFF59E0B)).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(20),
+  Widget build(BuildContext context) {
+    final allDone = uploaded == total;
+    final progress = total > 0 ? uploaded / total : 0.0;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          Icon(Icons.folder_open_outlined, color: AppColors.primary, size: 20),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Text('Mes Documents',
+                      style: TextStyle(color: Color(0xFF1A1A2E), fontSize: 14)),
+                  const Spacer(),
+                  Text('$uploaded/$total',
+                      style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        color: allDone ? const Color(0xFF22C55E) : const Color(0xFFF59E0B),
+                      )),
+                ]),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 4,
+                    backgroundColor: const Color(0xFFE5E7EB),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      allDone ? const Color(0xFF22C55E) : AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(verified ? Icons.check_circle_outline : Icons.upload_outlined,
-                size: 13, color: verified ? const Color(0xFF22C55E) : const Color(0xFFF59E0B)),
-            const SizedBox(width: 4),
-            Text(verified ? AppStrings.current.docVerified : AppStrings.current.docPending,
-                style: TextStyle(
-                    color: verified ? const Color(0xFF22C55E) : const Color(0xFFF59E0B),
-                    fontSize: 11, fontWeight: FontWeight.w600)),
-          ]),
-        ),
-        const SizedBox(width: 6),
-        const Icon(Icons.arrow_forward_ios, color: Color(0xFF7B8CA0), size: 12),
-      ]),
-    ),
-  );
+          const SizedBox(width: 10),
+          const Icon(Icons.arrow_forward_ios, color: Color(0xFF7B8CA0), size: 12),
+        ]),
+      ),
+    );
+  }
 }
 
 class _ActionRow extends StatelessWidget {
@@ -926,12 +959,11 @@ class _SheetBtn extends StatelessWidget {
 }
 
 class _LangTile extends StatelessWidget {
-  final String flag;
   final String label;
   final String code;
   final bool selected;
   final VoidCallback onTap;
-  const _LangTile({required this.flag, required this.label, required this.code, required this.selected, required this.onTap});
+  const _LangTile({required this.label, required this.code, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -948,8 +980,6 @@ class _LangTile extends StatelessWidget {
         ),
       ),
       child: Row(children: [
-        Text(flag, style: const TextStyle(fontSize: 22)),
-        const SizedBox(width: 14),
         Expanded(child: Text(label, style: TextStyle(
           color: Colors.white,
           fontSize: 15,
@@ -1079,33 +1109,42 @@ class _BadgeCard extends StatelessWidget {
             if (nextBadge != null) ...[
               const SizedBox(height: 12),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          Text('Prochain : ', style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 10)),
-                          Text(nextBadge.name,
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
-                          const Spacer(),
-                          Text('${nextBadge.coursesRequired} courses',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 10)),
-                        ]),
-                        const SizedBox(height: 5),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 5,
-                            backgroundColor: Colors.white.withValues(alpha: 0.15),
-                            valueColor: AlwaysStoppedAnimation<Color>(nextBadge.color),
-                          ),
-                        ),
-                      ],
-                    ),
+                  // GAUCHE : courses actuelles + objectif
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('$courses courses',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                      Text('Objectif : ${nextBadge.coursesRequired} courses',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 10)),
+                    ],
                   ),
+                  const Spacer(),
+                  // DROITE : icon + nom du prochain badge
+                  Container(
+                    width: 22, height: 22,
+                    decoration: BoxDecoration(
+                      color: nextBadge.color.withValues(alpha: 0.25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(nextBadge.icon, color: nextBadge.color, size: 13),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(nextBadge.name,
+                      style: TextStyle(color: nextBadge.color, fontSize: 11, fontWeight: FontWeight.w700)),
                 ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 5,
+                  backgroundColor: Colors.white.withValues(alpha: 0.15),
+                  valueColor: AlwaysStoppedAnimation<Color>(nextBadge.color),
+                ),
               ),
             ],
           ],
@@ -1115,7 +1154,8 @@ class _BadgeCard extends StatelessWidget {
   }
 }
 
-// ── Carte forfait journalier ──────────────────────────────────────────────────
+// ── Carte forfait journalier (S4 — pas encore intégrée dans le profil) ────────
+// ignore: unused_element
 class _ForfaitCard extends StatelessWidget {
   final Map<String, dynamic> status;
   const _ForfaitCard({required this.status});

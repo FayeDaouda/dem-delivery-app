@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import '../../../core/notifications/notification_service.dart';
 
 import '../../core/error/app_exception.dart';
+import '../../core/utils/dem_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,7 +35,7 @@ class HomeDriverScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
-    with TickerProviderStateMixin, RouteAware {
+    with TickerProviderStateMixin, RouteAware, WidgetsBindingObserver {
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
   String? _mapStyle;
@@ -84,6 +85,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -129,6 +131,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     routeObserver.unsubscribe(this);
     _pulseCtrl.dispose();
     _locationSub?.cancel();
@@ -140,6 +143,25 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();
     super.dispose();
+  }
+
+  /// Reconnexion socket au retour au premier plan.
+  /// Uber/Bolt font exactement ça : retour foreground → reconnexion immédiate.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!SocketService.instance.isConnected) {
+      // Reconnexion complète : dispose l'ancienne socket + crée une nouvelle
+      AuthStorage.getToken().then((token) {
+        if (token == null || !mounted) return;
+        SocketService.instance.connect(token);
+      });
+    }
+    // Recharge les courses disponibles (l'état peut avoir changé pendant l'absence)
+    final isAvailable = ref.read(profileProvider).isAvailable;
+    if (isAvailable && mounted) {
+      ref.read(availableOrdersProvider.notifier).refresh();
+    }
   }
 
   Future<void> _connectSocket() async {
@@ -455,24 +477,33 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       if (isAvailable) ref.read(availableOrdersProvider.notifier).refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+        showDemToast(context, friendlyError(e), isError: true);
       }
     }
+  }
+
+  Future<void> _declineOrder(String orderId) async {
+    // Mode DEV — pas d'appel API, on vide juste la liste locale
+    if (orderId.startsWith('dev-')) {
+      ref.read(availableOrdersProvider.notifier).removeOrder(orderId);
+      return;
+    }
+    // Appel API — informe le backend que ce driver refuse.
+    // Le backend ajoute le driver dans rejectedDriverIds et dispatche au suivant.
+    try {
+      await ref.read(ordersRepositoryProvider).declineOrder(orderId);
+    } catch (_) {
+      // Même en cas d'erreur réseau, on retire la modale localement.
+      // Le backend déclenchera un re-dispatch après expiration des 30s.
+    }
+    ref.read(availableOrdersProvider.notifier).removeOrder(orderId);
   }
 
   Future<void> _acceptOrder(String orderId) async {
     // GPS obligatoire — sans position le tracking client sera vide
     if (_driverPosition == null && !orderId.startsWith('dev-')) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS indisponible — activez la localisation pour accepter une course.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 4),
-          ),
-        );
+        showDemToast(context, 'GPS indisponible — activez la localisation pour accepter une course.', isError: true);
       }
       return;
     }
@@ -513,9 +544,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+        showDemToast(context, friendlyError(e), isError: true);
       }
     }
   }
@@ -719,65 +748,56 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
             ),
           ),
 
-          // ── Bouton re-centrer (boussole) — overlay quand on dézoom ──
-          if (!_autoFollow)
-            Positioned(
-              left: 16,
-              bottom: 220,
-              child: Semantics(
-                label: 'Recentrer sur ma position',
-                button: true,
-                child: GestureDetector(
-                  onTap: _recenter,
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.card, width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 12,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.my_location,
-                      color: AppColors.primary,
-                      size: 22,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          // ── Bouton toggle jour/nuit ──────────────────────────────────────
+          // ── Jour/Nuit GAUCHE + Recenter DROITE — même niveau ────────────
           Positioned(
             left: 16,
-            bottom: (_autoFollow ? 220 : 284) + MediaQuery.of(context).viewPadding.bottom,
-            child: Semantics(
-              label: ref.watch(mapNightProvider) ? 'Passer en mode jour' : 'Passer en mode nuit',
-              button: true,
-              child: GestureDetector(
-                onTap: _toggleMapTheme,
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.card, width: 1.5),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
-                  ),
-                  child: Icon(
-                    ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                    color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                    size: 22,
+            right: 16,
+            bottom: 220 + MediaQuery.of(context).viewPadding.bottom,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Semantics(
+                  label: ref.watch(mapNightProvider) ? 'Passer en mode jour' : 'Passer en mode nuit',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: _toggleMapTheme,
+                    child: Container(
+                      width: 52, height: 52,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.card, width: 1.5),
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                      ),
+                      child: Icon(
+                        ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                        color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                        size: 22,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                if (!_autoFollow)
+                  Semantics(
+                    label: 'Recentrer sur ma position',
+                    button: true,
+                    child: GestureDetector(
+                      onTap: _recenter,
+                      child: Container(
+                        width: 52, height: 52,
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.card, width: 1.5),
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                        ),
+                        child: const Icon(Icons.my_location, color: AppColors.primary, size: 22),
+                      ),
+                    ),
+                  )
+                else
+                  const SizedBox(width: 52),
+              ],
             ),
           ),
 
@@ -845,7 +865,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                       onDecline: () {
                         _cancelCountdown();
                         _clearPendingRoute();
-                        ref.read(availableOrdersProvider.notifier).refresh();
+                        _declineOrder(orders.first['id']);
                       },
                     )
                   // ── État 1 : accueil normal ──

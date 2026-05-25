@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import '../../core/error/app_exception.dart';
+import '../../core/utils/dem_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,6 +41,12 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   Timer? _waitTimer;
   Timer? _pollTimer;
   bool _waitTimedOut = false;
+
+  // Panel drag
+  double _panelDragOffset = 0.0;
+  bool _isDragging = false;
+  static const double _kMaxContent = 295.0;
+  static const double _kMinContent = 64.0; // buttons (50) + bottom pad (12) + 2px margin
 
   // Animation radar
   late final AnimationController _radarCtrl;
@@ -265,31 +273,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   }
 
   void _showToast(BuildContext ctx, {required String message, required IconData icon, required bool isError}) {
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        padding: EdgeInsets.zero,
-        backgroundColor: Colors.transparent,
-        behavior: SnackBarBehavior.floating,
-        elevation: 0,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-        duration: const Duration(seconds: 3),
-        content: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: isError
-                ? const LinearGradient(colors: [Color(0xFFB71C1C), Color(0xFFE53935)])
-                : AppColors.gradientSplash,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 14, offset: const Offset(0, 5))],
-          ),
-          child: Row(children: [
-            Icon(icon, color: isError ? Colors.white : const Color(0xFF69F0AE), size: 22),
-            const SizedBox(width: 10),
-            Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14))),
-          ]),
-        ),
-      ),
-    );
+    showDemToast(ctx, message, isError: isError);
   }
 
   @override
@@ -383,7 +367,9 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
           // ── MAP THEME TOGGLE ──────────────────────────────────────────────
           Positioned(
             right: 16,
-            bottom: 310 + MediaQuery.of(context).viewPadding.bottom,
+            bottom: max(_kMinContent + 22.0, _kMaxContent - _panelDragOffset + 22.0)
+                + 60
+                + MediaQuery.of(context).viewPadding.bottom,
             child: GestureDetector(
               onTap: _toggleMapTheme,
               child: Container(
@@ -418,10 +404,48 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Drag handle
-                      Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(2)))),
-                      const SizedBox(height: 16),
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onVerticalDragStart: (_) => setState(() => _isDragging = true),
+                        onVerticalDragUpdate: (d) {
+                          final maxOffset = _kMaxContent - _kMinContent;
+                          setState(() {
+                            _panelDragOffset = (_panelDragOffset + d.delta.dy).clamp(0.0, maxOffset);
+                          });
+                        },
+                        onVerticalDragEnd: (d) {
+                          final v = d.primaryVelocity ?? 0;
+                          final maxOffset = _kMaxContent - _kMinContent;
+                          setState(() {
+                            _isDragging = false;
+                            _panelDragOffset = (v > 200 || _panelDragOffset > maxOffset / 2) ? maxOffset : 0.0;
+                          });
+                        },
+                        onTap: () {
+                          final maxOffset = _kMaxContent - _kMinContent;
+                          setState(() {
+                            _isDragging = false;
+                            _panelDragOffset = _panelDragOffset == 0 ? maxOffset : 0.0;
+                          });
+                        },
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 22,
+                          child: Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(2)))),
+                        ),
+                      ),
 
-                      Padding(
+                      AnimatedContainer(
+                        duration: _isDragging ? Duration.zero : const Duration(milliseconds: 280),
+                        curve: Curves.easeInOut,
+                        height: (_kMaxContent - _panelDragOffset).clamp(_kMinContent, _kMaxContent),
+                        child: ClipRect(
+                          child: OverflowBox(
+                            alignment: Alignment.bottomCenter,
+                            maxHeight: _kMaxContent,
+                            child: SizedBox(
+                              height: _kMaxContent,
+                              child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                         child: Column(
                           children: [
@@ -522,19 +546,10 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                     Text('+${demFee.toInt()} FCFA',
                                         style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
                                   ]),
-                                  Divider(color: Colors.white.withValues(alpha: 0.15), height: 14),
                                 ],
-                                Row(children: [
-                                  const Text('TOTAL', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
-                                  const Spacer(),
-                                  Text(
-                                    '${((price ?? 0) + demFee).toInt()} FCFA',
-                                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                                  ),
-                                ]),
                               ]),
                             ),
-                            const SizedBox(height: 20),
+                            const Spacer(),
 
                             // ── Boutons Action ──
                             Row(
@@ -561,16 +576,12 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                 Expanded(
                                   child: GestureDetector(
                                     onTap: _cancelling ? null : () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Votre commande est en attente — vous serez notifié dès qu\'un livreur est trouvé.',
-                          ),
-                          duration: Duration(seconds: 5),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
                       context.go('/client/home');
+                      Future.microtask(() {
+                        if (context.mounted) {
+                          showDemToast(context, 'Votre commande est en attente — vous serez notifié dès qu\'un livreur est trouvé.');
+                        }
+                      });
                     },
                                     child: Container(
                                       height: 50,
@@ -594,15 +605,19 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                               ],
                             ),
                           ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+                        ),       // Column
+                      ),         // Padding
+                    ),           // SizedBox
+                  ),             // OverflowBox
+                ),               // ClipRect
+              ),                 // AnimatedContainer
+            ],                   // outer Column children
+          ),                     // outer Column
+        ),                       // Padding(top:8)
+      ),                         // SafeArea
+    ),                           // Container
+  ),                             // Align
+],
       ),
     );
   }

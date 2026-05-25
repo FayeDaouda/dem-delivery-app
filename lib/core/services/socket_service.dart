@@ -74,8 +74,13 @@ class SocketService {
           .setAuth({'token': token})
           .disableAutoConnect()
           .enableReconnection()
-          .setReconnectionDelay(3000)
-          .setReconnectionAttempts(10)
+          // Délai progressif : 2s → 4s → 8s → max 30s (backoff exponentiel)
+          .setReconnectionDelay(2000)
+          .setReconnectionDelayMax(30000)
+          // Infini : la socket essaie jusqu'à ce qu'elle réussisse (pas de capitulation)
+          .setReconnectionAttempts(double.maxFinite.toInt())
+          // Timeout de connexion : 10s (réduit depuis défaut 20s)
+          .setTimeout(10000)
           .build(),
     );
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import '../../core/error/app_exception.dart';
+import '../../core/utils/dem_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -414,8 +415,7 @@ class _HomeDriverThiakScreenState
       if (isAvailable) ref.read(availableOrdersProvider.notifier).refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
+        showDemToast(context, friendlyError(e), isError: true);
       }
     }
   }
@@ -444,8 +444,7 @@ class _HomeDriverThiakScreenState
       if (mounted) context.push('/driver/order/active', extra: merged);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyError(e))));
+        showDemToast(context, friendlyError(e), isError: true);
       }
     }
   }

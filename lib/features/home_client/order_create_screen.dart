@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 import '../../core/utils/input_formatters.dart';
+import '../../core/utils/dem_toast.dart';
 import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,7 +23,8 @@ import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
 
 // ─── Heights par step ────────────────────────────────────────────────────────
-const _kPanelHeights = [180.0, 290.0, 310.0, 260.0]; // step 0, 1, 2, 3
+const _kPanelHeights = [180.0, 290.0, 350.0, 250.0]; // step 0, 1, 2, 3
+const _kMinPanelContent = 66.0; // button (52) + bottom padding (12) + 2px margin
 
 class OrderCreateScreen extends ConsumerStatefulWidget {
   final String orderType;
@@ -40,6 +42,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
 
   // ── Step wizard ──────────────────────────────────────────────────────────
   int _step = 0; // 0=Trajet, 1=Contacts, 2=Résumé
+  double _panelDragOffset = 0.0;
+  bool _isDragging = false;
   late final PageController _pageCtrl;
 
   // ── Map ──────────────────────────────────────────────────────────────────
@@ -53,8 +57,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   bool _isMapPlacementMode = false;
 
   // ── Addresses ────────────────────────────────────────────────────────────
-  final _pickupCtrl   = TextEditingController();
-  final _deliveryCtrl = TextEditingController();
+  final _pickupCtrl    = TextEditingController();
+  final _deliveryCtrl  = TextEditingController();
+  final _pickupFocus   = FocusNode();
+  final _deliveryFocus = FocusNode();
   double? _pickupLat, _pickupLng;
   double? _deliveryLat, _deliveryLng;
 
@@ -153,6 +159,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     _priceTimeoutTimer?.cancel();
     _pickupCtrl.dispose();
     _deliveryCtrl.dispose();
+    _pickupFocus.dispose();
+    _deliveryFocus.dispose();
     _senderNameCtrl.dispose();
     _senderPhoneCtrl.dispose();
     _receiverNameCtrl.dispose();
@@ -338,17 +346,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   bool _validatePhone(TextEditingController ctrl, String label) {
     final digits = ctrl.text.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Numéro $label requis'),
-        backgroundColor: AppColors.error,
-      ));
+      showDemToast(context, 'Numéro $label requis', isError: true);
       return false;
     }
     if (digits.length < 9) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Numéro $label invalide — 9 chiffres minimum'),
-        backgroundColor: AppColors.error,
-      ));
+      showDemToast(context, 'Numéro $label invalide — 9 chiffres minimum', isError: true);
       return false;
     }
     return true;
@@ -483,7 +485,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   bool get _routeComplete => _pickupLat != null && _deliveryLat != null;
 
   void _goStep(int step) {
-    setState(() => _step = step);
+    setState(() { _step = step; _panelDragOffset = 0.0; _isDragging = false; });
     _pageCtrl.animateToPage(step,
         duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
     if (step >= 1 && _pickupLat != null && _deliveryLat != null) {
@@ -515,17 +517,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
 
     if (!granted) {
       if (!mounted) return;
-      final canOpenSettings = status == PermissionStatus.permanentlyDenied ||
-          status == PermissionStatus.restricted;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Accès aux contacts refusé'),
-        action: canOpenSettings
-            ? SnackBarAction(
-                label: 'Paramètres',
-                onPressed: FlutterContacts.permissions.openSettings,
-              )
-            : null,
-      ));
+      showDemToast(context, 'Accès aux contacts refusé', isError: true);
       return;
     }
     final contacts = await FlutterContacts.getAll(
@@ -647,9 +639,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
       if (mounted) context.pushReplacement('/orders/confirmation', extra: order);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyError(e)), backgroundColor: AppColors.error),
-        );
+        showDemToast(context, friendlyError(e), isError: true);
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -758,35 +748,35 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
             ),
           ),
 
-        // ── MAP THEME TOGGLE ──────────────────────────────────────────────────
+        // ── MAP THEME (gauche) + RECENTER (droite) — même niveau ─────────
         Positioned(
+          left: 16,
           right: 16,
-          bottom: panelH + 116 + keyboardH,
-          child: GestureDetector(
-            onTap: _toggleMapTheme,
-            child: Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.surface, shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
+          bottom: max(_kMinPanelContent + 22.0, panelH - _panelDragOffset) + 60 + keyboardH,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onTap: _toggleMapTheme,
+                child: Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface, shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
+                  ),
+                  child: Icon(
+                    ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                    color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                    size: 20,
+                  ),
+                ),
               ),
-              child: Icon(
-                ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                size: 20,
+              _FloatingBtn(
+                icon: _loadingGps ? null : Icons.my_location,
+                loading: _loadingGps,
+                onTap: _fetchGpsInit,
               ),
-            ),
-          ),
-        ),
-
-        // ── RECENTER BTN ───────────────────────────────────────────────────
-        Positioned(
-          right: 16,
-          bottom: panelH + 60 + keyboardH,
-          child: _FloatingBtn(
-            icon: _loadingGps ? null : Icons.my_location,
-            loading: _loadingGps,
-            onTap: _fetchGpsInit,
+            ],
           ),
         ),
 
@@ -815,10 +805,19 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                 if (_step == 0) ...[
                   _AddressField(
                     controller: _pickupCtrl,
+                    focusNode: _pickupFocus,
                     hint: 'Point de départ...',
                     dotColor: AppColors.success,
                     active: _isSelectingPickup && !_isMapPlacementMode,
-                    onTap: () => setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; }),
+                    onTap: () {
+                      if (_pickupCtrl.text.isNotEmpty && _deliveryCtrl.text.isEmpty) {
+                        setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; });
+                        _deliveryFocus.requestFocus();
+                      } else {
+                        setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; });
+                        _pickupFocus.requestFocus();
+                      }
+                    },
                     onChanged: (v) => _onAddressChanged(v, forPickup: true),
                     onMapTap: () {
                       FocusScope.of(context).unfocus();
@@ -851,10 +850,19 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                   ),
                   _AddressField(
                     controller: _deliveryCtrl,
+                    focusNode: _deliveryFocus,
                     hint: 'Destination...',
                     dotColor: AppColors.error,
                     active: !_isSelectingPickup && !_isMapPlacementMode,
-                    onTap: () => setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; }),
+                    onTap: () {
+                      if (_deliveryCtrl.text.isNotEmpty && _pickupCtrl.text.isEmpty) {
+                        setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; });
+                        _pickupFocus.requestFocus();
+                      } else {
+                        setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; });
+                        _deliveryFocus.requestFocus();
+                      }
+                    },
                     onChanged: (v) => _onAddressChanged(v, forPickup: false),
                     onMapTap: () {
                       FocusScope.of(context).unfocus();
@@ -940,12 +948,47 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Drag handle
-                const SizedBox(height: 8),
-                Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(2)))),
-                const SizedBox(height: 4),
+                GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onVerticalDragStart: (_) => setState(() => _isDragging = true),
+                  onVerticalDragUpdate: (d) {
+                    final maxOffset = (panelH - 20) - _kMinPanelContent;
+                    setState(() {
+                      _panelDragOffset = (_panelDragOffset + d.delta.dy).clamp(0.0, max(0.0, maxOffset));
+                    });
+                  },
+                  onVerticalDragEnd: (d) {
+                    final v = d.primaryVelocity ?? 0;
+                    final maxOffset = (panelH - 20) - _kMinPanelContent;
+                    setState(() {
+                      _isDragging = false;
+                      _panelDragOffset = (v > 200 || _panelDragOffset > maxOffset / 2) ? maxOffset : 0.0;
+                    });
+                  },
+                  onTap: () {
+                    final maxOffset = (panelH - 20) - _kMinPanelContent;
+                    setState(() {
+                      _isDragging = false;
+                      _panelDragOffset = _panelDragOffset == 0 ? maxOffset : 0.0;
+                    });
+                  },
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 22,
+                    child: Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(2)))),
+                  ),
+                ),
 
                 // Content via PageView (non scrollable)
-                SizedBox(
+                AnimatedContainer(
+                  duration: _isDragging ? Duration.zero : const Duration(milliseconds: 280),
+                  curve: Curves.easeInOut,
+                  height: _isMapPlacementMode ? panelH - 20 : max(_kMinPanelContent, (panelH - 20) - _panelDragOffset),
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.bottomCenter,
+                      maxHeight: panelH - 20,
+                      child: SizedBox(
                   height: panelH - 20,
                   child: _isMapPlacementMode
                       ? _PlacementConfirmPanel(
@@ -1015,7 +1058,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                             ),
                           ],
                         ),
-                ),
+                      ),   // SizedBox
+                    ),     // OverflowBox
+                  ),       // ClipRect
+                ),         // AnimatedContainer
               ],
             ),
             ),
@@ -1082,11 +1128,12 @@ class _AddressField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final VoidCallback onMapTap;
   final VoidCallback? onDotLongPress;
+  final FocusNode? focusNode;
 
   const _AddressField({
     required this.controller, required this.hint, required this.dotColor,
     required this.active, required this.onTap, required this.onChanged, required this.onMapTap,
-    this.onDotLongPress,
+    this.onDotLongPress, this.focusNode,
   });
 
   @override
@@ -1118,6 +1165,7 @@ class _AddressField extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
+              focusNode: focusNode,
               onChanged: onChanged,
               onTap: onTap,
               textInputAction: TextInputAction.search,
@@ -1482,15 +1530,7 @@ class _Step0Panel extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          if (!routeComplete) ...[
-            const Text(
-              'Définissez les deux adresses pour continuer',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 6),
-          ],
+          const Spacer(),
           _NextButton(
             label: 'Suivant — Contacts',
             icon: Icons.arrow_forward,
@@ -1525,6 +1565,14 @@ class _Step1Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Utilisez vos contacts 👤 pour gagner du temps',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 10),
           _ContactMini(
             label: orderType == 'RIDE' ? 'Passager' : 'Expéditeur',
             dotColor: AppColors.success,
@@ -1571,6 +1619,14 @@ class _Step2Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Utilisez vos contacts 👤 pour gagner du temps',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 10),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -1741,10 +1797,7 @@ class _Step3Panel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(children: [
-        // Contenu scrollable (s'adapte si bannière promo présente)
-        Expanded(
-          child: SingleChildScrollView(
-            child: Column(children: [
+        Column(children: [
         // Route recap
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1865,35 +1918,15 @@ class _Step3Panel extends StatelessWidget {
                           ]),
                           Divider(color: Colors.white.withValues(alpha: 0.10), height: 14),
                         ],
-                        // Ligne : total client
-                        if (estimatedPrice != null) ...[
-                          Row(children: [
-                            const Text('TOTAL', style: TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
-                            const Spacer(),
-                            if (freeCourse)
-                              const Row(children: [
-                                Text('0 FCFA', style: TextStyle(color: Color(0xFF00C853), fontSize: 22, fontWeight: FontWeight.bold)),
-                                SizedBox(width: 6),
-                                Text('🎁', style: TextStyle(fontSize: 16)),
-                              ])
-                            else
-                              Text(
-                                '${(estimatedPrice! + demFee).toInt()} FCFA',
-                                style: const TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.bold),
-                              ),
-                          ]),
-                        ] else
-                          const Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 22)),
                       ],
                     ),
         ),
         const SizedBox(height: 8),
-            ]),
-          ),
-        ),
+        ]),
+        const Spacer(),
         // Bouton toujours visible en bas
         _NextButton(
-          label: 'Confirmer la commande',
+          label: 'Trouvez un livreur',
           onTap: (canSubmit && !submitting) ? onSubmit : null,
           loading: submitting,
         ),
