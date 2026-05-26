@@ -12,8 +12,10 @@ import '../../../core/theme/app_theme.dart';
 class LocationDisclosureScreen extends StatelessWidget {
   const LocationDisclosureScreen({super.key});
 
-  // Accepter : demande la permission système + marque vu → GoRouter redirige
-  Future<void> _accept(BuildContext context) async {
+  // Continuer : demande toujours la permission système (guideline 5.1.1.iv Apple).
+  // L'utilisateur choisit d'autoriser ou refuser dans la dialog système iOS/Android.
+  // Pas de bouton "Plus tard" — Apple exige que la dialog système apparaisse toujours.
+  Future<void> _continue(BuildContext context) async {
     await Permission.locationWhenInUse.request();
     await Permission.locationAlways.request();
     // Android uniquement : demande l'exemption batterie pour que le foreground
@@ -21,14 +23,6 @@ class LocationDisclosureScreen extends StatelessWidget {
     if (defaultTargetPlatform == TargetPlatform.android) {
       await Permission.ignoreBatteryOptimizations.request();
     }
-    await AuthStorage.setLocationDisclosureSeen();
-    await AuthStorage.setOnboardingSeen();
-    await NotificationService.requestPermissionAndToken();
-    appStartupNotifier.markDisclosureSeen();  // → GoRouter redirect → /phone
-  }
-
-  // Refuser : marque vu sans demander la permission → GoRouter redirige
-  Future<void> _decline(BuildContext context) async {
     await AuthStorage.setLocationDisclosureSeen();
     await AuthStorage.setOnboardingSeen();
     await NotificationService.requestPermissionAndToken();
@@ -145,11 +139,13 @@ class LocationDisclosureScreen extends StatelessWidget {
                 const Spacer(),
 
                 // ── Bouton principal ───────────────────────────────────────
+                // Texte neutre "Continuer" requis par Apple guideline 5.1.1.iv.
+                // Pas de bouton "Plus tard" — la dialog système doit toujours apparaître.
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: () => _accept(context),
+                    onPressed: () => _continue(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFF04317C),
@@ -159,28 +155,13 @@ class LocationDisclosureScreen extends StatelessWidget {
                       elevation: 0,
                     ),
                     child: const Text(
-                      'Autoriser la localisation',
+                      'Continuer',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.2,
                       ),
                     ),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // ── Bouton secondaire ──────────────────────────────────────
-                TextButton(
-                  onPressed: () => _decline(context),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white60,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const Text(
-                    'Plus tard',
-                    style: TextStyle(fontSize: 15),
                   ),
                 ),
 
