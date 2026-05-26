@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Pas de tracking publicitaire cross-app -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+
+	<!-- Aucun domaine de tracking tiers -->
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!-- APIs système accédées et raisons requises (obligatoire Xcode 15 / iOS 17) -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+
+		<!-- UserDefaults — shared_preferences stocke les préférences utilisateur
+		     (token, flags onboarding, thème carte…) dans la même app uniquement. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+
+		<!-- SystemBootTime — Firebase Crashlytics utilise l'uptime système
+		     pour horodater précisément les crashes. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+
+		<!-- FileTimestamp — image_picker lit les métadonnées de date des photos
+		     choisies depuis la galerie (documents identité, photo de profil). -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+
+		<!-- DiskSpace — image_picker vérifie l'espace disponible avant
+		     de sauvegarder les images temporaires. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+
+	</array>
+</dict>
+</plist>

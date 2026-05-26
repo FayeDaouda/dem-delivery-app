@@ -748,137 +748,152 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
             ),
           ),
 
-          // ── Jour/Nuit GAUCHE + Recenter DROITE — même niveau ────────────
+          // ── Boutons flottants + sheet empilés en bas (comme côté client) ──
           Positioned(
-            left: 16,
-            right: 16,
-            bottom: 220 + MediaQuery.of(context).viewPadding.bottom,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Semantics(
-                  label: ref.watch(mapNightProvider) ? 'Passer en mode jour' : 'Passer en mode nuit',
-                  button: true,
-                  child: GestureDetector(
-                    onTap: _toggleMapTheme,
-                    child: Container(
-                      width: 52, height: 52,
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.card, width: 1.5),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
-                      ),
-                      child: Icon(
-                        ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                        color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                ),
-                if (!_autoFollow)
-                  Semantics(
-                    label: 'Recentrer sur ma position',
-                    button: true,
-                    child: GestureDetector(
-                      onTap: _recenter,
-                      child: Container(
-                        width: 52, height: 52,
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.card, width: 1.5),
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
-                        ),
-                        child: const Icon(Icons.my_location, color: AppColors.primary, size: 22),
-                      ),
-                    ),
-                  )
-                else
-                  const SizedBox(width: 52),
-              ],
-            ),
-          ),
-
-          // ── Badge Course Active (Vert) ───────────────────────────────────
-          if (_activeOrder != null)
-            Positioned(
-              right: 16,
-              bottom: (_autoFollow ? 220 : 284) + MediaQuery.of(context).viewPadding.bottom,
-              child: GestureDetector(
-                onTap: () => context.push('/driver/order/active', extra: _activeOrder),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF40F0C0), // Vert
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(color: const Color(0xFF40F0C0).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
-                    ],
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
+                // ── Flottants juste au-dessus du sheet ──
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Icon(Icons.delivery_dining, color: Colors.white, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Course en cours',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+
+                      // GAUCHE : Jour/Nuit
+                      Semantics(
+                        label: ref.watch(mapNightProvider) ? 'Passer en mode jour' : 'Passer en mode nuit',
+                        button: true,
+                        child: GestureDetector(
+                          onTap: _toggleMapTheme,
+                          child: Container(
+                            width: 52, height: 52,
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.card, width: 1.5),
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                            ),
+                            child: Icon(
+                              ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                              color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
+                              size: 22,
+                            ),
+                          ),
+                        ),
                       ),
+
+                      // DROITE : Badge course active + Recenter
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (_activeOrder != null) ...[
+                            GestureDetector(
+                              onTap: () => context.push('/driver/order/active', extra: _activeOrder),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF40F0C0),
+                                  borderRadius: BorderRadius.circular(30),
+                                  boxShadow: [
+                                    BoxShadow(color: const Color(0xFF40F0C0).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.delivery_dining, color: Colors.white, size: 20),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Course en cours',
+                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          if (!_autoFollow)
+                            Semantics(
+                              label: 'Recentrer sur ma position',
+                              button: true,
+                              child: GestureDetector(
+                                onTap: _recenter,
+                                child: Container(
+                                  width: 52, height: 52,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surface,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: AppColors.card, width: 1.5),
+                                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
+                                  ),
+                                  child: const Icon(Icons.my_location, color: AppColors.primary, size: 22),
+                                ),
+                              ),
+                            )
+                          else
+                            const SizedBox(width: 52),
+                        ],
+                      ),
+
                     ],
                   ),
                 ),
-              ),
-            ),
 
-          // ── Bottom sheet — 3 états (toujours visible) ──
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              switchInCurve: Curves.easeOutBack,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, anim) {
-                final slide = Tween<Offset>(
-                  begin: const Offset(0, 1),
-                  end: Offset.zero,
-                ).animate(anim);
-                return SlideTransition(
-                  position: slide,
-                  child: FadeTransition(opacity: anim, child: child),
-                );
-              },
-              child: isAvailable && orders.isNotEmpty
-                  // ── État 3 : nouvelle course ──
-                  ? _OrderNotificationSheet(
-                      key: const ValueKey('order'),
-                      order: orders.first,
-                      countdown: _countdown,
-                      etaSeconds: _pendingEtaSeconds,
-                      distanceMeters: _pendingDistanceMeters,
-                      onAccept: () {
-                        _cancelCountdown();
-                        _clearPendingRoute();
-                        _acceptOrder(orders.first['id']);
-                      },
-                      onDecline: () {
-                        _cancelCountdown();
-                        _clearPendingRoute();
-                        _declineOrder(orders.first['id']);
-                      },
-                    )
-                  // ── État 1 : accueil normal ──
-                  : _NormalSheet(
-                      key: const ValueKey('normal'),
-                      profile: profile,
-                      isAvailable: isAvailable,
-                      ordersLoading: ordersAsync.isLoading,
-                      todayCourses: _todayCourses,
-                      todayGains: _todayGains,
-                      onToggle: _toggleAvailability,
-                      onDevTap: null,
-                    ),
+                // ── Bottom sheet — 3 états (toujours visible) ──
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  switchInCurve: Curves.easeOutBack,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, anim) {
+                    final slide = Tween<Offset>(
+                      begin: const Offset(0, 1),
+                      end: Offset.zero,
+                    ).animate(anim);
+                    return SlideTransition(
+                      position: slide,
+                      child: FadeTransition(opacity: anim, child: child),
+                    );
+                  },
+                  child: isAvailable && orders.isNotEmpty
+                      // ── État 3 : nouvelle course ──
+                      ? _OrderNotificationSheet(
+                          key: const ValueKey('order'),
+                          order: orders.first,
+                          countdown: _countdown,
+                          etaSeconds: _pendingEtaSeconds,
+                          distanceMeters: _pendingDistanceMeters,
+                          onAccept: () {
+                            _cancelCountdown();
+                            _clearPendingRoute();
+                            _acceptOrder(orders.first['id']);
+                          },
+                          onDecline: () {
+                            _cancelCountdown();
+                            _clearPendingRoute();
+                            _declineOrder(orders.first['id']);
+                          },
+                        )
+                      // ── État 1 : accueil normal ──
+                      : _NormalSheet(
+                          key: const ValueKey('normal'),
+                          profile: profile,
+                          isAvailable: isAvailable,
+                          ordersLoading: ordersAsync.isLoading,
+                          todayCourses: _todayCourses,
+                          todayGains: _todayGains,
+                          onToggle: _toggleAvailability,
+                          onDevTap: null,
+                        ),
+                ),
+              ],
             ),
           ),
         ],

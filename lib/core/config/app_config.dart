@@ -6,6 +6,6 @@ class AppConfig {
   // En debug, la clé vient aussi de --dart-define (voir launch.json / run config).
   static const mapsApiKey = String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
 
-  static const privacyPolicyUrl = 'https://dem.sn/privacy';
-  static const termsUrl         = 'https://dem.sn/terms';
+  static const privacyPolicyUrl = 'https://www.dem.sn/privacy';
+  static const termsUrl         = 'https://www.dem.sn/terms';
 }
