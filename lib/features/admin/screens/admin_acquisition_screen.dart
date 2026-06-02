@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/dem_layout.dart';
 import '../admin_session.dart';
 
 class AdminAcquisitionScreen extends StatefulWidget {
@@ -160,7 +161,9 @@ class _AdminAcquisitionScreenState extends State<AdminAcquisitionScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+      child: Column(
       children: [
         // TabBar
         Container(
@@ -194,7 +197,8 @@ class _AdminAcquisitionScreenState extends State<AdminAcquisitionScreen>
           ),
         ),
       ],
-    );
+      ),    // Column
+    );    // ConstrainedBox
   }
 
   // ── Tab Forfait ────────────────────────────────────────────────────────────

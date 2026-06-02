@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
 import '../data/chef_de_flotte_repository.dart';
 import '../widgets/doc_picker_field.dart';
+import '../../../core/utils/dem_layout.dart';
 
 class _PhoneFormatter extends TextInputFormatter {
   @override
@@ -135,7 +136,10 @@ class _State extends State<ChefDeFlotteAddDriverScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: Column(
         children: [
           // ── Header gradient ────────────────────────────────────────────
           Container(
@@ -224,7 +228,9 @@ class _State extends State<ChefDeFlotteAddDriverScreen> {
             nextLabel: _step == _total - 1 ? 'Ajouter le livreur' : 'Suivant',
           ),
         ],
-      ),
+      ),          // Column
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 

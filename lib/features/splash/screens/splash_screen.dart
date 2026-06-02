@@ -93,6 +93,10 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isTablet  = MediaQuery.of(context).size.width > 600;
+    final logoSize  = isTablet ? 160.0 : 118.0;
+    final taglineFS = isTablet ? 13.0   : 11.5;
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
@@ -112,7 +116,7 @@ class _SplashScreenState extends State<SplashScreen>
                       scale: _logoScale.value,
                       child: Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(26),
+                          borderRadius: BorderRadius.circular(isTablet ? 34 : 26),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.30 * _logoOpacity.value),
@@ -128,8 +132,8 @@ class _SplashScreenState extends State<SplashScreen>
                           ],
                         ),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(26),
-                          child: Image.asset('assets/DEM.png', width: 118, height: 118),
+                          borderRadius: BorderRadius.circular(isTablet ? 34 : 26),
+                          child: Image.asset('assets/DEM.png', width: logoSize, height: logoSize),
                         ),
                       ),
                     ),
@@ -152,7 +156,7 @@ class _SplashScreenState extends State<SplashScreen>
                         'DELIVERY · EXPRESS · MOBILITY',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.88),
-                          fontSize: 11.5,
+                          fontSize: taglineFS,
                           fontWeight: FontWeight.w800,
                           letterSpacing: _letterSpacing.value,
                         ),

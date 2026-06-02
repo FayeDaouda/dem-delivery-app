@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/chef_de_flotte_repository.dart';
+import '../../../core/utils/dem_layout.dart';
 
 class ChefDeFlottePendingScreen extends StatefulWidget {
   const ChefDeFlottePendingScreen({super.key});
@@ -36,7 +37,10 @@ class _State extends State<ChefDeFlottePendingScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
           child: Column(
@@ -48,26 +52,32 @@ class _State extends State<ChefDeFlottePendingScreen> {
               const SizedBox(height: 32),
 
               // ── Icône hourglass (cyan) ─────────────────────────────────
-              Container(
-                width: 84, height: 84,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.18),
-                      AppColors.primaryMid.withValues(alpha: 0.10),
-                    ],
+              Builder(builder: (ctx) {
+                final t = MediaQuery.of(ctx).size.width > 600;
+                return Container(
+                  width: t ? 110.0 : 84.0, height: t ? 110.0 : 84.0,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primary.withValues(alpha: 0.18),
+                        AppColors.primaryMid.withValues(alpha: 0.10),
+                      ],
+                    ),
+                    shape: BoxShape.circle,
                   ),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.hourglass_top_rounded, color: AppColors.primaryMid, size: 42),
-              ),
+                  child: Icon(Icons.hourglass_top_rounded, color: AppColors.primaryMid, size: t ? 52.0 : 42.0),
+                );
+              }),
               const SizedBox(height: 24),
 
-              const Text(
-                'Dossier en cours de validation',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF0F2942)),
-              ),
+              Builder(builder: (ctx) {
+                final t = MediaQuery.of(ctx).size.width > 600;
+                return Text(
+                  'Dossier en cours de validation',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: t ? 26.0 : 22.0, fontWeight: FontWeight.w800, color: const Color(0xFF0F2942)),
+                );
+              }),
               const SizedBox(height: 10),
               const Text(
                 'Votre dossier a été soumis avec succès.\nL\'équipe DEM va le vérifier sous 24 à 48h.',
@@ -172,7 +182,9 @@ class _State extends State<ChefDeFlottePendingScreen> {
             ],
           ),
         ),
-      ),
+      ),          // SafeArea
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }
@@ -246,7 +258,7 @@ class _GradientButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
-    height: 52,
+    height: DemLayout.isTablet(context) ? 56.0 : 52.0,
     decoration: BoxDecoration(
       gradient: const LinearGradient(
         colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],

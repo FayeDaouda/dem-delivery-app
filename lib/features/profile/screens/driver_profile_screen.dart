@@ -2,6 +2,7 @@ import 'dart:io';
 import '../../../core/error/app_exception.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
+import '../../../core/utils/dem_layout.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -541,7 +542,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final phoneChangeStatus = _user?['phoneChangeStatus'] as String?;
 
     return Scaffold(
-      body: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: Column(
         children: [
           // ── Header ──
           Container(
@@ -732,6 +736,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           ),
         ],
       ),
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 

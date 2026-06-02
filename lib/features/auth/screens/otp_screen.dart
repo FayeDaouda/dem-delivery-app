@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/dem_layout.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../providers/auth_provider.dart';
 
@@ -148,12 +149,21 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (ctx, constraints) {
+              final isTablet = DemLayout.isTablet(ctx);
               return SingleChildScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(28, 20, 28, 24),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight - 44),
-                  child: Column(
+                padding: EdgeInsets.fromLTRB(
+                  isTablet ? 0 : 28, 20, isTablet ? 0 : 28, 24,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight - 44,
+                    maxWidth: DemLayout.formMaxWidth(ctx),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isTablet ? 28 : 0),
+                    child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
 
@@ -194,7 +204,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       // ── Icône cadenas ──
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
-                        width: 72, height: 72,
+                        width: isTablet ? 90.0 : 72.0,
+                        height: isTablet ? 90.0 : 72.0,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
@@ -216,16 +227,16 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                         ),
                         child: Icon(
                           _hasError ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
-                          color: Colors.white, size: 32,
+                          color: Colors.white, size: isTablet ? 40.0 : 32.0,
                         ),
                       ),
                       const SizedBox(height: 24),
 
                       // ── Titre ──
-                      const Text(
+                      Text(
                         'Vérification',
                         style: TextStyle(
-                          color: Colors.white, fontSize: 28,
+                          color: Colors.white, fontSize: isTablet ? 32.0 : 28.0,
                           fontWeight: FontWeight.w800, letterSpacing: -0.5,
                         ),
                       ),
@@ -248,8 +259,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                         pinTheme: PinTheme(
                           shape: PinCodeFieldShape.box,
                           borderRadius: BorderRadius.circular(14),
-                          fieldHeight: 58,
-                          fieldWidth: 48,
+                          fieldHeight: isTablet ? 72.0 : 58.0,
+                          fieldWidth:  isTablet ? 60.0 : 48.0,
                           activeFillColor: _hasError
                               ? errorColor.withValues(alpha: 0.20)
                               : Colors.white.withValues(alpha: 0.20),
@@ -269,8 +280,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                         ),
                         enableActiveFill: true,
                         cursorColor: Colors.white,
-                        textStyle: const TextStyle(
-                          color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700,
+                        textStyle: TextStyle(
+                          color: Colors.white, fontSize: isTablet ? 32.0 : 28.0, fontWeight: FontWeight.w700,
                         ),
                         onChanged: (val) {
                           _code = val;
@@ -350,9 +361,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                               ),
                       ),
                     ],
-                  ),
-                ),
-              );
+                  ),        // Column
+                ),          // Padding
+              ),            // ConstrainedBox
+            ),              // Center
+          );                // SingleChildScrollView
             },
           ),
         ),

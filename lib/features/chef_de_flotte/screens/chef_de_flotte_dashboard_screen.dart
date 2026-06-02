@@ -5,6 +5,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/network_error_widget.dart';
 import '../data/chef_de_flotte_repository.dart';
+import '../../../core/utils/dem_layout.dart';
 
 class ChefDeFlotteDashboardScreen extends StatefulWidget {
   const ChefDeFlotteDashboardScreen({super.key});
@@ -59,10 +60,13 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9FF),
-      body: CustomScrollView(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: DemLayout.isTablet(context) ? 200.0 : 160.0,
             pinned: true,
             backgroundColor: AppColors.primaryDark,
             foregroundColor: Colors.white,
@@ -76,9 +80,9 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const Text('Mon espace Chef de flotte', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text('Mon espace Chef de flotte', style: TextStyle(color: Colors.white70, fontSize: DemLayout.isTablet(context) ? 13.0 : 12.0)),
                     const SizedBox(height: 4),
-                    const Text('DEM Chef de flotte', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                    Text('DEM Chef de flotte', style: TextStyle(color: Colors.white, fontSize: DemLayout.isTablet(context) ? 26.0 : 22.0, fontWeight: FontWeight.w800)),
                   ],
                 ),
               ),
@@ -111,7 +115,7 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(children: [
-                const Text('Mes livreurs', style: TextStyle(color: Color.fromARGB(179, 0, 143, 252),fontSize: 16, fontWeight: FontWeight.w800)),
+                Text('Mes livreurs', style: TextStyle(color: const Color.fromARGB(179, 0, 143, 252), fontSize: DemLayout.isTablet(context) ? 18.0 : 16.0, fontWeight: FontWeight.w800)),
                 const Spacer(),
                 IconButton(icon: const Icon(Icons.refresh, size: 18), onPressed: _loadDrivers),
               ]),
@@ -194,7 +198,9 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
                       ),
                     ),
         ],
-      ),
+      ),          // CustomScrollView
+        ),          // ConstrainedBox
+      ),            // Center
       floatingActionButton: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(

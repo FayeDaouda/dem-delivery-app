@@ -6,6 +6,7 @@ class GradientButton extends StatelessWidget {
   final bool loading;
   final bool enabled;
   final VoidCallback onTap;
+  final VoidCallback? onDisabledTap;
 
   const GradientButton({
     super.key,
@@ -13,13 +14,15 @@ class GradientButton extends StatelessWidget {
     required this.onTap,
     this.loading = false,
     this.enabled = true,
+    this.onDisabledTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final active = enabled && !loading;
     return GestureDetector(
-      onTap: active ? onTap : null,
+      behavior: HitTestBehavior.opaque,
+      onTap: active ? onTap : (onDisabledTap ?? () {}),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         height: 54,

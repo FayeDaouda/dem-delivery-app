@@ -1,4 +1,5 @@
 import '../../../core/error/app_exception.dart';
+import '../../../core/utils/dem_layout.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -82,7 +83,10 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
     final loading = ref.watch(authProvider).isLoading;
 
     return Scaffold(
-      body: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: Column(
         children: [
           Container(
             decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
@@ -107,12 +111,15 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Center(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.asset('assets/DEM.png', width: 72, height: 72),
-                        ),
-                      ),
+                      Builder(builder: (ctx) {
+                          final t = MediaQuery.of(ctx).size.width > 600;
+                          return Center(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(t ? 22 : 16),
+                              child: Image.asset('assets/DEM.png', width: t ? 96.0 : 72.0, height: t ? 96.0 : 72.0),
+                            ),
+                          );
+                        }),
                     ],
                   ),
                 ),
@@ -131,12 +138,15 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Je suis …',
-                      style: TextStyle(
-                        color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                    Builder(builder: (ctx) {
+                      final t = MediaQuery.of(ctx).size.width > 600;
+                      return Text(
+                        'Je suis …',
+                        style: TextStyle(
+                          color: AppColors.textPrimary, fontSize: t ? 30.0 : 26.0, fontWeight: FontWeight.w800,
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 6),
                     const Text(
                       'Choisissez votre profil pour continuer',
@@ -189,6 +199,8 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
           ),
         ],
       ),
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }
@@ -230,6 +242,11 @@ class _RoleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet   = MediaQuery.of(context).size.width > 600;
+    final iconBox    = isTablet ? 64.0 : 52.0;
+    final iconSize   = isTablet ? 32.0 : 26.0;
+    final titleFS    = isTablet ? 17.0 : 15.0;
+
     return GestureDetector(
       onTap: loading ? null : onTap,
       child: Container(
@@ -242,12 +259,12 @@ class _RoleCard extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 52, height: 52,
+              width: iconBox, height: iconBox,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(isTablet ? 18 : 14),
               ),
-              child: Icon(icon, color: color, size: 26),
+              child: Icon(icon, color: color, size: iconSize),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -256,8 +273,8 @@ class _RoleCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700,
+                    style: TextStyle(
+                      color: AppColors.textPrimary, fontSize: titleFS, fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -266,7 +283,7 @@ class _RoleCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Icon(Icons.arrow_forward_ios, color: color, size: 16),
+            Icon(Icons.arrow_forward_ios, color: color, size: isTablet ? 18 : 16),
           ],
         ),
       ),

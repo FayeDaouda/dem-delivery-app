@@ -8,6 +8,7 @@ import '../../../core/notifications/notification_service.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/dem_layout.dart';
 
 class LocationDisclosureScreen extends StatelessWidget {
   const LocationDisclosureScreen({super.key});
@@ -25,19 +26,26 @@ class LocationDisclosureScreen extends StatelessWidget {
     }
     await AuthStorage.setLocationDisclosureSeen();
     await AuthStorage.setOnboardingSeen();
-    await NotificationService.requestPermissionAndToken();
+    // Notification permission best-effort — ne bloque pas la navigation si ça échoue
+    try {
+      await NotificationService.requestPermissionAndToken();
+    } catch (_) {}
     appStartupNotifier.markDisclosureSeen();  // → GoRouter redirect → /phone
   }
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = DemLayout.isTablet(context);
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28.0),
-            child: Column(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28.0),
+                child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 48),
@@ -45,8 +53,8 @@ class LocationDisclosureScreen extends StatelessWidget {
                 // ── Icône ──────────────────────────────────────────────────
                 Center(
                   child: Container(
-                    width: 100,
-                    height: 100,
+                    width: isTablet ? 130.0 : 100.0,
+                    height: isTablet ? 130.0 : 100.0,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.white.withValues(alpha: 0.12),
@@ -62,10 +70,10 @@ class LocationDisclosureScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.location_on_rounded,
-                      color: Color(0xFF40F0C0),
-                      size: 52,
+                      color: const Color(0xFF40F0C0),
+                      size: isTablet ? 65.0 : 52.0,
                     ),
                   ),
                 ),
@@ -73,12 +81,12 @@ class LocationDisclosureScreen extends StatelessWidget {
                 const SizedBox(height: 36),
 
                 // ── Titre ──────────────────────────────────────────────────
-                const Text(
+                Text(
                   'Suivi de livraison\nen temps réel',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 30,
+                    fontSize: isTablet ? 36.0 : 30.0,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.5,
                     height: 1.15,
@@ -143,7 +151,7 @@ class LocationDisclosureScreen extends StatelessWidget {
                 // Pas de bouton "Plus tard" — la dialog système doit toujours apparaître.
                 SizedBox(
                   width: double.infinity,
-                  height: 56,
+                  height: isTablet ? 60.0 : 56.0,
                   child: ElevatedButton(
                     onPressed: () => _continue(context),
                     style: ElevatedButton.styleFrom(
@@ -210,10 +218,12 @@ class LocationDisclosureScreen extends StatelessWidget {
 
                 const SizedBox(height: 24),
               ],
-            ),
-          ),
-        ),
-      ),
+            ),       // Column
+          ),         // Padding
+        ),           // ConstrainedBox
+      ),             // Center
+        ),           // SafeArea
+      ),             // Container
     );
   }
 }

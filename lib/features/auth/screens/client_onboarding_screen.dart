@@ -1,4 +1,5 @@
 import '../../../core/error/app_exception.dart';
+import '../../../core/utils/dem_layout.dart';
 import '../../../core/utils/input_formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -61,8 +62,16 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isTablet  = DemLayout.isTablet(context);
+    final logoSize  = isTablet ? 72.0 : 56.0;
+    final titleFS   = isTablet ? 32.0 : 28.0;
+    final btnHeight = isTablet ? 56.0 : 52.0;
+
     return Scaffold(
-      body: Container(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: Container(
         decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
         child: SafeArea(
           child: Padding(
@@ -77,8 +86,8 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                   child: GestureDetector(
                     onTap: () => context.go('/role-selection'),
                     child: Container(
-                      width: 48,
-                      height: 48,
+                      width: isTablet ? 52.0 : 48.0,
+                      height: isTablet ? 52.0 : 48.0,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.15),
@@ -90,15 +99,15 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                 ),
                 const SizedBox(height: 24),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset('assets/DEM.png', width: 56, height: 56),
+                  borderRadius: BorderRadius.circular(isTablet ? 16 : 12),
+                  child: Image.asset('assets/DEM.png', width: logoSize, height: logoSize),
                 ),
                 const SizedBox(height: 32),
-                const Text(
+                Text(
                   'Entrez votre nom complet',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 28,
+                    fontSize: titleFS,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
                   ),
@@ -163,7 +172,7 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                 const SizedBox(height: 28),
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: btnHeight,
                   child: ElevatedButton(
                     onPressed: _loading ? null : _submit,
                     style: ElevatedButton.styleFrom(
@@ -190,7 +199,9 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
             ),
           ),
         ),
-      ),
+      ),            // Container
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }

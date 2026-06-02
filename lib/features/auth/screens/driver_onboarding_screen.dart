@@ -1,4 +1,5 @@
 import '../../../core/error/app_exception.dart';
+import '../../../core/utils/dem_layout.dart';
 import '../../../core/utils/input_formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -114,7 +115,10 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: Column(
         children: [
           // ── Header gradient ──
           Container(
@@ -141,25 +145,31 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                       ),
                     ]),
                     const SizedBox(height: 12),
-                    Container(
-                      width: 72, height: 72,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
-                        color: Colors.white, size: 36,
-                      ),
-                    ),
+                    Builder(builder: (ctx) {
+                      final t = MediaQuery.of(ctx).size.width > 600;
+                      return Container(
+                        width: t ? 90.0 : 72.0, height: t ? 90.0 : 72.0,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
+                          color: Colors.white, size: t ? 44.0 : 36.0,
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 12),
-                    Text(
-                      _isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
-                      style: const TextStyle(
-                        color: Colors.white, fontSize: 16,
-                        fontWeight: FontWeight.w700, letterSpacing: 1,
-                      ),
-                    ),
+                    Builder(builder: (ctx) {
+                      final t = MediaQuery.of(ctx).size.width > 600;
+                      return Text(
+                        _isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
+                        style: TextStyle(
+                          color: Colors.white, fontSize: t ? 19.0 : 16.0,
+                          fontWeight: FontWeight.w700, letterSpacing: 1,
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -192,12 +202,15 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Votre profil',
-                      style: TextStyle(
-                        color: AppColors.textPrimary, fontSize: 26, fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                    Builder(builder: (ctx) {
+                      final t = MediaQuery.of(ctx).size.width > 600;
+                      return Text(
+                        'Votre profil',
+                        style: TextStyle(
+                          color: AppColors.textPrimary, fontSize: t ? 30.0 : 26.0, fontWeight: FontWeight.w800,
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 6),
                     const Text(
                       'Ces informations seront visibles par les clients.',
@@ -278,6 +291,8 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
           ),
         ],
       ),
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }

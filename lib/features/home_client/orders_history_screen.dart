@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
+import '../../core/utils/dem_layout.dart';
 
 // ── Provider historique client ────────────────────────────────────────────────
 final myOrdersProvider =
@@ -99,7 +100,10 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
     final async = ref.watch(myOrdersProvider);
 
     return Scaffold(
-      body: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: Column(
         children: [
           // ── Header gradient ──
           Container(
@@ -304,7 +308,9 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
             ),
           ),
         ],
-      ),
+      ),          // {W}
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../storage/auth_storage.dart';
 import '../../features/profile/data/profile_repository.dart';
@@ -38,9 +38,11 @@ class AppStartupNotifier extends ChangeNotifier {
     _onboardingSeen  = await AuthStorage.isOnboardingSeen();
     _disclosureSeen  = await AuthStorage.isLocationDisclosureSeen();
 
-    // 3. Statut permission localisation arrière-plan
-    final permStatus = await Permission.locationAlways.status;
-    _locationGranted = permStatus.isGranted;
+    // 3. Statut permission localisation arrière-plan (non disponible sur web)
+    if (!kIsWeb) {
+      final permStatus = await Permission.locationAlways.status;
+      _locationGranted = permStatus.isGranted;
+    }
 
     // 4. Si connecté, résoudre le rôle (rapide : cache d'abord)
     if (_isLoggedIn) {

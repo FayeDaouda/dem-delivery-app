@@ -7,6 +7,7 @@ import '../../../core/widgets/network_error_widget.dart';
 import '../../../features/profile/data/profile_repository.dart';
 import '../data/chef_de_flotte_repository.dart';
 import '../widgets/doc_picker_field.dart';
+import '../../../core/utils/dem_layout.dart';
 
 class ChefDeFlotteRejectedScreen extends StatefulWidget {
   const ChefDeFlotteRejectedScreen({super.key});
@@ -89,7 +90,10 @@ class _State extends State<ChefDeFlotteRejectedScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: _loadingProfile
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: _loadingProfile
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : _loadFailed
               ? NetworkErrorWidget(
@@ -120,17 +124,22 @@ class _State extends State<ChefDeFlotteRejectedScreen> {
                           ),
                         ]),
                         const SizedBox(height: 16),
-                        Container(
-                          width: 60, height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.edit_document, color: Colors.white, size: 28),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text('Corriger mon dossier',
-                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                        Builder(builder: (ctx) {
+                          final t = MediaQuery.of(ctx).size.width > 600;
+                          return Column(children: [
+                            Container(
+                              width: t ? 80.0 : 60.0, height: t ? 80.0 : 60.0,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.edit_document, color: Colors.white, size: t ? 38.0 : 28.0),
+                            ),
+                            const SizedBox(height: 12),
+                            Text('Corriger mon dossier',
+                              style: TextStyle(color: Colors.white, fontSize: t ? 24.0 : 20.0, fontWeight: FontWeight.w800)),
+                          ]);
+                        }),
                         const SizedBox(height: 4),
                         Text('Modifiez les documents et resoumettez',
                           style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
@@ -236,7 +245,9 @@ class _State extends State<ChefDeFlotteRejectedScreen> {
                   ),
                 ),
               ],
-            ),
+            ),          // Column
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }
@@ -307,7 +318,7 @@ class _GradientButton extends StatelessWidget {
   const _GradientButton({required this.label, required this.onTap, this.loading = false});
   @override
   Widget build(BuildContext context) => Container(
-    height: 52,
+    height: DemLayout.isTablet(context) ? 56.0 : 52.0,
     decoration: BoxDecoration(
       gradient: const LinearGradient(
         colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],

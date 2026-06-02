@@ -3,6 +3,7 @@ import '../../core/error/app_exception.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
+import '../../../core/utils/dem_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -320,7 +321,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
-      body: Column(children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: Column(children: [
 
         // ── Header collapsible ────────────────────────────────────────────────
         Container(
@@ -529,6 +533,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           ),
         ),
       ]),
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }

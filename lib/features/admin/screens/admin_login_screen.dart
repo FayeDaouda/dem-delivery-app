@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/dem_layout.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../admin_session.dart';
 
@@ -53,89 +54,99 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet   = DemLayout.isTablet(context);
+    final iconSize   = isTablet ? 90.0 : 72.0;
+    final titleFS    = isTablet ? 32.0 : 28.0;
+    final hPad       = isTablet ? 0.0  : 28.0;
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Retour ──
-                GestureDetector(
-                  onTap: () => context.pop(),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                    ),
-                    child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 16),
-                  ),
-                ),
-                const SizedBox(height: 48),
-
-                // ── Icône ──
-                Container(
-                  width: 72, height: 72,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.5),
-                  ),
-                  child: const Icon(Icons.admin_panel_settings_outlined, color: Colors.white, size: 36),
-                ),
-                const SizedBox(height: 20),
-
-                // ── Titre ──
-                const Text('Administration',
-                    style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                const Text('Connectez-vous avec vos identifiants admin',
-                    style: TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(height: 40),
-
-                // ── Email ──
-                const Text('Email',
-                    style: TextStyle(color: Colors.white70, fontSize: 12,
-                        fontWeight: FontWeight.w600, letterSpacing: 0.5)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _inputDeco('admin@dem.sn', Icons.email_outlined),
-                ),
-                const SizedBox(height: 20),
-
-                // ── Mot de passe ──
-                const Text('Mot de passe',
-                    style: TextStyle(color: Colors.white70, fontSize: 12,
-                        fontWeight: FontWeight.w600, letterSpacing: 0.5)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _passCtrl,
-                  obscureText: _obscure,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _inputDeco('••••••••', Icons.lock_outline).copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: Colors.white54, size: 20,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(isTablet ? 28 : hPad, 24, isTablet ? 28 : hPad, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Retour ──
+                    GestureDetector(
+                      onTap: () => context.pop(),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                        ),
+                        child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 16),
                       ),
-                      onPressed: () => setState(() => _obscure = !_obscure),
                     ),
-                  ),
-                  onSubmitted: (_) => _login(),
-                ),
-                const SizedBox(height: 36),
+                    const SizedBox(height: 48),
 
-                // ── Bouton ──
-                GradientButton(label: 'Se connecter', loading: _loading, onTap: _login),
-              ],
+                    // ── Icône ──
+                    Container(
+                      width: iconSize, height: iconSize,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.5),
+                      ),
+                      child: Icon(Icons.admin_panel_settings_outlined, color: Colors.white, size: iconSize * 0.5),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Titre ──
+                    Text('Administration',
+                        style: TextStyle(color: Colors.white, fontSize: titleFS, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    const Text('Connectez-vous avec vos identifiants admin',
+                        style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    const SizedBox(height: 40),
+
+                    // ── Email ──
+                    const Text('Email',
+                        style: TextStyle(color: Colors.white70, fontSize: 12,
+                            fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDeco('admin@dem.sn', Icons.email_outlined),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Mot de passe ──
+                    const Text('Mot de passe',
+                        style: TextStyle(color: Colors.white70, fontSize: 12,
+                            fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _passCtrl,
+                      obscureText: _obscure,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDeco('••••••••', Icons.lock_outline).copyWith(
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            color: Colors.white54, size: 20,
+                          ),
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                        ),
+                      ),
+                      onSubmitted: (_) => _login(),
+                    ),
+                    const SizedBox(height: 36),
+
+                    // ── Bouton ──
+                    GradientButton(label: 'Se connecter', loading: _loading, onTap: _login),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

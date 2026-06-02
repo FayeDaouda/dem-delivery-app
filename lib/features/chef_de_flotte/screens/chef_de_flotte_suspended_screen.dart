@@ -6,6 +6,7 @@ import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/network_error_widget.dart';
 import '../../profile/data/profile_repository.dart';
+import '../../../core/utils/dem_layout.dart';
 
 class ChefDeFlotteSuspendedScreen extends StatefulWidget {
   const ChefDeFlotteSuspendedScreen({super.key});
@@ -49,10 +50,14 @@ class _State extends State<ChefDeFlotteSuspendedScreen> {
     final parts = _suspensionReason?.split('\n') ?? [];
     final motif = parts.isNotEmpty ? parts[0] : null;
     final fix   = parts.length > 1 ? parts.sublist(1).join('\n') : null;
+    final t = DemLayout.isTablet(context);
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: _loading
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: _loading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : _error != null
               ? NetworkErrorWidget(
@@ -71,16 +76,16 @@ class _State extends State<ChefDeFlotteSuspendedScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                       child: Column(children: [
                         Container(
-                          width: 72, height: 72,
+                          width: t ? 90.0 : 72.0, height: t ? 90.0 : 72.0,
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.block_rounded, color: Colors.white, size: 36),
+                          child: Icon(Icons.block_rounded, color: Colors.white, size: t ? 44.0 : 36.0),
                         ),
                         const SizedBox(height: 14),
-                        const Text('Espace suspendu',
-                            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                        Text('Espace suspendu',
+                            style: TextStyle(color: Colors.white, fontSize: t ? 26.0 : 22.0, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
                         Text('Votre espace chef de flotte est temporairement suspendu',
                             style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12),
@@ -205,7 +210,9 @@ class _State extends State<ChefDeFlotteSuspendedScreen> {
                   ),
                 ),
               ],
-            ),
+            ),          // Column
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }

@@ -5,6 +5,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/chef_de_flotte_repository.dart';
 import '../widgets/doc_picker_field.dart';
+import '../../../core/utils/dem_layout.dart';
 
 class ChefDeFlotteOnboardingScreen extends StatefulWidget {
   const ChefDeFlotteOnboardingScreen({super.key});
@@ -59,7 +60,10 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: Column(
         children: [
           // ── Header gradient ──────────────────────────────────────────────
           Container(
@@ -83,17 +87,22 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
                     ),
                   ]),
                   const SizedBox(height: 16),
-                  Container(
-                    width: 60, height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.handshake_outlined, color: Colors.white, size: 30),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Devenir Chef de flotte DEM',
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                  Builder(builder: (ctx) {
+                    final t = MediaQuery.of(ctx).size.width > 600;
+                    return Column(children: [
+                      Container(
+                        width: t ? 80.0 : 60.0, height: t ? 80.0 : 60.0,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.handshake_outlined, color: Colors.white, size: t ? 40.0 : 30.0),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Devenir Chef de flotte DEM',
+                        style: TextStyle(color: Colors.white, fontSize: t ? 24.0 : 20.0, fontWeight: FontWeight.w800)),
+                    ]);
+                  }),
                   const SizedBox(height: 4),
                   Text('Soumettez votre dossier — validation sous 24–48h',
                     style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12),
@@ -177,7 +186,9 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
             ),
           ),
         ],
-      ),
+      ),          // {W}
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }
@@ -251,7 +262,7 @@ class _GradientButton extends StatelessWidget {
   const _GradientButton({required this.label, required this.onTap, this.loading = false});
   @override
   Widget build(BuildContext context) => Container(
-    height: 52,
+    height: DemLayout.isTablet(context) ? 56.0 : 52.0,
     decoration: BoxDecoration(
       gradient: const LinearGradient(
         colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],

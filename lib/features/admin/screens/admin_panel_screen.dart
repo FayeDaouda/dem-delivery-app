@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/dem_layout.dart';
 import '../admin_session.dart';
 import 'admin_acquisition_screen.dart';
 
@@ -196,11 +197,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
                               : RefreshIndicator(
                                   color: AppColors.primary,
                                   onRefresh: _fetch,
-                                  child: ListView.builder(
-                                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                                    itemCount: _requests.length,
-                                    itemBuilder: (_, i) =>
-                                        _RequestCard(driver: _requests[i], onResolve: _resolve),
+                                  child: Center(
+                                    child: ConstrainedBox(
+                                      constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+                                      child: ListView.builder(
+                                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                                        itemCount: _requests.length,
+                                        itemBuilder: (_, i) =>
+                                            _RequestCard(driver: _requests[i], onResolve: _resolve),
+                                      ),
+                                    ),
                                   ),
                                 ),
                 ),

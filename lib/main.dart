@@ -12,11 +12,15 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[DEM] main() started');
 
   // ── Firebase + Crashlytics ─────────────────────────────────────────────────
+  debugPrint('[DEM] Firebase.initializeApp starting...');
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  debugPrint('[DEM] Firebase.initializeApp done');
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[DEM FATAL ERROR] $error\n$stack');
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
@@ -30,6 +34,7 @@ void main() async {
     mapsImplementation.useAndroidViewSurface = true;
   }
 
+  debugPrint('[DEM] runApp() about to be called');
   runApp(const ProviderScope(child: DemApp()));
 }
 

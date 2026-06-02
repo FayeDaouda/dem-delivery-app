@@ -10,6 +10,7 @@ import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/profile/data/profile_repository.dart';
 import '../data/chef_de_flotte_repository.dart';
+import '../../../core/utils/dem_layout.dart';
 
 class ChefDeFlotteProfileScreen extends StatefulWidget {
   const ChefDeFlotteProfileScreen({super.key});
@@ -215,15 +216,19 @@ class _State extends State<ChefDeFlotteProfileScreen> {
     final initials = name.trim().isNotEmpty
         ? name.trim().split(' ').take(2).map((w) => w[0].toUpperCase()).join()
         : '?';
+    final isTablet = DemLayout.isTablet(context);
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: CustomScrollView(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
+          child: CustomScrollView(
         slivers: [
 
           // ── Header ──────────────────────────────────────────────────────
           SliverAppBar(
-            expandedHeight: 230,
+            expandedHeight: isTablet ? 280.0 : 230.0,
             pinned: true,
             backgroundColor: AppColors.primaryDark,
             foregroundColor: Colors.white,
@@ -404,7 +409,9 @@ class _State extends State<ChefDeFlotteProfileScreen> {
             ),
           ),
         ],
-      ),
+      ),          // CustomScrollView
+        ),          // ConstrainedBox
+      ),            // Center
     );
   }
 }

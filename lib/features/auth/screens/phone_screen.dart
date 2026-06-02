@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/dem_layout.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../providers/auth_provider.dart';
 
@@ -61,6 +62,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
 
   Future<void> _sendOtp() async {
     if (!_canContinue) return;
+    assert(() { debugPrint('[PhoneScreen] _sendOtp called, phone=${_phoneController.text}'); return true; }());
     // On préfixe avec +221 pour former un numéro E.164 complet
     final phone = '+221${_phoneController.text.replaceAll(' ', '').trim()}';
     _focusNode.unfocus();
@@ -109,13 +111,23 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
           child: LayoutBuilder(
             builder: (ctx, constraints) {
               final keyboardUp = MediaQuery.viewInsetsOf(ctx).bottom > 50;
+              final isTablet   = DemLayout.isTablet(ctx);
 
               return SingleChildScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight - 48),
-                  child: Column(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isTablet ? 0 : 28,
+                  vertical: 24,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight - 48,
+                    maxWidth: DemLayout.formMaxWidth(ctx),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isTablet ? 28 : 0),
+                    child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -240,11 +252,22 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                         loading: loading,
                         enabled: _canContinue,
                         onTap: _sendOtp,
+                        onDisabledTap: () {
+                          _focusNode.requestFocus();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Entrez votre numéro de téléphone pour continuer.'),
+                              duration: Duration(seconds: 3),
+                            ),
+                          );
+                        },
                       ),
                     ],
-                  ),
-                ),
-              );
+                  ),        // Column
+                ),          // Padding
+              ),            // ConstrainedBox
+            ),              // Center
+          );                // SingleChildScrollView
             },
           ),
         ),
