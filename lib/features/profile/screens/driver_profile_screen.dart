@@ -2,7 +2,7 @@ import 'dart:io';
 import '../../../core/error/app_exception.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
-import '../../../core/utils/dem_layout.dart';
+
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,7 +28,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>>? _badgesConfig;
   String? _photoPath;
-  bool _headerCollapsed = false;
   static const _photoKey = 'driver_profile_photo';
   final _profileRepo    = ProfileRepository();
   final _scrollCtrl     = ScrollController();
@@ -38,7 +37,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     super.initState();
     _load();
     LocaleService.notifier.addListener(_onLangChange);
-    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
@@ -50,10 +48,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   void _onLangChange() => setState(() {});
 
-  void _onScroll() {
-    final collapsed = _scrollCtrl.offset > 60;
-    if (collapsed != _headerCollapsed) setState(() => _headerCollapsed = collapsed);
-  }
+
 
   Future<void> _load() async {
     final user  = await AuthStorage.getUser();
@@ -542,10 +537,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final phoneChangeStatus = _user?['phoneChangeStatus'] as String?;
 
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
-          child: Column(
+      backgroundColor: const Color(0xFFF4F6FA),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Header ──
           Container(
@@ -569,14 +563,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       ],
                     ),
                   ),
-                  // Section dépliable : avatar + nom + badge
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                    child: _headerCollapsed
-                        ? const SizedBox.shrink()
-                        : Column(
-                            children: [
+                  // Avatar + nom + badge
+                  Column(
+                    children: [
                               const SizedBox(height: 4),
                               // Avatar modifiable
                               GestureDetector(
@@ -632,7 +621,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                               ],
                             ],
                           ),
-                  ),
                 ],
               ),
             ),
@@ -644,7 +632,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               color: const Color(0xFFF4F6FA),
               child: ListView(
                 controller: _scrollCtrl,
-                physics: const BouncingScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 children: [
 
@@ -736,8 +724,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           ),
         ],
       ),
-        ),          // ConstrainedBox
-      ),            // Center
     );
   }
 

@@ -60,10 +60,7 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9FF),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
-          child: CustomScrollView(
+      body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: DemLayout.isTablet(context) ? 200.0 : 160.0,
@@ -198,9 +195,7 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
                       ),
                     ),
         ],
-      ),          // CustomScrollView
-        ),          // ConstrainedBox
-      ),            // Center
+      ),
       floatingActionButton: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(

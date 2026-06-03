@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
-import '../../core/utils/dem_layout.dart';
+
 
 // ── Provider historique client ────────────────────────────────────────────────
 final myOrdersProvider =
@@ -100,17 +100,17 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
     final async = ref.watch(myOrdersProvider);
 
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
-          child: Column(
+      backgroundColor: const Color(0xFFF4F6FA),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Header gradient ──
+          // ── Header gradient FULL WIDTH ──
           Container(
             decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
             child: SafeArea(
               bottom: false,
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -155,162 +155,161 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
             ),
           ),
 
-          // ── Filtres statut ──
-          Container(
-            color: const Color(0xFFF4F6FA),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _statusFilters.map((f) {
-                  final active = _statusFilter == f['key'];
-                  return GestureDetector(
-                    onTap: () => setState(() => _statusFilter = f['key']!),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.only(right: 8, bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: active ? AppColors.primary : const Color(0xFFEEF0F5),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: active ? AppColors.primary : Colors.transparent),
-                      ),
-                      child: Text(
-                        f['label']!,
-                        style: TextStyle(
-                          color: active ? Colors.white : const Color(0xFF7B8CA0),
-                          fontSize: 13,
-                          fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+          // ── Filtres + liste pleine largeur ──
+          Expanded(
+            child: Column(
+              children: [
+                    // ── Filtres statut ──
+                    Container(
+                      color: const Color(0xFFF4F6FA),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: _statusFilters.map((f) {
+                            final active = _statusFilter == f['key'];
+                            return GestureDetector(
+                              onTap: () => setState(() => _statusFilter = f['key']!),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                margin: const EdgeInsets.only(right: 8, bottom: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: active ? AppColors.primary : const Color(0xFFEEF0F5),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: active ? AppColors.primary : Colors.transparent),
+                                ),
+                                child: Text(
+                                  f['label']!,
+                                  style: TextStyle(
+                                    color: active ? Colors.white : const Color(0xFF7B8CA0),
+                                    fontSize: 13,
+                                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
 
-          // ── Filtres période ──
-          Container(
-            color: const Color(0xFFF4F6FA),
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _periodFilters.map((f) {
-                  final active = _periodFilter == f['key'];
-                  return GestureDetector(
-                    onTap: () => setState(() => _periodFilter = f['key']!),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.only(right: 8, bottom: 4),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: active
-                            ? AppColors.primary.withValues(alpha: 0.15)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: active
-                              ? AppColors.primary.withValues(alpha: 0.6)
-                              : const Color(0xFFDDE3EC),
+                    // ── Filtres période ──
+                    Container(
+                      color: const Color(0xFFF4F6FA),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: _periodFilters.map((f) {
+                            final active = _periodFilter == f['key'];
+                            return GestureDetector(
+                              onTap: () => setState(() => _periodFilter = f['key']!),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                margin: const EdgeInsets.only(right: 8, bottom: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: active
+                                      ? AppColors.primary.withValues(alpha: 0.15)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: active
+                                        ? AppColors.primary.withValues(alpha: 0.6)
+                                        : const Color(0xFFDDE3EC),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.calendar_today_outlined,
+                                      size: 11,
+                                      color: active ? AppColors.primary : const Color(0xFF7B8CA0),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      f['label']!,
+                                      style: TextStyle(
+                                        color: active ? AppColors.primary : const Color(0xFF7B8CA0),
+                                        fontSize: 12,
+                                        fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.calendar_today_outlined,
-                            size: 11,
-                            color: active
-                                ? AppColors.primary
-                                : const Color(0xFF7B8CA0),
+                    ),
+
+                    // ── Liste ──
+                    Expanded(
+                      child: Container(
+                        color: const Color(0xFFF4F6FA),
+                        child: async.when(
+                          loading: () => const Center(
+                            child: CircularProgressIndicator(color: AppColors.primary),
                           ),
-                          const SizedBox(width: 5),
-                          Text(
-                            f['label']!,
-                            style: TextStyle(
-                              color: active
-                                  ? AppColors.primary
-                                  : const Color(0xFF7B8CA0),
-                              fontSize: 12,
-                              fontWeight:
-                                  active ? FontWeight.w600 : FontWeight.w400,
+                          error: (e, _) => Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.wifi_off_outlined,
+                                    color: Color(0xFF7B8CA0), size: 48),
+                                const SizedBox(height: 12),
+                                Text(friendlyError(e),
+                                    style: const TextStyle(
+                                        color: Color(0xFF7B8CA0), fontSize: 13),
+                                    textAlign: TextAlign.center),
+                                const SizedBox(height: 16),
+                                TextButton(
+                                  onPressed: () => ref.invalidate(myOrdersProvider),
+                                  child: const Text('Réessayer',
+                                      style: TextStyle(color: AppColors.primary)),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                          data: (orders) {
+                            final filtered = _applyFilters(orders);
+                            if (filtered.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.receipt_long_outlined,
+                                        color: Color(0xFFBCC5D0), size: 64),
+                                    const SizedBox(height: 12),
+                                    const Text('Aucune commande trouvée',
+                                        style: TextStyle(
+                                            color: Color(0xFF7B8CA0), fontSize: 15)),
+                                  ],
+                                ),
+                              );
+                            }
+                            return RefreshIndicator(
+                              color: AppColors.primary,
+                              onRefresh: () async => ref.invalidate(myOrdersProvider),
+                              child: ListView.builder(
+                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                                itemCount: filtered.length,
+                                itemBuilder: (_, i) => _OrderCard(order: filtered[i]),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-
-          // ── Liste ──
-          Expanded(
-            child: Container(
-              color: const Color(0xFFF4F6FA),
-              child: async.when(
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
+                  ],
                 ),
-                error: (e, _) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.wifi_off_outlined,
-                          color: Color(0xFF7B8CA0), size: 48),
-                      const SizedBox(height: 12),
-                      Text(friendlyError(e),
-                          style: const TextStyle(
-                              color: Color(0xFF7B8CA0), fontSize: 13),
-                          textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: () => ref.invalidate(myOrdersProvider),
-                        child: const Text('Réessayer',
-                            style: TextStyle(color: AppColors.primary)),
-                      ),
-                    ],
-                  ),
-                ),
-                data: (orders) {
-                  final filtered = _applyFilters(orders);
-                  if (filtered.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.receipt_long_outlined,
-                              color: Color(0xFFBCC5D0), size: 64),
-                          const SizedBox(height: 12),
-                          const Text('Aucune commande trouvée',
-                              style: TextStyle(
-                                  color: Color(0xFF7B8CA0), fontSize: 15)),
-                        ],
-                      ),
-                    );
-                  }
-                  return RefreshIndicator(
-                    color: AppColors.primary,
-                    onRefresh: () async => ref.invalidate(myOrdersProvider),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) => _OrderCard(order: filtered[i]),
-                    ),
-                  );
-                },
               ),
-            ),
-          ),
         ],
-      ),          // {W}
-        ),          // ConstrainedBox
-      ),            // Center
+      ),
     );
   }
 }

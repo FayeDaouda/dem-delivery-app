@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/dem_layout.dart';
+
 
 // ── Filtres statuts ───────────────────────────────────────────────────────────
 const _statusFilters = [
@@ -109,10 +109,9 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
     final async = ref.watch(_historyProvider);
 
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
-          child: Column(
+      backgroundColor: const Color(0xFFF4F6FA),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Header gradient ──
           Container(
@@ -296,9 +295,7 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
             ),
           ),
         ],
-      ),          // {W}
-        ),          // ConstrainedBox
-      ),            // Center
+      ),
     );
   }
 }

@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import 'data/favorite_addresses_repository.dart';
-import '../../core/utils/dem_layout.dart';
+
 
 const _kIcons = ['📍', '🏠', '💼', '❤️', '🛒', '🏫', '🏥', '🕌', '⭐'];
 const _kMax   = 6;
@@ -94,10 +94,9 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
-          child: Column(children: [
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         // ── Header ──────────────────────────────────────────────────────────
         Container(
           decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
@@ -141,9 +140,8 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
                       ),
                     ),
         ),
-      ]),          // Column
-        ),          // ConstrainedBox
-      ),            // Center
+      ],
+      ),
 
       floatingActionButton: _addresses.length < _kMax
           ? GestureDetector(

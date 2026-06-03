@@ -10,27 +10,43 @@ import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/dem_layout.dart';
 
-class LocationDisclosureScreen extends StatelessWidget {
+class LocationDisclosureScreen extends StatefulWidget {
   const LocationDisclosureScreen({super.key});
 
-  // Continuer : demande toujours la permission système (guideline 5.1.1.iv Apple).
-  // L'utilisateur choisit d'autoriser ou refuser dans la dialog système iOS/Android.
-  // Pas de bouton "Plus tard" — Apple exige que la dialog système apparaisse toujours.
-  Future<void> _continue(BuildContext context) async {
-    await Permission.locationWhenInUse.request();
-    await Permission.locationAlways.request();
-    // Android uniquement : demande l'exemption batterie pour que le foreground
-    // service GPS survive aux optimisations agressives (Xiaomi, Samsung, Huawei…)
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      await Permission.ignoreBatteryOptimizations.request();
-    }
+  @override
+  State<LocationDisclosureScreen> createState() => _LocationDisclosureScreenState();
+}
+
+class _LocationDisclosureScreenState extends State<LocationDisclosureScreen> {
+  bool _loading = false;
+
+  // Guideline 5.1.1.iv — demande la permission système (l'utilisateur choisit dans le dialog).
+  // On ne demande que "whenInUse" ici : iOS interdit de demander "Always" directement
+  // (l'utilisateur doit passer par les Paramètres système). Demander "Always" ici
+  // bloque l'app indéfiniment sur iOS 14+.
+  Future<void> _continue() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+
+    try {
+      await Permission.locationWhenInUse.request();
+      // Android uniquement : exemption batterie pour le foreground service GPS.
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        await Permission.ignoreBatteryOptimizations.request();
+      }
+    } catch (_) {}
+
     await AuthStorage.setLocationDisclosureSeen();
     await AuthStorage.setOnboardingSeen();
-    // Notification permission best-effort — ne bloque pas la navigation si ça échoue
+
+    // Notification best-effort — ne bloque pas si ça échoue ou prend trop de temps.
     try {
-      await NotificationService.requestPermissionAndToken();
+      await NotificationService.requestPermissionAndToken()
+          .timeout(const Duration(seconds: 12));
     } catch (_) {}
-    appStartupNotifier.markDisclosureSeen();  // → GoRouter redirect → /phone
+
+    if (!mounted) return;
+    appStartupNotifier.markDisclosureSeen(); // → GoRouter redirect → /phone
   }
 
   @override
@@ -148,28 +164,37 @@ class LocationDisclosureScreen extends StatelessWidget {
 
                 // ── Bouton principal ───────────────────────────────────────
                 // Texte neutre "Continuer" requis par Apple guideline 5.1.1.iv.
-                // Pas de bouton "Plus tard" — la dialog système doit toujours apparaître.
                 SizedBox(
                   width: double.infinity,
                   height: isTablet ? 60.0 : 56.0,
                   child: ElevatedButton(
-                    onPressed: () => _continue(context),
+                    onPressed: _loading ? null : _continue,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFF04317C),
+                      disabledBackgroundColor: Colors.white.withValues(alpha: 0.7),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Continuer',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
+                    child: _loading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Color(0xFF04317C),
+                            ),
+                          )
+                        : const Text(
+                            'Continuer',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
                   ),
                 ),
 

@@ -220,10 +220,7 @@ class _State extends State<ChefDeFlotteProfileScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
-          child: CustomScrollView(
+      body: CustomScrollView(
         slivers: [
 
           // ── Header ──────────────────────────────────────────────────────
@@ -409,9 +406,7 @@ class _State extends State<ChefDeFlotteProfileScreen> {
             ),
           ),
         ],
-      ),          // CustomScrollView
-        ),          // ConstrainedBox
-      ),            // Center
+      ),
     );
   }
 }

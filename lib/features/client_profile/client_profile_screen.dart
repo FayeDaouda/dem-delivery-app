@@ -3,7 +3,7 @@ import '../../core/error/app_exception.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
-import '../../../core/utils/dem_layout.dart';
+
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -321,12 +321,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
-          child: Column(children: [
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
 
-        // ── Header collapsible ────────────────────────────────────────────────
+        // ── Header gradient FULL WIDTH ────────────────────────────────────────
         Container(
           decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
           child: SafeArea(
@@ -433,7 +432,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           ),
         ),
 
-        // ── Corps scrollable ──────────────────────────────────────────────────
+        // ── Corps scrollable pleine largeur ──────────────────────────────────
         Expanded(
           child: RefreshIndicator(
             onRefresh: _fetchProfile,
@@ -532,10 +531,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             ),
           ),
         ),
-      ]),
-        ),          // ConstrainedBox
-      ),            // Center
-    );
+      ],
+    ),
+  );
   }
 }
 

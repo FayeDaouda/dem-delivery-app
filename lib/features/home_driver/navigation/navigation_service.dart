@@ -53,17 +53,15 @@ class NavigationService {
     );
   }
 
-  /// Demande la permission et retourne la première position précise (≤ 50 m).
-  /// Attend jusqu'à 8s pour un fix GPS propre, sinon fallback sur ce qui est disponible.
-  /// Retourne null si l'accès est refusé.
-  static Future<Position?> requestAndGetPosition() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
+  /// Retourne la position actuelle sans jamais afficher de dialog de permission.
+  /// La permission doit être demandée en amont via LocationDisclosureScreen.
+  /// Fallback sur Dakar si GPS indisponible (simulateur, permission refusée).
+  static Future<Position> requestAndGetPosition() async {
+    // Vérification silencieuse — jamais de requestPermission() ici
+    final permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      return null;
+      return _dakarFallback();
     }
     try {
       return await Geolocator.getPositionStream(
@@ -76,18 +74,39 @@ class NavigationService {
           .first
           .timeout(const Duration(seconds: 8));
     } catch (_) {
-      // Timeout ou pas de GPS (intérieur) : prendre la meilleure position disponible
-      return Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-        ),
-      );
+      // Timeout GPS précis → tenter une position approximative (réseau/WiFi)
+      try {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
+        ).timeout(const Duration(seconds: 5));
+      } catch (_) {
+        return _dakarFallback();
+      }
     }
   }
 
+  static Position _dakarFallback() => Position(
+    latitude: 14.6937,
+    longitude: -17.4441,
+    timestamp: DateTime.now(),
+    accuracy: 999,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+    isMocked: kDebugMode,
+  );
+
   /// Stream de positions GPS en temps réel.
-  static Stream<Position> get positionStream =>
-      Geolocator.getPositionStream(locationSettings: _settings);
+  /// Ne démarre que si la permission est accordée — évite le flood sur simulateur.
+  static Stream<Position> get positionStream async* {
+    final perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.always || perm == LocationPermission.whileInUse) {
+      yield* Geolocator.getPositionStream(locationSettings: _settings);
+    }
+  }
 
   /// Distance en mètres entre une position GPS et une cible.
   static double distanceTo(Position from, LatLng to) =>

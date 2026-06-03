@@ -97,13 +97,16 @@ class ReferralCard extends StatelessWidget {
                           width: 1.5),
                     ),
                     child: Column(children: [
-                      Text(
-                        code.toUpperCase(),
-                        style: const TextStyle(
-                          color: AppColors.primaryDark,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 4,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          code.toUpperCase(),
+                          style: const TextStyle(
+                            color: AppColors.primaryDark,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 4,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 4),

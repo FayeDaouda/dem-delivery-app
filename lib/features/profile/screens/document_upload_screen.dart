@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/dem_toast.dart';
-import '../../../core/utils/dem_layout.dart';
+
 
 // Groupes de documents obligatoires (certains ont recto+verso)
 class _DocGroup {
@@ -161,10 +161,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     final allDone  = uploaded == total;
 
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
-          child: Column(
+      backgroundColor: const Color(0xFFF4F6FA),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Header ──
           Container(
@@ -309,9 +308,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                   ),
           ),
         ],
-      ),          // {W}
-        ),          // ConstrainedBox
-      ),            // Center
+      ),
     );
   }
 }
