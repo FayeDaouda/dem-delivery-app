@@ -16,12 +16,13 @@ import GoogleMaps
     // super crée le FlutterViewController et la fenêtre — appeler avant d'accéder à window.
     let outcome = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
-    // Expose la clé Maps au côté Dart via MethodChannel.
+    // Expose la clé HTTP Maps (sans restriction d'app) au côté Dart via MethodChannel.
+    let httpKey = Bundle.main.object(forInfoDictionaryKey: "MapsHttpApiKey") as? String ?? mapsKey
     if let controller = window?.rootViewController as? FlutterViewController {
       FlutterMethodChannel(name: "dem/config", binaryMessenger: controller.binaryMessenger)
         .setMethodCallHandler { call, result in
           if call.method == "getMapsApiKey" {
-            result(mapsKey)
+            result(httpKey)
           } else {
             result(FlutterMethodNotImplemented)
           }

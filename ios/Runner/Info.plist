@@ -46,9 +46,11 @@
 	<string>DEM peut enregistrer des photos dans votre galerie.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>DEM accède à votre galerie pour importer vos documents d'identité, votre permis de conduire ou votre photo de profil.</string>
-	<!-- Clé Maps injectée depuis SecretKeys.xcconfig au build — jamais hardcodée -->
+	<!-- Clés Maps injectées depuis SecretKeys.xcconfig au build — jamais hardcodées -->
 	<key>MapsApiKey</key>
 	<string>$(MAPS_API_KEY)</string>
+	<key>MapsHttpApiKey</key>
+	<string>$(MAPS_HTTP_API_KEY)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
