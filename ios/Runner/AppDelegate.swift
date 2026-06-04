@@ -12,6 +12,18 @@ import GoogleMaps
     let mapsKey = Bundle.main.object(forInfoDictionaryKey: "MapsApiKey") as? String ?? ""
     GMSServices.provideAPIKey(mapsKey)
     GeneratedPluginRegistrant.register(with: self)
+
+    // Expose la clé Maps au côté Dart via MethodChannel.
+    let controller = window?.rootViewController as! FlutterViewController
+    FlutterMethodChannel(name: "dem/config", binaryMessenger: controller.binaryMessenger)
+      .setMethodCallHandler { call, result in
+        if call.method == "getMapsApiKey" {
+          result(mapsKey)
+        } else {
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }

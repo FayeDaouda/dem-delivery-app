@@ -1,10 +1,20 @@
+import 'package:flutter/services.dart';
+
 class AppConfig {
-  // ⚠️  NE JAMAIS mettre la vraie clé ici.
-  // Passer --dart-define=MAPS_API_KEY=<clé> à la commande de build :
-  //   flutter build apk  --dart-define=MAPS_API_KEY=AIza...
-  //   flutter build ipa  --dart-define=MAPS_API_KEY=AIza...
-  // En debug, la clé vient aussi de --dart-define (voir launch.json / run config).
-  static const mapsApiKey = String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
+  // Clé lue au démarrage via MethodChannel (iOS) ou --dart-define (Android/CI).
+  // Appeler AppConfig.init() dans main() avant runApp().
+  static String _mapsApiKey = String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
+  static String get mapsApiKey => _mapsApiKey;
+
+  static Future<void> init() async {
+    if (_mapsApiKey.isEmpty) {
+      try {
+        final key = await const MethodChannel('dem/config')
+            .invokeMethod<String>('getMapsApiKey');
+        if (key != null && key.isNotEmpty) _mapsApiKey = key;
+      } catch (_) {}
+    }
+  }
 
   static const privacyPolicyUrl = 'https://www.dem.sn/privacy';
   static const termsUrl         = 'https://www.dem.sn/terms';

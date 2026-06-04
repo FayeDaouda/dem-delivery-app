@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
 import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
+import 'core/config/app_config.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -15,6 +16,8 @@ void main() async {
   debugPrint('[DEM] main() started');
 
   // ── Firebase + Crashlytics ─────────────────────────────────────────────────
+  await AppConfig.init();
+
   debugPrint('[DEM] Firebase.initializeApp starting...');
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[DEM] Firebase.initializeApp done');
