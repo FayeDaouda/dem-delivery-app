@@ -1147,24 +1147,24 @@ class _ClientNavBar extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _NavItem(
+            Expanded(child: _NavItem(
               icon: Icons.home_rounded,
               label: 'Accueil',
               active: true,
               onTap: () {},
-            ),
-            _NavItem(
+            )),
+            Expanded(child: _NavItem(
               icon: Icons.receipt_long_outlined,
               label: 'Commandes',
               active: false,
               onTap: () => context.push('/orders/my'),
-            ),
-            _NavItem(
+            )),
+            Expanded(child: _NavItem(
               icon: Icons.person_outline_rounded,
               label: 'Profil',
               active: false,
               onTap: () => context.push('/client/profile'),
-            ),
+            )),
           ],
         ),
       ),
@@ -1190,28 +1190,26 @@ class _NavItem extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 80,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: active ? AppColors.primary : AppColors.textSecondary,
+            size: 26,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
               color: active ? AppColors.primary : AppColors.textSecondary,
-              size: 26,
+              fontSize: 11,
+              fontWeight: active ? FontWeight.w700 : FontWeight.normal,
             ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                color: active ? AppColors.primary : AppColors.textSecondary,
-                fontSize: 11,
-                fontWeight:
-                    active ? FontWeight.w700 : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
