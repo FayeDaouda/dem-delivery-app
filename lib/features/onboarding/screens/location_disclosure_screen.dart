@@ -39,11 +39,12 @@ class _LocationDisclosureScreenState extends State<LocationDisclosureScreen> {
     await AuthStorage.setLocationDisclosureSeen();
     await AuthStorage.setOnboardingSeen();
 
-    // Notification best-effort — ne bloque pas si ça échoue ou prend trop de temps.
-    try {
-      await NotificationService.requestPermissionAndToken()
-          .timeout(const Duration(seconds: 12));
-    } catch (_) {}
+    // Permission notif + token FCM en arrière-plan — ne bloque pas la navigation.
+    // La dialog système iOS apparaît après la navigation vers /phone, ce qui est
+    // acceptable et évite que le reviewer voie un spinner de 10-20 s sans réaction.
+    NotificationService.requestPermissionAndToken()
+        .timeout(const Duration(seconds: 20))
+        .catchError((_) {});
 
     if (!mounted) return;
     appStartupNotifier.markDisclosureSeen(); // → GoRouter redirect → /phone

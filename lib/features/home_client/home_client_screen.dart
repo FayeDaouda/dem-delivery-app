@@ -425,6 +425,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         if (!mounted) return;
         final shownIds = prefs.getStringList(_kDeliveredKey) ?? [];
         if (!shownIds.contains(orderId)) {
+          // Persiste immédiatement : si _checkPendingOrder est rappelé avant que
+          // addPostFrameCallback s'exécute (socket, retour écran), l'ID est déjà marqué.
+          shownIds.add(orderId);
+          await prefs.setStringList(_kDeliveredKey, shownIds);
+          if (!mounted) return;
           setState(() => _activeOrders = activeList);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _showDeliveredDialog(delivered, prefs, shownIds);
@@ -456,13 +461,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     SharedPreferences prefs,
     List<String> shownIds,
   ) {
-    final orderId  = order['id'] as String? ?? '';
     final price    = (order['price'] as num?)?.toInt() ?? 0;
     final delivery = order['deliveryAddress'] as String? ?? '—';
-
-    // Persiste immédiatement l'ID pour ne plus jamais afficher ce dialog
-    shownIds.add(orderId);
-    prefs.setStringList(_kDeliveredKey, shownIds);
 
     Timer? autoClose;
 
