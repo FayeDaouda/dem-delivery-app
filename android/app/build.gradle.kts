@@ -55,7 +55,14 @@ android {
         if (localPropsFile.exists()) localProps.load(localPropsFile.inputStream())
         val googleMapsKey = mapsProps.getProperty("GOOGLE_MAPS_API_KEY")
             ?: localProps.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
+        val mapsHttpKey = mapsProps.getProperty("MAPS_HTTP_API_KEY")
+            ?: localProps.getProperty("MAPS_HTTP_API_KEY") ?: googleMapsKey
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsKey
+        buildConfigField("String", "MAPS_HTTP_API_KEY", "\"$mapsHttpKey\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
