@@ -21,6 +21,7 @@ import '../home_driver/navigation/directions_service.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
 import '../../core/map/poi_data.dart';
+import '../../core/map/poi_service.dart';
 
 const _dakar = LatLng(14.6937, -17.4441);
 
@@ -40,7 +41,8 @@ class _HomeDriverThiakScreenState
   String? _mapStyle;
   BitmapDescriptor? _driverIcon;
   double _currentZoom = 15.5;
-  PoiIconSet? _poiIconSet;
+  PoiIconSet?     _poiIconSet;
+  List<PoiPoint>? _pois;
 
   // ── Pulse animation ───────────────────────────────────────────────────────
   late final AnimationController _pulseCtrl;
@@ -88,8 +90,10 @@ class _HomeDriverThiakScreenState
     _buildDriverIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
     });
-    buildPoiIconSet().then((set) {
-      if (mounted) setState(() => _poiIconSet = set);
+    PoiService.loadPois().then((pois) {
+      buildPoiIconSet(pois).then((set) {
+        if (mounted) setState(() { _pois = pois; _poiIconSet = set; });
+      });
     });
     _startGPS();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -305,8 +309,8 @@ class _HomeDriverThiakScreenState
         zIndexInt: 2,
       ));
     }
-    if (_poiIconSet != null) {
-      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom));
+    if (_poiIconSet != null && _pois != null) {
+      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom, _pois!));
     }
     return markers;
   }
