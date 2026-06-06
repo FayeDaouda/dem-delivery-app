@@ -249,7 +249,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   }
 
   void _onPosition(Position position) {
-    if (!mounted || position.accuracy > NavigationService.maxAccuracyMeters) return;
+    if (!mounted) return;
     setState(() {
       _clientPosition = position;
       if (position.heading >= 0) _travelHeading = position.heading;

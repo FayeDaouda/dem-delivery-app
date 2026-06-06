@@ -335,7 +335,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   bool _firstPositionSent = false;
 
   void _onPosition(Position position) {
-    if (!mounted || position.accuracy > NavigationService.maxAccuracyMeters) return;
+    if (!mounted) return;
     setState(() => _driverPosition = position);
     if (_autoFollow) _centerOn(position);
     _updateDriverScreenPos();

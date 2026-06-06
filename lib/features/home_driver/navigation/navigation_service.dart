@@ -57,32 +57,38 @@ class NavigationService {
   /// La permission doit être demandée en amont via LocationDisclosureScreen.
   /// Fallback sur Dakar si GPS indisponible (simulateur, permission refusée).
   static Future<Position> requestAndGetPosition() async {
-    // Vérification silencieuse — jamais de requestPermission() ici
     final permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       return _dakarFallback();
     }
+
+    // 1. Dernière position connue — immédiate, évite le cold start GPS
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) return last;
+    } catch (_) {}
+
+    // 2. Première position du stream, sans filtre d'accuracy (le cold start
+    //    peut prendre 15-30 s pour atteindre 50 m ; on accepte n'importe quelle
+    //    précision pour afficher la vraie position plutôt que Dakar).
     try {
       return await Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.bestForNavigation,
           distanceFilter: 0,
         ),
-      )
-          .where((p) => p.accuracy <= maxAccuracyMeters)
-          .first
-          .timeout(const Duration(seconds: 8));
-    } catch (_) {
-      // Timeout GPS précis → tenter une position approximative (réseau/WiFi)
-      try {
-        return await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
-        ).timeout(const Duration(seconds: 5));
-      } catch (_) {
-        return _dakarFallback();
-      }
-    }
+      ).first.timeout(const Duration(seconds: 12));
+    } catch (_) {}
+
+    // 3. Position réseau/WiFi (rapide, moins précise)
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {}
+
+    return _dakarFallback();
   }
 
   static Position _dakarFallback() => Position(
