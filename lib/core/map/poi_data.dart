@@ -154,11 +154,11 @@ const List<PoiPoint> dakarPois = [
 ];
 
 // ── Construit les 3 tailles d'icônes ─────────────────────────────────────────
-Future<PoiIconSet> buildPoiIconSet() async {
+Future<PoiIconSet> buildPoiIconSet(List<PoiPoint> pois) async {
   final small  = <String, BitmapDescriptor>{};
   final medium = <String, BitmapDescriptor>{};
   final large  = <String, BitmapDescriptor>{};
-  for (final poi in dakarPois) {
+  for (final poi in pois) {
     small[poi.id]  = await _buildPoiTextIcon(poi.name, poi.category, 13.0);
     medium[poi.id] = await _buildPoiTextIcon(poi.name, poi.category, 17.0);
     large[poi.id]  = await _buildPoiTextIcon(poi.name, poi.category, 21.0);
@@ -167,13 +167,14 @@ Future<PoiIconSet> buildPoiIconSet() async {
 }
 
 // ── Construit les markers selon zoom (filtre progressif + collision) ──────────
-Set<Marker> buildPoiMarkersForZoom(PoiIconSet iconSet, double zoom) {
+Set<Marker> buildPoiMarkersForZoom(
+    PoiIconSet iconSet, double zoom, List<PoiPoint> pois) {
   if (zoom < 13.0) return {};
 
   final icons = iconSet.iconsForZoom(zoom);
 
   // Filtre par zoom minimum de la catégorie
-  final visible = dakarPois.where((p) => zoom >= p.category.minZoom).toList();
+  final visible = pois.where((p) => zoom >= p.category.minZoom).toList();
 
   // Tri priorité décroissante → les plus importants passent en premier
   visible.sort((a, b) => b.category.priority.compareTo(a.category.priority));

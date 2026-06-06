@@ -14,6 +14,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/map/poi_data.dart';
+import '../../core/map/poi_service.dart';
 import '../../core/router/app_router.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
@@ -54,7 +55,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   BitmapDescriptor? _locationDotIcon;
 
   // ── POI ───────────────────────────────────────────────────────────────────
-  PoiIconSet? _poiIconSet;
+  PoiIconSet?      _poiIconSet;
+  List<PoiPoint>?  _pois;
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _orderAcceptedSub;
@@ -92,8 +94,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     _buildLocationDotIcon().then((icon) {
       if (mounted) setState(() => _locationDotIcon = icon);
     });
-    buildPoiIconSet().then((set) {
-      if (mounted) setState(() => _poiIconSet = set);
+    PoiService.loadPois().then((pois) {
+      buildPoiIconSet(pois).then((set) {
+        if (mounted) setState(() { _pois = pois; _poiIconSet = set; });
+      });
     });
     _startGPS();
     _loadUser();
@@ -340,8 +344,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         zIndexInt: 10,
       ));
     }
-    if (_poiIconSet != null) {
-      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom));
+    if (_poiIconSet != null && _pois != null) {
+      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom, _pois!));
     }
     return markers;
   }
