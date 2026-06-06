@@ -27,12 +27,12 @@ extension PoiCategoryX on PoiCategory {
 
   Color get color {
     switch (this) {
-      case PoiCategory.quartier:       return const Color(0xFF455A64); // gris-bleu foncé
-      case PoiCategory.hopital:        return const Color(0xFFD32F2F); // rouge vif
-      case PoiCategory.marche:         return const Color(0xFFE65100); // orange foncé
-      case PoiCategory.ecole:          return const Color(0xFF1565C0); // bleu foncé
-      case PoiCategory.stationBus:     return const Color(0xFF00695C); // teal foncé
-      case PoiCategory.stationEssence: return const Color(0xFF2E7D32); // vert foncé
+      case PoiCategory.quartier:       return const Color(0xFF37474F); // bleu-ardoise sobre
+      case PoiCategory.hopital:        return const Color(0xFF04317C); // bleu marine (brand)
+      case PoiCategory.marche:         return const Color(0xFF0D47A1); // bleu foncé
+      case PoiCategory.ecole:          return const Color(0xFF1565C0); // bleu moyen
+      case PoiCategory.stationBus:     return const Color(0xFF01579B); // bleu cobalt
+      case PoiCategory.stationEssence: return const Color(0xFF283593); // bleu indigo
     }
   }
 
