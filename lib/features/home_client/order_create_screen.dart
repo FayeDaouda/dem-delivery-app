@@ -189,7 +189,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     setState(() => _loadingGps = true);
     try {
       final pos = await NavigationService.requestAndGetPosition();
-      if (pos != null && mounted) {
+      if (mounted) {
         final ll = LatLng(pos.latitude, pos.longitude);
         _currentCameraPos = ll;
         _centerMap(ll);
@@ -728,7 +728,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
             onCameraIdle: () => setState(() => _isMapMoving = false),
             polylines: polylines,
             markers: markers,
-            myLocationEnabled: true,
+            myLocationEnabled: false,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             compassEnabled: false,

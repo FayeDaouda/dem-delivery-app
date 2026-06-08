@@ -326,13 +326,21 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   // ── GPS ──────────────────────────────────────────────────────────────────
   Future<void> _startGPS() async {
-    final initial = await NavigationService.requestAndGetPosition();
-    if (initial != null && mounted) {
-      setState(() => _driverPosition = initial);
-      _centerOn(initial);
+    // Étape 1 : affichage instantané depuis le cache app (toujours GPS, jamais antenne réseau)
+    final cached = await NavigationService.getCachedPosition();
+    if (cached != null && mounted) {
+      setState(() => _driverPosition = cached);
+      _centerOn(cached);
     }
 
+    // Étape 2 : position fraîche — requestLocation() sur iOS, jamais de cache
+    final fresh = await NavigationService.requestAndGetPosition();
     if (!mounted) return;
+    setState(() => _driverPosition = fresh);
+    _centerOn(fresh);
+    NavigationService.savePosition(fresh);
+
+    // Étape 3 : stream continu
     _locationSub = NavigationService.positionStream.listen(_onPosition);
   }
 
