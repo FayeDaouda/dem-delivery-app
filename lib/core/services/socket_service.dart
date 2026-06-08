@@ -108,6 +108,12 @@ class SocketService {
           _expiredOrderController.add(data['orderId'] as String);
         }
       })
+      ..on('order:taken', (data) {
+        // Un autre driver du broadcast a accepté — même comportement qu'une expiration
+        if (data is Map && data['orderId'] != null) {
+          _expiredOrderController.add(data['orderId'] as String);
+        }
+      })
       ..on('order:accepted', (data) {
         if (data is Map) {
           _orderAcceptedController.add(Map<String, dynamic>.from(data));
