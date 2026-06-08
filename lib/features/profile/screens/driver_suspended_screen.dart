@@ -1,6 +1,7 @@
 import '../../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../profile/data/profile_repository.dart';
@@ -33,6 +34,99 @@ class _State extends State<DriverSuspendedScreen> {
       if (mounted) { setState(() => _loading = false); }
     }
   }
+
+  Future<void> _contactSupport() async {
+    final phone = '+221784448524';
+    final wa    = '221784448524';
+    final msg   = Uri.encodeComponent(
+      'Bonjour, mon compte livreur DEM a été suspendu. Je souhaite obtenir des informations sur la réactivation.',
+    );
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
+          ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(child: Container(
+              width: 36, height: 3,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.30),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            )),
+            const SizedBox(height: 20),
+            const Text('Contacter le support',
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            Text('Notre équipe peut vous aider à réactiver votre compte.',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 13, height: 1.4),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            _contactTile(
+              icon: Icons.phone_rounded, color: const Color(0xFF22C55E),
+              label: 'Appeler le support', sub: phone,
+              onTap: () async {
+                final uri = Uri.parse('tel:$phone');
+                if (await canLaunchUrl(uri)) launchUrl(uri);
+              },
+            ),
+            const SizedBox(height: 10),
+            _contactTile(
+              icon: Icons.chat_rounded, color: const Color(0xFF25D366),
+              label: 'WhatsApp support', sub: 'Message pré-rempli',
+              onTap: () async {
+                final uri = Uri.parse('https://wa.me/$wa?text=$msg');
+                if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _contactTile({
+    required IconData icon, required Color color,
+    required String label, required String sub,
+    required VoidCallback onTap,
+  }) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 38, height: 38,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.18), shape: BoxShape.circle),
+          child: Icon(icon, color: color, size: 19),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text(sub, style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 12)),
+        ])),
+        Icon(Icons.arrow_forward_ios, color: color.withValues(alpha: 0.60), size: 14),
+      ]),
+    ),
+  );
 
   Future<void> _logout() async {
     await AuthStorage.clear();
@@ -147,7 +241,7 @@ class _State extends State<DriverSuspendedScreen> {
                             _GradientButton(
                               label: 'Contacter le support',
                               icon: Icons.support_agent_outlined,
-                              onTap: () {},
+                              onTap: _contactSupport,
                             ),
                           ]),
                         ),
@@ -212,7 +306,7 @@ class _InfoCard extends StatelessWidget {
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: iconColor)),
         const SizedBox(height: 4),
-        Text(body, style: const TextStyle(fontSize: 13, height: 1.4)),
+        Text(body, style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.black87)),
       ])),
     ]),
   );
