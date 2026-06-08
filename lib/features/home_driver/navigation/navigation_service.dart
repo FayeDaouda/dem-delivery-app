@@ -63,15 +63,10 @@ class NavigationService {
       return _dakarFallback();
     }
 
-    // 1. Dernière position connue — immédiate, évite le cold start GPS
-    try {
-      final last = await Geolocator.getLastKnownPosition();
-      if (last != null) return last;
-    } catch (_) {}
-
-    // 2. Première position du stream, sans filtre d'accuracy (le cold start
-    //    peut prendre 15-30 s pour atteindre 50 m ; on accepte n'importe quelle
-    //    précision pour afficher la vraie position plutôt que Dakar).
+    // Première position du stream sans filtre d'accuracy.
+    // On n'utilise PAS getLastKnownPosition() : il retourne un cache potentiellement
+    // vieux de plusieurs heures et affiche une position incorrecte au démarrage.
+    // Sans le filtre accuracy, le stream fournit une vraie position en 1-3 s.
     try {
       return await Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
@@ -81,7 +76,7 @@ class NavigationService {
       ).first.timeout(const Duration(seconds: 12));
     } catch (_) {}
 
-    // 3. Position réseau/WiFi (rapide, moins précise)
+    // Fallback : position réseau/WiFi (rapide, moins précise)
     try {
       return await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
