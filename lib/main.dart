@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -28,6 +29,11 @@ void main() async {
     return true;
   };
 
+  // ── Écran de secours en production — jamais d'écran rouge/blanc pour le grand public ──
+  if (kReleaseMode) {
+    ErrorWidget.builder = (details) => const _FriendlyErrorScreen();
+  }
+
   // ── Push notifications (canaux + listeners uniquement, sans dialog de permission) ─
   NotificationService.setup().timeout(const Duration(seconds: 5)).catchError((_) {});
 
@@ -39,6 +45,26 @@ void main() async {
 
   debugPrint('[DEM] runApp() about to be called');
   runApp(const ProviderScope(child: DemApp()));
+}
+
+/// Remplace l'écran rouge/blanc de Flutter en production par un message
+/// neutre — affiché si un widget plante de façon inattendue.
+class _FriendlyErrorScreen extends StatelessWidget {
+  const _FriendlyErrorScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.background,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(24),
+      child: const Text(
+        'Une erreur est survenue. Veuillez réessayer.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+      ),
+    );
+  }
 }
 
 class DemApp extends StatelessWidget {

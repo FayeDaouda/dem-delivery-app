@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../admin_session.dart';
@@ -104,7 +105,7 @@ class _AdminAcquisitionScreenState extends State<AdminAcquisitionScreen>
       await AdminSession.dio.put('/admin/forfait/config', data: {'active': active});
       await _loadForfait();
       _snack(active ? 'Forfait activé ✓' : 'Forfait désactivé', success: active);
-    } catch (e) { _snack('Erreur : $e', success: false); }
+    } catch (e) { _snack(friendlyError(e), success: false); }
   }
 
   Future<void> _saveForfaitAmount() async {
@@ -114,7 +115,7 @@ class _AdminAcquisitionScreenState extends State<AdminAcquisitionScreen>
       await AdminSession.dio.put('/admin/forfait/config', data: {'amount': amount});
       await _loadForfait();
       _snack('Montant mis à jour : $amount FCFA/jour ✓');
-    } catch (e) { _snack('Erreur : $e', success: false); }
+    } catch (e) { _snack(friendlyError(e), success: false); }
   }
 
   Future<void> _processForfait() async {
@@ -129,7 +130,7 @@ class _AdminAcquisitionScreenState extends State<AdminAcquisitionScreen>
       final charged = r.data['charged'] as int? ?? 0;
       _snack('$charged driver(s) prélevé(s) aujourd\'hui ✓');
       await _loadForfait();
-    } catch (e) { _snack('Erreur : $e', success: false); }
+    } catch (e) { _snack(friendlyError(e), success: false); }
     if (mounted) setState(() => _processingForfait = false);
   }
 

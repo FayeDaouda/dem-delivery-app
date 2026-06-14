@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/error/app_exception.dart';
 import '../../features/deliveries/data/orders_repository.dart';
 
 // ── Types de problèmes ────────────────────────────────────────────────────────
@@ -93,7 +94,7 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red),
         );
       }
     } finally {
