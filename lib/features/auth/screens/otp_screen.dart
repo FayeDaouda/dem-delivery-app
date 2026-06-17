@@ -82,10 +82,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       return;
     }
 
-    final role        = user['role'] as String;
-    final vehicleType = user['vehicleType'] as String?;
-    final isActive    = user['isActive'] as bool? ?? true;
-    final chefStatus  = user['chefDeFlotteStatus'] as String?;
+    final role            = user['role'] as String;
+    final vehicleType     = user['vehicleType'] as String?;
+    final isActive        = user['isActive'] as bool? ?? true;
+    final chefStatus      = user['chefDeFlotteStatus'] as String?;
+    final proStatus       = user['proStatus'] as String?;
+    final proBusinessName = user['proBusinessName'] as String?;
 
     // Notifie le router que l'utilisateur est connecté → évite les redirects erronés
     appStartupNotifier.markLoggedIn(
@@ -93,6 +95,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       vehicle:  vehicleType,
       active:   isActive,
       chef:     chefStatus,
+      pro:      proStatus,
+      proDone:  proBusinessName?.isNotEmpty ?? false,
     );
 
     if (role == 'DRIVER') {
@@ -104,6 +108,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       else if (chefStatus == 'PENDING')  { context.go('/chef-de-flotte/pending'); }
       else if (chefStatus == 'REJECTED') { context.go('/chef-de-flotte/rejected'); }
       else                               { context.go('/chef-de-flotte/onboarding'); }
+    } else if (role == 'DEM_PRO') {
+      context.go(appStartupNotifier.homeForRole);
     } else {
       context.go('/client/home');
     }

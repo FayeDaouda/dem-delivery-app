@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../dem_pro/theme/dem_pro_colors.dart';
 import '../providers/auth_provider.dart';
 
 class RoleSelectionScreen extends ConsumerStatefulWidget {
@@ -31,7 +32,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
     );
 
     // Chaque carte démarre 100ms après la précédente
-    _fades = List.generate(3, (i) {
+    _fades = List.generate(4, (i) {
       final start = 0.08 + i * 0.15;
       return CurvedAnimation(
         parent: _ctrl,
@@ -39,7 +40,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
       );
     });
 
-    _slides = List.generate(3, (i) {
+    _slides = List.generate(4, (i) {
       final start = 0.08 + i * 0.15;
       return Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(
         CurvedAnimation(
@@ -63,11 +64,17 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
       await ref.read(authProvider.notifier).setupProfile(role: role, vehicleType: vehicleType);
       if (!mounted) return;
       // Notifie le router que le rôle est maintenant connu
-      appStartupNotifier.markLoggedIn(userRole: role, vehicle: vehicleType);
+      appStartupNotifier.markLoggedIn(
+        userRole: role,
+        vehicle: vehicleType,
+        pro: role == 'DEM_PRO' ? 'PENDING' : null,
+      );
       if (role == 'DRIVER') {
         context.go('/driver/onboarding?type=$vehicleType');
       } else if (role == 'CHEF_DE_FLOTTE') {
         context.go('/chef-de-flotte/onboarding');
+      } else if (role == 'DEM_PRO') {
+        context.go('/dem-pro/onboarding');
       } else {
         context.go('/client/onboarding');
       }
@@ -190,6 +197,19 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                         color: const Color(0xFF7C3AED),
                         loading: loading,
                         onTap: () => _select('CHEF_DE_FLOTTE'),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    _AnimatedCard(
+                      fade: _fades[3], slide: _slides[3],
+                      child: _RoleCard(
+                        icon: Icons.storefront_outlined,
+                        title: 'DEM Pro',
+                        subtitle: 'Je gère des livraisons pour mon business',
+                        color: DemProColors.accent,
+                        loading: loading,
+                        onTap: () => _select('DEM_PRO'),
                       ),
                     ),
                   ],

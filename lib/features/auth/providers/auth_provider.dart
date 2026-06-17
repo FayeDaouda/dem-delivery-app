@@ -69,6 +69,18 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  Future<Map<String, dynamic>> upgradeToPro() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final data = await _repo.upgradeToPro();
+      state = state.copyWith(isLoading: false);
+      return data;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: friendlyError(e));
+      rethrow;
+    }
+  }
+
   Future<void> logout() => _repo.logout();
 }
 

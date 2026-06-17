@@ -60,6 +60,13 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   StreamSubscription<Map<String, dynamic>>? _newOrderSub;
   StreamSubscription<String>?              _expiredOrderSub;
   StreamSubscription<void>?                _reconnectSub;
+  StreamSubscription<Map<String, dynamic>>? _newBatchSub;
+  StreamSubscription<String>?              _batchExpiredSub;
+
+  // ── Offre de tournée (batch) ──────────────────────────────────────────────
+  Map<String, dynamic>? _currentBatch;
+  int _batchCountdown = 25;
+  Timer? _batchCountdownTimer;
 
   // ── Polling fallback (si socket déconnecté) ───────────────────────────────
   Timer? _pollTimer;
@@ -83,6 +90,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   int _todayCourses = 0;
   int _todayGains   = 0;
   Map<String, dynamic>? _activeOrder;
+  Map<String, dynamic>? _activeBatch;
 
   @override
   void initState() {
@@ -144,6 +152,9 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _newOrderSub?.cancel();
     _expiredOrderSub?.cancel();
     _reconnectSub?.cancel();
+    _newBatchSub?.cancel();
+    _batchExpiredSub?.cancel();
+    _batchCountdownTimer?.cancel();
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();
     super.dispose();
@@ -189,6 +200,23 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _reconnectSub = SocketService.instance.onReconnect.listen((_) {
       if (!mounted) return;
       ref.read(availableOrdersProvider.notifier).refresh();
+    });
+
+    _newBatchSub = SocketService.instance.onNewBatch.listen((batch) {
+      if (!mounted) return;
+      setState(() {
+        _currentBatch = batch;
+        _batchCountdown = 25;
+      });
+      _startBatchCountdown();
+    });
+
+    _batchExpiredSub = SocketService.instance.onBatchExpired.listen((batchId) {
+      if (!mounted) return;
+      if (_currentBatch?['id'] == batchId) {
+        setState(() => _currentBatch = null);
+        _cancelBatchCountdown();
+      }
     });
 
     // Heartbeat toutes les 30s pour maintenir lastSeenAt à jour côté backend
@@ -255,7 +283,21 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
         }
       }
       
-      if (active != null) {
+      // Détecte une tournée batch active via batchOrderId sur la commande active
+      Map<String, dynamic>? activeBatch;
+      if (active != null && active['batchOrderId'] != null) {
+        activeBatch = await ref.read(ordersRepositoryProvider).getActiveBatch();
+        active = null; // la tournée prend la priorité, on masque la commande individuelle
+      }
+
+      if (activeBatch != null) {
+        final stopCount = (activeBatch['orders'] as List?)?.length ?? 0;
+        NotificationService.showOngoingNotification(
+          id: 9999,
+          title: 'Tournée en cours',
+          body: '$stopCount arrêts à livrer',
+        );
+      } else if (active != null) {
         final delivery = active['deliveryAddress'] as String? ?? 'client';
         NotificationService.showOngoingNotification(
           id: 9999,
@@ -267,10 +309,11 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       }
 
       if (mounted) {
-        setState(() { 
-          _todayCourses = courses; 
+        setState(() {
+          _todayCourses = courses;
           _todayGains = gains;
           _activeOrder = active;
+          _activeBatch = activeBatch;
         });
       }
     } catch (_) {}
@@ -561,6 +604,46 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     }
   }
 
+  void _startBatchCountdown() {
+    _batchCountdownTimer?.cancel();
+    _batchCountdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() => _batchCountdown--);
+      if (_batchCountdown <= 0) {
+        t.cancel();
+        setState(() => _currentBatch = null);
+      }
+    });
+  }
+
+  void _cancelBatchCountdown() {
+    _batchCountdownTimer?.cancel();
+    if (mounted) setState(() => _batchCountdown = 25);
+  }
+
+  Future<void> _declineBatch(String batchId) async {
+    _cancelBatchCountdown();
+    setState(() => _currentBatch = null);
+    try {
+      await ref.read(ordersRepositoryProvider).declineBatch(batchId);
+    } catch (_) {}
+  }
+
+  Future<void> _acceptBatch(String batchId) async {
+    _cancelBatchCountdown();
+    final notifBatch = _currentBatch;
+    setState(() => _currentBatch = null);
+    try {
+      final acceptedBatch = await ref.read(ordersRepositoryProvider).acceptBatch(batchId);
+      final merged = {...?notifBatch, ...acceptedBatch};
+      if (mounted) {
+        context.push('/driver/batch/active', extra: merged);
+      }
+    } catch (e) {
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider);
@@ -805,6 +888,33 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
+                          if (_activeBatch != null) ...[
+                            GestureDetector(
+                              onTap: () => context.push('/driver/batch/active', extra: _activeBatch),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF00AECB),
+                                  borderRadius: BorderRadius.circular(30),
+                                  boxShadow: [
+                                    BoxShadow(color: const Color(0xFF00AECB).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.route, color: Colors.white, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Tournée · ${(_activeBatch!['orders'] as List?)?.length ?? 0} arrêts',
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
                           if (_activeOrder != null) ...[
                             GestureDetector(
                               onTap: () => context.push('/driver/order/active', extra: _activeOrder),
@@ -874,7 +984,16 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                       child: FadeTransition(opacity: anim, child: child),
                     );
                   },
-                  child: isAvailable && orders.isNotEmpty
+                  child: _currentBatch != null
+                      // ── État 4 : nouvelle tournée batch ──
+                      ? _BatchNotificationSheet(
+                          key: const ValueKey('batch'),
+                          batch: _currentBatch!,
+                          countdown: _batchCountdown,
+                          onAccept: () => _acceptBatch(_currentBatch!['id'] as String),
+                          onDecline: () => _declineBatch(_currentBatch!['id'] as String),
+                        )
+                      : isAvailable && orders.isNotEmpty
                       // ── État 3 : nouvelle course ──
                       ? _OrderNotificationSheet(
                           key: const ValueKey('order'),
@@ -1280,6 +1399,183 @@ class _OrderNotificationSheet extends StatelessWidget {
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── État 4 : notification nouvelle tournée batch ──────────────────────────────
+class _BatchNotificationSheet extends StatelessWidget {
+  final Map<String, dynamic> batch;
+  final int countdown;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  const _BatchNotificationSheet({
+    super.key,
+    required this.batch,
+    required this.countdown,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final orders    = (batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final total     = (batch['totalPrice'] as num?)?.toInt() ?? 0;
+    final pickup    = batch['pickupAddress'] as String? ?? '';
+    final stopCount = orders.length;
+
+    return _GlassSheet(
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 24),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Color(0xFF00AECB), width: 2)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header
+            Row(children: [
+              const Icon(Icons.route, color: Color(0xFF00AECB), size: 26),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Nouvelle tournée',
+                      style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                  Text('$stopCount arrêt${stopCount > 1 ? 's' : ''}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ]),
+              ),
+              SizedBox(
+                width: 44, height: 44,
+                child: Stack(alignment: Alignment.center, children: [
+                  CircularProgressIndicator(
+                    value: countdown / 25,
+                    strokeWidth: 3,
+                    backgroundColor: AppColors.card,
+                    color: countdown > 10 ? const Color(0xFF00AECB) : Colors.orange,
+                  ),
+                  Text(
+                    '$countdown',
+                    style: TextStyle(
+                      color: countdown > 10 ? const Color(0xFF00AECB) : Colors.orange,
+                      fontSize: 13, fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ]),
+              ),
+            ]),
+
+            const SizedBox(height: 14),
+
+            // Stops list on white card
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+              child: Column(children: [
+                // Pickup row
+                _AddressRow(
+                  icon: Icons.circle,
+                  color: Colors.black87,
+                  label: 'Récupération',
+                  address: pickup,
+                ),
+                // Up to 3 stops
+                ...orders.take(3).toList().asMap().entries.map((e) {
+                  final i = e.key;
+                  final o = e.value;
+                  return Column(children: [
+                    Container(
+                      margin: const EdgeInsets.only(left: 10, top: 4, bottom: 4),
+                      width: 1.5, height: 10,
+                      color: Colors.black12,
+                    ),
+                    _AddressRow(
+                      icon: Icons.location_on,
+                      color: Colors.black87,
+                      label: 'Arrêt ${i + 1}',
+                      address: o['deliveryAddress'] as String? ?? '',
+                    ),
+                  ]);
+                }),
+                if (stopCount > 3) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '+ ${stopCount - 3} autre${stopCount - 3 > 1 ? 's' : ''} arrêt${stopCount - 3 > 1 ? 's' : ''}',
+                    style: const TextStyle(color: Colors.black45, fontSize: 11),
+                  ),
+                ],
+              ]),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Total price
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00AECB).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$total FCFA',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Buttons
+            Row(children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: onDecline,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      border: Border.all(color: Colors.red, width: 1.5),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Text('Refuser',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.red, fontSize: 15, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: GestureDetector(
+                  onTap: onAccept,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00AECB),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Text('Accepter la tournée',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ),
+            ]),
           ],
         ),
       ),

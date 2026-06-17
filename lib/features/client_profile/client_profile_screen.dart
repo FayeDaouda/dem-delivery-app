@@ -14,6 +14,7 @@ import '../../core/config/app_config.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/referral_card.dart';
+import '../auth/data/auth_repository.dart';
 import '../home_client/widgets/client_badge_card.dart';
 
 class ClientProfileScreen extends StatefulWidget {
@@ -216,6 +217,38 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Demande envoyée. Vous serez contacté sous 24–48h.')),
       );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+    }
+  }
+
+  // ── Bascule vers DEM Pro ─────────────────────────────────────────────────────
+  Future<void> _requestProUpgrade() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Passer en compte DEM Pro ?',
+            style: TextStyle(color: Color(0xFF1A1A2E), fontWeight: FontWeight.w700)),
+        content: const Text(
+          'Vous allez compléter le profil de votre entreprise. Votre demande sera '
+          'ensuite examinée par notre équipe avant activation.',
+          style: TextStyle(color: Color(0xFF7B8CA0)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler', style: TextStyle(color: Color(0xFF7B8CA0)))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),  child: const Text('Continuer', style: TextStyle(color: AppColors.primary))),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await AuthRepository().upgradeToPro();
+      if (!mounted) return;
+      appStartupNotifier.markLoggedIn(userRole: 'DEM_PRO', pro: 'PENDING', proDone: false);
+      context.go('/dem-pro/onboarding');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
     }
@@ -485,6 +518,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     onTap: phoneStatus == 'PENDING' ? () {} : _requestPhoneChange,
                     titleColor: phoneStatus == 'PENDING' ? Colors.grey : const Color(0xFF1A1A2E),
                     iconColor:  phoneStatus == 'PENDING' ? Colors.grey : AppColors.primary,
+                  ),
+                  _MenuItemData(
+                    icon: Icons.storefront_outlined,
+                    title: 'Demander le passage en DEM Pro',
+                    onTap: _requestProUpgrade,
                   ),
                 ]),
                 const SizedBox(height: 20),

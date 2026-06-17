@@ -6,6 +6,7 @@ class ChefDeFlotteRepository {
   const ChefDeFlotteRepository(this._dio);
 
   Future<Map<String, dynamic>> submitOnboarding({
+    required String name,
     required String cniRecto,
     required String cniVerso,
     String? companyName,
@@ -14,6 +15,7 @@ class ChefDeFlotteRepository {
   }) async {
     try {
       final res = await _dio.post('/chefs-de-flotte/onboarding', data: {
+        'name': name,
         'cniRecto': cniRecto,
         'cniVerso': cniVerso,
         if (companyName != null) 'companyName': companyName,

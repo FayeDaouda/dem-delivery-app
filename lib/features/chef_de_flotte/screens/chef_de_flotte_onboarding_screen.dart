@@ -19,6 +19,7 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
   String? _cniRecto;
   String? _cniVerso;
 
+  final _nameCtrl    = TextEditingController();
   final _companyCtrl = TextEditingController();
   final _nineaCtrl   = TextEditingController();
   final _rccmCtrl    = TextEditingController();
@@ -27,6 +28,11 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
   String? _error;
 
   Future<void> _submit() async {
+    final name = _nameCtrl.text.trim();
+    if (name.length < 2) {
+      setState(() => _error = 'Le nom complet est obligatoire.');
+      return;
+    }
     if (_cniRecto == null || _cniVerso == null) {
       setState(() => _error = 'CNI recto et verso sont obligatoires.');
       return;
@@ -34,6 +40,7 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       await _repo.submitOnboarding(
+        name:        name,
         cniRecto:    _cniRecto!,
         cniVerso:    _cniVerso!,
         companyName: _companyCtrl.text.trim().isEmpty ? null : _companyCtrl.text.trim(),
@@ -50,6 +57,7 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
 
   @override
   void dispose() {
+    _nameCtrl.dispose();
     _companyCtrl.dispose();
     _nineaCtrl.dispose();
     _rccmCtrl.dispose();
@@ -119,6 +127,21 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+
+                  // ── Explication Chef de flotte ──────────────────────────
+                  const _CdfExplanation(),
+                  const SizedBox(height: 24),
+
+                  // Informations personnelles
+                  _SectionTitle(title: 'Informations personnelles', icon: Icons.person_outline),
+                  const SizedBox(height: 14),
+                  _LightField(
+                    ctrl: _nameCtrl,
+                    label: 'Nom complet *',
+                    hint: 'Ex: Mamadou Diallo',
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  const SizedBox(height: 24),
 
                   // Encart info
                   Container(
@@ -214,10 +237,12 @@ class _SectionTitle extends StatelessWidget {
 class _LightField extends StatelessWidget {
   final TextEditingController ctrl;
   final String label, hint;
-  const _LightField({required this.ctrl, required this.label, required this.hint});
+  final TextCapitalization textCapitalization;
+  const _LightField({required this.ctrl, required this.label, required this.hint, this.textCapitalization = TextCapitalization.none});
   @override
   Widget build(BuildContext context) => TextField(
     controller: ctrl,
+    textCapitalization: textCapitalization,
     style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14),
     decoration: InputDecoration(
       labelText: label,
@@ -252,6 +277,96 @@ class _ErrorBanner extends StatelessWidget {
       const SizedBox(width: 8),
       Expanded(child: Text(message, style: TextStyle(color: Colors.red.shade700, fontSize: 13))),
     ]),
+  );
+}
+
+class _CdfExplanation extends StatelessWidget {
+  const _CdfExplanation();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F3FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.handshake_outlined, color: Color(0xFF7C3AED), size: 18),
+            ),
+            const SizedBox(width: 10),
+            const Text('C\'est quoi un Chef de flotte ?',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF4C1D95))),
+          ]),
+          const SizedBox(height: 14),
+          const _CdfPoint(
+            icon: Icons.groups_outlined,
+            text: 'Recrutez et gérez une équipe de livreurs DEM sous votre nom',
+          ),
+          const SizedBox(height: 10),
+          const _CdfPoint(
+            icon: Icons.trending_up_outlined,
+            text: 'Gagnez une commission sur chaque livraison effectuée par votre flotte',
+          ),
+          const SizedBox(height: 10),
+          const _CdfPoint(
+            icon: Icons.dashboard_outlined,
+            text: 'Accédez à un tableau de bord dédié : suivi en temps réel, statistiques, performances',
+          ),
+          const SizedBox(height: 10),
+          const _CdfPoint(
+            icon: Icons.verified_user_outlined,
+            text: 'Vos livreurs sont rattachés à vous — vous êtes responsable de leur activité',
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF7C3AED).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(children: [
+              Icon(Icons.star_outline, color: Color(0xFF7C3AED), size: 15),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Idéal si vous avez déjà un réseau de livreurs ou souhaitez développer votre propre activité de transport.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF5B21B6), height: 1.4),
+                ),
+              ),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CdfPoint extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _CdfPoint({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, color: const Color(0xFF7C3AED), size: 16),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.4)),
+      ),
+    ],
   );
 }
 

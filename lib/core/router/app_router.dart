@@ -24,6 +24,7 @@ import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/onboarding/screens/location_disclosure_screen.dart';
 import '../../features/profile/screens/driver_profile_screen.dart';
 import '../../features/home_driver/active_order_screen.dart';
+import '../../features/home_driver/active_batch_screen.dart';
 import '../../features/admin/screens/admin_login_screen.dart';
 import '../../features/admin/screens/admin_panel_screen.dart';
 import '../../features/chef_de_flotte/screens/chef_de_flotte_onboarding_screen.dart';
@@ -34,6 +35,16 @@ import '../../features/chef_de_flotte/screens/chef_de_flotte_rejected_screen.dar
 import '../../features/chef_de_flotte/screens/chef_de_flotte_suspended_screen.dart';
 import '../../features/chef_de_flotte/screens/chef_de_flotte_profile_screen.dart';
 import '../../features/profile/screens/driver_suspended_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_onboarding_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_pending_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_rejected_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_home_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_order_create_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_batch_create_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_batch_confirmation_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_batch_tracking_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_order_confirmation_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_order_tracking_screen.dart';
 
 final routeObserver = RouteObserver<ModalRoute<void>>();
 
@@ -158,6 +169,49 @@ final appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: '/dem-pro/orders/create',
+      builder: (context, state) => const DemProOrderCreateScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/batch/create',
+      builder: (context, state) => const DemProBatchCreateScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/batch/confirmation',
+      builder: (context, state) {
+        final batch = state.extra as Map<String, dynamic>;
+        return DemProBatchConfirmationScreen(batch: batch);
+      },
+    ),
+    GoRoute(
+      path: '/dem-pro/batch/tracking',
+      builder: (context, state) {
+        final args    = state.extra as Map<String, dynamic>;
+        final batchId = args['batchId'] as String;
+        final initialBatch = args['initialBatch'] as Map<String, dynamic>?;
+        return DemProBatchTrackingScreen(batchId: batchId, initialBatch: initialBatch);
+      },
+    ),
+    GoRoute(
+      path: '/dem-pro/orders/confirmation',
+      builder: (context, state) {
+        final order = state.extra as Map<String, dynamic>;
+        return DemProOrderConfirmationScreen(order: order);
+      },
+    ),
+    GoRoute(
+      path: '/dem-pro/orders/tracking',
+      builder: (context, state) {
+        final args = state.extra as Map<String, dynamic>;
+        return DemProOrderTrackingScreen(
+          orderId:      args['orderId']      as String,
+          driverId:     args['driverId']     as String,
+          etaPickupMin: args['etaPickupMin'] as int?,
+          initialOrder: args['initialOrder'] as Map<String, dynamic>?,
+        );
+      },
+    ),
+    GoRoute(
       path: '/orders/confirmation',
       builder: (context, state) {
         final order = state.extra as Map<String, dynamic>;
@@ -202,6 +256,15 @@ final appRouter = GoRouter(
       },
     ),
 
+    // ── Active batch (driver) ──
+    GoRoute(
+      path: '/driver/batch/active',
+      builder: (context, state) {
+        final batch = state.extra as Map<String, dynamic>;
+        return ActiveBatchScreen(batch: batch);
+      },
+    ),
+
     // ── Profil driver ──
     GoRoute(
       path: '/driver/profile',
@@ -236,6 +299,24 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/chef-de-flotte/profile',
       builder: (context, state) => const ChefDeFlotteProfileScreen(),
+    ),
+
+    // ── DEM Pro ──
+    GoRoute(
+      path: '/dem-pro/onboarding',
+      builder: (context, state) => const DemProOnboardingScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/pending',
+      builder: (context, state) => const DemProPendingScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/rejected',
+      builder: (context, state) => const DemProRejectedScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/home',
+      builder: (context, state) => const DemProHomeScreen(),
     ),
     GoRoute(
       path: '/driver/suspended',

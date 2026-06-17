@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/router/app_startup_notifier.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
@@ -576,7 +577,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                 Expanded(
                                   child: GestureDetector(
                                     onTap: _cancelling ? null : () {
-                      context.go('/client/home');
+                      context.go(appStartupNotifier.homeForRole);
                       Future.microtask(() {
                         if (context.mounted) {
                           showDemToast(context, 'Votre commande est en attente — vous serez notifié dès qu\'un livreur est trouvé.');

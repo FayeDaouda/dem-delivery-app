@@ -27,6 +27,8 @@ class AppStartupNotifier extends ChangeNotifier {
   String? vehicleType;
   bool    isActive    = true;
   String? chefStatus;
+  String? proStatus;
+  bool    proOnboarded = false;
 
   // ── Initialisation asynchrone complète ──────────────────────────────────────
   Future<void> initialize() async {
@@ -48,10 +50,12 @@ class AppStartupNotifier extends ChangeNotifier {
       } catch (_) {
         user = await AuthStorage.getUser();
       }
-      role        = user?['role'] as String?;
-      vehicleType = user?['vehicleType'] as String?;
-      isActive    = user?['isActive'] as bool? ?? true;
-      chefStatus  = user?['chefDeFlotteStatus'] as String?;
+      role         = user?['role'] as String?;
+      vehicleType  = user?['vehicleType'] as String?;
+      isActive     = user?['isActive'] as bool? ?? true;
+      chefStatus   = user?['chefDeFlotteStatus'] as String?;
+      proStatus    = user?['proStatus'] as String?;
+      proOnboarded = (user?['proBusinessName'] as String?)?.isNotEmpty == true;
 
       // Si le rôle est null après fetch + cache → état corrompu (token sans profil complet)
       // On efface la session pour permettre une ré-authentification propre
@@ -69,14 +73,35 @@ class AppStartupNotifier extends ChangeNotifier {
   void markOnboardingSeen()  { _onboardingSeen  = true; notifyListeners(); }
   void markDisclosureSeen()  { _disclosureSeen  = true; notifyListeners(); }
   void markLocationGranted() { _locationGranted = true; notifyListeners(); }
-  void markLoggedIn({ required String userRole, String? vehicle, bool active = true, String? chef }) {
+  void markLoggedIn({
+    required String userRole,
+    String? vehicle,
+    bool active = true,
+    String? chef,
+    String? pro,
+    bool proDone = false,
+  }) {
     _isLoggedIn = true;
     role = userRole; vehicleType = vehicle; isActive = active; chefStatus = chef;
+    proStatus = pro; proOnboarded = proDone;
     notifyListeners();
   }
   void markLoggedOut() {
     _isLoggedIn = false; role = null; vehicleType = null; isActive = true; chefStatus = null;
+    proStatus = null; proOnboarded = false;
     notifyListeners();
+  }
+
+  /// Recharge le statut DEM Pro depuis l'API (bouton "Actualiser" de l'écran
+  /// d'attente) — déclenche une réévaluation de [homeForRole] par GoRouter.
+  Future<void> refreshProStatus() async {
+    try {
+      final user = await ProfileRepository().getMe();
+      isActive     = user['isActive'] as bool? ?? true;
+      proStatus    = user['proStatus'] as String?;
+      proOnboarded = (user['proBusinessName'] as String?)?.isNotEmpty == true;
+      notifyListeners();
+    } catch (_) {}
   }
 
   // ── Destination pour utilisateur connecté ───────────────────────────────────
@@ -93,6 +118,13 @@ class AppStartupNotifier extends ChangeNotifier {
       if (chefStatus == 'PENDING')  return '/chef-de-flotte/pending';
       if (chefStatus == 'REJECTED') return '/chef-de-flotte/rejected';
       return '/chef-de-flotte/onboarding';
+    }
+    if (role == 'DEM_PRO') {
+      if (!proOnboarded)          return '/dem-pro/onboarding';
+      if (proStatus == 'PENDING')  return '/dem-pro/pending';
+      if (proStatus == 'REJECTED') return '/dem-pro/rejected';
+      if (proStatus == 'ACTIVE')   return '/dem-pro/home';
+      return '/dem-pro/onboarding';
     }
     // Ne jamais retourner '/phone' ici — créerait une boucle redirect infinie
     // L'état corrompu est nettoyé dans initialize() avant d'arriver ici

@@ -61,5 +61,21 @@ class AuthRepository {
     }
   }
 
+  /// Demande de bascule Client → DEM Pro (validation admin requise).
+  Future<Map<String, dynamic>> upgradeToPro() async {
+    try {
+      final response = await _dio.patch('/users/me/upgrade-to-pro');
+      final data = response.data as Map<String, dynamic>;
+      await AuthStorage.saveToken(data['token']);
+      await AuthStorage.saveUser(data['user']);
+      return data;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Erreur lors de la demande de passage en DEM Pro.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<void> logout() => AuthStorage.clear();
 }

@@ -202,6 +202,41 @@ class OrdersRepository {
     }
   }
 
+  Future<Map<String, dynamic>?> getActiveBatch() async {
+    try {
+      final response = await _dio.get('/orders/batch/driver/active');
+      final data = response.data;
+      if (data == null) return null;
+      return data as Map<String, dynamic>;
+    } on DioException {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> acceptBatch(String batchId) async {
+    try {
+      final response = await _dio.patch('/orders/batch/$batchId/accept');
+      final data = response.data as Map<String, dynamic>;
+      return (data['batch'] ?? data) as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'accepter la tournée.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> declineBatch(String batchId) async {
+    try {
+      await _dio.patch('/orders/batch/$batchId/decline');
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de refuser la tournée.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> cancelOrder(String id) async {
     try {
       final response = await _dio.patch('/orders/$id/cancel');

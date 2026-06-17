@@ -30,6 +30,8 @@ class SocketService {
   final _driverUnreachableController    = StreamController<Map<String, dynamic>>.broadcast();
   final _orderCancelledController       = StreamController<Map<String, dynamic>>.broadcast();
   final _orderAdminCancelledController  = StreamController<Map<String, dynamic>>.broadcast();
+  final _newBatchController             = StreamController<Map<String, dynamic>>.broadcast();
+  final _batchExpiredController         = StreamController<String>.broadcast();
 
   Stream<Map<String, dynamic>> get onNewOrder             => _newOrderController.stream;
   Stream<String>               get onOrderExpired          => _expiredOrderController.stream;
@@ -45,6 +47,9 @@ class SocketService {
   // Annulations (client + driver)
   Stream<Map<String, dynamic>> get onOrderCancelled        => _orderCancelledController.stream;
   Stream<Map<String, dynamic>> get onOrderAdminCancelled   => _orderAdminCancelledController.stream;
+  // Tournées (batch)
+  Stream<Map<String, dynamic>> get onNewBatch              => _newBatchController.stream;
+  Stream<String>               get onBatchExpired          => _batchExpiredController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -157,6 +162,21 @@ class SocketService {
       ..on('order:admin_cancelled', (data) {
         if (data is Map) {
           _orderAdminCancelledController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('batch:new', (data) {
+        if (data is Map) {
+          _newBatchController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('batch:expired', (data) {
+        if (data is Map && data['batchId'] != null) {
+          _batchExpiredController.add(data['batchId'] as String);
+        }
+      })
+      ..on('batch:taken', (data) {
+        if (data is Map && data['batchId'] != null) {
+          _batchExpiredController.add(data['batchId'] as String);
         }
       })
       ..connect();
