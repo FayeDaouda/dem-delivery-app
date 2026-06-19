@@ -70,6 +70,7 @@ class _State extends State<DemProOrderCreateScreen> {
   LatLng _cameraPos   = _dakar;
   bool _isMapPlacement = false;
   bool _placingPickup  = false; // false = placing delivery
+  final _sheetCtrl = DraggableScrollableController();
 
   // ── Départ (auto-rempli depuis ProAddress défaut) ────────────────────────
   List<Map<String, dynamic>> _proAddresses = [];
@@ -122,6 +123,7 @@ class _State extends State<DemProOrderCreateScreen> {
   @override
   void dispose() {
     _mapCtrl?.dispose();
+    _sheetCtrl.dispose();
     _searchDebounce?.cancel();
     _recipientNameCtrl.dispose();
     _recipientPhoneCtrl.dispose();
@@ -559,13 +561,8 @@ class _State extends State<DemProOrderCreateScreen> {
   }
 
   double get _panelHeight {
-    if (_isMapPlacement) return 130;
     final h = MediaQuery.of(context).size.height;
-    return switch (_step) {
-      1 => h * 0.58,
-      2 => h * 0.58,
-      _ => h * 0.56,
-    };
+    return h * _sheetMax;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -609,22 +606,50 @@ class _State extends State<DemProOrderCreateScreen> {
           Positioned(top: 0, left: 0, right: 0,
             child: SafeArea(child: _buildHeader())),
 
-        // Panel bas
-        Positioned(bottom: 0, left: 0, right: 0,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeOut,
-            height: _panelHeight + MediaQuery.of(context).viewPadding.bottom,
-            decoration: BoxDecoration(
-              color: DemProColors.bg2,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
+        // Panel bas — placement
+        if (_isMapPlacement)
+          Positioned(bottom: 0, left: 0, right: 0,
+            child: Container(
+              height: 130 + MediaQuery.of(context).viewPadding.bottom,
+              decoration: BoxDecoration(
+                color: DemProColors.bg2,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
+              ),
+              child: _buildPlacementPanel(),
             ),
-            child: _isMapPlacement ? _buildPlacementPanel() : _buildPanel(),
-          )),
+          ),
+
+        // Panel bas — draggable
+        if (!_isMapPlacement)
+          DraggableScrollableSheet(
+            controller: _sheetCtrl,
+            initialChildSize: _sheetMax,
+            minChildSize: _sheetMin,
+            maxChildSize: _sheetMax,
+            snap: true,
+            snapSizes: [_sheetMin, _sheetMax],
+            builder: (context, scrollCtrl) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: DemProColors.bg2,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
+                ),
+                child: _buildPanel(scrollCtrl),
+              );
+            },
+          ),
       ]),
     );
   }
+
+  double get _sheetMin => 0.12;
+  double get _sheetMax => switch (_step) {
+    1 => 0.60,
+    2 => 0.60,
+    _ => 0.58,
+  };
 
   // ── Header ────────────────────────────────────────────────────────────────
 
@@ -702,43 +727,47 @@ class _State extends State<DemProOrderCreateScreen> {
 
   // ── Panel principal ───────────────────────────────────────────────────────
 
-  Widget _buildPanel() => Column(children: [
-    Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 8),
-      child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
-    ),
+  Widget _buildPanel(ScrollController scrollCtrl) => CustomScrollView(
+    controller: scrollCtrl,
+    slivers: [
+      // ── Handle drag ──────────────────────────────────────────────────────
+      SliverToBoxAdapter(child: Center(child: Padding(
+        padding: const EdgeInsets.only(top: 12, bottom: 8),
+        child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
+      ))),
 
-    // ── Bandeau départ (toujours visible) ─────────────────────────────────
-    _DepartureBanner(
-      label: _selectedProAddr?['label'] as String?,
-      address: _pickupAddress,
-      loading: _loadingGps,
-      onTap: () => _showChangeDeparture(),
-    ),
+      // ── Bandeau départ ────────────────────────────────────────────────────
+      SliverToBoxAdapter(child: _DepartureBanner(
+        label: _selectedProAddr?['label'] as String?,
+        address: _pickupAddress,
+        loading: _loadingGps,
+        onTap: () => _showChangeDeparture(),
+      )),
 
-    // ── Séparateur ────────────────────────────────────────────────────────
-    Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-      child: Row(children: [
-        Icon(_stepMeta[_step].$1, color: DemProColors.accent, size: 18),
-        const SizedBox(width: 8),
-        Text(_stepMeta[_step].$2, style: const TextStyle(color: DemProColors.text, fontSize: 16, fontWeight: FontWeight.w800)),
-      ]),
-    ),
+      // ── Titre étape ───────────────────────────────────────────────────────
+      SliverToBoxAdapter(child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+        child: Row(children: [
+          Icon(_stepMeta[_step].$1, color: DemProColors.accent, size: 18),
+          const SizedBox(width: 8),
+          Text(_stepMeta[_step].$2, style: const TextStyle(color: DemProColors.text, fontSize: 16, fontWeight: FontWeight.w800)),
+        ]),
+      )),
 
-    // ── Contenu scrollable ────────────────────────────────────────────────
-    Expanded(child: SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      child: switch (_step) {
-        0 => _buildStep0(),
-        1 => _buildStep1(),
-        _ => _buildStep2(),
-      },
-    )),
+      // ── Contenu ───────────────────────────────────────────────────────────
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+        sliver: SliverToBoxAdapter(child: switch (_step) {
+          0 => _buildStep0(),
+          1 => _buildStep1(),
+          _ => _buildStep2(),
+        }),
+      ),
 
-    // ── Boutons ───────────────────────────────────────────────────────────
-    _buildNavButtons(),
-  ]);
+      // ── Boutons ───────────────────────────────────────────────────────────
+      SliverToBoxAdapter(child: _buildNavButtons()),
+    ],
+  );
 
   // ── Étape 0 — Destination ─────────────────────────────────────────────────
 
