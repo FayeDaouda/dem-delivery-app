@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../api/api_client.dart';
 import '../router/app_router.dart';
+import '../router/app_startup_notifier.dart';
 
 /// Handler background (app fermée / suspendue) — doit être top-level.
 @pragma('vm:entry-point')
@@ -111,16 +112,21 @@ class NotificationService {
     final type     = message.data['type'] as String?;
     final orderId  = message.data['orderId'] as String?;
     final driverId = message.data['driverId'] as String?;
+    final batchId  = message.data['batchId'] as String?;
 
-    // Petit délai pour laisser le router s'initialiser (cas app terminée)
     Future.delayed(const Duration(milliseconds: 300), () {
-      // ORDER_ACCEPTED / ORDER_PICKED_UP → aller directement au suivi si on a les IDs
       if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP') &&
           orderId != null && driverId != null) {
-        appRouter.push('/orders/tracking', extra: {
+        final role = appStartupNotifier.role;
+        final path = role == 'DEM_PRO' ? '/dem-pro/orders/tracking' : '/orders/tracking';
+        appRouter.push(path, extra: {
           'orderId': orderId,
           'driverId': driverId,
         });
+        return;
+      }
+      if ((type == 'BATCH_ACCEPTED' || type == 'BATCH_COMPLETED') && batchId != null) {
+        appRouter.push('/dem-pro/batch/tracking', extra: {'batchId': batchId});
         return;
       }
       final route = _routeForType(type);
@@ -159,13 +165,20 @@ class NotificationService {
       dismiss();
       if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP') &&
           orderId != null && driverId != null) {
-        appRouter.push('/orders/tracking', extra: {
+        final role = appStartupNotifier.role;
+        final path = role == 'DEM_PRO' ? '/dem-pro/orders/tracking' : '/orders/tracking';
+        appRouter.push(path, extra: {
           'orderId': orderId,
           'driverId': driverId,
         });
       } else {
-        final route = _routeForType(type);
-        if (route != null) appRouter.go(route);
+        final batchId = message.data['batchId'] as String?;
+        if ((type == 'BATCH_ACCEPTED' || type == 'BATCH_COMPLETED') && batchId != null) {
+          appRouter.push('/dem-pro/batch/tracking', extra: {'batchId': batchId});
+        } else {
+          final route = _routeForType(type);
+          if (route != null) appRouter.go(route);
+        }
       }
     }
 
@@ -204,13 +217,15 @@ class NotificationService {
     // ── Orders — driver ─────────────────────────────────────────────────────
     'ORDER_OFFER'               => '/driver/home',     // socket affiche le modal d'offre
     'ORDER_CANCELLED'           => '/driver/home',     // client a annulé avant acceptation
-    // ── Orders — client ─────────────────────────────────────────────────────
-    'ORDER_ACCEPTED'            => '/client/home',
-    'ORDER_PICKED_UP'           => '/client/home',
-    'ORDER_DELIVERED'           => '/orders/my',
-    'ORDER_SEARCHING'           => '/client/home',     // on cherche encore un livreur
-    'ORDER_AUTO_CANCELLED'      => '/client/home',     // annulation auto après 15 min
-    'DISPUTE_OPENED'            => '/orders/my',       // litige signalé → historique
+    // ── Orders — client / DEM Pro ──────────────────────────────────────────
+    'ORDER_ACCEPTED'            => null, // géré dans _handleTap avec role-aware routing
+    'ORDER_PICKED_UP'           => null,
+    'ORDER_DELIVERED'           => null, // tap navigue via _handleTap
+    'ORDER_SEARCHING'           => null,
+    'ORDER_AUTO_CANCELLED'      => null,
+    'BATCH_ACCEPTED'            => null, // géré dans _handleTap
+    'BATCH_COMPLETED'           => null,
+    'DISPUTE_OPENED'            => '/orders/my',
     // ── Paiement — driver ───────────────────────────────────────────────────
     'PAYMENT_RESOLVED'          => '/driver/home',     // admin confirme paiement
     _ => null,

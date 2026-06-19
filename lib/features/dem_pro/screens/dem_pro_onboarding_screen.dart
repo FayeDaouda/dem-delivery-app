@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/error/app_exception.dart';
+import '../../../core/notifications/notification_service.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/dem_layout.dart';
@@ -132,6 +133,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
           await ApiClient.dio.post('/users/driver/documents', data: formData);
         } catch (_) {}
       }
+      NotificationService.requestPermissionAndToken();
       appStartupNotifier.markLoggedIn(userRole: 'DEM_PRO', pro: 'PENDING', proDone: true);
       if (mounted) context.go('/dem-pro/pending');
     } catch (e) {
