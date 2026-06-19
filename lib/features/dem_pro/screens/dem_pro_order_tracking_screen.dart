@@ -64,11 +64,21 @@ class _DemProOrderTrackingScreenState
     super.initState();
     _order = widget.initialOrder;
     _status = (widget.initialOrder?['status'] as String? ?? 'ACCEPTED').toUpperCase();
+    _initDriverPos();
     _loadMapStyle();
     _buildDriverIcon();
     _fetchRoute();
     _connectSocket();
     _startPolling();
+  }
+
+  void _initDriverPos() {
+    final driver = widget.initialOrder?['driver'] as Map<String, dynamic>?;
+    final lat = (driver?['latitude'] as num?)?.toDouble();
+    final lng = (driver?['longitude'] as num?)?.toDouble();
+    if (lat != null && lng != null && lat != 0 && lng != 0) {
+      _driverPos = LatLng(lat, lng);
+    }
   }
 
   @override
@@ -133,9 +143,15 @@ class _DemProOrderTrackingScreenState
             .getOrderById(widget.orderId);
         if (!mounted) return;
         final s = (order['status'] as String? ?? '').toUpperCase();
+        final driver = order['driver'] as Map<String, dynamic>?;
+        final lat = (driver?['latitude'] as num?)?.toDouble();
+        final lng = (driver?['longitude'] as num?)?.toDouble();
         setState(() {
           _order = order;
           _status = s;
+          if (lat != null && lng != null && lat != 0 && lng != 0) {
+            _driverPos = LatLng(lat, lng);
+          }
         });
         if (s == 'DELIVERED' || s == 'CANCELLED') {
           _pollTimer?.cancel();
@@ -265,6 +281,32 @@ class _DemProOrderTrackingScreenState
     'CANCELLED' => ('Commande annulée', DemProColors.danger),
     _           => ('En attente', const Color(0xFF6B8BAA)),
   };
+
+  String? get _distanceInfo {
+    if (_driverPos == null) return null;
+    final o = _order ?? widget.initialOrder ?? {};
+    final targetLat = _status == 'PICKED_UP'
+        ? (o['deliveryLatitude'] as num?)?.toDouble()
+        : (o['pickupLatitude'] as num?)?.toDouble();
+    final targetLng = _status == 'PICKED_UP'
+        ? (o['deliveryLongitude'] as num?)?.toDouble()
+        : (o['pickupLongitude'] as num?)?.toDouble();
+    if (targetLat == null || targetLng == null) return null;
+    final km = _haversineKm(_driverPos!.latitude, _driverPos!.longitude, targetLat, targetLng);
+    final mins = (km / 25 * 60).round(); // ~25 km/h en ville
+    if (km < 1) return '${(km * 1000).round()} m · ~$mins min';
+    return '${km.toStringAsFixed(1)} km · ~$mins min';
+  }
+
+  double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371.0;
+    const deg2rad = 3.141592653589793 / 180;
+    final dLat = (lat2 - lat1) * deg2rad;
+    final dLng = (lng2 - lng1) * deg2rad;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * deg2rad) * cos(lat2 * deg2rad) * sin(dLng / 2) * sin(dLng / 2);
+    return r * 2 * atan2(sqrt(a), sqrt(1 - a));
+  }
 
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
@@ -417,6 +459,17 @@ class _DemProOrderTrackingScreenState
                     ),
                   ),
                 ),
+                if (_distanceInfo != null) ...[
+                  const SizedBox(height: 8),
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.near_me_outlined, color: DemProColors.accent, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      _distanceInfo!,
+                      style: const TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ]),
+                ],
                 const SizedBox(height: 16),
 
                 // ── Livreur ────────────────────────────────────────────────
