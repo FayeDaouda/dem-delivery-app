@@ -1,7 +1,13 @@
-import '../../../core/error/app_exception.dart';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../../core/api/api_client.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/dem_layout.dart';
@@ -45,6 +51,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
 
   String? _sector;
   String? _weeklyVolume;
+  XFile?  _pickedAvatar;
 
   bool    _loadingProfile = true;
   bool    _submitting     = false;
@@ -116,6 +123,15 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
         email:        email.isEmpty ? null : email,
         weeklyVolume: _weeklyVolume!,
       );
+      if (_pickedAvatar != null) {
+        try {
+          final formData = FormData.fromMap({
+            'file': await MultipartFile.fromFile(_pickedAvatar!.path, filename: _pickedAvatar!.name),
+            'field': 'avatar',
+          });
+          await ApiClient.dio.post('/users/driver/documents', data: formData);
+        } catch (_) {}
+      }
       appStartupNotifier.markLoggedIn(userRole: 'DEM_PRO', pro: 'PENDING', proDone: true);
       if (mounted) context.go('/dem-pro/pending');
     } catch (e) {
@@ -147,15 +163,42 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: isTablet ? 80.0 : 64.0,
-                height: isTablet ? 80.0 : 64.0,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+              GestureDetector(
+                onTap: () async {
+                  final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 512, imageQuality: 80);
+                  if (picked != null) setState(() => _pickedAvatar = picked);
+                },
+                child: Stack(
+                  children: [
+                    Container(
+                      width: isTablet ? 80.0 : 72.0,
+                      height: isTablet ? 80.0 : 72.0,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+                        image: _pickedAvatar != null
+                            ? DecorationImage(image: FileImage(File(_pickedAvatar!.path)), fit: BoxFit.cover)
+                            : null,
+                      ),
+                      child: _pickedAvatar == null
+                          ? Icon(Icons.storefront_outlined, color: Colors.white, size: isTablet ? 36.0 : 30.0)
+                          : null,
+                    ),
+                    Positioned(
+                      bottom: 0, right: 0,
+                      child: Container(
+                        width: 24, height: 24,
+                        decoration: BoxDecoration(
+                          color: DemProColors.accent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 12),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Icon(Icons.delivery_dining, color: Colors.white, size: isTablet ? 40.0 : 32.0),
               ),
               const SizedBox(height: 12),
               Text(
