@@ -13,6 +13,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../deliveries/data/orders_repository.dart';
+import '../../home_driver/navigation/directions_service.dart';
 import '../../home_driver/navigation/navigation_service.dart';
 import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
@@ -95,6 +96,9 @@ class _State extends State<DemProOrderCreateScreen> {
   bool   _isFragile        = false;
   late bool _isScheduled = widget.scheduled;
   DateTime? _scheduledAt;
+
+  // ── Route polyline ────────────────────────────────────────────────────
+  List<LatLng> _routePoints = [];
 
   // ── Articles ───────────────────────────────────────────────────────────
   final List<_Article> _articles = [_Article()];
@@ -185,6 +189,9 @@ class _State extends State<DemProOrderCreateScreen> {
     });
     if (lat == null || lng == null) {
       _geocodePickupAddress(address);
+    } else if (_step == 2) {
+      _fetchEstimate();
+      _fetchRoute();
     }
   }
 
@@ -200,6 +207,7 @@ class _State extends State<DemProOrderCreateScreen> {
         _pickupLng = loc.longitude;
       });
       _centerMapVisible(LatLng(loc.latitude, loc.longitude));
+      if (_step == 2) { _fetchEstimate(); _fetchRoute(); }
     } catch (_) {
       _fetchGps();
     }
@@ -242,7 +250,10 @@ class _State extends State<DemProOrderCreateScreen> {
       _deliveryLat = pos.latitude; _deliveryLng = pos.longitude;
       await _reverseGeocode(pos, forPickup: false);
     }
-    if (mounted) setState(() { _isMapPlacement = false; _geocoding = false; });
+    if (mounted) {
+      setState(() { _isMapPlacement = false; _geocoding = false; });
+      if (_step == 2) { _fetchEstimate(); _fetchRoute(); }
+    }
   }
 
   void _onAddressChanged(String query) {
@@ -472,7 +483,10 @@ class _State extends State<DemProOrderCreateScreen> {
 
   void _next() {
     if (!_canAdvance) { showDemToast(context, _stepError, isError: true); return; }
-    if (_step == 1) _fetchEstimate();
+    if (_step == 1) {
+      _fetchEstimate();
+      _fetchRoute();
+    }
     setState(() => _step++);
   }
 
@@ -502,13 +516,46 @@ class _State extends State<DemProOrderCreateScreen> {
 
   Set<Polyline> get _polylines {
     if (_pickupLat == null || _deliveryLat == null || _step < 2) return {};
+    final pts = _routePoints.isNotEmpty
+        ? _routePoints
+        : [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)];
     return {Polyline(
       polylineId: const PolylineId('route'),
-      points: [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)],
+      points: pts,
       color: DemProColors.accent,
-      width: 3,
-      patterns: [PatternItem.dash(16), PatternItem.gap(8)],
+      width: 4,
     )};
+  }
+
+  Future<void> _fetchRoute() async {
+    if (_pickupLat == null || _deliveryLat == null) return;
+    final origin = LatLng(_pickupLat!, _pickupLng!);
+    final dest   = LatLng(_deliveryLat!, _deliveryLng!);
+    try {
+      final result = await DirectionsService.getRoute(
+        origin: origin,
+        destination: dest,
+        apiKey: AppConfig.mapsApiKey,
+      );
+      if (mounted) {
+        setState(() => _routePoints = result.points);
+        _fitBounds(origin, dest);
+      }
+    } catch (_) {}
+  }
+
+  void _fitBounds(LatLng a, LatLng b) {
+    final bounds = LatLngBounds(
+      southwest: LatLng(
+        a.latitude < b.latitude ? a.latitude : b.latitude,
+        a.longitude < b.longitude ? a.longitude : b.longitude,
+      ),
+      northeast: LatLng(
+        a.latitude > b.latitude ? a.latitude : b.latitude,
+        a.longitude > b.longitude ? a.longitude : b.longitude,
+      ),
+    );
+    _mapCtrl?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
   }
 
   double get _panelHeight {
