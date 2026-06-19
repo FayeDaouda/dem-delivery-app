@@ -340,7 +340,7 @@ class _State extends State<DemProOrderCreateScreen> {
         pickupLat: _pickupLat!,    pickupLng: _pickupLng!,
         deliveryLat: _deliveryLat!, deliveryLng: _deliveryLng!,
         orderType: 'DELIVERY',
-      );
+      ).timeout(const Duration(seconds: 10));
       debugPrint('[ESTIMATE] result: $est');
       if (mounted) setState(() { _estimate = est; _loadingEstimate = false; });
     } catch (e) {
@@ -414,13 +414,10 @@ class _State extends State<DemProOrderCreateScreen> {
     _ => '',
   };
 
-  void _next() async {
+  void _next() {
     if (!_canAdvance) { showDemToast(context, _stepError, isError: true); return; }
-    if (_step == 1) {
-      setState(() => _loadingEstimate = true);
-      await _fetchEstimate();
-    }
-    if (mounted) setState(() => _step++);
+    if (_step == 1) _fetchEstimate();
+    setState(() => _step++);
   }
 
   void _back() {
