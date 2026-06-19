@@ -262,6 +262,21 @@ class _AccueilTab extends StatelessWidget {
     required this.onRefresh, required this.t,
   });
 
+  void _goToActiveOrder(BuildContext context, Map<String, dynamic> o) {
+    final status = o['status'] as String? ?? '';
+    if (status == 'PENDING') {
+      context.push('/dem-pro/orders/confirmation', extra: o);
+    } else {
+      final driverId = (o['driver'] as Map?)?['id'] as String?
+          ?? o['driverId'] as String? ?? '';
+      context.push('/dem-pro/orders/tracking', extra: {
+        'orderId': o['id'],
+        'driverId': driverId,
+        'initialOrder': o,
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final businessName = (user?['proBusinessName'] as String?)?.trim();
@@ -336,64 +351,22 @@ class _AccueilTab extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const _ProBadge(),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const _ProBadge(),
+                      if (activeOrders.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _ActiveOrderIcon(
+                          count: activeOrders.length,
+                          onTap: () => _goToActiveOrder(context, activeOrders.first),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-
-              // ── Commandes en cours (bandeau cliquable) ─────────────────
-              if (activeOrders.isNotEmpty)
-                GestureDetector(
-                  onTap: () {
-                    final o = activeOrders.first;
-                    final status = o['status'] as String? ?? '';
-                    if (status == 'PENDING') {
-                      context.push('/dem-pro/orders/confirmation', extra: o);
-                    } else {
-                      final driverId = (o['driver'] as Map?)?['id'] as String? ?? o['driverId'] as String? ?? '';
-                      context.push('/dem-pro/orders/tracking', extra: {
-                        'orderId': o['id'],
-                        'driverId': driverId,
-                        'initialOrder': o,
-                      });
-                    }
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: DemProColors.accent.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: DemProColors.accent.withValues(alpha: 0.4)),
-                    ),
-                    child: Row(children: [
-                      Container(
-                        width: 36, height: 36,
-                        decoration: BoxDecoration(
-                          color: DemProColors.accent.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 18),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${activeOrders.length} livraison${activeOrders.length > 1 ? 's' : ''} en cours',
-                            style: const TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w700),
-                          ),
-                          Text(
-                            'Appuyez pour suivre',
-                            style: TextStyle(color: t.muted, fontSize: 11),
-                          ),
-                        ],
-                      )),
-                      const Icon(Icons.chevron_right, color: DemProColors.accent, size: 20),
-                    ]),
-                  ),
-                ),
-              if (activeOrders.isNotEmpty) const SizedBox(height: 12),
+              const SizedBox(height: 20),
 
               // ── Carte résumé ─────────────────────────────────────────────
               if (loading)
@@ -719,6 +692,75 @@ class _ProBadge extends StatelessWidget {
         fontWeight: FontWeight.w800,
         letterSpacing: 0.5,
       )),
+  );
+}
+
+class _ActiveOrderIcon extends StatefulWidget {
+  final int count;
+  final VoidCallback onTap;
+  const _ActiveOrderIcon({required this.count, required this.onTap});
+  @override
+  State<_ActiveOrderIcon> createState() => _ActiveOrderIconState();
+}
+
+class _ActiveOrderIconState extends State<_ActiveOrderIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: widget.onTap,
+    child: AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, child) => Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(
+          color: DemProColors.accent.withValues(alpha: 0.12 + _ctrl.value * 0.08),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: DemProColors.accent.withValues(alpha: 0.4 + _ctrl.value * 0.3),
+            width: 1.5,
+          ),
+        ),
+        child: child,
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 20),
+          if (widget.count > 1)
+            Positioned(
+              top: 2, right: 2,
+              child: Container(
+                width: 14, height: 14,
+                decoration: const BoxDecoration(
+                  color: DemProColors.accent,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(child: Text(
+                  '${widget.count}',
+                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
+                )),
+              ),
+            ),
+        ],
+      ),
+    ),
   );
 }
 
