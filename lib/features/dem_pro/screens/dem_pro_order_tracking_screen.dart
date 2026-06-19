@@ -246,17 +246,26 @@ class _DemProOrderTrackingScreenState
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                context.go('/dem-pro/home');
+                context.pushReplacement('/dem-pro/orders/receipt', extra: _order ?? widget.initialOrder ?? {});
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: DemProColors.accent,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Retour au tableau de bord',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              child: const Text('Voir le reçu', style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                context.go('/dem-pro/home');
+              },
+              child: const Text('Retour au tableau de bord', style: TextStyle(color: Color(0xFF6B8BAA))),
             ),
           ),
         ]),

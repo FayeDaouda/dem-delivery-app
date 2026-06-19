@@ -45,6 +45,7 @@ import '../../features/dem_pro/screens/dem_pro_batch_confirmation_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_batch_tracking_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_confirmation_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_tracking_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_receipt_screen.dart';
 import '../../features/guest_tracking/guest_tracking_screen.dart';
 
 final routeObserver = RouteObserver<ModalRoute<void>>();
@@ -225,6 +226,10 @@ final appRouter = GoRouter(
           initialOrder: args['initialOrder'] as Map<String, dynamic>?,
         );
       },
+    ),
+    GoRoute(
+      path: '/dem-pro/orders/receipt',
+      builder: (context, state) => DemProReceiptScreen(order: state.extra as Map<String, dynamic>),
     ),
     GoRoute(
       path: '/orders/confirmation',

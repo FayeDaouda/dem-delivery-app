@@ -111,6 +111,8 @@ void _navigateToOrder(BuildContext context, Map<String, dynamic> order) {
       'driverId': driverId,
       'initialOrder': order,
     });
+  } else if (status == 'DELIVERED' || status == 'CANCELLED') {
+    context.push('/dem-pro/orders/receipt', extra: order);
   }
 }
 
