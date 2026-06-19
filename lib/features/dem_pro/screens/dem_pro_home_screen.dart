@@ -600,14 +600,14 @@ class _CompteTabState extends State<_CompteTab> {
 
     setState(() => _uploading = true);
     try {
-      final bytes = await picked.readAsBytes();
       final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(picked.path, filename: picked.name),
         'field': 'avatar',
-        'file': MultipartFile.fromBytes(bytes, filename: 'avatar.jpg'),
       });
       await ApiClient.dio.post('/users/driver/documents', data: formData);
       await widget.onRefresh();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[AVATAR UPLOAD] error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Échec de l\'upload. Réessayez.')),
