@@ -10,7 +10,7 @@ class _NavItem {
 
 const _items = [
   _NavItem(Icons.home_outlined,                   Icons.home_rounded,             'Accueil'),
-  _NavItem(Icons.local_shipping_outlined,         Icons.local_shipping,           'Livraisons'),
+  _NavItem(Icons.two_wheeler_outlined,             Icons.two_wheeler,              'Livraisons'),
   _NavItem(Icons.place_outlined,                  Icons.place,                    'Adresses'),
   _NavItem(Icons.account_balance_wallet_outlined, Icons.account_balance_wallet,   'Finances'),
   _NavItem(Icons.person_outline,                  Icons.person,                   'Compte'),
