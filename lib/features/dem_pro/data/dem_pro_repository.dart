@@ -33,10 +33,13 @@ class DemProRepository {
   }
 
   /// Liste complète des commandes du compte DEM Pro (clientId = userId).
-  Future<List<Map<String, dynamic>>> getMyOrders() async {
+  Future<List<Map<String, dynamic>>> getMyOrders({int page = 1, int limit = 50}) async {
     try {
-      final res = await _dio.get('/orders/my');
-      return (res.data as List).cast<Map<String, dynamic>>();
+      final res = await _dio.get('/orders/my', queryParameters: {'page': page, 'limit': limit});
+      final data = res.data;
+      if (data is List) return data.cast<Map<String, dynamic>>();
+      if (data is Map && data['orders'] is List) return (data['orders'] as List).cast<Map<String, dynamic>>();
+      return [];
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible de charger les livraisons.',
