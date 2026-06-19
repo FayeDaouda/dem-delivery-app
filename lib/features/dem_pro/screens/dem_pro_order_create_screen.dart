@@ -34,8 +34,23 @@ const _stepMeta = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+class _Article {
+  final nameCtrl = TextEditingController();
+  final qtyCtrl  = TextEditingController(text: '1');
+  final priceCtrl = TextEditingController();
+
+  void dispose() {
+    nameCtrl.dispose();
+    qtyCtrl.dispose();
+    priceCtrl.dispose();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 class DemProOrderCreateScreen extends StatefulWidget {
-  const DemProOrderCreateScreen({super.key});
+  final bool scheduled;
+  const DemProOrderCreateScreen({super.key, this.scheduled = false});
   @override
   State<DemProOrderCreateScreen> createState() => _State();
 }
@@ -77,8 +92,14 @@ class _State extends State<DemProOrderCreateScreen> {
   String _packageType = 'small';
   final  _instructionsCtrl = TextEditingController();
   bool   _isFragile        = false;
-  bool   _isScheduled      = false;
+  late bool _isScheduled = widget.scheduled;
   DateTime? _scheduledAt;
+
+  // ── Articles ───────────────────────────────────────────────────────────
+  final List<_Article> _articles = [_Article()];
+
+  // ── Paiement ───────────────────────────────────────────────────────────
+  String _paymentMode = 'merchant'; // 'merchant' | 'cod'
 
   // ── Étape 3 — Confirmation ──────────────────────────────────────────────
   Map<String, dynamic>? _estimate;
@@ -102,6 +123,7 @@ class _State extends State<DemProOrderCreateScreen> {
     _landmarkCtrl.dispose();
     _addressSearchCtrl.dispose();
     _instructionsCtrl.dispose();
+    for (final a in _articles) { a.dispose(); }
     super.dispose();
   }
 
@@ -113,8 +135,18 @@ class _State extends State<DemProOrderCreateScreen> {
   }
 
   void _centerMap(LatLng pos) => _mapCtrl?.animateCamera(
-    CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 14, tilt: 20)),
+    CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 15, tilt: 20)),
   );
+
+  void _centerMapVisible(LatLng pos) {
+    final screenH = MediaQuery.of(context).size.height;
+    final panelH = _panelHeight + MediaQuery.of(context).viewPadding.bottom;
+    final offsetLat = panelH / screenH * 0.006;
+    final adjusted = LatLng(pos.latitude + offsetLat, pos.longitude);
+    _mapCtrl?.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(target: adjusted, zoom: 15, tilt: 20)),
+    );
+  }
 
   // ── ProAddresses — auto-remplissage du départ ────────────────────────────
 
@@ -146,7 +178,7 @@ class _State extends State<DemProOrderCreateScreen> {
       _pickupAddress   = addr['address'] as String? ?? '';
       if (lat != null && lng != null) {
         _pickupLat = lat; _pickupLng = lng;
-        _centerMap(LatLng(lat, lng));
+        _centerMapVisible(LatLng(lat, lng));
       }
     });
   }
@@ -238,7 +270,7 @@ class _State extends State<DemProOrderCreateScreen> {
         _deliveryAddress = query.trim();
         _addressSearchCtrl.text = query.trim();
       });
-      _centerMap(LatLng(loc.latitude, loc.longitude));
+      _centerMapVisible(LatLng(loc.latitude, loc.longitude));
     } catch (_) {
       if (mounted) showDemToast(context, 'Adresse introuvable', isError: true);
     } finally {
@@ -273,7 +305,7 @@ class _State extends State<DemProOrderCreateScreen> {
           _deliveryAddress = name;
           _addressSearchCtrl.text = name;
         });
-        _centerMap(LatLng(lat, lng));
+        _centerMapVisible(LatLng(lat, lng));
       }
     } catch (_) {
       if (mounted) showDemToast(context, 'Impossible de charger l\'adresse', isError: true);
@@ -321,6 +353,16 @@ class _State extends State<DemProOrderCreateScreen> {
       if (_instructionsCtrl.text.trim().isNotEmpty) parts.add(_instructionsCtrl.text.trim());
       if (_landmarkCtrl.text.trim().isNotEmpty) parts.add('Repère: ${_landmarkCtrl.text.trim()}');
 
+      final items = _articles
+          .where((a) => a.nameCtrl.text.trim().isNotEmpty)
+          .map((a) => {
+                'name': a.nameCtrl.text.trim(),
+                'quantity': int.tryParse(a.qtyCtrl.text.trim()) ?? 1,
+                if (a.priceCtrl.text.trim().isNotEmpty)
+                  'price': int.tryParse(a.priceCtrl.text.trim()) ?? 0,
+              })
+          .toList();
+
       final order = await _ordersRepo.createOrder({
         'orderType':         'DELIVERY',
         'pickupAddress':     _pickupAddress.isNotEmpty ? _pickupAddress : '${_pickupLat!.toStringAsFixed(4)}, ${_pickupLng!.toStringAsFixed(4)}',
@@ -335,6 +377,8 @@ class _State extends State<DemProOrderCreateScreen> {
         if (_estimate?['price']  != null) 'price':  (_estimate!['price']  as num).toDouble(),
         if (_estimate?['demFee'] != null) 'demFee': (_estimate!['demFee'] as num).toDouble(),
         if (_scheduledAt != null) 'scheduledAt': _scheduledAt!.toUtc().toIso8601String(),
+        'paymentMode': _paymentMode,
+        if (items.isNotEmpty) 'items': items,
       });
 
       if (_selectedProAddr != null) {
@@ -352,7 +396,7 @@ class _State extends State<DemProOrderCreateScreen> {
   // ── Validation ───────────────────────────────────────────────────────────
 
   bool get _canAdvance => switch (_step) {
-    0 => _deliveryLat != null && _recipientPhoneCtrl.text.trim().length >= 8,
+    0 => _deliveryLat != null && _recipientPhoneCtrl.text.trim().length == 9,
     1 => true,
     _ => false,
   };
@@ -360,7 +404,7 @@ class _State extends State<DemProOrderCreateScreen> {
   String get _stepError => switch (_step) {
     0 => _deliveryLat == null
         ? 'Définissez la destination sur la carte'
-        : 'Le numéro du destinataire est obligatoire',
+        : 'Le numéro doit contenir exactement 9 chiffres',
     _ => '',
   };
 
@@ -409,7 +453,7 @@ class _State extends State<DemProOrderCreateScreen> {
     if (_isMapPlacement) return 130;
     final h = MediaQuery.of(context).size.height;
     return switch (_step) {
-      1 => h * 0.48,
+      1 => h * 0.58,
       2 => h * 0.58,
       _ => h * 0.56,
     };
@@ -492,7 +536,10 @@ class _State extends State<DemProOrderCreateScreen> {
         decoration: BoxDecoration(color: DemProColors.bg2.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(14)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            const Text('Nouvelle livraison', style: TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text(
+              _isScheduled ? 'Programmer une livraison' : 'Nouvelle livraison',
+              style: const TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w700),
+            ),
             const Spacer(),
             Text(_stepMeta[_step].$3, style: const TextStyle(color: DemProColors.accent, fontSize: 12, fontWeight: FontWeight.w600)),
           ]),
@@ -686,11 +733,6 @@ class _State extends State<DemProOrderCreateScreen> {
       ),
     const SizedBox(height: 14),
 
-    _FieldLabel('Repère (optionnel)'),
-    const SizedBox(height: 6),
-    _ProTextField(controller: _landmarkCtrl, hint: 'ex: Face mosquée, 2ème porte bleue…'),
-    const SizedBox(height: 14),
-
     const Divider(color: DemProColors.bg3, height: 1),
     const SizedBox(height: 14),
 
@@ -704,8 +746,10 @@ class _State extends State<DemProOrderCreateScreen> {
     _ProTextField(
       controller: _recipientPhoneCtrl,
       hint: '77 000 00 00',
-      prefix: '+221',
+      prefix: '+221 ',
       keyboardType: TextInputType.phone,
+      maxLength: 9,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       onChanged: (_) => setState(() {}),
     ),
   ]);
@@ -713,6 +757,65 @@ class _State extends State<DemProOrderCreateScreen> {
   // ── Étape 1 — Colis ──────────────────────────────────────────────────────
 
   Widget _buildStep1() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+    // ── Articles ──────────────────────────────────────────────────────────
+    const _FieldLabel('Articles'),
+    const SizedBox(height: 10),
+    ...List.generate(_articles.length, (i) {
+      final a = _articles[i];
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: DemProColors.bg3,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: DemProColors.bg4),
+        ),
+        child: Column(children: [
+          Row(children: [
+            CircleAvatar(radius: 12, backgroundColor: DemProColors.accent.withValues(alpha: 0.15),
+              child: Text('${i + 1}', style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w800))),
+            const SizedBox(width: 10),
+            Expanded(child: _ProTextField(controller: a.nameCtrl, hint: 'Nom du produit')),
+            if (_articles.length > 1) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => setState(() { _articles[i].dispose(); _articles.removeAt(i); }),
+                child: const Icon(Icons.remove_circle_outline, color: DemProColors.danger, size: 20),
+              ),
+            ],
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: _ProTextField(controller: a.qtyCtrl, hint: 'Qté', keyboardType: TextInputType.number)),
+            const SizedBox(width: 10),
+            Expanded(flex: 2, child: _ProTextField(controller: a.priceCtrl, hint: 'Prix (FCFA)', keyboardType: TextInputType.number)),
+          ]),
+        ]),
+      );
+    }),
+    if (_articles.length < 10)
+      GestureDetector(
+        onTap: () => setState(() => _articles.add(_Article())),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
+          ),
+          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.add, color: DemProColors.accent, size: 16),
+            SizedBox(width: 6),
+            Text('Ajouter un article', style: TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      ),
+    const SizedBox(height: 16),
+    const Divider(color: DemProColors.bg3, height: 1),
+    const SizedBox(height: 14),
+
+    // ── Type de colis ─────────────────────────────────────────────────────
     const _FieldLabel('Type de colis'),
     const SizedBox(height: 10),
     ..._packageTypes.map((t) => _PackageTypeRow(
@@ -740,15 +843,90 @@ class _State extends State<DemProOrderCreateScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       ),
     ),
-    const SizedBox(height: 14),
-    _FieldLabel('Instructions pour le livreur (optionnel)'),
-    const SizedBox(height: 6),
-    _ProTextField(controller: _instructionsCtrl, hint: 'ex: Appeler à l\'arrivée…', maxLines: 3),
     const SizedBox(height: 16),
     const Divider(color: DemProColors.bg3, height: 1),
     const SizedBox(height: 14),
 
-    // ── Livraison programmée ────────────────────────────────────────────
+    // ── Paiement ──────────────────────────────────────────────────────────
+    const _FieldLabel('Qui paie la livraison ?'),
+    const SizedBox(height: 10),
+    Row(children: [
+      Expanded(child: GestureDetector(
+        onTap: () => setState(() => _paymentMode = 'merchant'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: _paymentMode == 'merchant' ? DemProColors.accent.withValues(alpha: 0.12) : DemProColors.bg3,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _paymentMode == 'merchant' ? DemProColors.accent : DemProColors.bg4,
+              width: _paymentMode == 'merchant' ? 1.5 : 1,
+            ),
+          ),
+          child: Column(children: [
+            Icon(Icons.storefront_outlined,
+              color: _paymentMode == 'merchant' ? DemProColors.accent : DemProColors.muted, size: 22),
+            const SizedBox(height: 6),
+            Text('Je paie',
+              style: TextStyle(
+                color: _paymentMode == 'merchant' ? DemProColors.accent : DemProColors.muted,
+                fontSize: 13, fontWeight: FontWeight.w700,
+              )),
+            const SizedBox(height: 2),
+            Text('Paiement en ligne',
+              style: TextStyle(
+                color: _paymentMode == 'merchant' ? DemProColors.accent.withValues(alpha: 0.7) : DemProColors.muted,
+                fontSize: 10,
+              )),
+          ]),
+        ),
+      )),
+      const SizedBox(width: 10),
+      Expanded(child: GestureDetector(
+        onTap: () => setState(() => _paymentMode = 'cod'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: _paymentMode == 'cod' ? DemProColors.accent.withValues(alpha: 0.12) : DemProColors.bg3,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _paymentMode == 'cod' ? DemProColors.accent : DemProColors.bg4,
+              width: _paymentMode == 'cod' ? 1.5 : 1,
+            ),
+          ),
+          child: Column(children: [
+            Icon(Icons.payments_outlined,
+              color: _paymentMode == 'cod' ? DemProColors.accent : DemProColors.muted, size: 22),
+            const SizedBox(height: 6),
+            Text('Client paie',
+              style: TextStyle(
+                color: _paymentMode == 'cod' ? DemProColors.accent : DemProColors.muted,
+                fontSize: 13, fontWeight: FontWeight.w700,
+              )),
+            const SizedBox(height: 2),
+            Text('À la livraison',
+              style: TextStyle(
+                color: _paymentMode == 'cod' ? DemProColors.accent.withValues(alpha: 0.7) : DemProColors.muted,
+                fontSize: 10,
+              )),
+          ]),
+        ),
+      )),
+    ]),
+    const SizedBox(height: 16),
+    const Divider(color: DemProColors.bg3, height: 1),
+    const SizedBox(height: 14),
+
+    // ── Instructions ──────────────────────────────────────────────────────
+    _FieldLabel('Instructions pour le livreur (optionnel)'),
+    const SizedBox(height: 6),
+    _ProTextField(controller: _instructionsCtrl, hint: 'ex: Appeler à l\'arrivée…', maxLines: 3),
+
+    // ── Livraison programmée (uniquement si lancé depuis "Programmer") ──
+    if (widget.scheduled) ...[
+    const SizedBox(height: 16),
+    const Divider(color: DemProColors.bg3, height: 1),
+    const SizedBox(height: 14),
     Container(
       decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: _isScheduled ? DemProColors.accent.withValues(alpha: 0.4) : DemProColors.bg4)),
       child: SwitchListTile(
@@ -798,16 +976,18 @@ class _State extends State<DemProOrderCreateScreen> {
         ),
       ),
     ],
+    ], // end if (widget.scheduled)
   ]);
 
   // ── Étape 2 — Confirmation ────────────────────────────────────────────────
 
   Widget _buildStep2() {
+    final totalClient = (_estimate?['totalClient'] as num?)?.toInt();
     final price  = (_estimate?['price']       as num?)?.toInt();
     final demFee = (_estimate?['demFee']      as num?)?.toInt() ?? 0;
     final dist   = (_estimate?['distanceKm']  as num?)?.toStringAsFixed(1);
     final dur    = (_estimate?['durationMin'] as num?)?.toInt();
-    final total  = price != null ? price + demFee : null;
+    final total  = totalClient ?? (price != null ? price + demFee : null);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
@@ -868,6 +1048,53 @@ class _State extends State<DemProOrderCreateScreen> {
       ),
       const SizedBox(height: 10),
 
+      // Articles
+      if (_articles.any((a) => a.nameCtrl.text.trim().isNotEmpty))
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.bg4)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [
+              Icon(Icons.shopping_bag_outlined, color: DemProColors.accent, size: 16),
+              SizedBox(width: 8),
+              Text('Articles', style: TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w700)),
+            ]),
+            const SizedBox(height: 8),
+            ..._articles.where((a) => a.nameCtrl.text.trim().isNotEmpty).map((a) {
+              final qty = int.tryParse(a.qtyCtrl.text.trim()) ?? 1;
+              final price = int.tryParse(a.priceCtrl.text.trim());
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(children: [
+                  const Text('•  ', style: TextStyle(color: DemProColors.muted, fontSize: 12)),
+                  Expanded(child: Text(
+                    '${a.nameCtrl.text.trim()} × $qty',
+                    style: const TextStyle(color: DemProColors.text, fontSize: 12),
+                  )),
+                  if (price != null)
+                    Text('$price FCFA', style: const TextStyle(color: DemProColors.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                ]),
+              );
+            }),
+          ]),
+        ),
+
+      // Paiement
+      Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.bg4)),
+        child: Row(children: [
+          Icon(_paymentMode == 'merchant' ? Icons.storefront_outlined : Icons.payments_outlined, color: DemProColors.accent, size: 18),
+          const SizedBox(width: 10),
+          Text(
+            _paymentMode == 'merchant' ? 'Vous payez la livraison' : 'Le client paie à la livraison',
+            style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ]),
+      ),
+
       // Créneau programmé
       if (_scheduledAt != null)
         Container(
@@ -915,14 +1142,17 @@ class _State extends State<DemProOrderCreateScreen> {
           ]),
         )
       else
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.bg4)),
-          child: const Row(children: [
-            Icon(Icons.info_outline, color: DemProColors.muted, size: 16),
-            SizedBox(width: 8),
-            Expanded(child: Text('Prix calculé au moment de la confirmation.', style: TextStyle(color: DemProColors.muted, fontSize: 12))),
-          ]),
+        GestureDetector(
+          onTap: _fetchEstimate,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.warning.withValues(alpha: 0.4))),
+            child: const Row(children: [
+              Icon(Icons.refresh, color: DemProColors.warning, size: 16),
+              SizedBox(width: 8),
+              Expanded(child: Text('Impossible de calculer le prix. Appuyez pour réessayer.', style: TextStyle(color: DemProColors.warning, fontSize: 12))),
+            ]),
+          ),
         ),
       const SizedBox(height: 8),
     ]);
@@ -1211,14 +1441,18 @@ class _ProTextField extends StatelessWidget {
   final String? prefix;
   final TextInputType? keyboardType;
   final int maxLines;
+  final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
   final void Function(String)? onChanged;
-  const _ProTextField({required this.controller, required this.hint, this.prefix, this.keyboardType, this.maxLines = 1, this.onChanged});
+  const _ProTextField({required this.controller, required this.hint, this.prefix, this.keyboardType, this.maxLines = 1, this.maxLength, this.inputFormatters, this.onChanged});
 
   @override
   Widget build(BuildContext context) => TextField(
     controller: controller,
     keyboardType: keyboardType,
     maxLines: maxLines,
+    maxLength: maxLength,
+    inputFormatters: inputFormatters,
     onChanged: onChanged,
     style: const TextStyle(color: DemProColors.text, fontSize: 14),
     decoration: InputDecoration(
@@ -1226,6 +1460,7 @@ class _ProTextField extends StatelessWidget {
       hintStyle: const TextStyle(color: DemProColors.muted, fontSize: 13),
       prefixText: prefix,
       prefixStyle: const TextStyle(color: DemProColors.muted, fontSize: 14),
+      counterText: '',
       filled: true,
       fillColor: DemProColors.bg3,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),

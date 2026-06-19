@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/storage/auth_storage.dart';
+import '../../deliveries/data/orders_repository.dart';
 import '../../profile/data/profile_repository.dart';
 import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
@@ -292,16 +293,28 @@ class _AccueilTab extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
-                          style: TextStyle(
-                            color: t.text,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            _ProAvatar(
+                              avatarUrl: user?['avatar'] as String?,
+                              businessName: businessName,
+                              size: 40,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
+                                style: TextStyle(
+                                  color: t.text,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -438,7 +451,7 @@ class _AccueilTab extends StatelessWidget {
                 Expanded(
                   child: _ActionButton(
                     label: 'Livraison',
-                    icon: Icons.add_circle_outline,
+                    icon: Icons.two_wheeler,
                     filled: true,
                     onTap: () => context.push('/dem-pro/orders/create'),
                     t: t,
@@ -447,10 +460,10 @@ class _AccueilTab extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _ActionButton(
-                    label: 'Tournée',
-                    icon: Icons.route,
+                    label: 'Programmer',
+                    icon: Icons.schedule,
                     filled: false,
-                    onTap: () => context.push('/dem-pro/batch/create'),
+                    onTap: () => context.push('/dem-pro/orders/create?scheduled=true'),
                     t: t,
                   ),
                 ),
@@ -523,13 +536,10 @@ class _CompteTab extends StatelessWidget {
                 border: Border.all(color: DemProColors.accent.withValues(alpha: 0.15)),
               ),
               child: Row(children: [
-                Container(
-                  width: 48, height: 48,
-                  decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.storefront_outlined, color: DemProColors.accent, size: 24),
+                _ProAvatar(
+                  avatarUrl: user?['avatar'] as String?,
+                  businessName: businessName,
+                  size: 48,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -639,6 +649,61 @@ class _ProBadge extends StatelessWidget {
         letterSpacing: 0.5,
       )),
   );
+}
+
+class _ProAvatar extends StatelessWidget {
+  final String? avatarUrl;
+  final String? businessName;
+  final double size;
+  const _ProAvatar({this.avatarUrl, this.businessName, this.size = 40});
+
+  String get _initials {
+    final name = (businessName ?? '').trim();
+    if (name.isEmpty) return 'P';
+    final parts = name.split(RegExp(r'\s+'));
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return name[0].toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = avatarUrl != null && avatarUrl!.isNotEmpty;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: DemProColors.accent.withValues(alpha: 0.15),
+        border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3), width: 1.5),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: hasUrl
+          ? Image.network(
+              avatarUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(
+                  _initials,
+                  style: TextStyle(
+                    color: DemProColors.accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: size * 0.38,
+                  ),
+                ),
+              ),
+            )
+          : Center(
+              child: Text(
+                _initials,
+                style: TextStyle(
+                  color: DemProColors.accent,
+                  fontWeight: FontWeight.w800,
+                  fontSize: size * 0.38,
+                ),
+              ),
+            ),
+    );
+  }
 }
 
 // Grande stat dans la carte (livrées / en cours)
@@ -965,40 +1030,9 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
     return SafeArea(
       child: Column(
         children: [
-          // ── Toggle Livraisons / Tournées ─────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: t.cardBg2,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(children: [
-                _ViewToggleBtn(
-                  label: 'Livraisons',
-                  icon: Icons.two_wheeler,
-                  active: _viewType == _ViewType.orders,
-                  onTap: () => _switchView(_ViewType.orders),
-                  t: t,
-                ),
-                _ViewToggleBtn(
-                  label: 'Tournées',
-                  icon: Icons.route,
-                  active: _viewType == _ViewType.batches,
-                  onTap: () => _switchView(_ViewType.batches),
-                  t: t,
-                ),
-              ]),
-            ),
-          ),
-
+          const SizedBox(height: 16),
           // ── Contenu ──────────────────────────────────────────────────────
-          Expanded(
-            child: _viewType == _ViewType.batches
-                ? _buildBatchesView(t)
-                : _buildOrdersView(t),
-          ),
+          Expanded(child: _buildOrdersView(t)),
         ],
       ),
     );
@@ -2526,10 +2560,13 @@ class _FormField extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _periodOptions = [
-  ('this_month',  'Ce mois'),
-  ('prev_month',  'Mois précédent'),
-  ('3months',     '3 derniers mois'),
+  ('today',      'Jour'),
+  ('this_week',  'Semaine'),
+  ('this_month', 'Mois'),
+  ('3months',    '3 mois'),
 ];
+
+enum _FinanceView { sales, deliveries }
 
 class _FinancesTab extends StatefulWidget {
   final _T t;
@@ -2539,10 +2576,14 @@ class _FinancesTab extends StatefulWidget {
 }
 
 class _FinancesTabState extends State<_FinancesTab> {
-  final _repo = DemProRepository(ApiClient.dio);
+  final _repo    = DemProRepository(ApiClient.dio);
+  final _ordRepo = OrdersRepository();
 
   String _period = 'this_month';
-  Map<String, dynamic>? _data;
+  _FinanceView _view = _FinanceView.sales;
+
+  Map<String, dynamic>? _financeData;
+  List<Map<String, dynamic>> _orders = [];
   bool   _loading = true;
   String? _error;
 
@@ -2557,9 +2598,16 @@ class _FinancesTabState extends State<_FinancesTab> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final data = await _repo.getMyFinances(_period);
+      final results = await Future.wait([
+        _repo.getMyFinances(_period),
+        _repo.getMyOrders(),
+      ]);
       if (!mounted) return;
-      setState(() { _data = data; _loading = false; });
+      setState(() {
+        _financeData = results[0] as Map<String, dynamic>;
+        _orders = (results[1] as List).cast<Map<String, dynamic>>();
+        _loading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = e.toString(); _loading = false; });
@@ -2572,6 +2620,48 @@ class _FinancesTabState extends State<_FinancesTab> {
     _load();
   }
 
+  // ── Filtrage des commandes par période ────────────────────────────────────
+  List<Map<String, dynamic>> get _filteredOrders {
+    final now = DateTime.now();
+    final delivered = _orders.where((o) {
+      final s = (o['status'] as String? ?? '').toUpperCase();
+      return s == 'DELIVERED' || s == 'PAYMENT_CONFIRMED';
+    }).where((o) {
+      final dt = DateTime.tryParse(o['createdAt'] as String? ?? '')?.toLocal();
+      if (dt == null) return false;
+      return switch (_period) {
+        'today'      => dt.year == now.year && dt.month == now.month && dt.day == now.day,
+        'this_week'  => now.difference(dt).inDays < 7,
+        'this_month' => dt.year == now.year && dt.month == now.month,
+        '3months'    => now.difference(dt).inDays < 90,
+        _            => true,
+      };
+    }).toList();
+    delivered.sort((a, b) => (b['createdAt'] as String? ?? '').compareTo(a['createdAt'] as String? ?? ''));
+    return delivered;
+  }
+
+  int get _totalSales {
+    int total = 0;
+    for (final o in _filteredOrders) {
+      final items = o['items'] as List?;
+      if (items != null) {
+        for (final item in items) {
+          total += ((item['price'] as num?)?.toInt() ?? 0) * ((item['quantity'] as num?)?.toInt() ?? 1);
+        }
+      }
+    }
+    return total;
+  }
+
+  int get _totalDelivery {
+    int total = 0;
+    for (final o in _filteredOrders) {
+      total += (o['price'] as num?)?.toInt() ?? 0;
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -2581,17 +2671,11 @@ class _FinancesTabState extends State<_FinancesTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
           child: Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Finances', style: TextStyle(color: t.text, fontSize: 22, fontWeight: FontWeight.w800)),
-              Text(
-                (_data?['period']?['label'] as String?) ?? '…',
-                style: TextStyle(color: t.muted, fontSize: 12),
-              ),
-            ])),
+            Expanded(child: Text('Finances', style: TextStyle(color: t.text, fontSize: 22, fontWeight: FontWeight.w800))),
           ]),
         ),
 
-        // ── Sélecteur de période ──────────────────────────────────────────
+        // ── Filtre 1 — Période ───────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
           child: Row(children: _periodOptions.map((opt) {
@@ -2600,7 +2684,7 @@ class _FinancesTabState extends State<_FinancesTab> {
               onTap: () => _selectPeriod(opt.$1),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                margin: EdgeInsets.only(right: opt.$1 != '3months' ? 8 : 0),
+                margin: EdgeInsets.only(right: opt.$1 != '3months' ? 6 : 0),
                 padding: const EdgeInsets.symmetric(vertical: 9),
                 decoration: BoxDecoration(
                   color: selected ? DemProColors.accent : t.cardBg,
@@ -2621,6 +2705,34 @@ class _FinancesTabState extends State<_FinancesTab> {
           }).toList()),
         ),
 
+        // ── Filtre 2 — Ventes / Livraisons ──────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: t.cardBg2,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              _FinanceToggle(
+                label: 'Ventes',
+                icon: Icons.shopping_bag_outlined,
+                active: _view == _FinanceView.sales,
+                onTap: () => setState(() => _view = _FinanceView.sales),
+                t: t,
+              ),
+              _FinanceToggle(
+                label: 'Livraisons',
+                icon: Icons.two_wheeler,
+                active: _view == _FinanceView.deliveries,
+                onTap: () => setState(() => _view = _FinanceView.deliveries),
+                t: t,
+              ),
+            ]),
+          ),
+        ),
+
         // ── Contenu ───────────────────────────────────────────────────────
         Expanded(
           child: _loading
@@ -2634,13 +2746,9 @@ class _FinancesTabState extends State<_FinancesTab> {
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
                         physics: const AlwaysScrollableScrollPhysics(),
-                        children: [
-                          _buildSummaryCard(),
-                          const SizedBox(height: 16),
-                          _buildChart(),
-                          const SizedBox(height: 20),
-                          _buildTransactions(),
-                        ],
+                        children: _view == _FinanceView.sales
+                            ? _buildSalesContent()
+                            : _buildDeliveriesContent(),
                       ),
                     ),
         ),
@@ -2663,79 +2771,184 @@ class _FinancesTabState extends State<_FinancesTab> {
     ),
   ]));
 
-  // ── Card résumé ─────────────────────────────────────────────────────────────
+  // ── Vue VENTES ──────────────────────────────────────────────────────────────
 
-  Widget _buildSummaryCard() {
-    final summary  = _data?['summary'] as Map<String, dynamic>? ?? {};
-    final total    = (summary['totalSpent']           as num?) ?? 0;
-    final count    = (summary['deliveriesCount']      as num?) ?? 0;
-    final avg      = (summary['avgCostPerDelivery']   as num?) ?? 0;
+  List<Widget> _buildSalesContent() {
+    final orders = _filteredOrders;
+    int totalItems = 0;
+    for (final o in orders) {
+      final items = o['items'] as List?;
+      if (items != null) totalItems += items.length;
+    }
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: t.dark
-              ? [DemProColors.bg3, DemProColors.bg4]
-              : [const Color(0xFFEFF6FF), const Color(0xFFDCEFFB)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: t.border),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: DemProColors.accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.account_balance_wallet_outlined, color: DemProColors.accent, size: 16),
+    return [
+      // Résumé ventes
+      Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: t.dark
+                ? [DemProColors.bg3, DemProColors.bg4]
+                : [const Color(0xFFEFF6FF), const Color(0xFFDCEFFB)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
-          const SizedBox(width: 8),
-          Text('Résumé', style: TextStyle(color: t.muted, fontSize: 12, fontWeight: FontWeight.w600)),
-        ]),
-        const SizedBox(height: 14),
-        // Total bien mis en avant
-        Text(
-          _fcfa(total.toInt()),
-          style: TextStyle(color: t.text, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: t.border),
         ),
-        Text('Total dépensé', style: TextStyle(color: t.muted, fontSize: 12)),
-        const SizedBox(height: 16),
-        // 2 métriques secondaires
-        Row(children: [
-          Expanded(child: _MiniStat(
-            value: count.toInt().toString(),
-            label: 'Livraisons',
-            color: DemProColors.accent,
-            t: t,
-          )),
-          Container(width: 1, height: 40, color: t.border),
-          Expanded(child: _MiniStat(
-            value: _fcfa(avg.toInt()),
-            label: 'Coût moyen',
-            color: DemProColors.success,
-            t: t,
-          )),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: DemProColors.success.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.trending_up, color: DemProColors.success, size: 16),
+            ),
+            const SizedBox(width: 8),
+            Text('Ventes', style: TextStyle(color: t.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 14),
+          Text(
+            '${_fcfa(_totalSales)} FCFA',
+            style: TextStyle(color: t.text, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+          ),
+          Text('Chiffre d\'affaires', style: TextStyle(color: t.muted, fontSize: 12)),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _MiniStat(
+              value: orders.length.toString(),
+              label: 'Commandes',
+              color: DemProColors.accent,
+              t: t,
+            )),
+            Container(width: 1, height: 40, color: t.border),
+            Expanded(child: _MiniStat(
+              value: totalItems.toString(),
+              label: 'Articles vendus',
+              color: DemProColors.success,
+              t: t,
+            )),
+          ]),
         ]),
+      ),
+      const SizedBox(height: 20),
+
+      // Historique ventes
+      Row(children: [
+        Text('Historique des ventes', style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: DemProColors.accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text('${orders.length}', style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700)),
+        ),
       ]),
-    );
+      const SizedBox(height: 10),
+      if (orders.isEmpty)
+        _buildEmpty('Aucune vente sur cette période')
+      else
+        ...orders.map((o) => _SaleRow(order: o, t: t)),
+    ];
   }
 
-  // ── Graphique en barres ──────────────────────────────────────────────────────
+  // ── Vue LIVRAISONS ─────────────────────────────────────────────────────────
 
-  Widget _buildChart() {
-    final breakdown = (_data?['breakdown'] as List?)
-        ?.cast<Map<String, dynamic>>() ?? [];
-    if (breakdown.isEmpty) return const SizedBox.shrink();
+  List<Widget> _buildDeliveriesContent() {
+    final orders  = _filteredOrders;
+    final summary = _financeData?['summary'] as Map<String, dynamic>? ?? {};
+    final total   = (summary['totalSpent']         as num?) ?? _totalDelivery;
+    final count   = (summary['deliveriesCount']    as num?) ?? orders.length;
+    final avg     = (summary['avgCostPerDelivery'] as num?) ?? (orders.isNotEmpty ? _totalDelivery / orders.length : 0);
+    final breakdown = (_financeData?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
+    return [
+      // Résumé livraisons
+      Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: t.dark
+                ? [DemProColors.bg3, DemProColors.bg4]
+                : [const Color(0xFFEFF6FF), const Color(0xFFDCEFFB)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: t.border),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: DemProColors.accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 16),
+            ),
+            const SizedBox(width: 8),
+            Text('Livraisons', style: TextStyle(color: t.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 14),
+          Text(
+            '${_fcfa(total.toInt())} FCFA',
+            style: TextStyle(color: t.text, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+          ),
+          Text('Total dépensé', style: TextStyle(color: t.muted, fontSize: 12)),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _MiniStat(
+              value: count.toInt().toString(),
+              label: 'Livraisons',
+              color: DemProColors.accent,
+              t: t,
+            )),
+            Container(width: 1, height: 40, color: t.border),
+            Expanded(child: _MiniStat(
+              value: '${_fcfa(avg.toInt())}',
+              label: 'Coût moyen',
+              color: DemProColors.success,
+              t: t,
+            )),
+          ]),
+        ]),
+      ),
+      const SizedBox(height: 16),
+
+      // Graphique
+      if (breakdown.isNotEmpty) ...[
+        _buildChart(breakdown),
+        const SizedBox(height: 20),
+      ],
+
+      // Transactions
+      Row(children: [
+        Text('Transactions', style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: DemProColors.accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text('${orders.length}', style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700)),
+        ),
+      ]),
+      const SizedBox(height: 10),
+      if (orders.isEmpty)
+        _buildEmpty('Aucune livraison sur cette période')
+      else
+        ...orders.map((o) => _DeliveryRow(order: o, t: t)),
+    ];
+  }
+
+  Widget _buildChart(List<Map<String, dynamic>> breakdown) {
     final maxAmt = breakdown
         .map((b) => (b['amount'] as num?)?.toDouble() ?? 0.0)
         .fold(0.0, (a, b) => a > b ? a : b);
-
-    final isMonthly = _period == '3months';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2745,10 +2958,7 @@ class _FinancesTabState extends State<_FinancesTab> {
         border: Border.all(color: t.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(
-          isMonthly ? 'Évolution mensuelle' : 'Évolution hebdomadaire',
-          style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700),
-        ),
+        Text('Évolution', style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
         const SizedBox(height: 16),
         SizedBox(
           height: 120,
@@ -2765,40 +2975,30 @@ class _FinancesTabState extends State<_FinancesTab> {
 
               return Expanded(child: Padding(
                 padding: EdgeInsets.only(right: isLast ? 0 : 6),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (count > 0) ...[
-                      Text(
-                        _fcfa(amount.toInt()),
-                        style: TextStyle(color: DemProColors.accent, fontSize: 9, fontWeight: FontWeight.w700),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                    ] else
-                      const SizedBox(height: 18),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeOut,
-                      height: barH,
-                      decoration: BoxDecoration(
-                        color: count > 0
-                            ? DemProColors.accent.withValues(alpha: 0.25 + 0.75 * ratio)
-                            : t.border,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                      ),
+                child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  if (count > 0) ...[
+                    Text(_fcfa(amount.toInt()),
+                      style: TextStyle(color: DemProColors.accent, fontSize: 9, fontWeight: FontWeight.w700),
+                      textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 3),
+                  ] else
+                    const SizedBox(height: 18),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeOut,
+                    height: barH,
+                    decoration: BoxDecoration(
+                      color: count > 0
+                          ? DemProColors.accent.withValues(alpha: 0.25 + 0.75 * ratio)
+                          : t.border,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      label,
-                      style: TextStyle(color: t.muted, fontSize: 8.5, fontWeight: FontWeight.w500),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(label,
+                    style: TextStyle(color: t.muted, fontSize: 8.5, fontWeight: FontWeight.w500),
+                    textAlign: TextAlign.center, maxLines: 2),
+                ]),
               ));
             }).toList(),
           ),
@@ -2807,37 +3007,7 @@ class _FinancesTabState extends State<_FinancesTab> {
     );
   }
 
-  // ── Liste des transactions ───────────────────────────────────────────────────
-
-  Widget _buildTransactions() {
-    final txs = (_data?['transactions'] as List?)
-        ?.cast<Map<String, dynamic>>() ?? [];
-
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Text('Transactions', style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: DemProColors.accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            '${txs.length}',
-            style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ]),
-      const SizedBox(height: 10),
-      if (txs.isEmpty)
-        _buildEmptyTx()
-      else
-        ...txs.map((tx) => _TxRow(tx: tx, t: t)),
-    ]);
-  }
-
-  Widget _buildEmptyTx() => Container(
+  Widget _buildEmpty(String msg) => Container(
     padding: const EdgeInsets.all(24),
     decoration: BoxDecoration(
       color: t.cardBg,
@@ -2847,10 +3017,43 @@ class _FinancesTabState extends State<_FinancesTab> {
     child: Column(children: [
       Icon(Icons.receipt_long_outlined, color: t.muted, size: 36),
       const SizedBox(height: 10),
-      Text('Aucune livraison cette période', style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w600)),
-      const SizedBox(height: 4),
-      Text('Les livraisons complétées apparaîtront ici.', style: TextStyle(color: t.muted, fontSize: 12), textAlign: TextAlign.center),
+      Text(msg, style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w600)),
     ]),
+  );
+}
+
+// ── Toggle Ventes / Livraisons ──────────────────────────────────────────────
+
+class _FinanceToggle extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  final _T t;
+  const _FinanceToggle({required this.label, required this.icon, required this.active, required this.onTap, required this.t});
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: active ? DemProColors.accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, size: 14, color: active ? Colors.white : t.muted),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(
+            color: active ? Colors.white : t.muted,
+            fontSize: 12,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+          )),
+        ]),
+      ),
+    ),
   );
 }
 
@@ -2874,19 +3077,119 @@ class _MiniStat extends StatelessWidget {
   );
 }
 
-// ── Ligne de transaction ──────────────────────────────────────────────────────
+// ── Ligne vente (avec articles) ─────────────────────────────────────────────
 
-class _TxRow extends StatelessWidget {
-  final Map<String, dynamic> tx;
+class _SaleRow extends StatelessWidget {
+  final Map<String, dynamic> order;
   final _T t;
-  const _TxRow({required this.tx, required this.t});
+  const _SaleRow({required this.order, required this.t});
 
   @override
   Widget build(BuildContext context) {
-    final address    = _shortAddress(tx['deliveryAddress'] as String? ?? '—');
-    final amount     = (tx['amount'] as num?)?.toInt() ?? 0;
-    final driverName = tx['driverName'] as String?;
-    final date       = _formatDateTime(tx['date'] as String?);
+    final items     = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final desc      = order['description'] as String? ?? '';
+    final date      = _formatDateTime(order['createdAt'] as String?);
+    final receiver  = order['receiverName'] as String?;
+    final address   = _shortAddress(order['deliveryAddress'] as String? ?? '');
+    final payMode   = order['paymentMode'] as String?;
+
+    int saleTotal = 0;
+    for (final item in items) {
+      saleTotal += ((item['price'] as num?)?.toInt() ?? 0) * ((item['quantity'] as num?)?.toInt() ?? 1);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: t.cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: t.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Header
+        Row(children: [
+          Container(
+            width: 34, height: 34,
+            decoration: BoxDecoration(
+              color: DemProColors.success.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.shopping_bag_outlined, color: DemProColors.success, size: 17),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(receiver ?? address, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(date, style: TextStyle(color: t.muted, fontSize: 11)),
+          ])),
+          if (saleTotal > 0)
+            Text('${_fcfa(saleTotal)} F', style: const TextStyle(color: DemProColors.success, fontSize: 14, fontWeight: FontWeight.w800)),
+        ]),
+
+        // Articles
+        if (items.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: t.cardBg2,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(children: items.map((item) {
+              final name = item['name'] as String? ?? '—';
+              final qty  = (item['quantity'] as num?)?.toInt() ?? 1;
+              final price = (item['price'] as num?)?.toInt();
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(children: [
+                  Text('$name', style: TextStyle(color: t.text, fontSize: 12)),
+                  Text('  × $qty', style: TextStyle(color: t.muted, fontSize: 12)),
+                  const Spacer(),
+                  if (price != null)
+                    Text('${_fcfa(price * qty)} F', style: TextStyle(color: t.text, fontSize: 12, fontWeight: FontWeight.w600)),
+                ]),
+              );
+            }).toList()),
+          ),
+        ] else if (desc.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(desc, style: TextStyle(color: t.muted, fontSize: 11.5), maxLines: 2, overflow: TextOverflow.ellipsis),
+        ],
+
+        // Paiement
+        if (payMode != null) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            Icon(
+              payMode == 'merchant' ? Icons.storefront_outlined : Icons.payments_outlined,
+              color: t.muted, size: 13,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              payMode == 'merchant' ? 'Payé par vous' : 'Payé à la livraison',
+              style: TextStyle(color: t.muted, fontSize: 11),
+            ),
+          ]),
+        ],
+      ]),
+    );
+  }
+}
+
+// ── Ligne livraison ─────────────────────────────────────────────────────────
+
+class _DeliveryRow extends StatelessWidget {
+  final Map<String, dynamic> order;
+  final _T t;
+  const _DeliveryRow({required this.order, required this.t});
+
+  @override
+  Widget build(BuildContext context) {
+    final address    = _shortAddress(order['deliveryAddress'] as String? ?? '—');
+    final amount     = (order['price'] as num?)?.toInt() ?? 0;
+    final driver     = order['driver'] as Map<String, dynamic>?;
+    final driverName = driver?['name'] as String?;
+    final date       = _formatDateTime(order['createdAt'] as String?);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2900,10 +3203,10 @@ class _TxRow extends StatelessWidget {
         Container(
           width: 36, height: 36,
           decoration: BoxDecoration(
-            color: DemProColors.success.withValues(alpha: 0.10),
+            color: DemProColors.accent.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(Icons.check_circle_outline, color: DemProColors.success, size: 18),
+          child: const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 18),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2913,22 +3216,12 @@ class _TxRow extends StatelessWidget {
             Text(date, style: TextStyle(color: t.muted, fontSize: 11)),
             if (driverName != null && driverName.isNotEmpty) ...[
               Text('  ·  ', style: TextStyle(color: t.muted, fontSize: 11)),
-              Expanded(
-                child: Text(
-                  driverName,
-                  style: TextStyle(color: t.muted, fontSize: 11),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+              Expanded(child: Text(driverName, style: TextStyle(color: t.muted, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
             ],
           ]),
         ])),
         const SizedBox(width: 12),
-        Text(
-          _fcfa(amount),
-          style: const TextStyle(color: DemProColors.accent, fontSize: 13.5, fontWeight: FontWeight.w800),
-        ),
+        Text('${_fcfa(amount)} F', style: const TextStyle(color: DemProColors.accent, fontSize: 13.5, fontWeight: FontWeight.w800)),
       ]),
     );
   }
