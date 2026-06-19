@@ -163,6 +163,7 @@ class _State extends State<DemProHomeScreen> {
 
   Map<String, dynamic>? _user;
   Map<String, dynamic>? _stats;
+  List<Map<String, dynamic>> _activeOrders = [];
   bool _loading = true;
 
   @override
@@ -173,10 +174,23 @@ class _State extends State<DemProHomeScreen> {
 
   Future<void> _load() async {
     try {
-      final user  = await ProfileRepository().getMe();
-      final stats = await _demProRepo.getMyStats();
+      final results = await Future.wait([
+        ProfileRepository().getMe(),
+        _demProRepo.getMyStats(),
+        _demProRepo.getMyOrders(),
+      ]);
       if (!mounted) return;
-      setState(() { _user = user; _stats = stats; _loading = false; });
+      final orders = results[2] as List<Map<String, dynamic>>;
+      final active = orders.where((o) {
+        final s = o['status'] as String? ?? '';
+        return const {'PENDING', 'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'}.contains(s);
+      }).toList();
+      setState(() {
+        _user = results[0] as Map<String, dynamic>;
+        _stats = results[1] as Map<String, dynamic>;
+        _activeOrders = active;
+        _loading = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -198,6 +212,7 @@ class _State extends State<DemProHomeScreen> {
         children: [
           _AccueilTab(
             user: _user, stats: _stats, loading: _loading,
+            activeOrders: _activeOrders,
             onRefresh: _load, t: t,
           ),
           _LivraisonsTab(t: t),
@@ -238,11 +253,13 @@ class _AccueilTab extends StatelessWidget {
   final Map<String, dynamic>? user;
   final Map<String, dynamic>? stats;
   final bool loading;
+  final List<Map<String, dynamic>> activeOrders;
   final Future<void> Function() onRefresh;
   final _T t;
   const _AccueilTab({
     required this.user, required this.stats,
-    required this.loading, required this.onRefresh, required this.t,
+    required this.loading, required this.activeOrders,
+    required this.onRefresh, required this.t,
   });
 
   @override
@@ -322,7 +339,61 @@ class _AccueilTab extends StatelessWidget {
                   const _ProBadge(),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+
+              // ── Commandes en cours (bandeau cliquable) ─────────────────
+              if (activeOrders.isNotEmpty)
+                GestureDetector(
+                  onTap: () {
+                    final o = activeOrders.first;
+                    final status = o['status'] as String? ?? '';
+                    if (status == 'PENDING') {
+                      context.push('/dem-pro/orders/confirmation', extra: o);
+                    } else {
+                      final driverId = (o['driver'] as Map?)?['id'] as String? ?? o['driverId'] as String? ?? '';
+                      context.push('/dem-pro/orders/tracking', extra: {
+                        'orderId': o['id'],
+                        'driverId': driverId,
+                        'initialOrder': o,
+                      });
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: DemProColors.accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: DemProColors.accent.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(children: [
+                      Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: DemProColors.accent.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${activeOrders.length} livraison${activeOrders.length > 1 ? 's' : ''} en cours',
+                            style: const TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            'Appuyez pour suivre',
+                            style: TextStyle(color: t.muted, fontSize: 11),
+                          ),
+                        ],
+                      )),
+                      const Icon(Icons.chevron_right, color: DemProColors.accent, size: 20),
+                    ]),
+                  ),
+                ),
+              if (activeOrders.isNotEmpty) const SizedBox(height: 12),
 
               // ── Carte résumé ─────────────────────────────────────────────
               if (loading)

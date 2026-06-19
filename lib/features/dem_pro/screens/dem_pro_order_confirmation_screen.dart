@@ -335,7 +335,7 @@ class _DemProOrderConfirmationScreenState
             child: Row(children: [
               _MapBtn(
                 icon: Icons.arrow_back,
-                onTap: _cancelling ? null : _cancel,
+                onTap: () => context.go('/dem-pro/home'),
               ),
               const Spacer(),
               Container(
