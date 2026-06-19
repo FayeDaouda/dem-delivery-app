@@ -1,5 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -222,6 +224,7 @@ class _State extends State<DemProHomeScreen> {
             user: _user, onLogout: _handleLogout, t: t,
             darkMode: _darkMode,
             onThemeToggle: () => setState(() => _darkMode = !_darkMode),
+            onRefresh: _load,
           ),
         ],
       ),
@@ -539,19 +542,96 @@ class _AccueilTab extends StatelessWidget {
 // Onglet Compte
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CompteTab extends StatelessWidget {
+class _CompteTab extends StatefulWidget {
   final Map<String, dynamic>? user;
   final VoidCallback onLogout;
   final VoidCallback onThemeToggle;
   final bool darkMode;
   final _T t;
+  final Future<void> Function() onRefresh;
   const _CompteTab({
     required this.user, required this.onLogout,
     required this.onThemeToggle, required this.darkMode, required this.t,
+    required this.onRefresh,
   });
+  @override
+  State<_CompteTab> createState() => _CompteTabState();
+}
+
+class _CompteTabState extends State<_CompteTab> {
+  bool _uploading = false;
+
+  Future<void> _pickAndUploadAvatar() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 512, imageQuality: 80);
+    if (picked == null) return;
+
+    setState(() => _uploading = true);
+    try {
+      final bytes = await picked.readAsBytes();
+      final formData = FormData.fromMap({
+        'field': 'avatar',
+        'file': MultipartFile.fromBytes(bytes, filename: 'avatar.jpg'),
+      });
+      await ApiClient.dio.post('/users/driver/documents', data: formData);
+      await widget.onRefresh();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Échec de l\'upload. Réessayez.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _editField(String label, String currentValue, String fieldKey) async {
+    final ctrl = TextEditingController(text: currentValue);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: widget.t.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Modifier $label', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: TextStyle(color: widget.t.text),
+          decoration: InputDecoration(
+            hintText: label,
+            hintStyle: TextStyle(color: widget.t.muted),
+            filled: true,
+            fillColor: widget.t.cardBg2,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Annuler', style: TextStyle(color: widget.t.muted))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+            child: const Text('Enregistrer', style: TextStyle(color: DemProColors.accent, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty || result == currentValue) return;
+    try {
+      await ApiClient.dio.patch('/users/me/profile', data: {fieldKey: result});
+      await widget.onRefresh();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Échec de la mise à jour.')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final t = widget.t;
+    final user = widget.user;
     final businessName = (user?['proBusinessName'] as String?)?.trim();
     final name         = user?['name']  as String?;
     final phone        = user?['phone'] as String?;
@@ -580,25 +660,50 @@ class _CompteTab extends StatelessWidget {
                 border: Border.all(color: DemProColors.accent.withValues(alpha: 0.15)),
               ),
               child: Row(children: [
-                _ProAvatar(
-                  avatarUrl: user?['avatar'] as String?,
-                  businessName: businessName,
-                  size: 48,
+                GestureDetector(
+                  onTap: _uploading ? null : _pickAndUploadAvatar,
+                  child: Stack(
+                    children: [
+                      _ProAvatar(
+                        avatarUrl: user?['avatar'] as String?,
+                        businessName: businessName,
+                        size: 56,
+                      ),
+                      Positioned(
+                        bottom: 0, right: 0,
+                        child: Container(
+                          width: 22, height: 22,
+                          decoration: BoxDecoration(
+                            color: DemProColors.accent,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: t.cardBg, width: 2),
+                          ),
+                          child: _uploading
+                              ? const Padding(
+                                  padding: EdgeInsets.all(3),
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5),
+                                )
+                              : const Icon(Icons.camera_alt, color: Colors.white, size: 12),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
-                        style: TextStyle(
-                          color: t.text,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      GestureDetector(
+                        onTap: () => _editField('Nom entreprise', businessName ?? '', 'proBusinessName'),
+                        child: Row(children: [
+                          Expanded(child: Text(
+                            businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
+                            style: TextStyle(color: t.text, fontSize: 17, fontWeight: FontWeight.w800),
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                          )),
+                          Icon(Icons.edit_outlined, color: t.muted, size: 14),
+                        ]),
                       ),
                       const SizedBox(height: 4),
                       const _ProBadge(),
@@ -614,10 +719,11 @@ class _CompteTab extends StatelessWidget {
             _InfoCard(
               t: t,
               children: [
-                _InfoRow(icon: Icons.person_outline,   label: 'Responsable', value: name  ?? '—', t: t),
-                _InfoRow(icon: Icons.phone_outlined,   label: 'Téléphone',   value: phone ?? '—', t: t),
-                if (email != null && email.isNotEmpty)
-                  _InfoRow(icon: Icons.email_outlined, label: 'Email',       value: email,         t: t),
+                _EditableInfoRow(icon: Icons.person_outline, label: 'Responsable', value: name ?? '—', t: t,
+                  onTap: () => _editField('Responsable', name ?? '', 'name')),
+                _InfoRow(icon: Icons.phone_outlined, label: 'Téléphone', value: phone ?? '—', t: t),
+                _EditableInfoRow(icon: Icons.email_outlined, label: 'Email', value: email?.isNotEmpty == true ? email! : '—', t: t,
+                  onTap: () => _editField('Email', email ?? '', 'email')),
                 _InfoRow(icon: Icons.category_outlined,  label: 'Secteur',     value: _sectorLabels[sector] ?? '—', t: t),
                 _InfoRow(icon: Icons.bar_chart_outlined, label: 'Volume hebdo', value: _volumeLabels[volume] ?? '—', t: t, isLast: true),
               ],
@@ -636,24 +742,20 @@ class _CompteTab extends StatelessWidget {
               ),
               child: Row(children: [
                 Icon(
-                  darkMode ? Icons.dark_mode_outlined : Icons.wb_sunny_outlined,
+                  widget.darkMode ? Icons.dark_mode_outlined : Icons.wb_sunny_outlined,
                   color: DemProColors.accent,
                   size: 20,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    darkMode ? 'Mode sombre' : 'Mode clair',
-                    style: TextStyle(
-                      color: t.text,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    widget.darkMode ? 'Mode sombre' : 'Mode clair',
+                    style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                 ),
                 Switch(
-                  value: darkMode,
-                  onChanged: (_) => onThemeToggle(),
+                  value: widget.darkMode,
+                  onChanged: (_) => widget.onThemeToggle(),
                   activeThumbColor: Colors.white,
                   activeTrackColor: DemProColors.accent,
                   inactiveThumbColor: Colors.white,
@@ -664,7 +766,7 @@ class _CompteTab extends StatelessWidget {
             const SizedBox(height: 24),
 
             // ── Déconnexion ───────────────────────────────────────────────
-            _LogoutButton(onTap: onLogout, t: t),
+            _LogoutButton(onTap: widget.onLogout, t: t),
           ],
         ),
       ),
@@ -1024,6 +1126,32 @@ class _InfoRow extends StatelessWidget {
       Expanded(child: Text(label, style: TextStyle(color: t.muted, fontSize: 13))),
       Text(value, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
     ]),
+  );
+}
+
+class _EditableInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label, value;
+  final _T t;
+  final VoidCallback onTap;
+  const _EditableInfoRow({required this.icon, required this.label, required this.value, required this.t, required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.border)),
+      ),
+      child: Row(children: [
+        Icon(icon, color: DemProColors.accent, size: 18),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label, style: TextStyle(color: t.muted, fontSize: 13))),
+        Text(value, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 6),
+        Icon(Icons.edit_outlined, color: t.muted, size: 14),
+      ]),
+    ),
   );
 }
 
