@@ -156,7 +156,10 @@ class OrdersRepository {
       });
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
-      debugPrint('[getEstimate] ${e.response?.statusCode} ${e.response?.data}');
+      debugPrint('[getEstimate] ERROR ${e.response?.statusCode} ${e.response?.data}');
+      return null;
+    } catch (e) {
+      debugPrint('[getEstimate] UNEXPECTED: $e');
       return null;
     }
   }

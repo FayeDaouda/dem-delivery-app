@@ -334,13 +334,19 @@ class _State extends State<DemProOrderCreateScreen> {
 
   Future<void> _fetchEstimate() async {
     if (_pickupLat == null || _deliveryLat == null) return;
-    setState(() { _loadingEstimate = true; _estimate = null; });
-    final est = await _ordersRepo.getEstimate(
-      pickupLat: _pickupLat!,    pickupLng: _pickupLng!,
-      deliveryLat: _deliveryLat!, deliveryLng: _deliveryLng!,
-      orderType: 'DELIVERY',
-    );
-    if (mounted) setState(() { _estimate = est; _loadingEstimate = false; });
+    if (mounted) setState(() { _loadingEstimate = true; _estimate = null; });
+    try {
+      final est = await _ordersRepo.getEstimate(
+        pickupLat: _pickupLat!,    pickupLng: _pickupLng!,
+        deliveryLat: _deliveryLat!, deliveryLng: _deliveryLng!,
+        orderType: 'DELIVERY',
+      );
+      debugPrint('[ESTIMATE] result: $est');
+      if (mounted) setState(() { _estimate = est; _loadingEstimate = false; });
+    } catch (e) {
+      debugPrint('[ESTIMATE] error: $e');
+      if (mounted) setState(() => _loadingEstimate = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -408,10 +414,13 @@ class _State extends State<DemProOrderCreateScreen> {
     _ => '',
   };
 
-  void _next() {
+  void _next() async {
     if (!_canAdvance) { showDemToast(context, _stepError, isError: true); return; }
-    if (_step == 1) _fetchEstimate();
-    setState(() => _step++);
+    if (_step == 1) {
+      setState(() => _loadingEstimate = true);
+      await _fetchEstimate();
+    }
+    if (mounted) setState(() => _step++);
   }
 
   void _back() {
