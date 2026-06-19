@@ -146,6 +146,7 @@ class OrdersRepository {
     required double deliveryLat, required double deliveryLng,
     String orderType = 'DELIVERY',
   }) async {
+    debugPrint('[getEstimate] CALLING pickup=($pickupLat,$pickupLng) delivery=($deliveryLat,$deliveryLng)');
     try {
       final res = await _dio.get('/orders/estimate', queryParameters: {
         'pickupLat':   pickupLat,
@@ -154,9 +155,10 @@ class OrdersRepository {
         'deliveryLng': deliveryLng,
         'orderType':   orderType,
       });
+      debugPrint('[getEstimate] OK: ${res.data}');
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
-      debugPrint('[getEstimate] ERROR ${e.response?.statusCode} ${e.response?.data}');
+      debugPrint('[getEstimate] ERROR ${e.response?.statusCode} ${e.response?.data} ${e.message}');
       return null;
     } catch (e) {
       debugPrint('[getEstimate] UNEXPECTED: $e');

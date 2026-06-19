@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -332,6 +333,32 @@ class _State extends State<DemProOrderCreateScreen> {
 
   // ── Estimate & submit ────────────────────────────────────────────────────
 
+  double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371.0;
+    const deg2rad = 3.141592653589793 / 180;
+    final dLat = (lat2 - lat1) * deg2rad;
+    final dLng = (lng2 - lng1) * deg2rad;
+    final lat1R = lat1 * deg2rad;
+    final lat2R = lat2 * deg2rad;
+    final sinDLat = math.sin(dLat / 2);
+    final sinDLng = math.sin(dLng / 2);
+    final a = sinDLat * sinDLat + math.cos(lat1R) * math.cos(lat2R) * sinDLng * sinDLng;
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  Map<String, dynamic> _localEstimate() {
+    if (_pickupLat == null || _deliveryLat == null) return {};
+    final distKm = _haversineKm(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
+    final raw = 600 + distKm * 250;
+    final price = (raw / 5).round() * 5;
+    return {
+      'price': price,
+      'demFee': 0,
+      'totalClient': price,
+      'distanceKm': (distKm * 10).round() / 10,
+    };
+  }
+
   Future<void> _fetchEstimate() async {
     if (_pickupLat == null || _deliveryLat == null) return;
     if (mounted) setState(() { _loadingEstimate = true; _estimate = null; });
@@ -344,8 +371,8 @@ class _State extends State<DemProOrderCreateScreen> {
       debugPrint('[ESTIMATE] result: $est');
       if (mounted) setState(() { _estimate = est; _loadingEstimate = false; });
     } catch (e) {
-      debugPrint('[ESTIMATE] error: $e');
-      if (mounted) setState(() => _loadingEstimate = false);
+      debugPrint('[ESTIMATE] error: $e — using local fallback');
+      if (mounted) setState(() { _estimate = _localEstimate(); _loadingEstimate = false; });
     }
   }
 
