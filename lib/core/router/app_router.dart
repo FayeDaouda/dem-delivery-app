@@ -45,6 +45,7 @@ import '../../features/dem_pro/screens/dem_pro_batch_confirmation_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_batch_tracking_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_confirmation_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_tracking_screen.dart';
+import '../../features/guest_tracking/guest_tracking_screen.dart';
 
 final routeObserver = RouteObserver<ModalRoute<void>>();
 
@@ -75,6 +76,9 @@ final appRouter = GoRouter(
 
     // ── Admin : pas de garde de flux onboarding ──────────────────────────────
     if (_adminRoutes.contains(path)) return null;
+
+    // ── Suivi invité : accessible sans auth ─────────────────────────────────
+    if (path.startsWith('/track/')) return null;
 
     // ── 1. Utilisateur connecté ──────────────────────────────────────────────
     if (n.isLoggedIn) {
@@ -118,6 +122,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/location-disclosure',
       builder: (context, state) => const LocationDisclosureScreen(),
+    ),
+
+    // ── Suivi invité (public, sans auth) ──
+    GoRoute(
+      path: '/track/:id',
+      builder: (context, state) => GuestTrackingScreen(
+        orderId: state.pathParameters['id']!,
+      ),
     ),
 
     // ── Auth ──
@@ -170,7 +182,10 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/dem-pro/orders/create',
-      builder: (context, state) => const DemProOrderCreateScreen(),
+      builder: (context, state) {
+        final scheduled = state.uri.queryParameters['scheduled'] == 'true';
+        return DemProOrderCreateScreen(scheduled: scheduled);
+      },
     ),
     GoRoute(
       path: '/dem-pro/batch/create',

@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import 'package:share_plus/share_plus.dart';
+
 import '../../../core/config/app_config.dart';
 import '../../../core/services/socket_service.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -339,6 +341,14 @@ class _DemProOrderConfirmationScreenState
                 onTap: () => context.go('/dem-pro/home'),
               ),
               const Spacer(),
+              _MapBtn(
+                icon: Icons.share_outlined,
+                onTap: () {
+                  final url = 'https://api.dem.sn/track/${widget.order['id']}';
+                  SharePlus.instance.share(ShareParams(text: 'Suivez ma livraison DEM : $url'));
+                },
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(

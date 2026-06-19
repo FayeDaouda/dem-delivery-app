@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/config/app_config.dart';
@@ -263,6 +264,12 @@ class _DemProOrderTrackingScreenState
     );
   }
 
+  void _shareOrder() {
+    final baseUrl = 'https://api.dem.sn';
+    final url = '$baseUrl/track/${widget.orderId}';
+    SharePlus.instance.share(ShareParams(text: 'Suivez ma livraison DEM en temps réel : $url'));
+  }
+
   // ── Contact livreur ───────────────────────────────────────────────────────
   void _callDriver() {
     final phone = (_order?['driver'] as Map?)?['phone'] as String?;
@@ -407,6 +414,11 @@ class _DemProOrderTrackingScreenState
                 onTap: () => context.go('/dem-pro/home'),
               ),
               const Spacer(),
+              _MapBtn(
+                icon: Icons.share_outlined,
+                onTap: () => _shareOrder(),
+              ),
+              const SizedBox(width: 8),
               _MapBtn(
                 icon: Icons.my_location,
                 onTap: () {
