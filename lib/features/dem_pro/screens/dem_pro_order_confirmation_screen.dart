@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/services/socket_service.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/map_theme_provider.dart';
@@ -162,7 +163,7 @@ class _DemProOrderConfirmationScreenState
         queryParameters: {
           'origin':      '$pLat,$pLng',
           'destination': '$dLat,$dLng',
-          'key':         'AIzaSyBvmfGU3pIkKjBRtJGz-KJvBXvWFRK9pCk',
+          'key':         AppConfig.mapsApiKey,
         },
       );
       final steps = (res.data['routes'] as List?)?.first['legs']?.first['steps'] as List?;
