@@ -11,6 +11,8 @@ class AppStartupNotifier extends ChangeNotifier {
   bool _isReady = false;
   bool get isReady => _isReady;
 
+  String? initialDeepLink;
+
   // ── Flags de flux ────────────────────────────────────────────────────────────
   bool _isLoggedIn        = false;
   bool _onboardingSeen    = false;

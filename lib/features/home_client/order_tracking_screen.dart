@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/services/socket_service.dart';
@@ -574,7 +576,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
             ),
             const SizedBox(height: 8),
             GestureDetector(
-              onTap: _showReportSheet,
+              onTap: _showSupportBottomSheet,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
@@ -683,7 +685,79 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     return const SizedBox.shrink();
   }
 
-  void _showReportSheet() {
+  void _showShareSheet(BuildContext context, String orderId) async {
+    try {
+      final repo = ref.read(ordersRepositoryProvider);
+      final link = await repo.getShareLink(orderId);
+
+      if (!context.mounted) return;
+
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (ctx) => Container(
+          decoration: BoxDecoration(
+            gradient: AppColors.gradientSplash,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, -4))],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36, height: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('Partager le suivi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 8),
+                  Text('Permettez au destinataire de suivre le livreur en temps réel.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, height: 1.5)),
+                  const SizedBox(height: 24),
+                  _SupportAction(
+                    iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 20),
+                    color: const Color(0xFF25D366),
+                    label: 'WhatsApp',
+                    subtitle: 'Envoyer directement via WhatsApp',
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      final uri = Uri.parse('https://wa.me/?text=Suis%20ta%20livraison%20DEM%20en%20temps%20r%C3%A9el%20:%20$link');
+                      launchUrl(uri, mode: LaunchMode.externalApplication);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _SupportAction(
+                    iconWidget: const Icon(Icons.share_rounded, color: Color(0xFF0CB8DE), size: 20),
+                    color: const Color(0xFF0CB8DE),
+                    label: 'Autres options',
+                    subtitle: 'SMS, Email, Copier le lien...',
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      Share.share('Suis ta livraison DEM en temps réel : $link');
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+    }
+  }
+
+  void _showSupportBottomSheet() {
     final orderId = widget.orderId;
     final since   = _s.driverOfflineSince;
     final mins    = since != null ? DateTime.now().difference(since).inMinutes : 0;
@@ -745,7 +819,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
                 // Appeler le support
                 _SupportAction(
-                  icon: Icons.phone_rounded,
+                  iconWidget: const Icon(Icons.phone_rounded, color: Color(0xFF00C853), size: 20),
                   color: const Color(0xFF00C853),
                   label: 'Appeler le support',
                   subtitle: _kSupportPhone,
@@ -759,7 +833,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
                 // WhatsApp
                 _SupportAction(
-                  icon: Icons.chat_rounded,
+                  iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 20),
                   color: const Color(0xFF25D366),
                   label: 'WhatsApp support',
                   subtitle: 'Message direct avec le texte pré-rempli',
@@ -1149,6 +1223,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                         ),
                       ),
                     ],
+                    if (orderState.otherActiveOrders.isEmpty)
+                      const Spacer(),
                   ],
                 ),
               ),
@@ -1445,6 +1521,25 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                           ),
                       ]),
 
+                      if (['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].contains(orderState.phase)) ...[
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showShareSheet(context, widget.orderId),
+                            icon: const Icon(Icons.share_rounded, size: 20),
+                            label: const Text('Partager le suivi', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0CB8DE),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+
                       if (orderState.phase == 'DELIVERED' && !_rated) ...[
                         const SizedBox(height: 14),
                         Container(
@@ -1513,14 +1608,15 @@ class _RouteRow extends StatelessWidget {
 }
 
 class _SupportAction extends StatelessWidget {
-  final IconData icon;
+  final Widget iconWidget;
   final Color color;
   final String label;
   final String subtitle;
   final VoidCallback onTap;
 
   const _SupportAction({
-    required this.icon,
+    super.key,
+    required this.iconWidget,
     required this.color,
     required this.label,
     required this.subtitle,
@@ -1544,7 +1640,7 @@ class _SupportAction extends StatelessWidget {
             Container(
               width: 42, height: 42,
               decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: Icon(icon, color: color, size: 20),
+              child: Center(child: iconWidget),
             ),
             const SizedBox(width: 14),
             Expanded(

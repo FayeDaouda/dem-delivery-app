@@ -18,6 +18,7 @@ import '../../features/client_profile/client_profile_screen.dart';
 import '../../features/client_profile/favorite_addresses_screen.dart';
 import '../../features/home_client/orders_history_screen.dart';
 import '../../features/home_client/order_tracking_screen.dart';
+import '../../features/home_client/guest_tracking_screen.dart';
 
 import '../../features/splash/screens/splash_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
@@ -59,11 +60,24 @@ final appRouter = GoRouter(
 
     // ── 0. Pas encore initialisé → rester sur /splash ───────────────────────
     if (!n.isReady) {
+      if (path.startsWith('/track/')) {
+        n.initialDeepLink = path;
+      }
       return path == '/splash' ? null : '/splash';
     }
 
     // ── Admin : pas de garde de flux onboarding ──────────────────────────────
     if (_adminRoutes.contains(path)) return null;
+
+    // ── Guest Route (Partage de suivi) ───────────────────────────────────────
+    if (path.startsWith('/track/')) return null;
+
+    // ── Restauration du Deep Link après chargement ───────────────────────────
+    if (n.initialDeepLink != null) {
+      final link = n.initialDeepLink!;
+      n.initialDeepLink = null;
+      return link;
+    }
 
     // ── 1. Utilisateur connecté ──────────────────────────────────────────────
     if (n.isLoggedIn) {
@@ -178,6 +192,13 @@ final appRouter = GoRouter(
           etaPickupMin: extra['etaPickupMin'] as int?,
           initialOrder: extra['initialOrder'] as Map<String, dynamic>?,
         );
+      },
+    ),
+    GoRoute(
+      path: '/track/:id',
+      builder: (context, state) {
+        final id = state.pathParameters['id']!;
+        return GuestTrackingScreen(orderId: id);
       },
     ),
 

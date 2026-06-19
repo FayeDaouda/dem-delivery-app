@@ -249,4 +249,28 @@ class OrdersRepository {
       );
     }
   }
+
+  Future<Map<String, dynamic>> getGuestOrder(String id) async {
+    try {
+      final response = await _dio.get('/orders/guest/$id');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Commande introuvable.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<String> getShareLink(String id) async {
+    try {
+      final response = await _dio.get('/orders/$id/share-link');
+      return response.data['shareUrl'] as String;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de générer le lien.',
+        e.response?.statusCode,
+      );
+    }
+  }
 }
