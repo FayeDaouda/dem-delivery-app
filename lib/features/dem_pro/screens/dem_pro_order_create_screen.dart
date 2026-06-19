@@ -174,14 +174,35 @@ class _State extends State<DemProOrderCreateScreen> {
   void _applyProAddress(Map<String, dynamic> addr) {
     final lat = (addr['lat'] as num?)?.toDouble();
     final lng = (addr['lng'] as num?)?.toDouble();
+    final address = addr['address'] as String? ?? '';
     setState(() {
       _selectedProAddr = addr;
-      _pickupAddress   = addr['address'] as String? ?? '';
+      _pickupAddress   = address;
       if (lat != null && lng != null) {
         _pickupLat = lat; _pickupLng = lng;
         _centerMapVisible(LatLng(lat, lng));
       }
     });
+    if (lat == null || lng == null) {
+      _geocodePickupAddress(address);
+    }
+  }
+
+  Future<void> _geocodePickupAddress(String address) async {
+    if (address.isEmpty) { _fetchGps(); return; }
+    try {
+      final locations = await geo.locationFromAddress('$address, Dakar, Sénégal')
+          .timeout(const Duration(seconds: 6));
+      if (locations.isEmpty || !mounted) return;
+      final loc = locations.first;
+      setState(() {
+        _pickupLat = loc.latitude;
+        _pickupLng = loc.longitude;
+      });
+      _centerMapVisible(LatLng(loc.latitude, loc.longitude));
+    } catch (_) {
+      _fetchGps();
+    }
   }
 
   // ── GPS ──────────────────────────────────────────────────────────────────
@@ -377,6 +398,14 @@ class _State extends State<DemProOrderCreateScreen> {
   }
 
   Future<void> _submit() async {
+    if (_pickupLat == null || _pickupLng == null) {
+      showDemToast(context, 'Position de départ introuvable. Changez le point de départ.', isError: true);
+      return;
+    }
+    if (_deliveryLat == null || _deliveryLng == null) {
+      showDemToast(context, 'Destination introuvable.', isError: true);
+      return;
+    }
     setState(() => _submitting = true);
     try {
       final parts = <String>[];
