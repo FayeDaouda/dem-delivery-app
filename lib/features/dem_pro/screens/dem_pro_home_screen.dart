@@ -99,6 +99,21 @@ Color _statusColor(String s) => switch (s) {
 
 String _shortAddress(String addr) => addr.split(',').first.trim();
 
+void _navigateToOrder(BuildContext context, Map<String, dynamic> order) {
+  final status = order['status'] as String? ?? '';
+  if (status == 'PENDING') {
+    context.push('/dem-pro/orders/confirmation', extra: order);
+  } else if (const {'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'}.contains(status)) {
+    final driverId = (order['driver'] as Map?)?['id'] as String?
+        ?? order['driverId'] as String? ?? '';
+    context.push('/dem-pro/orders/tracking', extra: {
+      'orderId': order['id'],
+      'driverId': driverId,
+      'initialOrder': order,
+    });
+  }
+}
+
 String _driverInitials(String? name) {
   if (name == null || name.isEmpty) return '?';
   final p = name.trim().split(RegExp(r'\s+'));
@@ -157,11 +172,12 @@ class DemProHomeScreen extends StatefulWidget {
   State<DemProHomeScreen> createState() => _State();
 }
 
-class _State extends State<DemProHomeScreen> {
+class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
   int  _currentIndex = 0;
   bool _darkMode     = true;
 
   final _demProRepo = DemProRepository(ApiClient.dio);
+  final _livraisonsKey = GlobalKey<_LivraisonsTabState>();
 
   Map<String, dynamic>? _user;
   Map<String, dynamic>? _stats;
@@ -171,7 +187,19 @@ class _State extends State<DemProHomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _load();
   }
 
   Future<void> _load() async {
@@ -217,7 +245,7 @@ class _State extends State<DemProHomeScreen> {
             activeOrders: _activeOrders,
             onRefresh: _load, t: t,
           ),
-          _LivraisonsTab(t: t),
+          _LivraisonsTab(key: _livraisonsKey, t: t),
           _AdressesTab(t: t),
           _FinancesTab(t: t),
           _CompteTab(
@@ -241,7 +269,11 @@ class _State extends State<DemProHomeScreen> {
       },
       bottomNavigationBar: DemProNavBar(
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: (i) {
+          setState(() => _currentIndex = i);
+          if (i == 0) _load();
+          if (i == 1) _livraisonsKey.currentState?._loadOrders();
+        },
         darkMode: _darkMode,
       ),
     );
@@ -1192,7 +1224,7 @@ class _LogoutButton extends StatelessWidget {
 
 class _LivraisonsTab extends StatefulWidget {
   final _T t;
-  const _LivraisonsTab({required this.t});
+  const _LivraisonsTab({super.key, required this.t});
   @override
   State<_LivraisonsTab> createState() => _LivraisonsTabState();
 }
@@ -1678,9 +1710,7 @@ class _ActiveOrderCard extends StatelessWidget {
                 if (batchOrderId != null) {
                   context.push('/dem-pro/batch/tracking', extra: {'batchId': batchOrderId});
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Suivi en temps réel — bientôt disponible')),
-                  );
+                  _navigateToOrder(context, order);
                 }
               },
               child: Container(
@@ -1749,9 +1779,7 @@ class _HistoriqueRow extends StatelessWidget {
         : BorderRadius.zero;
 
     return InkWell(
-      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Détail complet — bientôt disponible')),
-      ),
+      onTap: () => _navigateToOrder(context, order),
       borderRadius: radius,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
