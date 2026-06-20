@@ -1,5 +1,6 @@
 import '../../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -23,6 +24,38 @@ class _State extends State<ChefDeFlotteSuspendedScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  void _showSupport(BuildContext ctx) {
+    showModalBottomSheet(
+      context: ctx,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          const Text('Contacter le support', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          ListTile(
+            leading: const Icon(Icons.phone_outlined, color: AppColors.primaryMid),
+            title: const Text('Appeler'), subtitle: const Text('+221 78 444 85 24'),
+            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('tel:+221784448524')); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.chat_bubble_outline, color: Colors.green),
+            title: const Text('WhatsApp'), subtitle: const Text('+221 78 444 85 24'),
+            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('https://wa.me/221784448524'), mode: LaunchMode.externalApplication); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.email_outlined, color: AppColors.primaryMid),
+            title: const Text('Email'), subtitle: const Text('support@dem.sn'),
+            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('mailto:support@dem.sn')); },
+          ),
+        ]),
+      )),
+    );
   }
 
   Future<void> _load() async {
@@ -176,7 +209,7 @@ class _State extends State<ChefDeFlotteSuspendedScreen> {
                             _GradientButton(
                               label: 'Contacter le support',
                               icon: Icons.support_agent_outlined,
-                              onTap: () {},
+                              onTap: () => _showSupport(context),
                             ),
                           ]),
                         ),
