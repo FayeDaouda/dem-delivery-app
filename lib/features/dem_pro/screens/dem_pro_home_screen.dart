@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/storage/auth_storage.dart';
@@ -620,6 +621,56 @@ class _CompteTabState extends State<_CompteTab> {
     }
   }
 
+  Future<void> _showSectorPicker(String? current) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        backgroundColor: widget.t.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Domaine d\'activité', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        children: _sectorLabels.entries.map((e) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, e.key),
+          child: Row(children: [
+            Icon(e.key == current ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: e.key == current ? DemProColors.accent : widget.t.muted, size: 20),
+            const SizedBox(width: 12),
+            Text(e.value, style: TextStyle(color: widget.t.text, fontSize: 14)),
+          ]),
+        )).toList(),
+      ),
+    );
+    if (result == null || result == current) return;
+    try {
+      await ApiClient.dio.patch('/users/me/profile', data: {'proSector': result});
+      await widget.onRefresh();
+    } catch (_) {}
+  }
+
+  Future<void> _showVolumePicker(String? current) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        backgroundColor: widget.t.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Volume hebdomadaire', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        children: _volumeLabels.entries.map((e) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, e.key),
+          child: Row(children: [
+            Icon(e.key == current ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: e.key == current ? DemProColors.accent : widget.t.muted, size: 20),
+            const SizedBox(width: 12),
+            Text(e.value, style: TextStyle(color: widget.t.text, fontSize: 14)),
+          ]),
+        )).toList(),
+      ),
+    );
+    if (result == null || result == current) return;
+    try {
+      await ApiClient.dio.patch('/users/me/profile', data: {'proWeeklyVolume': result});
+      await widget.onRefresh();
+    } catch (_) {}
+  }
+
   Future<void> _editField(String label, String currentValue, String fieldKey) async {
     final ctrl = TextEditingController(text: currentValue);
     final result = await showDialog<String>(
@@ -756,11 +807,48 @@ class _CompteTabState extends State<_CompteTab> {
                 _EditableInfoRow(icon: Icons.person_outline, label: 'Responsable', value: name ?? '—', t: t,
                   onTap: () => _editField('Responsable', name ?? '', 'name')),
                 _InfoRow(icon: Icons.phone_outlined, label: 'Téléphone', value: phone ?? '—', t: t),
-                _EditableInfoRow(icon: Icons.email_outlined, label: 'Email', value: email?.isNotEmpty == true ? email! : '—', t: t,
-                  onTap: () => _editField('Email', email ?? '', 'email')),
-                _InfoRow(icon: Icons.category_outlined,  label: 'Secteur',     value: _sectorLabels[sector] ?? '—', t: t),
-                _InfoRow(icon: Icons.bar_chart_outlined, label: 'Volume hebdo', value: _volumeLabels[volume] ?? '—', t: t, isLast: true),
+                _EditableInfoRow(
+                  icon: Icons.email_outlined, label: 'Email',
+                  value: email?.isNotEmpty == true ? email! : 'Ajouter un email',
+                  isPlaceholder: email == null || email.isEmpty,
+                  t: t,
+                  onTap: () => _editField('Email', email ?? '', 'email'),
+                ),
+                _EditableInfoRow(icon: Icons.category_outlined, label: 'Secteur', value: _sectorLabels[sector] ?? '—', t: t,
+                  onTap: () => _showSectorPicker(sector)),
+                _EditableInfoRow(icon: Icons.bar_chart_outlined, label: 'Volume hebdo', value: _volumeLabels[volume] ?? '—', t: t, isLast: true,
+                  onTap: () => _showVolumePicker(volume)),
               ],
+            ),
+            const SizedBox(height: 24),
+
+            // ── Abonnement ───────────────────────────────────────────────
+            _SectionLabel(label: 'ABONNEMENT', t: t),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: DemProColors.accent.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: DemProColors.accent.withValues(alpha: 0.2)),
+              ),
+              child: Row(children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.workspace_premium, color: DemProColors.accent, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('DEM Pro', style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('Plan gratuit — lancement', style: TextStyle(color: DemProColors.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+                ])),
+              ]),
             ),
             const SizedBox(height: 24),
 
@@ -799,8 +887,24 @@ class _CompteTabState extends State<_CompteTab> {
             ),
             const SizedBox(height: 24),
 
+            // ── Support ──────────────────────────────────────────────────
+            _SectionLabel(label: 'SUPPORT', t: t),
+            const SizedBox(height: 12),
+            _InfoCard(t: t, children: [
+              _TapRow(icon: Icons.help_outline, label: 'Centre d\'aide', t: t,
+                onTap: () => launchUrl(Uri.parse('https://www.dem.sn/#faq'), mode: LaunchMode.externalApplication)),
+              _TapRow(icon: Icons.headset_mic_outlined, label: 'Contacter DEM', t: t,
+                onTap: () => launchUrl(Uri.parse('https://wa.me/221779597940'), mode: LaunchMode.externalApplication)),
+              _TapRow(icon: Icons.description_outlined, label: 'Conditions d\'utilisation', t: t, isLast: true,
+                onTap: () => launchUrl(Uri.parse('https://www.dem.sn/#cgu'), mode: LaunchMode.externalApplication)),
+            ]),
+            const SizedBox(height: 24),
+
             // ── Déconnexion ───────────────────────────────────────────────
             _LogoutButton(onTap: widget.onLogout, t: t),
+
+            const SizedBox(height: 16),
+            Center(child: Text('DEM v1.0.0', style: TextStyle(color: t.muted.withValues(alpha: 0.5), fontSize: 11))),
           ],
         ),
       ),
@@ -1168,22 +1272,54 @@ class _EditableInfoRow extends StatelessWidget {
   final String label, value;
   final _T t;
   final VoidCallback onTap;
-  const _EditableInfoRow({required this.icon, required this.label, required this.value, required this.t, required this.onTap});
+  final bool isPlaceholder;
+  final bool isLast;
+  const _EditableInfoRow({required this.icon, required this.label, required this.value, required this.t, required this.onTap, this.isPlaceholder = false, this.isLast = false});
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: t.border)),
+        border: isLast ? null : Border(bottom: BorderSide(color: t.border)),
       ),
       child: Row(children: [
         Icon(icon, color: DemProColors.accent, size: 18),
         const SizedBox(width: 12),
         Expanded(child: Text(label, style: TextStyle(color: t.muted, fontSize: 13))),
-        Text(value, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
+        Text(value, style: TextStyle(
+          color: isPlaceholder ? DemProColors.accent.withValues(alpha: 0.6) : t.text,
+          fontSize: 13,
+          fontWeight: isPlaceholder ? FontWeight.w500 : FontWeight.w600,
+          fontStyle: isPlaceholder ? FontStyle.italic : FontStyle.normal,
+        )),
         const SizedBox(width: 6),
         Icon(Icons.edit_outlined, color: t.muted, size: 14),
+      ]),
+    ),
+  );
+}
+
+class _TapRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final _T t;
+  final VoidCallback onTap;
+  final bool isLast;
+  const _TapRow({required this.icon, required this.label, required this.t, required this.onTap, this.isLast = false});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        border: isLast ? null : Border(bottom: BorderSide(color: t.border)),
+      ),
+      child: Row(children: [
+        Icon(icon, color: DemProColors.accent, size: 18),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600))),
+        Icon(Icons.chevron_right, color: t.muted, size: 18),
       ]),
     ),
   );
