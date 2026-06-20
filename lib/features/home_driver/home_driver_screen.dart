@@ -810,6 +810,25 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                     ),
                   ),
                   const Spacer(),
+                  GestureDetector(
+                    onTap: () => context.push('/driver/profile'),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.45),
+                            blurRadius: 12,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.person_outline, color: Colors.white, size: 22),
+                    ),
+                  ),
                 ],
               ),
             ),
