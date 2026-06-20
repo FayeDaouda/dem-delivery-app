@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/services/socket_service.dart';
@@ -1149,6 +1150,22 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                         ),
                       ),
                     ],
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () {
+                        final url = 'https://api.dem.sn/track/${widget.orderId}';
+                        SharePlus.instance.share(ShareParams(text: 'Suivez ma livraison DEM en temps réel : $url'));
+                      },
+                      child: Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 8)],
+                        ),
+                        child: const Icon(Icons.share_outlined, size: 18, color: Colors.black87),
+                      ),
+                    ),
                   ],
                 ),
               ),

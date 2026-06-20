@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/router/app_startup_notifier.dart';
 import '../../core/services/socket_service.dart';
@@ -384,6 +385,28 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                   color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
                   size: 20,
                 ),
+              ),
+            ),
+          ),
+
+          // ── Bouton partager ──────────────────────────────────────────────
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12,
+            right: 16,
+            child: GestureDetector(
+              onTap: () {
+                final id = widget.order['id'] as String? ?? '';
+                final url = 'https://api.dem.sn/track/$id';
+                SharePlus.instance.share(ShareParams(text: 'Suivez ma livraison DEM en temps réel : $url'));
+              },
+              child: Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 8)],
+                ),
+                child: const Icon(Icons.share_outlined, size: 18, color: Colors.black87),
               ),
             ),
           ),
