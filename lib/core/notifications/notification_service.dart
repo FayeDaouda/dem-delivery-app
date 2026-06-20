@@ -115,11 +115,12 @@ class NotificationService {
     final batchId  = message.data['batchId'] as String?;
 
     Future.delayed(const Duration(milliseconds: 300), () {
+      final role = appStartupNotifier.role;
+      final isDemPro = role == 'DEM_PRO';
+
       if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP') &&
           orderId != null && driverId != null) {
-        final role = appStartupNotifier.role;
-        final path = role == 'DEM_PRO' ? '/dem-pro/orders/tracking' : '/orders/tracking';
-        appRouter.push(path, extra: {
+        appRouter.push(isDemPro ? '/dem-pro/orders/tracking' : '/orders/tracking', extra: {
           'orderId': orderId,
           'driverId': driverId,
         });
@@ -127,6 +128,10 @@ class NotificationService {
       }
       if ((type == 'BATCH_ACCEPTED' || type == 'BATCH_COMPLETED') && batchId != null) {
         appRouter.push('/dem-pro/batch/tracking', extra: {'batchId': batchId});
+        return;
+      }
+      if (isDemPro && (type == 'ORDER_DELIVERED' || type == 'ORDER_AUTO_CANCELLED')) {
+        appRouter.go('/dem-pro/home');
         return;
       }
       final route = _routeForType(type);
@@ -220,9 +225,9 @@ class NotificationService {
     // ── Orders — client / DEM Pro ──────────────────────────────────────────
     'ORDER_ACCEPTED'            => null, // géré dans _handleTap avec role-aware routing
     'ORDER_PICKED_UP'           => null,
-    'ORDER_DELIVERED'           => null, // tap navigue via _handleTap
-    'ORDER_SEARCHING'           => null,
-    'ORDER_AUTO_CANCELLED'      => null,
+    'ORDER_DELIVERED'           => '/orders/my',
+    'ORDER_SEARCHING'           => '/client/home',
+    'ORDER_AUTO_CANCELLED'      => '/orders/my',
     'BATCH_ACCEPTED'            => null, // géré dans _handleTap
     'BATCH_COMPLETED'           => null,
     'DISPUTE_OPENED'            => '/orders/my',
