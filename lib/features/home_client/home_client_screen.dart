@@ -829,23 +829,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             child: Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => context.push('/client/profile'),
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.person,
-                          color: Colors.white, size: 20),
-                    ),
-                  ),
-                ],
-              ),
+              child: const SizedBox.shrink(),
             ),
           ),
 
