@@ -118,7 +118,7 @@ class NotificationService {
       final role = appStartupNotifier.role;
       final isDemPro = role == 'DEM_PRO';
 
-      if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP') &&
+      if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP' || type == 'DRIVER_NEARBY') &&
           orderId != null && driverId != null) {
         appRouter.push(isDemPro ? '/dem-pro/orders/tracking' : '/orders/tracking', extra: {
           'orderId': orderId,
@@ -168,7 +168,7 @@ class NotificationService {
 
     void onTap() {
       dismiss();
-      if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP') &&
+      if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP' || type == 'DRIVER_NEARBY') &&
           orderId != null && driverId != null) {
         final role = appStartupNotifier.role;
         final path = role == 'DEM_PRO' ? '/dem-pro/orders/tracking' : '/orders/tracking';
@@ -230,6 +230,7 @@ class NotificationService {
     'ORDER_AUTO_CANCELLED'      => '/orders/my',
     'BATCH_ACCEPTED'            => null, // géré dans _handleTap
     'BATCH_COMPLETED'           => null,
+    'DRIVER_NEARBY'             => null, // géré dans _handleTap
     'DISPUTE_OPENED'            => '/orders/my',
     // ── Paiement — driver ───────────────────────────────────────────────────
     'PAYMENT_RESOLVED'          => '/driver/home',     // admin confirme paiement
