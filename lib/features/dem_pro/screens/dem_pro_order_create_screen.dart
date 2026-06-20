@@ -118,6 +118,9 @@ class _State extends State<DemProOrderCreateScreen> {
     super.initState();
     _loadMapStyle();
     _loadProAddresses();
+    if (widget.scheduled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _pickScheduleDate());
+    }
   }
 
   @override

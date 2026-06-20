@@ -621,6 +621,41 @@ class _CompteTabState extends State<_CompteTab> {
     }
   }
 
+  Future<void> _confirmDeleteAccount(BuildContext ctx) async {
+    final confirmed = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        backgroundColor: widget.t.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Supprimer mon compte ?', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Text(
+          'Cette action est irréversible. Toutes vos données, livraisons et adresses seront définitivement supprimées.',
+          style: TextStyle(color: widget.t.muted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Annuler', style: TextStyle(color: widget.t.muted))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Supprimer', style: TextStyle(color: DemProColors.danger, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiClient.dio.delete('/users/me');
+      await AuthStorage.clear();
+      appStartupNotifier.markLoggedOut();
+      if (mounted) context.go('/phone');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Échec de la suppression. Réessayez.')),
+        );
+      }
+    }
+  }
+
   Future<void> _showSectorPicker(String? current) async {
     final result = await showDialog<String>(
       context: context,
@@ -891,10 +926,15 @@ class _CompteTabState extends State<_CompteTab> {
             _SectionLabel(label: 'SUPPORT', t: t),
             const SizedBox(height: 12),
             _InfoCard(t: t, children: [
-              _TapRow(icon: Icons.help_outline, label: 'Centre d\'aide', t: t,
-                onTap: () => launchUrl(Uri.parse('https://www.dem.sn/#faq'), mode: LaunchMode.externalApplication)),
-              _TapRow(icon: Icons.headset_mic_outlined, label: 'Contacter DEM', t: t,
-                onTap: () => launchUrl(Uri.parse('https://wa.me/221779597940'), mode: LaunchMode.externalApplication)),
+              _TapRow(icon: Icons.phone_outlined, label: 'Appeler le support', t: t,
+                subtitle: '+221 78 444 85 24',
+                onTap: () => launchUrl(Uri.parse('tel:+221784448524'))),
+              _TapRow(icon: Icons.chat_bubble_outline, label: 'WhatsApp', t: t,
+                subtitle: '+221 78 444 85 24',
+                onTap: () => launchUrl(Uri.parse('https://wa.me/221784448524'), mode: LaunchMode.externalApplication)),
+              _TapRow(icon: Icons.email_outlined, label: 'Envoyer un e-mail', t: t,
+                subtitle: 'support@dem.sn',
+                onTap: () => launchUrl(Uri.parse('mailto:support@dem.sn'))),
               _TapRow(icon: Icons.description_outlined, label: 'Conditions d\'utilisation', t: t, isLast: true,
                 onTap: () => launchUrl(Uri.parse('https://www.dem.sn/#cgu'), mode: LaunchMode.externalApplication)),
             ]),
@@ -902,6 +942,26 @@ class _CompteTabState extends State<_CompteTab> {
 
             // ── Déconnexion ───────────────────────────────────────────────
             _LogoutButton(onTap: widget.onLogout, t: t),
+
+            const SizedBox(height: 12),
+
+            // ── Supprimer le compte ──────────────────────────────────────
+            GestureDetector(
+              onTap: () => _confirmDeleteAccount(context),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: DemProColors.danger.withValues(alpha: 0.3)),
+                ),
+                child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.delete_outline, color: DemProColors.danger, size: 18),
+                  SizedBox(width: 8),
+                  Text('Supprimer mon compte', style: TextStyle(color: DemProColors.danger, fontSize: 13, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
 
             const SizedBox(height: 16),
             Center(child: Text('DEM v1.0.0', style: TextStyle(color: t.muted.withValues(alpha: 0.5), fontSize: 11))),
@@ -1303,10 +1363,11 @@ class _EditableInfoRow extends StatelessWidget {
 class _TapRow extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? subtitle;
   final _T t;
   final VoidCallback onTap;
   final bool isLast;
-  const _TapRow({required this.icon, required this.label, required this.t, required this.onTap, this.isLast = false});
+  const _TapRow({required this.icon, required this.label, this.subtitle, required this.t, required this.onTap, this.isLast = false});
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1318,7 +1379,11 @@ class _TapRow extends StatelessWidget {
       child: Row(children: [
         Icon(icon, color: DemProColors.accent, size: 18),
         const SizedBox(width: 12),
-        Expanded(child: Text(label, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600))),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
+          if (subtitle != null)
+            Text(subtitle!, style: TextStyle(color: t.muted, fontSize: 11)),
+        ])),
         Icon(Icons.chevron_right, color: t.muted, size: 18),
       ]),
     ),
