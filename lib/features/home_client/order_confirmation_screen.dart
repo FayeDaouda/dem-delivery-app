@@ -558,26 +558,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                 ],
                               ]),
                             ),
-                            const SizedBox(height: 12),
-
-                            // ── Partager le suivi ──
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () => _showShareSheet(context),
-                                icon: const Icon(Icons.share_outlined, size: 18),
-                                label: const Text('Partager le suivi',
-                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF00BCD4),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                  elevation: 0,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 16),
 
                             // ── Boutons Action ──
                             Row(
