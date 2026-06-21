@@ -48,8 +48,9 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   // Panel drag
   double _panelDragOffset = 0.0;
   bool _isDragging = false;
-  static const double _kMaxContent = 370.0;
-  static const double _kMinContent = 64.0; // buttons (50) + bottom pad (12) + 2px margin
+  double get _kMaxContent => 370.0 + _bottomInset;
+  static const double _kMinContent = 64.0;
+  double get _bottomInset => MediaQuery.of(context).viewPadding.bottom;
 
   // Animation radar
   late final AnimationController _radarCtrl;
