@@ -542,7 +542,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         controller: _scrollCtrl,
         slivers: [
           SliverAppBar(
-            expandedHeight: _user != null ? 340 : 260,
+            expandedHeight: _user != null ? 420 : 280,
             pinned: true,
             floating: false,
             stretch: true,
