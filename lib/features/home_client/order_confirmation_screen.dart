@@ -454,8 +454,9 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                             child: SizedBox(
                               height: _kMaxContent,
                               child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        padding: EdgeInsets.fromLTRB(16, 4, 16, 12 + _bottomInset),
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
                           children: [
                             // ── Header : radar normal OU timeout 5 min ──
                             if (_waitTimedOut)
@@ -581,21 +582,20 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                             // ── Boutons Action ──
                             Row(
                               children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: _cancelling ? null : _cancelOrder,
-                                    child: Container(
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFF5252),
-                                        borderRadius: BorderRadius.circular(14),
-                                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 8, offset: const Offset(0, 3))],
-                                      ),
-                                      child: Center(
-                                        child: _cancelling
-                                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                            : const Text('Annuler', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                                      ),
+                                GestureDetector(
+                                  onTap: _cancelling ? null : _cancelOrder,
+                                  child: Container(
+                                    height: 50,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.6)),
+                                    ),
+                                    child: Center(
+                                      child: _cancelling
+                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF5252)))
+                                          : const Text('Annuler', style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.w600, fontSize: 14)),
                                     ),
                                   ),
                                 ),
