@@ -542,7 +542,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         controller: _scrollCtrl,
         slivers: [
           SliverAppBar(
-            expandedHeight: _user != null ? 420 : 280,
+            expandedHeight: _user != null ? 500 : 280,
             pinned: true,
             floating: false,
             stretch: true,
@@ -551,7 +551,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               onPressed: () => context.pop(),
               icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
             ),
-            title: Text(s.myProfile, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+            title: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (_photoPath != null && File(_photoPath!).existsSync())
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Container(
+                    width: 28, height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    child: ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover)),
+                  ),
+                ),
+              Text(s.myProfile, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+            ]),
             centerTitle: true,
             actions: [
               IconButton(onPressed: _showSupportSheet, icon: const Icon(Icons.headset_mic_outlined, color: Colors.white, size: 22)),
