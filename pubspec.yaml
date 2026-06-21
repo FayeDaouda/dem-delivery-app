@@ -78,3 +78,4 @@ flutter:
     - assets/DEM.png
     - assets/map_style_day.json
     - assets/map_style_waze.json
+    - assets/icons/

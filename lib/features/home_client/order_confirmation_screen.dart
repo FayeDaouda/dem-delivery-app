@@ -9,8 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+import '../../shared/widgets/share_tracking_sheet.dart';
 
 import '../../core/router/app_startup_notifier.dart';
 import '../../core/services/socket_service.dart';
@@ -199,81 +199,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   }
 
   void _showShareSheet(BuildContext ctx) {
-    final id = widget.order['id'] as String? ?? '';
-    final url = 'https://api.dem.sn/track/$id';
-    final msg = 'Suivez ma livraison DEM en temps réel : $url';
-    showModalBottomSheet(
-      context: ctx,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
-          const Text('Partager le suivi', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          const Text('Permettez au destinataire de suivre le livreur en temps réel.',
-            style: TextStyle(fontSize: 13, color: Colors.grey), textAlign: TextAlign.center),
-          const SizedBox(height: 20),
-          GestureDetector(
-            onTap: () {
-              Navigator.pop(ctx);
-              launchUrl(Uri.parse('https://wa.me/?text=${Uri.encodeComponent(msg)}'), mode: LaunchMode.externalApplication);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF25D366).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.15)),
-              ),
-              child: Row(children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(color: const Color(0xFF25D366).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.chat_bubble_rounded, color: Color(0xFF25D366), size: 22),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('WhatsApp', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                  Text('Envoyer directement via WhatsApp', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ])),
-                Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 22),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () {
-              Navigator.pop(ctx);
-              SharePlus.instance.share(ShareParams(text: msg));
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0CB8DE).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFF0CB8DE).withValues(alpha: 0.15)),
-              ),
-              child: Row(children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(color: const Color(0xFF0CB8DE).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.share_outlined, color: Color(0xFF0CB8DE), size: 22),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Autres options', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                  Text('SMS, Email, Copier le lien...', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ])),
-                Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 22),
-              ]),
-            ),
-          ),
-        ]),
-      )),
-    );
+    ShareTrackingSheet.show(ctx, orderId: widget.order['id'] as String? ?? '');
   }
 
   Future<void> _cancelOrder() async {
