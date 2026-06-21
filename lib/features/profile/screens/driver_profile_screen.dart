@@ -622,7 +622,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(20),
-                children: [
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
                   // Parrainage
                   Text('PARRAINAGE',
@@ -706,8 +706,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         color: const Color(0xFFEF4444), onTap: _deleteAccount),
                   ]),
                   const SizedBox(height: 12),
-                ],
-              ),
+              ]),
             ),
           ),
         ],
