@@ -538,102 +538,90 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ── Header ──
-          Container(
-            decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(
-                      children: [
-                        IconButton(onPressed: () => context.pop(),
-                            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20)),
-                        const Spacer(),
-                        Text(s.myProfile,
-                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                        const Spacer(),
-                        IconButton(onPressed: _showSupportSheet,
-                            icon: const Icon(Icons.headset_mic_outlined, color: Colors.white, size: 22)),
-                      ],
-                    ),
-                  ),
-                  // Avatar + nom + badge
-                  Column(
-                    children: [
-                              const SizedBox(height: 4),
-                              // Avatar modifiable
-                              GestureDetector(
-                                onTap: _pickProfilePhoto,
-                                child: Stack(
-                                  children: [
-                                    Container(
-                                      width: 88, height: 88,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.2),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2.5),
-                                      ),
-                                      child: _photoPath != null && File(_photoPath!).existsSync()
-                                          ? ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover))
-                                          : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
-                                              color: Colors.white, size: 40),
-                                    ),
-                                    Positioned(
-                                      right: 0, bottom: 0,
-                                      child: Container(
-                                        width: 28, height: 28,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary, shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 2),
-                                        ),
-                                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(_isMoto ? 'Livreur-DEM' : 'DEM Thiak Thiak',
-                                    style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
-                              ),
-                              // ── Badge card (espace au-dessus) ──
-                              if (_user != null) ...[
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                                  child: _BadgeCard(user: _user!, badgesConfig: _badgesConfig),
-                                ),
-                              ] else ...[
-                                const SizedBox(height: 16),
-                              ],
-                            ],
+      body: CustomScrollView(
+        controller: _scrollCtrl,
+        slivers: [
+          SliverAppBar(
+            expandedHeight: _user != null ? 340 : 260,
+            pinned: true,
+            floating: false,
+            stretch: true,
+            backgroundColor: AppColors.primaryMid,
+            leading: IconButton(
+              onPressed: () => context.pop(),
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+            ),
+            title: Text(s.myProfile, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+            centerTitle: true,
+            actions: [
+              IconButton(onPressed: _showSupportSheet, icon: const Icon(Icons.headset_mic_outlined, color: Colors.white, size: 22)),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 56),
+                    child: Column(children: [
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        onTap: _pickProfilePhoto,
+                        child: Stack(children: [
+                          Container(
+                            width: 88, height: 88,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2.5),
+                            ),
+                            child: _photoPath != null && File(_photoPath!).existsSync()
+                                ? ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover))
+                                : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined, color: Colors.white, size: 40),
                           ),
-                ],
+                          Positioned(
+                            right: 0, bottom: 0,
+                            child: Container(
+                              width: 28, height: 28,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary, shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                            ),
+                          ),
+                        ]),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(_isMoto ? 'Livreur-DEM' : 'DEM Thiak Thiak',
+                            style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                      ),
+                      if (_user != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                          child: _BadgeCard(user: _user!, badgesConfig: _badgesConfig),
+                        )
+                      else
+                        const SizedBox(height: 16),
+                    ]),
+                  ),
+                ),
               ),
             ),
           ),
 
           // ── Corps ──
-          Expanded(
-            child: Container(
-              color: const Color(0xFFF4F6FA),
-              child: ListView(
-                controller: _scrollCtrl,
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
                 children: [
 
                   // Parrainage
