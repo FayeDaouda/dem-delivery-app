@@ -82,7 +82,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   double _surgeMultiplier = 1.0;
   double? _estimatedPrice; // prix course (= ce que le livreur gagne)
   double _demFee = 0.0;    // frais DEM prélevés en sus au client
-  bool _freeCourseEligible = false; // 2ème course gratuite (100 premiers clients)
+  bool _freeCourseEligible = false;
   bool _loadingSurge  = false;
   bool _priceTimedOut = false;
   bool _loadingGps    = false;
@@ -142,8 +142,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   }
 
   Future<void> _checkFreeCourse() async {
-    final eligible = await _repo.checkFreeCourse();
-    if (mounted) setState(() => _freeCourseEligible = eligible);
+    // Promo gérée par l'admin — plus de vérification automatique
   }
 
   void _fillMe(TextEditingController nameCtrl, TextEditingController phoneCtrl) {
@@ -1816,30 +1815,6 @@ class _Step3Panel extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 10),
-
-        // Bannière 2ème course gratuite
-        if (freeCourse) ...[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF00C853).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.40)),
-            ),
-            child: const Row(children: [
-              Text('🎁', style: TextStyle(fontSize: 16)),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '2ème course offerte — vous faites partie des 100 premiers !',
-                  style: TextStyle(color: Color(0xFF00C853), fontSize: 12, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ]),
-          ),
-          const SizedBox(height: 8),
-        ],
 
         // Price card
         Container(
