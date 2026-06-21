@@ -294,6 +294,49 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     // Tous les listeners socket sont maintenant dans clientOrderStateProvider
   }
 
+  void _showShareSheet(BuildContext ctx) {
+    final url = 'https://api.dem.sn/track/${widget.orderId}';
+    final msg = 'Suivez ma livraison DEM en temps réel : $url';
+    showModalBottomSheet(
+      context: ctx,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          const Text('Partager le suivi', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          const Text('Permettez au destinataire de suivre le livreur en temps réel.',
+            style: TextStyle(fontSize: 13, color: Colors.grey), textAlign: TextAlign.center),
+          const SizedBox(height: 20),
+          _ShareOption(
+            icon: Icons.chat_bubble_rounded,
+            iconColor: const Color(0xFF25D366),
+            label: 'WhatsApp',
+            subtitle: 'Envoyer directement via WhatsApp',
+            onTap: () {
+              Navigator.pop(ctx);
+              launchUrl(Uri.parse('https://wa.me/?text=${Uri.encodeComponent(msg)}'), mode: LaunchMode.externalApplication);
+            },
+          ),
+          const SizedBox(height: 10),
+          _ShareOption(
+            icon: Icons.share_outlined,
+            iconColor: const Color(0xFF0CB8DE),
+            label: 'Autres options',
+            subtitle: 'SMS, Email, Copier le lien...',
+            onTap: () {
+              Navigator.pop(ctx);
+              SharePlus.instance.share(ShareParams(text: msg));
+            },
+          ),
+        ]),
+      )),
+    );
+  }
+
   void _showRatingDialog() {
     if (!mounted || _rated) return;
     int selectedRating = 5;
@@ -1151,21 +1194,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                       ),
                     ],
                     const Spacer(),
-                    GestureDetector(
-                      onTap: () {
-                        final url = 'https://api.dem.sn/track/${widget.orderId}';
-                        SharePlus.instance.share(ShareParams(text: 'Suivez ma livraison DEM en temps réel : $url'));
-                      },
-                      child: Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 8)],
-                        ),
-                        child: const Icon(Icons.share_outlined, size: 18, color: Colors.black87),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -1462,6 +1490,27 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                           ),
                       ]),
 
+                      // Bouton Partager le suivi
+                      if (!['DELIVERED', 'CANCELLED'].contains(orderState.phase)) ...[
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showShareSheet(context),
+                            icon: const Icon(Icons.share_outlined, size: 18),
+                            label: const Text('Partager le suivi',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00BCD4),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+
                       if (orderState.phase == 'DELIVERED' && !_rated) ...[
                         const SizedBox(height: 14),
                         Container(
@@ -1504,6 +1553,39 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
       ),
     );
   }
+}
+
+class _ShareOption extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label, subtitle;
+  final VoidCallback onTap;
+  const _ShareOption({required this.icon, required this.iconColor, required this.label, required this.subtitle, required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: iconColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: iconColor.withValues(alpha: 0.15)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 44, height: 44,
+          decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: iconColor, size: 22),
+        ),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        ])),
+        Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 22),
+      ]),
+    ),
+  );
 }
 
 class _RouteRow extends StatelessWidget {
