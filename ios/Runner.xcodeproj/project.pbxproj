@@ -351,7 +351,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "echo \"Crashlytics upload-symbols disabled for build\"";
+			shellScript = "echo \"Crashlytics upload-symbols disabled\"";
 		};
 		722E00A64847429AD3654ADF /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

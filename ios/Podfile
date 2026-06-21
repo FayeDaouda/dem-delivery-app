@@ -55,14 +55,17 @@ post_install do |installer|
       config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
       config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
     end
+  end
 
-    # Désactiver le script upload-symbols de Crashlytics (évite le build fail)
-    if target.name == 'firebase_crashlytics'
-      target.build_phases.each do |phase|
-        if phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase) && phase.name&.include?('upload-symbols')
-          phase.shell_script = 'echo "Crashlytics upload-symbols disabled"'
-        end
+  # Désactiver Crashlytics upload-symbols dans le Runner target
+  main_project = installer.aggregate_targets.first.user_project
+  main_project.targets.each do |t|
+    next unless t.name == 'Runner'
+    t.build_phases.each do |phase|
+      if phase.respond_to?(:name) && phase.name&.include?('Crashlytics')
+        phase.shell_script = 'echo "Crashlytics upload-symbols disabled"'
       end
     end
   end
+  main_project.save
 end
