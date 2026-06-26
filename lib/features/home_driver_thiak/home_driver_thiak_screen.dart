@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import '../../core/notifications/notification_service.dart';
 import '../../core/error/app_exception.dart';
 import '../../core/utils/dem_toast.dart';
 import 'package:flutter/material.dart';
@@ -230,6 +231,7 @@ class _HomeDriverThiakScreenState
   void dispose() {
     _pulseCtrl.dispose();
     _countdownTimer?.cancel();
+    NotificationService.stopOrderAlert();
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();
     _newOrderSub?.cancel();
@@ -326,7 +328,7 @@ class _HomeDriverThiakScreenState
   }
 
   // ── Countdown ─────────────────────────────────────────────────────────────
-  int _countdown = 30;
+  int _countdown = 60;
   Timer? _countdownTimer;
 
   Color get _countdownColor {
@@ -337,17 +339,18 @@ class _HomeDriverThiakScreenState
 
   void _startCountdown({bool isDevOrder = false, String? orderId}) {
     _countdownTimer?.cancel();
-    setState(() => _countdown = 30);
+    setState(() => _countdown = 60);
+    NotificationService.startOrderAlert();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) { t.cancel(); return; }
+      if (!mounted) { t.cancel(); NotificationService.stopOrderAlert(); return; }
       setState(() => _countdown--);
       if (_countdown <= 0) {
         t.cancel();
+        NotificationService.stopOrderAlert();
         _clearPendingRoute();
         if (isDevOrder) {
           ref.read(availableOrdersProvider.notifier).clearDevOrder();
         } else if (orderId != null) {
-          // Signaler le refus au backend pour dispatch immédiat au suivant
           ref.read(ordersRepositoryProvider).declineOrder(orderId).catchError((_) {});
           ref.read(availableOrdersProvider.notifier).refresh();
         }
@@ -357,7 +360,8 @@ class _HomeDriverThiakScreenState
 
   void _cancelCountdown() {
     _countdownTimer?.cancel();
-    if (mounted) setState(() => _countdown = 30);
+    NotificationService.stopOrderAlert();
+    if (mounted) setState(() => _countdown = 60);
   }
 
   // ── Route vers pickup ─────────────────────────────────────────────────────

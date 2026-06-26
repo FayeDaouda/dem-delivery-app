@@ -83,7 +83,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   DateTime? _lastLocationEmit;
 
   // ── Countdown nouvelle course ─────────────────────────────────────────────
-  int _countdown = 20;
+  int _countdown = 60;
   Timer? _countdownTimer;
 
   // ── Stats du jour (pills accueil) ─────────────────────────────────────────
@@ -149,6 +149,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _locationSub?.cancel();
     _mapController?.dispose();
     _countdownTimer?.cancel();
+    NotificationService.stopOrderAlert();
     _newOrderSub?.cancel();
     _expiredOrderSub?.cancel();
     _reconnectSub?.cancel();
@@ -241,15 +242,18 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   void _startCountdown() {
     _countdownTimer?.cancel();
-    setState(() => _countdown = 20);
+    setState(() => _countdown = 60);
+    NotificationService.startOrderAlert();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
         t.cancel();
+        NotificationService.stopOrderAlert();
         return;
       }
       setState(() => _countdown--);
       if (_countdown <= 0) {
         t.cancel();
+        NotificationService.stopOrderAlert();
         ref.read(availableOrdersProvider.notifier).refresh();
       }
     });
@@ -257,7 +261,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   void _cancelCountdown() {
     _countdownTimer?.cancel();
-    if (mounted) setState(() => _countdown = 20);
+    NotificationService.stopOrderAlert();
+    if (mounted) setState(() => _countdown = 60);
   }
 
   // ── Stats du jour (pills accueil) ─────────────────────────────────────────

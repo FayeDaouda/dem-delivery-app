@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -288,6 +289,50 @@ class NotificationService {
         ),
       );
     }
+  }
+
+  // ── Sonnerie en boucle pour nouvelle course (livreur) ─────────────────────
+  static Timer? _orderAlertTimer;
+
+  static void startOrderAlert() {
+    stopOrderAlert();
+    _playOrderAlertOnce();
+    _orderAlertTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _playOrderAlertOnce();
+    });
+  }
+
+  static void stopOrderAlert() {
+    _orderAlertTimer?.cancel();
+    _orderAlertTimer = null;
+    _localNotificationsPlugin.cancel(id: 7777);
+  }
+
+  static Future<void> _playOrderAlertOnce() async {
+    HapticFeedback.heavyImpact();
+    const androidDetails = AndroidNotificationDetails(
+      'dem_high_importance',
+      'Notifications Importantes DEM',
+      channelDescription: 'Notifications de courses en temps réel',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      fullScreenIntent: true,
+      playSound: true,
+      enableVibration: true,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    await _localNotificationsPlugin.show(
+      id: 7777,
+      title: 'Nouvelle course disponible !',
+      body: 'Ouvrez l\'application pour accepter la course.',
+      notificationDetails: details,
+    );
   }
 
   // ── Notifications système persistantes (en cours) ─────────────────────────
