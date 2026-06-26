@@ -95,7 +95,10 @@ class ClientOrderNotifier extends StateNotifier<ClientOrderState> {
     _statusSub = SocketService.instance.onOrderStatusUpdated.listen((data) {
       if (!mounted || data['orderId'] != orderId) return;
       final newPhase = data['status'] as String?;
-      if (newPhase != null) state = state.copyWith(phase: newPhase);
+      if (newPhase != null) {
+        state = state.copyWith(phase: newPhase);
+        _notifyStatusChange(newPhase);
+      }
     });
 
     _locationSub = SocketService.instance.onDriverLocation.listen((data) {
@@ -154,6 +157,21 @@ class ClientOrderNotifier extends StateNotifier<ClientOrderState> {
       cancelReason = data['reason'] as String?;
       state = state.copyWith(phase: 'CANCELLED');
     });
+  }
+
+  // ── Notification système à chaque étape clé ────────────────────────────────
+  void _notifyStatusChange(String phase) {
+    final messages = {
+      'PICKED_UP':  ('Colis récupéré', 'Votre livreur est en route vers vous.'),
+      'IN_TRANSIT': ('En route', 'Votre livreur se dirige vers la destination.'),
+      'DELIVERED':  ('Livraison effectuée', 'Votre colis a été livré avec succès !'),
+      'CANCELLED':  ('Course annulée', 'Votre course a été annulée.'),
+    };
+    final msg = messages[phase];
+    if (msg != null) {
+      NotificationService.showSystemNotification(title: msg.$1, body: msg.$2);
+      NotificationService.playAlertSound();
+    }
   }
 
   // ── Calcul ETA côté client (rough, 25 km/h moyen) ────────────────────────
