@@ -391,7 +391,7 @@ class _State extends State<DemProOrderCreateScreen> {
     if (_pickupLat == null || _deliveryLat == null) return {};
     final distKm = _haversineKm(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
     final raw = 600 + distKm * 250;
-    final price = (raw / 5).round() * 5;
+    final price = (raw / 50).round() * 50;
     return {
       'price': price,
       'demFee': 0,
