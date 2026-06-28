@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import '../../features/home_driver/navigation/navigation_service.dart';
 
 Future<bool> ensureLocationEnabled(BuildContext context) async {
   var permission = await Geolocator.checkPermission();

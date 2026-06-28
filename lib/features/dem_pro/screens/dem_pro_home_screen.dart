@@ -11,7 +11,6 @@ import '../../profile/data/profile_repository.dart';
 import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
 import '../widgets/dem_pro_nav_bar.dart';
-import 'dem_pro_batch_tracking_screen.dart' show DemProBatchTrackingScreen;
 import '../../../core/utils/location_gate.dart';
 
 const _sectorLabels = {

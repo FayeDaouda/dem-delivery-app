@@ -686,7 +686,7 @@ class _HomeDriverThiakScreenState
                       key: const ValueKey('normal'),
                       profile: profile,
                       isAvailable: isAvailable,
-                      onDevTap: () => ref.read(availableOrdersProvider.notifier).injectDevOrder(orderType: 'RIDE'),
+                      onDevTap: null,
                     ),
             ),
           ),
