@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../notifications/notification_service.dart';
 import '../storage/auth_storage.dart';
 import '../../features/profile/data/profile_repository.dart';
 
@@ -57,11 +58,11 @@ class AppStartupNotifier extends ChangeNotifier {
       proStatus    = user?['proStatus'] as String?;
       proOnboarded = (user?['proBusinessName'] as String?)?.isNotEmpty == true;
 
-      // Si le rôle est null après fetch + cache → état corrompu (token sans profil complet)
-      // On efface la session pour permettre une ré-authentification propre
       if (role == null) {
         await AuthStorage.clear();
         _isLoggedIn = false;
+      } else {
+        NotificationService.requestPermissionAndToken();
       }
     }
 
