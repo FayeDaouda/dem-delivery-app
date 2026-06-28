@@ -62,6 +62,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   StreamSubscription<void>?                _reconnectSub;
   StreamSubscription<Map<String, dynamic>>? _newBatchSub;
   StreamSubscription<String>?              _batchExpiredSub;
+  StreamSubscription<Map<String, dynamic>>? _cancelledOrderSub;
 
   // ── Offre de tournée (batch) ──────────────────────────────────────────────
   Map<String, dynamic>? _currentBatch;
@@ -152,6 +153,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     NotificationService.stopOrderAlert();
     _newOrderSub?.cancel();
     _expiredOrderSub?.cancel();
+    _cancelledOrderSub?.cancel();
     _reconnectSub?.cancel();
     _newBatchSub?.cancel();
     _batchExpiredSub?.cancel();
@@ -196,6 +198,15 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       if (!mounted) return;
       ref.read(availableOrdersProvider.notifier).removeOrder(orderId);
       _cancelCountdown();
+    });
+
+    _cancelledOrderSub = SocketService.instance.onOrderCancelled.listen((data) {
+      if (!mounted) return;
+      final orderId = data['orderId'] as String?;
+      if (orderId != null) {
+        ref.read(availableOrdersProvider.notifier).removeOrder(orderId);
+        _cancelCountdown();
+      }
     });
 
     _reconnectSub = SocketService.instance.onReconnect.listen((_) {

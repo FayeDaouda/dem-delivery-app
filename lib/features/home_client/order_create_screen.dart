@@ -906,6 +906,16 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                               canSubmit: _routeComplete && _estimatedPrice != null,
                               onRetry: _retryEstimate,
                               onSubmit: _submit,
+                              onEditPickup: () {
+                                setState(() => _isSelectingPickup = true);
+                                _goStep(0);
+                                Future.delayed(const Duration(milliseconds: 300), () => _pickupFocus.requestFocus());
+                              },
+                              onEditDelivery: () {
+                                setState(() => _isSelectingPickup = false);
+                                _goStep(0);
+                                Future.delayed(const Duration(milliseconds: 300), () => _deliveryFocus.requestFocus());
+                              },
                             ),
                           ],
                         ),
@@ -1780,6 +1790,8 @@ class _Step3Panel extends StatelessWidget {
   final bool canSubmit;
   final VoidCallback onRetry;
   final VoidCallback onSubmit;
+  final VoidCallback? onEditPickup;
+  final VoidCallback? onEditDelivery;
 
   const _Step3Panel({
     required this.pickupLabel, required this.deliveryLabel,
@@ -1792,6 +1804,8 @@ class _Step3Panel extends StatelessWidget {
     required this.canSubmit,
     required this.onRetry,
     required this.onSubmit,
+    this.onEditPickup,
+    this.onEditDelivery,
   });
 
   @override
@@ -1805,12 +1819,24 @@ class _Step3Panel extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _RouteRow(icon: Icons.circle, color: AppColors.success, text: pickupLabel),
+            GestureDetector(
+              onTap: onEditPickup,
+              child: Row(children: [
+                Expanded(child: _RouteRow(icon: Icons.circle, color: AppColors.success, text: pickupLabel)),
+                if (onEditPickup != null) Icon(Icons.edit_outlined, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 14),
+              ]),
+            ),
             Padding(
               padding: const EdgeInsets.only(left: 6),
               child: Container(width: 2, height: 14, color: AppColors.textSecondary.withValues(alpha: 0.3)),
             ),
-            _RouteRow(icon: Icons.location_on, color: AppColors.error, text: deliveryLabel),
+            GestureDetector(
+              onTap: onEditDelivery,
+              child: Row(children: [
+                Expanded(child: _RouteRow(icon: Icons.location_on, color: AppColors.error, text: deliveryLabel)),
+                if (onEditDelivery != null) Icon(Icons.edit_outlined, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 14),
+              ]),
+            ),
           ]),
         ),
         const SizedBox(height: 10),
