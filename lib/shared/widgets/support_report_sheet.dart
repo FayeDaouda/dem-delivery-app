@@ -196,8 +196,8 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
   // ── Écran succès ──────────────────────────────────────────────────────────
   Widget _buildSuccess() {
     final support = _result!['support'] as Map?;
-    final phone   = support?['phone']    as String? ?? '+221784448524';
-    final wa      = support?['whatsapp'] as String? ?? '221784448524';
+    final phone   = support?['phone']    as String? ?? '+221710064664';
+    final wa      = support?['whatsapp'] as String? ?? '221710064664';
 
     return Column(
       mainAxisSize: MainAxisSize.min,

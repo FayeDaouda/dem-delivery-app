@@ -83,7 +83,7 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
                 child: Column(children: [
                   Row(children: [
                     GestureDetector(
-                      onTap: () => context.pop(),
+                      onTap: () => context.go('/role-selection'),
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(

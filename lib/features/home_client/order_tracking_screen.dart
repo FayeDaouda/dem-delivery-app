@@ -23,8 +23,8 @@ import '../home_driver/navigation/map_theme.dart';
 import 'providers/order_state.dart';
 import 'providers/order_state_provider.dart';
 
-const _kSupportPhone    = '+221784448524';
-const _kSupportWhatsApp = '221784448524';
+const _kSupportPhone    = '+221710064664';
+const _kSupportWhatsApp = '221710064664';
 
 class OrderTrackingScreen extends ConsumerStatefulWidget {
   final String orderId;
@@ -67,6 +67,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
   bool _nearbyAlerted = false;
   bool _arrivedOverlayVisible = false;
 
+  // ── Annulation client (2 min après acceptation) ───────────────────────────
+  Timer? _clientCancelTimer;
+  int _clientCancelSecondsLeft = 120;
+  bool _clientCancelling = false;
+
   // ── État métier → clientOrderStateProvider ────────────────────────────────
   // _order, _status, _loading, _driverLocation, _liveEtaMin,
   // _driverOffline, _driverUnreachable, _searchingNewDriver,
@@ -87,6 +92,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _routeRefreshTimer?.cancel();
+    _clientCancelTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
@@ -113,6 +119,64 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     final phase = _s.phase;
     if (phase == 'ACCEPTED' || phase == 'PICKED_UP') {
       _fetchRoute();
+    }
+  }
+
+  void _startClientCancelWindow(Map<String, dynamic>? order) {
+    if (order == null) return;
+    final acceptedAt = order['acceptedAt'] as String?;
+    final status = order['status'] as String? ?? '';
+    if (acceptedAt == null || status != 'ACCEPTED') {
+      _clientCancelSecondsLeft = 0;
+      return;
+    }
+    final elapsed = DateTime.now().difference(DateTime.parse(acceptedAt)).inSeconds;
+    _clientCancelSecondsLeft = (120 - elapsed).clamp(0, 120);
+    if (_clientCancelSecondsLeft <= 0) return;
+    _clientCancelTimer?.cancel();
+    _clientCancelTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _clientCancelSecondsLeft--);
+      if (_clientCancelSecondsLeft <= 0) _clientCancelTimer?.cancel();
+    });
+  }
+
+  Future<void> _clientCancelOrder() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Annuler la commande ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: const Text(
+          'Votre commande sera annulée et aucun montant ne sera débité.',
+          style: TextStyle(fontSize: 13.5, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Continuer'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Annuler', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _clientCancelling = true);
+    try {
+      await ref.read(ordersRepositoryProvider).cancelOrder(widget.orderId);
+      if (!mounted) return;
+      context.go('/client/home');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().contains('délai') ? e.toString() : 'Impossible d\'annuler la commande.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _clientCancelling = false);
     }
   }
 
@@ -834,6 +898,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     // ── Side effects (carte, haptic, dialog) réagissant aux changements ─────
     ref.listen<ClientOrderState>(clientOrderStateProvider(widget.orderId),
         (prev, next) {
+      if (prev?.orderData == null && next.orderData != null && _clientCancelTimer == null) {
+        _startClientCancelWindow(next.orderData);
+      }
+      if (next.phase == 'PICKED_UP' && _clientCancelTimer != null) {
+        _clientCancelTimer?.cancel();
+        setState(() => _clientCancelSecondsLeft = 0);
+      }
       final newLoc = next.driverLocation;
 
       // Changement de position driver
@@ -1471,6 +1542,27 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                             ),
                           ),
                         ),
+                        if (orderState.phase == 'ACCEPTED' && _clientCancelSecondsLeft > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: TextButton(
+                                onPressed: _clientCancelling ? null : _clientCancelOrder,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFFEF4444),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                                  ),
+                                ),
+                                child: _clientCancelling
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)))
+                                    : Text('Annuler la commande (${_clientCancelSecondsLeft}s)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                              ),
+                            ),
+                          ),
                       ],
 
                       if (orderState.phase == 'DELIVERED' && !_rated) ...[

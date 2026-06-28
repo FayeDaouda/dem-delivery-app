@@ -51,7 +51,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
   final _emailCtrl        = TextEditingController();
 
   String? _sector;
-  String? _weeklyVolume;
+  String? _weeklyVolume = 'low';
   XFile?  _pickedAvatar;
 
   bool    _loadingProfile = true;
@@ -165,6 +165,20 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Row(children: [
+                GestureDetector(
+                  onTap: () => context.go('/role-selection'),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 16),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
               GestureDetector(
                 onTap: () async {
                   final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 512, imageQuality: 80);

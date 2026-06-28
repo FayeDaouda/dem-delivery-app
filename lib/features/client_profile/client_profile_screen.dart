@@ -273,11 +273,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           const SizedBox(height: 8),
           const Text('Support DEM', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 20),
-          _SupportTile(icon: Icons.phone_outlined,      label: 'Appeler le support', sub: '+221 78 444 85 24', onTap: () => _launch('tel:+221784448524')),
+          _SupportTile(icon: Icons.phone_outlined,      label: 'Appeler le support', sub: '+221 71 006 46 64', onTap: () => _launch('tel:+221710064664')),
           const SizedBox(height: 10),
           _SupportTile(icon: Icons.email_outlined,      label: 'Envoyer un e-mail',  sub: 'support@dem.sn',   onTap: () => _launch('mailto:support@dem.sn')),
           const SizedBox(height: 10),
-          _SupportTile(icon: Icons.chat_bubble_outline, label: 'WhatsApp',           sub: '+221 78 444 85 24', onTap: () => _launch('https://wa.me/221784448524')),
+          _SupportTile(icon: Icons.chat_bubble_outline, label: 'WhatsApp',           sub: '+221 71 006 46 64', onTap: () => _launch('https://wa.me/221710064664')),
         ]),
       ),
     );

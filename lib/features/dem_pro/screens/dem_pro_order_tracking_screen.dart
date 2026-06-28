@@ -286,16 +286,26 @@ class _DemProOrderTrackingScreenState
     launchUrl(Uri.parse('tel:$phone'));
   }
 
+  void _whatsAppDriver(String phone) {
+    final cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final number = cleaned.startsWith('221') ? cleaned : '221$cleaned';
+    launchUrl(
+      Uri.parse('https://wa.me/$number'),
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   String _short(String? addr) =>
       (addr == null || addr.isEmpty) ? '—' : addr.split(',').first.trim();
 
   (String, Color) get _statusInfo => switch (_status) {
-    'ACCEPTED'  => ('Livreur en route vers le colis', DemProColors.accent),
-    'PICKED_UP' => ('Colis récupéré · En route', DemProColors.warning),
-    'DELIVERED' => ('Livraison effectuée', DemProColors.success),
-    'CANCELLED' => ('Commande annulée', DemProColors.danger),
-    _           => ('En attente', const Color(0xFF6B8BAA)),
+    'ACCEPTED'   => ('Livreur en route vers le colis', DemProColors.accent),
+    'PICKED_UP'  => ('Colis récupéré · En route', DemProColors.warning),
+    'IN_TRANSIT' => ('En route vers la destination', DemProColors.accent),
+    'DELIVERED'  => ('Livraison effectuée', DemProColors.success),
+    'CANCELLED'  => ('Commande annulée', DemProColors.danger),
+    _            => ('En attente', const Color(0xFF6B8BAA)),
   };
 
   String? get _distanceInfo {
@@ -524,12 +534,19 @@ class _DemProOrderTrackingScreenState
                           style: TextStyle(color: Color(0xFF6B8BAA), fontSize: 12)),
                     ]),
                   ),
-                  if (dPhone != null)
+                  if (dPhone != null) ...[
+                    _ActionChip(
+                      icon: Icons.chat_bubble_outline,
+                      label: 'WhatsApp',
+                      onTap: () => _whatsAppDriver(dPhone),
+                    ),
+                    const SizedBox(width: 6),
                     _ActionChip(
                       icon: Icons.phone_outlined,
                       label: 'Appeler',
                       onTap: _callDriver,
                     ),
+                  ],
                 ]),
                 const SizedBox(height: 16),
 

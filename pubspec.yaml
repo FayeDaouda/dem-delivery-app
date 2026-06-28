@@ -23,6 +23,9 @@ dependencies:
   # Stockage local (token JWT)
   shared_preferences: ^2.2.3
 
+  # Guidage vocal navigation
+  flutter_tts: ^4.2.0
+
   # Localisation + boussole
   geolocator: ^13.0.1
   flutter_compass: ^0.8.0

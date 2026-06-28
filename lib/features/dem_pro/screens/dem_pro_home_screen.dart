@@ -184,6 +184,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
 
   Map<String, dynamic>? _user;
   Map<String, dynamic>? _stats;
+  List<Map<String, dynamic>> _allOrders = [];
   List<Map<String, dynamic>> _activeOrders = [];
   bool _loading = true;
 
@@ -221,6 +222,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
       setState(() {
         _user = results[0] as Map<String, dynamic>;
         _stats = results[1] as Map<String, dynamic>;
+        _allOrders = orders;
         _activeOrders = active;
         _loading = false;
       });
@@ -246,6 +248,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
           _AccueilTab(
             user: _user, stats: _stats, loading: _loading,
             activeOrders: _activeOrders,
+            allOrders: _allOrders,
             onRefresh: _load, t: t,
           ),
           _LivraisonsTab(key: _livraisonsKey, t: t),
@@ -292,11 +295,13 @@ class _AccueilTab extends StatelessWidget {
   final Map<String, dynamic>? stats;
   final bool loading;
   final List<Map<String, dynamic>> activeOrders;
+  final List<Map<String, dynamic>> allOrders;
   final Future<void> Function() onRefresh;
   final _T t;
   const _AccueilTab({
     required this.user, required this.stats,
     required this.loading, required this.activeOrders,
+    required this.allOrders,
     required this.onRefresh, required this.t,
   });
 
@@ -324,8 +329,30 @@ class _AccueilTab extends StatelessWidget {
 
     final delivered  = (stats?['deliveriesToday']?['completed']  as num?)?.toInt() ?? 0;
     final inProgress = (stats?['deliveriesToday']?['inProgress'] as num?)?.toInt() ?? 0;
-    final spentToday = (stats?['spendingToday'] as num?) ?? 0;
-    final spentMonth = (stats?['spendingMonth'] as num?) ?? 0;
+
+    final now0 = DateTime.now();
+    int salesToday = 0;
+    int salesMonth = 0;
+    for (final o in allOrders) {
+      final s = (o['status'] as String? ?? '').toUpperCase();
+      if (s != 'DELIVERED' && s != 'PAYMENT_CONFIRMED') continue;
+      final items = o['items'] as List?;
+      if (items == null) continue;
+      int orderSales = 0;
+      for (final item in items) {
+        orderSales += ((item['price'] as num?)?.toInt() ?? 0) * ((item['quantity'] as num?)?.toInt() ?? 1);
+      }
+      final dt = DateTime.tryParse(o['createdAt'] as String? ?? '')?.toLocal();
+      if (dt != null && dt.year == now0.year && dt.month == now0.month) {
+        salesMonth += orderSales;
+        if (dt.day == now0.day) salesToday += orderSales;
+      }
+    }
+
+    final recentHistory = allOrders.where((o) {
+      final s = o['status'] as String? ?? '';
+      return s == 'DELIVERED' || s == 'CANCELLED';
+    }).take(5).toList();
 
     final now      = DateTime.now();
     final dateStr  = '${_dayNames[now.weekday - 1]} ${now.day} ${_monthNames[now.month - 1]}';
@@ -465,7 +492,7 @@ class _AccueilTab extends StatelessWidget {
                       ]),
                       const SizedBox(height: 14),
 
-                      // Dépenses en 2 mini-cards distinctes
+                      // Ventes en 2 mini-cards distinctes
                       Row(children: [
                         Expanded(
                           child: Container(
@@ -478,14 +505,14 @@ class _AccueilTab extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Dépenses aujourd\'hui',
+                                  'Ventes aujourd\'hui',
                                   style: TextStyle(color: t.muted, fontSize: 10),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  _fcfa(spentToday),
+                                  _fcfa(salesToday),
                                   style: TextStyle(
-                                    color: t.text,
+                                    color: DemProColors.success,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -506,14 +533,14 @@ class _AccueilTab extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Dépenses ce mois',
+                                  'Ventes ce mois',
                                   style: TextStyle(color: t.muted, fontSize: 10),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  _fcfa(spentMonth),
+                                  _fcfa(salesMonth),
                                   style: TextStyle(
-                                    color: t.text,
+                                    color: DemProColors.success,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -555,16 +582,28 @@ class _AccueilTab extends StatelessWidget {
               // ── En cours ─────────────────────────────────────────────────
               _SectionLabel(label: 'EN COURS', t: t),
               const SizedBox(height: 12),
-              _EnCoursEmpty(
-                onOrder: () => context.push('/dem-pro/orders/create'),
-                t: t,
-              ),
+              if (activeOrders.isEmpty)
+                _EnCoursEmpty(
+                  onOrder: () => context.push('/dem-pro/orders/create'),
+                  t: t,
+                )
+              else
+                ...activeOrders.map((o) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _OrderMiniCard(order: o, t: t, onTap: () => _goToActiveOrder(context, o)),
+                )),
               const SizedBox(height: 24),
 
               // ── Historique récent ─────────────────────────────────────────
               _SectionLabel(label: 'HISTORIQUE RÉCENT', t: t),
               const SizedBox(height: 12),
-              _HistoriqueEmpty(t: t),
+              if (recentHistory.isEmpty)
+                _HistoriqueEmpty(t: t)
+              else
+                ...recentHistory.map((o) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _OrderMiniCard(order: o, t: t, onTap: () => _navigateToOrder(context, o)),
+                )),
             ],
           ),
         ),
@@ -927,11 +966,11 @@ class _CompteTabState extends State<_CompteTab> {
             const SizedBox(height: 12),
             _InfoCard(t: t, children: [
               _TapRow(icon: Icons.phone_outlined, label: 'Appeler le support', t: t,
-                subtitle: '+221 78 444 85 24',
-                onTap: () => launchUrl(Uri.parse('tel:+221784448524'))),
+                subtitle: '+221 71 006 46 64',
+                onTap: () => launchUrl(Uri.parse('tel:+221710064664'))),
               _TapRow(icon: Icons.chat_bubble_outline, label: 'WhatsApp', t: t,
-                subtitle: '+221 78 444 85 24',
-                onTap: () => launchUrl(Uri.parse('https://wa.me/221784448524'), mode: LaunchMode.externalApplication)),
+                subtitle: '+221 71 006 46 64',
+                onTap: () => launchUrl(Uri.parse('https://wa.me/221710064664'), mode: LaunchMode.externalApplication)),
               _TapRow(icon: Icons.email_outlined, label: 'Envoyer un e-mail', t: t,
                 subtitle: 'support@dem.sn',
                 onTap: () => launchUrl(Uri.parse('mailto:support@dem.sn'))),
@@ -1289,6 +1328,76 @@ class _HistoriqueEmpty extends StatelessWidget {
       ),
     ]),
   );
+}
+
+class _OrderMiniCard extends StatelessWidget {
+  final Map<String, dynamic> order;
+  final _T t;
+  final VoidCallback onTap;
+  const _OrderMiniCard({required this.order, required this.t, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final status = order['status'] as String? ?? '';
+    final color = _statusColor(status);
+    final dropoff = order['dropoffAddress'] as String? ?? '—';
+    final price = (order['price'] as num?)?.toInt();
+    final createdAt = _timeAgo(order['createdAt'] as String?);
+    final driverName = (order['driver'] as Map?)?['name'] as String?;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: t.cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: t.border),
+        ),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              _isActiveStatus(status) ? Icons.two_wheeler : status == 'DELIVERED' ? Icons.check_circle_outline : Icons.cancel_outlined,
+              color: color, size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _shortAddress(dropoff),
+                style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Row(children: [
+                Text(_statusLabel(status), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+                if (driverName != null) ...[
+                  Text(' · ', style: TextStyle(color: t.muted, fontSize: 11)),
+                  Text(driverName, style: TextStyle(color: t.muted, fontSize: 11)),
+                ],
+              ]),
+            ],
+          )),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (price != null) Text(_fcfa(price), style: TextStyle(color: t.text, fontSize: 12, fontWeight: FontWeight.w700)),
+              if (createdAt.isNotEmpty) Text(createdAt, style: TextStyle(color: t.muted, fontSize: 10)),
+            ],
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right, color: t.muted, size: 16),
+        ]),
+      ),
+    );
+  }
 }
 
 class _InfoCard extends StatelessWidget {
@@ -3282,7 +3391,7 @@ class _FinancesTabState extends State<_FinancesTab> {
           ]),
           const SizedBox(height: 14),
           Text(
-            '${_fcfa(_totalSales)} FCFA',
+            _fcfa(_totalSales),
             style: TextStyle(color: t.text, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
           ),
           Text('Chiffre d\'affaires', style: TextStyle(color: t.muted, fontSize: 12)),
@@ -3366,7 +3475,7 @@ class _FinancesTabState extends State<_FinancesTab> {
           ]),
           const SizedBox(height: 14),
           Text(
-            '${_fcfa(total.toInt())} FCFA',
+            _fcfa(total.toInt()),
             style: TextStyle(color: t.text, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
           ),
           Text('Total dépensé', style: TextStyle(color: t.muted, fontSize: 12)),

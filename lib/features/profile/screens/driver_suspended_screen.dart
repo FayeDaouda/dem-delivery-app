@@ -36,8 +36,8 @@ class _State extends State<DriverSuspendedScreen> {
   }
 
   Future<void> _contactSupport() async {
-    final phone = '+221784448524';
-    final wa    = '221784448524';
+    final phone = '+221710064664';
+    final wa    = '221710064664';
     final msg   = Uri.encodeComponent(
       'Bonjour, mon compte livreur DEM a été suspendu. Je souhaite obtenir des informations sur la réactivation.',
     );

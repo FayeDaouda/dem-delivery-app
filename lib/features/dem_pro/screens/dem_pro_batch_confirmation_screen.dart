@@ -44,7 +44,7 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             isScheduled
-                ? 'Votre tournée sera dispatché au créneau choisi.'
+                ? 'Votre tournée sera dispatchée au créneau choisi.'
                 : 'Nous recherchons un livreur pour votre tournée.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: DemProColors.muted, fontSize: 14),
@@ -71,6 +71,27 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
                   style: const TextStyle(color: DemProColors.accent, fontSize: 15, fontWeight: FontWeight.w800)),
               ]),
               const SizedBox(height: 12),
+              if (isScheduled) ...[
+                const SizedBox(height: 4),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.schedule, color: DemProColors.accent, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      _fmtDateTime(scheduled),
+                      style: const TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+              ],
               ...orders.asMap().entries.map((e) {
                 final i = e.key;
                 final o = e.value;
@@ -138,6 +159,15 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
         ]),
       )),
     );
+  }
+
+  static String _fmtDateTime(String iso) {
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return iso;
+    const months = ['jan.','fév.','mars','avr.','mai','juin','juil.','août','sep.','oct.','nov.','déc.'];
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year} à $h:$m';
   }
 
   static String _fmtFcfa(int v) {

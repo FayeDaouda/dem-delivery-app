@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/router/app_startup_notifier.dart';
 import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
 
@@ -278,55 +280,77 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: t.border),
                 ),
-                child: Row(children: [
-                  Container(
-                    width: 42, height: 42,
-                    decoration: BoxDecoration(
-                      color: DemProColors.accent.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        _initials(driver['name'] as String?),
-                        style: const TextStyle(
-                          color: DemProColors.accent,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
+                child: Column(children: [
+                  Row(children: [
+                    Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(
+                        color: DemProColors.accent.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          _initials(driver['name'] as String?),
+                          style: const TextStyle(
+                            color: DemProColors.accent,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          driver['name'] as String? ?? 'Livreur DEM',
-                          style: TextStyle(
-                            color: t.text,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            driver['name'] as String? ?? 'Livreur DEM',
+                            style: TextStyle(
+                              color: t.text,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        Text('Moto · DEM',
-                            style: TextStyle(color: t.muted, fontSize: 12)),
-                      ],
+                          Text('Moto · DEM',
+                              style: TextStyle(color: t.muted, fontSize: 12)),
+                        ],
+                      ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: DemProColors.success.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: DemProColors.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.check_circle, color: DemProColors.success, size: 13),
+                        SizedBox(width: 4),
+                        Text('Assigné',
+                            style: TextStyle(color: DemProColors.success, fontSize: 12, fontWeight: FontWeight.w700)),
+                      ]),
                     ),
-                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.check_circle, color: DemProColors.success, size: 13),
-                      SizedBox(width: 4),
-                      Text('Assigné',
-                          style: TextStyle(color: DemProColors.success, fontSize: 12, fontWeight: FontWeight.w700)),
+                  ]),
+                  if (driver['phone'] != null) ...[
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: _ContactChip(
+                        icon: Icons.chat_bubble_outline,
+                        label: 'WhatsApp',
+                        onTap: () {
+                          final phone = (driver['phone'] as String).replaceAll(RegExp(r'[^0-9]'), '');
+                          final number = phone.startsWith('221') ? phone : '221$phone';
+                          launchUrl(Uri.parse('https://wa.me/$number'), mode: LaunchMode.externalApplication);
+                        },
+                      )),
+                      const SizedBox(width: 8),
+                      Expanded(child: _ContactChip(
+                        icon: Icons.phone_outlined,
+                        label: 'Appeler',
+                        onTap: () => launchUrl(Uri.parse('tel:${driver['phone']}')),
+                      )),
                     ]),
-                  ),
+                  ],
                 ]),
               )
             else
@@ -462,6 +486,26 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                   ]),
               ]),
             ),
+
+            // ── Bouton retour (tournée terminée / annulée) ─────────────────
+            if (status == 'COMPLETED' || status == 'CANCELLED') ...[
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: () => context.go(appStartupNotifier.homeForRole),
+                  icon: const Icon(Icons.home_outlined, size: 20),
+                  label: const Text('Retour au tableau de bord', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: DemProColors.accent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -610,6 +654,31 @@ class _SectionLabel extends StatelessWidget {
       fontSize: 11,
       fontWeight: FontWeight.w700,
       letterSpacing: 1,
+    ),
+  );
+}
+
+class _ContactChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _ContactChip({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: DemProColors.accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
+      ),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(icon, color: DemProColors.accent, size: 16),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w600)),
+      ]),
     ),
   );
 }

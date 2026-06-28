@@ -1,18 +1,33 @@
 import 'package:dio/dio.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+class RouteStep {
+  final String instruction;
+  final LatLng startLocation;
+  final int distanceMeters;
+  final String maneuver;
+
+  const RouteStep({
+    required this.instruction,
+    required this.startLocation,
+    required this.distanceMeters,
+    required this.maneuver,
+  });
+}
+
 class RouteResult {
   final List<LatLng> points;
-  final int? durationSeconds;   // durée estimée
-  final double? distanceMeters; // distance totale
+  final int? durationSeconds;
+  final double? distanceMeters;
+  final List<RouteStep> steps;
 
   const RouteResult({
     required this.points,
     this.durationSeconds,
     this.distanceMeters,
+    this.steps = const [],
   });
 
-  /// Résultat de secours : ligne droite entre deux points.
   factory RouteResult.fallback(LatLng origin, LatLng destination) =>
       RouteResult(points: [origin, destination]);
 }
@@ -49,12 +64,23 @@ class DirectionsService {
           final route = (data['routes'] as List).first as Map<String, dynamic>;
           final leg   = (route['legs']   as List).first as Map<String, dynamic>;
 
-          // Step-level polylines : suit les courbes réelles des rues
           final steps  = leg['steps'] as List;
           final points = <LatLng>[];
+          final routeSteps = <RouteStep>[];
           for (final step in steps) {
-            points.addAll(_decodePolyline(
-              (step as Map<String, dynamic>)['polyline']['points'] as String,
+            final s = step as Map<String, dynamic>;
+            points.addAll(_decodePolyline(s['polyline']['points'] as String));
+            final htmlInstr = s['html_instructions'] as String? ?? '';
+            final clean = htmlInstr.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+            final startLoc = s['start_location'] as Map<String, dynamic>;
+            routeSteps.add(RouteStep(
+              instruction: clean,
+              startLocation: LatLng(
+                (startLoc['lat'] as num).toDouble(),
+                (startLoc['lng'] as num).toDouble(),
+              ),
+              distanceMeters: (s['distance']?['value'] as num?)?.toInt() ?? 0,
+              maneuver: s['maneuver'] as String? ?? '',
             ));
           }
 
@@ -62,6 +88,7 @@ class DirectionsService {
             points:          points,
             durationSeconds: (leg['duration']['value'] as num).toInt(),
             distanceMeters:  (leg['distance']['value']  as num).toDouble(),
+            steps:           routeSteps,
           );
         }
       } catch (_) {

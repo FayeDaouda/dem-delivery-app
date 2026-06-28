@@ -49,6 +49,7 @@ class DemProReceiptScreen extends StatelessWidget {
     final demFee = (order['demFee'] as num?) ?? 0;
     final total = price + demFee;
     final description = order['description'] as String?;
+    final items = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final receiverName = order['receiverName'] as String?;
     final receiverPhone = order['receiverPhone'] as String?;
     final driver = order['driver'] as Map<String, dynamic>?;
@@ -155,6 +156,43 @@ class DemProReceiptScreen extends StatelessWidget {
               ]),
             ),
 
+          // ── Articles ──────────────────────────────────────────────────
+          if (items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _Card(t: t, children: [
+                _CardHeader(icon: Icons.shopping_bag_outlined, label: 'ARTICLES', t: t),
+                const SizedBox(height: 10),
+                ...items.map((item) {
+                  final name = item['name'] as String? ?? '—';
+                  final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+                  final itemPrice = (item['price'] as num?)?.toInt();
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(children: [
+                      Text('•  ', style: TextStyle(color: t.muted, fontSize: 12)),
+                      Expanded(child: Text('$name × $qty', style: TextStyle(color: t.text, fontSize: 13))),
+                      if (itemPrice != null)
+                        Text(_fcfa(itemPrice * qty), style: TextStyle(color: t.text, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ]),
+                  );
+                }),
+                if (items.any((i) => i['price'] != null)) ...[
+                  const SizedBox(height: 6),
+                  Divider(color: t.border, height: 1),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    Text('Total articles', style: TextStyle(color: t.muted, fontSize: 12)),
+                    const Spacer(),
+                    Text(
+                      _fcfa(items.fold<int>(0, (sum, i) => sum + ((i['price'] as num?)?.toInt() ?? 0) * ((i['quantity'] as num?)?.toInt() ?? 1))),
+                      style: const TextStyle(color: DemProColors.success, fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ]),
+                ],
+              ]),
+            ),
+
           // ── Livreur ────────────────────────────────────────────────────
           if (driverName != null)
             Padding(
@@ -206,6 +244,24 @@ class DemProReceiptScreen extends StatelessWidget {
             if (deliveredAt != null)
               _DetailRow(label: 'Durée', value: _duration(createdAt, deliveredAt), t: t),
           ]),
+          const SizedBox(height: 24),
+
+          // ── Nouvelle livraison ─────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/dem-pro/orders/create'),
+              icon: const Icon(Icons.add, size: 20),
+              label: const Text('Nouvelle livraison', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: DemProColors.accent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+            ),
+          ),
         ]),
       ),
     );

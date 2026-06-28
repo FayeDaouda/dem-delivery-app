@@ -1,6 +1,8 @@
 import '../../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../../../core/widgets/network_error_widget.dart';
@@ -42,6 +44,89 @@ class _State extends State<DemProRejectedScreen> {
     }
   }
 
+  void _showSupport(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.support_agent_outlined, color: DemProColors.accent, size: 36),
+              const SizedBox(height: 10),
+              const Text('Support DEM', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              const Text(
+                'Besoin de précisions sur le refus de votre demande ?',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              _SupportOption(
+                icon: Icons.phone_outlined,
+                label: 'Appeler le support',
+                sub: '+221 71 006 46 64',
+                onTap: () { Navigator.pop(context); launchUrl(Uri.parse('tel:+221710064664')); },
+              ),
+              const SizedBox(height: 10),
+              _SupportOption(
+                icon: Icons.chat_bubble_outline,
+                label: 'WhatsApp',
+                sub: '+221 71 006 46 64',
+                onTap: () {
+                  Navigator.pop(context);
+                  launchUrl(
+                    Uri.parse('https://wa.me/221710064664?text=${Uri.encodeComponent("Bonjour, ma demande DEM Pro a été refusée. Je souhaite obtenir plus de détails.")}'),
+                    mode: LaunchMode.externalApplication,
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+              _SupportOption(
+                icon: Icons.email_outlined,
+                label: 'Envoyer un e-mail',
+                sub: 'support@dem.sn',
+                onTap: () { Navigator.pop(context); launchUrl(Uri.parse('mailto:support@dem.sn')); },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Se déconnecter ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: const Text(
+          'Vous pourrez vous reconnecter avec le même numéro.',
+          style: TextStyle(fontSize: 13.5, color: Color(0xFF6B7280)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler', style: TextStyle(color: Color(0xFF6B7280))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Déconnexion', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await AuthStorage.clear();
+    if (!mounted) return;
+    if (this.context.mounted) this.context.go('/phone');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -62,6 +147,18 @@ class _State extends State<DemProRejectedScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            // ── Logo DEM ────────────────────────────────────
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Image.asset('assets/DEM.png', width: 56, height: 56, fit: BoxFit.cover),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'delivery express mobility',
+                              style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), letterSpacing: 0.5),
+                            ),
+                            const SizedBox(height: 24),
+
                             Builder(builder: (ctx) {
                               final t = MediaQuery.of(ctx).size.width > 600;
                               return Container(
@@ -143,6 +240,30 @@ class _State extends State<DemProRejectedScreen> {
                               icon: Icons.edit_outlined,
                               onTap: () => context.go('/dem-pro/onboarding'),
                             ),
+                            const SizedBox(height: 16),
+
+                            // ── Support ─────────────────────────────────────
+                            TextButton.icon(
+                              onPressed: () => _showSupport(context),
+                              icon: const Icon(Icons.help_outline, size: 15),
+                              label: const Text('Besoin d\'aide ? Contacter le support'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF9CA3AF),
+                                textStyle: const TextStyle(fontSize: 12.5),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+
+                            // ── Déconnexion ─────────────────────────────────
+                            TextButton.icon(
+                              onPressed: () => _confirmLogout(context),
+                              icon: const Icon(Icons.logout, size: 15),
+                              label: const Text('Se déconnecter'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFFEF4444),
+                                textStyle: const TextStyle(fontSize: 12.5),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -185,6 +306,40 @@ class _GradientButton extends StatelessWidget {
             Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
           ]),
         ),
+      ),
+    ),
+  );
+}
+
+// ── Tile support ─────────────────────────────────────────────────────────────
+class _SupportOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String sub;
+  final VoidCallback onTap;
+  const _SupportOption({required this.icon, required this.label, required this.sub, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: const Color(0xFFF8FAFC),
+    borderRadius: BorderRadius.circular(12),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(children: [
+          Icon(icon, color: DemProColors.accent, size: 20),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Color(0xFF1F2937))),
+              Text(sub, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+            ],
+          )),
+          const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFFD1D5DB)),
+        ]),
       ),
     ),
   );

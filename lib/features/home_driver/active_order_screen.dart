@@ -22,6 +22,7 @@ import '../deliveries/providers/orders_provider.dart';
 import 'navigation/alert_manager.dart';
 import 'navigation/directions_service.dart';
 import 'navigation/navigation_service.dart';
+import 'navigation/voice_nav_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../shared/widgets/support_report_sheet.dart';
 
@@ -69,6 +70,14 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
 
   StreamSubscription<Map<String, dynamic>>? _cancelledSub;
 
+  // ── Guidage vocal ──────────────────────────────────────────────────────────
+  bool _voiceNavEnabled = true;
+
+  // ── Annulation livreur (1 min 30) ─────────────────────────────────────────
+  Timer? _cancelWindowTimer;
+  int _cancelSecondsLeft = 90;
+  bool _driverCancelling = false;
+
   // ── Getters ───────────────────────────────────────────────────────────────
   double _parseCoord(dynamic val, [double fallback = 0.0]) {
     if (val == null) return fallback;
@@ -108,6 +117,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       if (mounted) setState(() => _driverIcon = icon);
     });
     _startNavigation();
+    _startCancelWindow();
 
     final orderId = _order['id'] as String?;
     _cancelledSub = SocketService.instance.onOrderCancelled.listen((data) {
@@ -207,13 +217,64 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _cancelledSub?.cancel();
+    _cancelWindowTimer?.cancel();
     _locationSub?.cancel();
     _alertTimer?.cancel();
     _mapController?.dispose();
+    VoiceNavService.instance.dispose();
     super.dispose();
   }
 
-  /// Appelé par Flutter quand l'app change d'état (foreground ↔ background).
+  void _startCancelWindow() {
+    final acceptedAt = _order['acceptedAt'] as String?;
+    if (acceptedAt != null) {
+      final elapsed = DateTime.now().difference(DateTime.parse(acceptedAt)).inSeconds;
+      _cancelSecondsLeft = (90 - elapsed).clamp(0, 90);
+    }
+    if (_cancelSecondsLeft <= 0 || _isPickedUp) return;
+    _cancelWindowTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _cancelSecondsLeft--);
+      if (_cancelSecondsLeft <= 0) _cancelWindowTimer?.cancel();
+    });
+  }
+
+  Future<void> _driverCancel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Annuler cette course ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: const Text(
+          'La course sera re-dispatchée à un autre livreur. Cela affectera votre taux d\'acceptation.',
+          style: TextStyle(fontSize: 13.5, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Continuer la course'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Annuler', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _driverCancelling = true);
+    try {
+      await ref.read(ordersRepositoryProvider).driverCancelOrder(_order['id'] as String);
+      if (!mounted) return;
+      ref.read(availableOrdersProvider.notifier).clear();
+      context.go('/driver/home');
+    } catch (e) {
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
+    } finally {
+      if (mounted) setState(() => _driverCancelling = false);
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -259,6 +320,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
 
   // ── Navigation ────────────────────────────────────────────────────────────
   Future<void> _startNavigation() async {
+    await VoiceNavService.instance.init();
+    if (mounted) setState(() => _voiceNavEnabled = VoiceNavService.instance.enabled);
+    VoiceNavService.instance.onPhaseChanged(isPickedUp: _isPickedUp);
+
     final bool isNight = ref.read(mapNightProvider);
     final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
@@ -308,6 +373,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
         _etaSeconds   = result.durationSeconds;
         _loadingRoute = false;
       });
+      if (result.steps.isNotEmpty) {
+        VoiceNavService.instance.updateSteps(result.steps);
+      }
 
       final dist = _distanceToTarget;
       if (dist != null) {
@@ -372,6 +440,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     if (!mounted) return;
     setState(() => _driverPosition = position);
     _trimDisplayRoute();
+    VoiceNavService.instance.onPositionUpdate(position);
 
     // Auto-follow : caméra orientée dans la direction de déplacement
     if (_autoFollow && _mapController != null) {
@@ -430,7 +499,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     final dist = _distanceToTarget;
     if (dist != null) {
       final alert = _alertManager.check(dist, isPickupPhase: !_isPickedUp);
-      if (alert != null) _showAlert(alert.message, alert.priority);
+      if (alert != null) {
+        _showAlert(alert.message, alert.priority);
+        VoiceNavService.instance.speakDirect(alert.message);
+      }
     }
 
     // Recalcul si déviation > 60m depuis la route (couvre demi-tour et chemin alternatif)
@@ -515,8 +587,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     try {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.pickupOrder(_order['id']);
-      // Fusionne : _order (conserve client/clientPhone) + updated (nouveau statut)
       setState(() => _order = {..._order, ...updated});
+      VoiceNavService.instance.onPhaseChanged(isPickedUp: true);
       await _loadRoute();
     } catch (e) {
       if (mounted) {
@@ -1179,6 +1251,33 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
             ),
           ),
 
+          // ── Bouton guidage vocal ──
+          if (!_isDelivered)
+            Positioned(
+              right: 16,
+              bottom: 290,
+              child: GestureDetector(
+                onTap: () async {
+                  await VoiceNavService.instance.toggle();
+                  if (mounted) setState(() => _voiceNavEnabled = VoiceNavService.instance.enabled);
+                },
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: _voiceNavEnabled ? AppColors.primary : Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
+                  ),
+                  child: Icon(
+                    _voiceNavEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                    color: _voiceNavEnabled ? Colors.white : Colors.grey,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
+
           // ── Bouton re-centrer (visible quand autoFollow désactivé) ──
           if (!_autoFollow && _driverPosition != null)
             Positioned(
@@ -1383,7 +1482,30 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                     ],
                   ),
 
-                  const SizedBox(height: 12),
+                  // Bouton annuler livreur (1 min 30)
+                  if (!_isPickedUp && !_isDelivered && _cancelSecondsLeft > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 4),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: _driverCancelling ? null : _driverCancel,
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFEF4444),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: BorderSide(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                            ),
+                          ),
+                          child: _driverCancelling
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)))
+                              : Text('Annuler la course (${_cancelSecondsLeft}s)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 8),
 
                   // Bouton action principal + cercle appel
                   if (!_isDelivered)

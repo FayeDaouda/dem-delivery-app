@@ -40,13 +40,13 @@ class _State extends State<ChefDeFlotteSuspendedScreen> {
           const SizedBox(height: 16),
           ListTile(
             leading: const Icon(Icons.phone_outlined, color: AppColors.primaryMid),
-            title: const Text('Appeler'), subtitle: const Text('+221 78 444 85 24'),
-            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('tel:+221784448524')); },
+            title: const Text('Appeler'), subtitle: const Text('+221 71 006 46 64'),
+            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('tel:+221710064664')); },
           ),
           ListTile(
             leading: const Icon(Icons.chat_bubble_outline, color: Colors.green),
-            title: const Text('WhatsApp'), subtitle: const Text('+221 78 444 85 24'),
-            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('https://wa.me/221784448524'), mode: LaunchMode.externalApplication); },
+            title: const Text('WhatsApp'), subtitle: const Text('+221 71 006 46 64'),
+            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('https://wa.me/221710064664'), mode: LaunchMode.externalApplication); },
           ),
           ListTile(
             leading: const Icon(Icons.email_outlined, color: AppColors.primaryMid),

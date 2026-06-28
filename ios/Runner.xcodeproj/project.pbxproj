@@ -17,6 +17,7 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		D9A5D833DD2BC34338D9C015 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 9AEF86FDC4E5F346F943CB12 /* GoogleService-Info.plist */; };
+		DEM0001A2B3C4D5E6F7890AB /* dem_order_alert.wav in Resources */ = {isa = PBXBuildFile; fileRef = DEM0001A2B3C4D5E6F7890AC /* dem_order_alert.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +68,7 @@
 		D58E4789490DD9EC76FE2024 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		D5EA79AE31625A3CC19667D9 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E4E45802305BB5F5230A562D /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		DEM0001A2B3C4D5E6F7890AC /* dem_order_alert.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = dem_order_alert.wav; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +143,7 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				DEM0001A2B3C4D5E6F7890AC /* dem_order_alert.wav */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -269,6 +272,7 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 				D9A5D833DD2BC34338D9C015 /* GoogleService-Info.plist in Resources */,
+				DEM0001A2B3C4D5E6F7890AB /* dem_order_alert.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

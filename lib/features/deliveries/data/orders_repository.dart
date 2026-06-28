@@ -254,6 +254,18 @@ class OrdersRepository {
     }
   }
 
+  Future<Map<String, dynamic>> driverCancelOrder(String id) async {
+    try {
+      final response = await _dio.patch('/orders/$id/driver-cancel');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'annuler la course.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<void> updateDriverLocation(double lat, double lng) async {
     try {
       await _dio.patch('/users/driver/location', data: {'lat': lat, 'lng': lng});

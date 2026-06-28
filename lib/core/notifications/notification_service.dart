@@ -33,11 +33,13 @@ class NotificationService {
 
       // Canal Android haute importance (alertes, nouvelles courses)
       const channel = AndroidNotificationChannel(
-        'dem_high_importance',
-        'Notifications Importantes DEM',
-        description: 'Notifications de courses en temps réel',
+        'dem_order_alert',
+        'Alertes courses DEM',
+        description: 'Son et vibration pour les nouvelles courses',
         importance: Importance.max,
         enableVibration: true,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound('dem_order_alert'),
       );
       await _localNotificationsPlugin
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
@@ -310,23 +312,26 @@ class NotificationService {
 
   static Future<void> _playOrderAlertOnce() async {
     HapticFeedback.heavyImpact();
-    const androidDetails = AndroidNotificationDetails(
-      'dem_high_importance',
-      'Notifications Importantes DEM',
-      channelDescription: 'Notifications de courses en temps réel',
+    final androidDetails = AndroidNotificationDetails(
+      'dem_order_alert',
+      'Alertes courses DEM',
+      channelDescription: 'Son et vibration pour les nouvelles courses',
       importance: Importance.max,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
       fullScreenIntent: true,
       playSound: true,
+      sound: const RawResourceAndroidNotificationSound('dem_order_alert'),
       enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 300, 200, 300, 200, 300]),
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
+      sound: 'dem_order_alert.wav',
     );
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
     await _localNotificationsPlugin.show(
       id: 7777,
       title: 'Nouvelle course disponible !',

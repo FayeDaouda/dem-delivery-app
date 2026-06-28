@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/router/app_startup_notifier.dart';
+import '../../../core/storage/auth_storage.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../theme/dem_pro_colors.dart';
 
@@ -100,6 +102,18 @@ class _State extends State<DemProPendingScreen> {
                           height: 1.55,
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.notifications_active_outlined, color: DemProColors.accent, size: 14),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Vous serez notifié dès que votre demande sera traitée.',
+                            style: TextStyle(fontSize: 12, color: DemProColors.accent, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 28),
 
                       // ── Timeline 3 étapes ──────────────────────────────
@@ -178,6 +192,17 @@ class _State extends State<DemProPendingScreen> {
                           textStyle: const TextStyle(fontSize: 12.5),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      // ── Déconnexion ──────────────────────────────────
+                      TextButton.icon(
+                        onPressed: () => _confirmLogout(context),
+                        icon: const Icon(Icons.logout, size: 15),
+                        label: const Text('Se déconnecter'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFEF4444),
+                          textStyle: const TextStyle(fontSize: 12.5),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -190,26 +215,92 @@ class _State extends State<DemProPendingScreen> {
   }
 
   void _showSupportDialog(BuildContext context) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Support DEM',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.support_agent_outlined, color: DemProColors.accent, size: 36),
+              const SizedBox(height: 10),
+              const Text('Support DEM', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              const Text(
+                'Pour toute question sur votre demande DEM Pro',
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              _SupportOption(
+                icon: Icons.phone_outlined,
+                label: 'Appeler le support',
+                sub: '+221 71 006 46 64',
+                onTap: () {
+                  Navigator.pop(context);
+                  launchUrl(Uri.parse('tel:+221710064664'));
+                },
+              ),
+              const SizedBox(height: 10),
+              _SupportOption(
+                icon: Icons.chat_bubble_outline,
+                label: 'WhatsApp',
+                sub: '+221 71 006 46 64',
+                onTap: () {
+                  Navigator.pop(context);
+                  launchUrl(
+                    Uri.parse('https://wa.me/221710064664?text=${Uri.encodeComponent("Bonjour, j'ai une question concernant ma demande DEM Pro.")}'),
+                    mode: LaunchMode.externalApplication,
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+              _SupportOption(
+                icon: Icons.email_outlined,
+                label: 'Envoyer un e-mail',
+                sub: 'support@dem.sn',
+                onTap: () {
+                  Navigator.pop(context);
+                  launchUrl(Uri.parse('mailto:support@dem.sn'));
+                },
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Se déconnecter ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
         content: const Text(
-          'Pour toute question concernant votre demande DEM Pro, contactez notre équipe.\n\nNous vous répondrons dans les plus brefs délais.',
-          style: TextStyle(fontSize: 13.5, color: Color(0xFF6B7280), height: 1.5),
+          'Vous pourrez vous reconnecter avec le même numéro.',
+          style: TextStyle(fontSize: 13.5, color: Color(0xFF6B7280)),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fermer', style: TextStyle(color: DemProColors.accent)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler', style: TextStyle(color: Color(0xFF6B7280))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Déconnexion', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
+    if (confirmed != true || !mounted) return;
+    await AuthStorage.clear();
+    if (!mounted) return;
+    if (this.context.mounted) this.context.go('/phone');
   }
 }
 
@@ -452,6 +543,41 @@ class _RefreshButton extends StatelessWidget {
                   ),
           ),
         ),
+      ),
+    ),
+  );
+}
+
+// ── Tile support ─────────────────────────────────────────────────────────────
+
+class _SupportOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String sub;
+  final VoidCallback onTap;
+  const _SupportOption({required this.icon, required this.label, required this.sub, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: const Color(0xFFF8FAFC),
+    borderRadius: BorderRadius.circular(12),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(children: [
+          Icon(icon, color: DemProColors.accent, size: 20),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Color(0xFF1F2937))),
+              Text(sub, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+            ],
+          )),
+          const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFFD1D5DB)),
+        ]),
       ),
     ),
   );
