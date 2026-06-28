@@ -23,6 +23,7 @@ import '../../core/theme/map_theme_provider.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
+import '../../core/utils/location_gate.dart';
 
 
 // Centre par défaut : Dakar
@@ -253,10 +254,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
     // Étape 2 : position fraîche — requestLocation() sur iOS, jamais de cache
     final fresh = await NavigationService.requestAndGetPosition();
-    if (mounted) {
+    if (fresh != null && mounted) {
       setState(() => _clientPosition = fresh);
       _setCamera(position: fresh);
-      NavigationService.savePosition(fresh); // cache pour le prochain démarrage
+      NavigationService.savePosition(fresh);
     }
 
     // Étape 3 : stream continu
@@ -991,6 +992,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           subtitle: 'Envoyez ou recevez des colis',
           color: const Color(0xFF1A6B7A),
           onTap: () async {
+            if (!await ensureLocationEnabled(context)) return;
+            if (!mounted) return;
             await context.push('/orders/create?type=DELIVERY');
             _checkPendingOrder();
           },

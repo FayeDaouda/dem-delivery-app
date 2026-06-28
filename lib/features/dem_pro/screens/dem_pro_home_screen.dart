@@ -12,6 +12,7 @@ import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
 import '../widgets/dem_pro_nav_bar.dart';
 import 'dem_pro_batch_tracking_screen.dart' show DemProBatchTrackingScreen;
+import '../../../core/utils/location_gate.dart';
 
 const _sectorLabels = {
   'commerce':     'Commerce',
@@ -268,7 +269,11 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
               foregroundColor: Colors.white,
               elevation: 4,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              onPressed: () => context.push('/dem-pro/orders/create'),
+              onPressed: () async {
+                if (!await ensureLocationEnabled(context)) return;
+                if (!context.mounted) return;
+                context.push('/dem-pro/orders/create');
+              },
               child: const Icon(Icons.add, size: 28),
             ),
         _ => null,
@@ -562,7 +567,11 @@ class _AccueilTab extends StatelessWidget {
                     label: 'Livraison',
                     icon: Icons.two_wheeler,
                     filled: true,
-                    onTap: () => context.push('/dem-pro/orders/create'),
+                    onTap: () async {
+                      if (!await ensureLocationEnabled(context)) return;
+                      if (!context.mounted) return;
+                      context.push('/dem-pro/orders/create');
+                    },
                     t: t,
                   ),
                 ),
@@ -572,7 +581,11 @@ class _AccueilTab extends StatelessWidget {
                     label: 'Programmer',
                     icon: Icons.schedule,
                     filled: false,
-                    onTap: () => context.push('/dem-pro/orders/create?scheduled=true'),
+                    onTap: () async {
+                      if (!await ensureLocationEnabled(context)) return;
+                      if (!context.mounted) return;
+                      context.push('/dem-pro/orders/create?scheduled=true');
+                    },
                     t: t,
                   ),
                 ),

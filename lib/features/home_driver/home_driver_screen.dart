@@ -381,12 +381,13 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       _centerOn(cached);
     }
 
-    // Étape 2 : position fraîche — requestLocation() sur iOS, jamais de cache
     final fresh = await NavigationService.requestAndGetPosition();
     if (!mounted) return;
-    setState(() => _driverPosition = fresh);
-    _centerOn(fresh);
-    NavigationService.savePosition(fresh);
+    if (fresh != null) {
+      setState(() => _driverPosition = fresh);
+      _centerOn(fresh);
+      NavigationService.savePosition(fresh);
+    }
 
     // Étape 3 : stream continu
     _locationSub = NavigationService.positionStream.listen(_onPosition);

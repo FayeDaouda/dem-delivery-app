@@ -225,6 +225,10 @@ class _State extends State<DemProOrderCreateScreen> {
     try {
       final pos = await NavigationService.requestAndGetPosition();
       if (!mounted) return;
+      if (pos == null) {
+        showDemToast(context, 'Activez la localisation pour continuer', isError: true);
+        return;
+      }
       final ll = LatLng(pos.latitude, pos.longitude);
       _pickupLat = ll.latitude; _pickupLng = ll.longitude;
       _centerMap(ll);

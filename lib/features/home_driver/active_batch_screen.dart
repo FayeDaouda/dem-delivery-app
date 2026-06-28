@@ -98,8 +98,10 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   Future<void> _startGPS() async {
     final fresh = await NavigationService.requestAndGetPosition();
     if (!mounted) return;
-    setState(() => _driverPosition = fresh);
-    _centerOn(fresh);
+    if (fresh != null) {
+      setState(() => _driverPosition = fresh);
+      _centerOn(fresh);
+    }
     _locationSub = NavigationService.positionStream.listen((pos) {
       if (!mounted) return;
       setState(() => _driverPosition = pos);

@@ -137,6 +137,10 @@ class _State extends State<DemProBatchCreateScreen> {
     try {
       final pos = await NavigationService.requestAndGetPosition();
       if (!mounted) return;
+      if (pos == null) {
+        showDemToast(context, 'Activez la localisation pour continuer', isError: true);
+        return;
+      }
       _pickupLat = pos.latitude; _pickupLng = pos.longitude;
       _centerMap(LatLng(pos.latitude, pos.longitude));
       await _reverseGeocode(LatLng(pos.latitude, pos.longitude), stopIndex: -1);

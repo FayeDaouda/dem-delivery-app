@@ -188,7 +188,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     setState(() => _loadingGps = true);
     try {
       final pos = await NavigationService.requestAndGetPosition();
-      if (mounted) {
+      if (pos != null && mounted) {
         final ll = LatLng(pos.latitude, pos.longitude);
         _currentCameraPos = ll;
         _centerMap(ll);
@@ -197,7 +197,6 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         _reverseGeocode(ll, forPickup: true);
       }
     } catch (_) {
-      // fallback Dakar
     } finally {
       if (mounted) setState(() => _loadingGps = false);
     }

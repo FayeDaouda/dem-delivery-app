@@ -88,7 +88,7 @@ class NavigationService {
   ///
   /// Demande la permission si elle n'a pas encore été accordée.
   /// À appeler UNE FOIS au démarrage. Pour les mises à jour continues, utiliser positionStream.
-  static Future<Position> requestAndGetPosition() async {
+  static Future<Position?> requestAndGetPosition() async {
     var permission = await Geolocator.checkPermission();
 
     // Permission pas encore demandée → la demander maintenant.
@@ -99,11 +99,9 @@ class NavigationService {
 
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      return _dakarFallback();
+      return null;
     }
 
-    // GPS précis — peut prendre 3-15s selon la qualité du signal
-    // Sur iOS : requestLocation() → JAMAIS de cache (≠ startUpdatingLocation)
     try {
       return await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -112,7 +110,6 @@ class NavigationService {
       ).timeout(const Duration(seconds: 20));
     } catch (_) {}
 
-    // Fallback réseau/WiFi — moins précis mais rapide
     try {
       return await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -121,22 +118,28 @@ class NavigationService {
       ).timeout(const Duration(seconds: 8));
     } catch (_) {}
 
-    return _dakarFallback();
+    return null;
   }
 
-  static Position _dakarFallback() => Position(
-        latitude: 14.6937,
-        longitude: -17.4441,
-        timestamp: DateTime.now(),
-        accuracy: 999,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-        isMocked: kDebugMode,
-      );
+  static Future<bool> isLocationEnabled() async {
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      return false;
+    }
+    return Geolocator.isLocationServiceEnabled();
+  }
+
+  static Future<bool> requestLocationWithPrompt() async {
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.deniedForever) {
+      await Geolocator.openAppSettings();
+      return false;
+    }
+    return permission == LocationPermission.whileInUse || permission == LocationPermission.always;
+  }
 
   // ── Stream continu ─────────────────────────────────────────────────────────
 
