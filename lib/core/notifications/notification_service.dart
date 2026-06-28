@@ -45,6 +45,20 @@ class NotificationService {
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
 
+      // Canal Android notifications générales (broadcast, statut commande, etc.)
+      const notifyChannel = AndroidNotificationChannel(
+        'dem_notify',
+        'Notifications DEM',
+        description: 'Notifications générales DEM',
+        importance: Importance.high,
+        enableVibration: true,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound('dem_notify'),
+      );
+      await _localNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(notifyChannel);
+
       // Canal Android discret (notification persistante GPS pendant la course)
       // Importance.low = pas de son/vibration, mais visible dans la barre de statut.
       // DOIT être créé ici — Android 8+ refuse d'afficher une notification
