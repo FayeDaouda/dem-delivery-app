@@ -895,6 +895,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     // ── Source unique de vérité pour l'état métier ──────────────────────────
     final orderState = ref.watch(clientOrderStateProvider(widget.orderId));
 
+    // Init timer annulation si pas encore démarré
+    if (_clientCancelTimer == null && _clientCancelSecondsLeft == 120 && orderState.orderData != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _startClientCancelWindow(orderState.orderData);
+      });
+    }
+
     // ── Side effects (carte, haptic, dialog) réagissant aux changements ─────
     ref.listen<ClientOrderState>(clientOrderStateProvider(widget.orderId),
         (prev, next) {

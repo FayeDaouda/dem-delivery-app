@@ -122,7 +122,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     final orderId = _order['id'] as String?;
     _cancelledSub = SocketService.instance.onOrderCancelled.listen((data) {
       if (!mounted || data['orderId'] != orderId) return;
-      final reason = data['reason'] as String? ?? 'Cette course a été annulée par l\'administration DEM.';
+      final reason = data['reason'] as String? ?? 'Cette course a été annulée.';
       showDialog(
         context: context,
         barrierDismissible: false,
