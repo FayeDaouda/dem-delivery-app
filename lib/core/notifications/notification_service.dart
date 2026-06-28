@@ -93,9 +93,27 @@ class NotificationService {
       final initial = await _messaging.getInitialMessage();
       if (initial != null) _handleTap(initial);
 
+      clearBadge();
+
     } catch (_) {
       // Silencieux sur émulateur sans Google Play Services
     }
+  }
+
+  /// Remet le badge de l'icône app à 0 (le compteur rouge disparaît).
+  static Future<void> clearBadge() async {
+    try {
+      await _localNotificationsPlugin.cancelAll();
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await _localNotificationsPlugin.show(
+          id: 0, title: null, body: null,
+          notificationDetails: const NotificationDetails(
+            iOS: DarwinNotificationDetails(presentAlert: false, presentSound: false, badgeNumber: 0),
+          ),
+        );
+        await _localNotificationsPlugin.cancel(id: 0);
+      }
+    } catch (_) {}
   }
 
   /// À appeler après l'onboarding : demande la permission et enregistre le token FCM.

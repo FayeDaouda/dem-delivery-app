@@ -67,8 +67,32 @@ class _FriendlyErrorScreen extends StatelessWidget {
   }
 }
 
-class DemApp extends StatelessWidget {
+class DemApp extends StatefulWidget {
   const DemApp({super.key});
+
+  @override
+  State<DemApp> createState() => _DemAppState();
+}
+
+class _DemAppState extends State<DemApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      NotificationService.clearBadge();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
