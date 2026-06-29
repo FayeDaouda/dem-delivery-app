@@ -250,44 +250,78 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   }
 
   void _showCompletionDialog() {
+    int selectedRating = 5;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: const Color(0xFF0C1628),
-        title: const Row(children: [
-          Icon(Icons.check_circle, color: Color(0xFF00E08C), size: 28),
-          SizedBox(width: 10),
-          Text(
-            'Tournée terminée !',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: const Color(0xFF0C1628),
+          title: const Row(children: [
+            Icon(Icons.check_circle, color: Color(0xFF00E08C), size: 28),
+            SizedBox(width: 10),
+            Text(
+              'Tournée terminée !',
+              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
             ),
-          ),
-        ]),
-        content: Text(
-          'Tous les ${_stops.length} arrêts ont été livrés avec succès.',
-          style:
-              const TextStyle(color: Color(0xFF6B8BAA), fontSize: 14, height: 1.5),
+          ]),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+              'Tous les ${_stops.length} arrêts ont été livrés avec succès.',
+              style: const TextStyle(color: Color(0xFF6B8BAA), fontSize: 14, height: 1.5),
+            ),
+            const SizedBox(height: 20),
+            const Text('Notez le client', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (i) {
+                final star = i + 1;
+                return GestureDetector(
+                  onTap: () => setDialogState(() => selectedRating = star),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      star <= selectedRating ? Icons.star : Icons.star_border,
+                      color: star <= selectedRating ? const Color(0xFFFFD700) : const Color(0xFF6B8BAA),
+                      size: 32,
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ]),
+          actions: [
+            ElevatedButton(
+              onPressed: () async {
+                final batchId = widget.batch['id'] as String?;
+                final clientId = widget.batch['clientId'] as String?;
+                if (batchId != null && clientId != null && selectedRating > 0) {
+                  try {
+                    final firstOrderId = _stops.isNotEmpty ? _stops.first['id'] as String? : null;
+                    if (firstOrderId != null) {
+                      await ref.read(ordersRepositoryProvider).rateDriver(
+                        orderId: firstOrderId,
+                        driverId: clientId,
+                        score: selectedRating,
+                      );
+                    }
+                  } catch (_) {}
+                }
+                if (!mounted) return;
+                Navigator.of(context).pop();
+                context.go('/driver/home');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00AECB),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("Terminer"),
+            ),
+          ],
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              context.go('/driver/home');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00AECB),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text("Retour à l'accueil"),
-          ),
-        ],
       ),
     );
   }

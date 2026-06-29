@@ -210,65 +210,95 @@ class _DemProOrderTrackingScreenState
   void _showCompletionDialog() {
     if (_done) return;
     _done = true;
+    int selectedRating = 5;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0C1628),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 64, height: 64,
-            decoration: BoxDecoration(
-              color: DemProColors.success.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.check_rounded, color: DemProColors.success, size: 36),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Livraison effectuée !',
-            style: TextStyle(
-              color: Color(0xFFE8F4F8),
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Commande #${widget.orderId.substring(0, 8).toUpperCase()} livrée avec succès.',
-            style: const TextStyle(color: Color(0xFF6B8BAA), fontSize: 13),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                context.pushReplacement('/dem-pro/orders/receipt', extra: _order ?? widget.initialOrder ?? {});
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: DemProColors.accent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF0C1628),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                color: DemProColors.success.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
               ),
-              child: const Text('Voir le reçu', style: TextStyle(fontWeight: FontWeight.w600)),
+              child: const Icon(Icons.check_rounded, color: DemProColors.success, size: 36),
             ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                context.go('/dem-pro/home');
-              },
-              child: const Text('Retour au tableau de bord', style: TextStyle(color: Color(0xFF6B8BAA))),
+            const SizedBox(height: 16),
+            const Text(
+              'Livraison effectuée !',
+              style: TextStyle(color: Color(0xFFE8F4F8), fontSize: 18, fontWeight: FontWeight.w700),
             ),
-          ),
-        ]),
+            const SizedBox(height: 8),
+            Text(
+              'Commande #${widget.orderId.substring(0, 8).toUpperCase()} livrée avec succès.',
+              style: const TextStyle(color: Color(0xFF6B8BAA), fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            const Text('Notez le livreur', style: TextStyle(color: Color(0xFFE8F4F8), fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (i) {
+                final star = i + 1;
+                return GestureDetector(
+                  onTap: () => setDialogState(() => selectedRating = star),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      star <= selectedRating ? Icons.star : Icons.star_border,
+                      color: star <= selectedRating ? const Color(0xFFFFD700) : const Color(0xFF6B8BAA),
+                      size: 32,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final dId = (_order?['driver'] as Map?)?['id'] as String?;
+                  if (dId != null && selectedRating > 0) {
+                    try {
+                      await ref.read(ordersRepositoryProvider).rateDriver(
+                        orderId: widget.orderId,
+                        driverId: dId,
+                        score: selectedRating,
+                      );
+                    } catch (_) {}
+                  }
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  context.pushReplacement('/dem-pro/orders/receipt', extra: _order ?? widget.initialOrder ?? {});
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: DemProColors.accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Voir le reçu', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.go('/dem-pro/home');
+                },
+                child: const Text('Retour au tableau de bord', style: TextStyle(color: Color(0xFF6B8BAA))),
+              ),
+            ),
+          ]),
+        ),
       ),
     );
   }
