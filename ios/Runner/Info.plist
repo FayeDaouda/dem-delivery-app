@@ -87,5 +87,16 @@
 		<string>https</string>
 		<string>http</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dem</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>sn.dem.demapp</string>
+		</dict>
+	</array>
 </dict>
 </plist>
