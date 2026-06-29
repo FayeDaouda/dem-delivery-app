@@ -485,6 +485,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   bool get _routeComplete => _pickupLat != null && _deliveryLat != null;
 
   void _goStep(int step) {
+    FocusScope.of(context).unfocus();
     setState(() { _step = step; _panelDragOffset = 0.0; _isDragging = false; });
     _pageCtrl.animateToPage(step,
         duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);

@@ -30,6 +30,7 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
   }
 
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() => _nameError = 'Entrez votre prénom et nom.');

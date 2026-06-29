@@ -28,6 +28,7 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
   String? _error;
 
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
     final name = _nameCtrl.text.trim();
     if (name.length < 2) {
       setState(() => _error = 'Le nom complet est obligatoire.');

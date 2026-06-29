@@ -276,6 +276,7 @@ class _State extends State<DemProBatchCreateScreen> {
       _stops.every((s) => s.hasLocation && s.phone.trim().length >= 8);
 
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
     if (!_canSubmit) {
       showDemToast(context,
           _pickupLat == null

@@ -80,6 +80,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   }
 
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
     final name = _nameController.text.trim();
 
     // Validation inline

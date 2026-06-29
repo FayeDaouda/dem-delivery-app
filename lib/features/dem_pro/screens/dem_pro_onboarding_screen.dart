@@ -88,6 +88,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
   }
 
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
     final firstName    = _firstNameCtrl.text.trim();
     final lastName     = _lastNameCtrl.text.trim();
     final businessName = _businessNameCtrl.text.trim();

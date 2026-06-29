@@ -419,6 +419,7 @@ class _State extends State<DemProOrderCreateScreen> {
   }
 
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
     if (_pickupLat == null || _pickupLng == null) {
       showDemToast(context, 'Position de départ introuvable. Changez le point de départ.', isError: true);
       return;
@@ -492,6 +493,7 @@ class _State extends State<DemProOrderCreateScreen> {
   };
 
   void _next() {
+    FocusScope.of(context).unfocus();
     if (!_canAdvance) { showDemToast(context, _stepError, isError: true); return; }
     if (_step == 1) {
       _fetchEstimate();
