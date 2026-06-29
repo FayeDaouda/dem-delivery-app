@@ -181,6 +181,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
 
   final _demProRepo = DemProRepository(ApiClient.dio);
   final _livraisonsKey = GlobalKey<_LivraisonsTabState>();
+  final _financesKey   = GlobalKey<_FinancesTabState>();
 
   Map<String, dynamic>? _user;
   Map<String, dynamic>? _stats;
@@ -253,7 +254,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
           ),
           _LivraisonsTab(key: _livraisonsKey, t: t),
           _AdressesTab(t: t),
-          _FinancesTab(t: t),
+          _FinancesTab(key: _financesKey, t: t),
           _CompteTab(
             user: _user, onLogout: _handleLogout, t: t,
             darkMode: _darkMode,
@@ -283,6 +284,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
           setState(() => _currentIndex = i);
           if (i == 0) _load();
           if (i == 1) _livraisonsKey.currentState?._loadOrders();
+          if (i == 3) _financesKey.currentState?._load();
         },
         darkMode: _darkMode,
       ),
@@ -757,6 +759,61 @@ class _CompteTabState extends State<_CompteTab> {
     } catch (_) {}
   }
 
+  Future<void> _requestPhoneChange(String currentPhone) async {
+    final ctrl = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: widget.t.cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Changer de numéro', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Numéro actuel : $currentPhone', style: TextStyle(color: widget.t.muted, fontSize: 13)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.phone,
+            style: TextStyle(color: widget.t.text),
+            decoration: InputDecoration(
+              hintText: '77 000 00 00',
+              prefixText: '+221 ',
+              prefixStyle: TextStyle(color: widget.t.muted),
+              hintStyle: TextStyle(color: widget.t.muted),
+              filled: true,
+              fillColor: widget.t.cardBg2,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('La demande sera validée par l\'équipe DEM.', style: TextStyle(color: widget.t.muted, fontSize: 11)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Annuler', style: TextStyle(color: widget.t.muted))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+            child: const Text('Envoyer', style: TextStyle(color: DemProColors.accent, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.length < 9) return;
+    try {
+      await ApiClient.dio.post('/users/dem-pro/phone-change', data: {'newPhone': '+221$result'});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Demande envoyée. L\'équipe DEM va la valider.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e is DioException ? (e.response?.data?['message'] ?? 'Erreur') : 'Erreur')),
+        );
+      }
+    }
+  }
+
   Future<void> _editField(String label, String currentValue, String fieldKey) async {
     final ctrl = TextEditingController(text: currentValue);
     final result = await showDialog<String>(
@@ -892,7 +949,8 @@ class _CompteTabState extends State<_CompteTab> {
               children: [
                 _EditableInfoRow(icon: Icons.person_outline, label: 'Responsable', value: name ?? '—', t: t,
                   onTap: () => _editField('Responsable', name ?? '', 'name')),
-                _InfoRow(icon: Icons.phone_outlined, label: 'Téléphone', value: phone ?? '—', t: t),
+                _EditableInfoRow(icon: Icons.phone_outlined, label: 'Téléphone', value: phone ?? '—', t: t,
+                  onTap: () => _requestPhoneChange(phone ?? '')),
                 _EditableInfoRow(
                   icon: Icons.email_outlined, label: 'Email',
                   value: email?.isNotEmpty == true ? email! : 'Ajouter un email',
@@ -3163,7 +3221,7 @@ enum _FinanceView { sales, deliveries }
 
 class _FinancesTab extends StatefulWidget {
   final _T t;
-  const _FinancesTab({required this.t});
+  const _FinancesTab({super.key, required this.t});
   @override
   State<_FinancesTab> createState() => _FinancesTabState();
 }

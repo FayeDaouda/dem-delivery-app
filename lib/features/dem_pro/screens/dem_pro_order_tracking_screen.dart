@@ -464,11 +464,6 @@ class _DemProOrderTrackingScreenState
               ),
               const Spacer(),
               _MapBtn(
-                icon: Icons.share_outlined,
-                onTap: () => _shareOrder(),
-              ),
-              const SizedBox(width: 8),
-              _MapBtn(
                 icon: Icons.my_location,
                 onTap: () {
                   final pos = _driverPos ?? LatLng(pLat, pLng);
@@ -595,6 +590,21 @@ class _DemProOrderTrackingScreenState
                     style: const TextStyle(color: Color(0xFF6B8BAA), fontSize: 12),
                   ),
                 ]),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _shareOrder,
+                    icon: const Icon(Icons.share_outlined, size: 16),
+                    label: const Text('Partager le suivi', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: DemProColors.accent,
+                      side: BorderSide(color: DemProColors.accent.withValues(alpha: 0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
               ]),
             ),
           ),
