@@ -272,7 +272,9 @@ class _DemProOrderConfirmationScreenState
     final delivery = _short(widget.order['deliveryAddress'] as String?);
     final price    = (widget.order['price'] as num?) ?? 0;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: DemProColors.bg,
       body: Stack(
         children: [
@@ -384,6 +386,7 @@ class _DemProOrderConfirmationScreenState
           ),
         ],
       ),
+    ),
     );
   }
 

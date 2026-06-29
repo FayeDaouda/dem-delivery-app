@@ -731,7 +731,9 @@ class _CompteTabState extends State<_CompteTab> {
     try {
       await ApiClient.dio.patch('/users/me/profile', data: {'proSector': result});
       await widget.onRefresh();
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Une erreur est survenue.')));
+    }
   }
 
   Future<void> _showVolumePicker(String? current) async {
@@ -756,7 +758,9 @@ class _CompteTabState extends State<_CompteTab> {
     try {
       await ApiClient.dio.patch('/users/me/profile', data: {'proWeeklyVolume': result});
       await widget.onRefresh();
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Une erreur est survenue.')));
+    }
   }
 
   Future<void> _requestPhoneChange(String currentPhone) async {
@@ -2629,14 +2633,18 @@ class _AdressesTabState extends State<_AdressesTab> {
     try {
       await _repo.deleteAddress(addr['id'] as String);
       _load();
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Une erreur est survenue.')));
+    }
   }
 
   Future<void> _setDefault(Map<String, dynamic> addr) async {
     try {
       await _repo.setDefaultAddress(addr['id'] as String);
       _load();
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Une erreur est survenue.')));
+    }
   }
 
   @override

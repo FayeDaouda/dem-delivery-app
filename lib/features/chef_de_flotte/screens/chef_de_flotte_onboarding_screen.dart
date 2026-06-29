@@ -141,6 +141,7 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
                     label: 'Nom complet *',
                     hint: 'Ex: Mamadou Diallo',
                     textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 24),
 
@@ -186,11 +187,11 @@ class _State extends State<ChefDeFlotteOnboardingScreen> {
                   // Entreprise (optionnel)
                   _SectionTitle(title: 'Entreprise (optionnel)', icon: Icons.business_outlined, muted: true),
                   const SizedBox(height: 14),
-                  _LightField(ctrl: _companyCtrl, label: 'Nom entreprise', hint: 'Ex: Transport Diallo SARL'),
+                  _LightField(ctrl: _companyCtrl, label: 'Nom entreprise', hint: 'Ex: Transport Diallo SARL', textInputAction: TextInputAction.next),
                   const SizedBox(height: 10),
-                  _LightField(ctrl: _nineaCtrl,   label: 'NINEA',           hint: '000000000 0A0'),
+                  _LightField(ctrl: _nineaCtrl,   label: 'NINEA',           hint: '000000000 0A0', textInputAction: TextInputAction.next),
                   const SizedBox(height: 10),
-                  _LightField(ctrl: _rccmCtrl,    label: 'RCCM',            hint: 'SN-DKR-XXXX'),
+                  _LightField(ctrl: _rccmCtrl,    label: 'RCCM',            hint: 'SN-DKR-XXXX', textInputAction: TextInputAction.done),
 
                   // Erreur
                   if (_error != null) ...[
@@ -239,11 +240,13 @@ class _LightField extends StatelessWidget {
   final TextEditingController ctrl;
   final String label, hint;
   final TextCapitalization textCapitalization;
-  const _LightField({required this.ctrl, required this.label, required this.hint, this.textCapitalization = TextCapitalization.none});
+  final TextInputAction? textInputAction;
+  const _LightField({required this.ctrl, required this.label, required this.hint, this.textCapitalization = TextCapitalization.none, this.textInputAction});
   @override
   Widget build(BuildContext context) => TextField(
     controller: ctrl,
     textCapitalization: textCapitalization,
+    textInputAction: textInputAction,
     style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14),
     decoration: InputDecoration(
       labelText: label,

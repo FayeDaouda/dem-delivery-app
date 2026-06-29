@@ -260,7 +260,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final ctrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (_) => Dialog(
+      builder: (_) {
+        bool saving = false;
+        return StatefulBuilder(builder: (ctx, setDialogState) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 28),
         child: Container(
@@ -332,20 +334,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: saving ? null : () => Navigator.pop(context),
                     child: Text(s.cancel,
                         style: TextStyle(color: Colors.white.withValues(alpha: 0.65))),
                   ),
                   const SizedBox(width: 4),
                   TextButton(
-                    onPressed: () async {
+                    onPressed: saving ? null : () async {
                       final phone = ctrl.text.trim();
                       if (phone.length < 8) return;
-                      Navigator.pop(context);
+                      setDialogState(() => saving = true);
                       try {
                         await ApiClient.dio.post('/users/driver/phone-change', data: {'newPhone': '+221$phone'});
                         await _load();
                         if (mounted) {
+                          Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Demande envoyée — en attente de validation admin'),
@@ -354,6 +357,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                           );
                         }
                       } catch (e) {
+                        setDialogState(() => saving = false);
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
@@ -366,16 +370,19 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     ),
-                    child: Text(s.save,
-                        style: const TextStyle(
-                            color: Color(0xFF04317C), fontWeight: FontWeight.w700)),
+                    child: saving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF04317C)))
+                        : Text(s.save,
+                            style: const TextStyle(
+                                color: Color(0xFF04317C), fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
             ],
           ),
         ),
-      ),
+      ));
+      },
     );
   }
 
@@ -383,7 +390,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final ctrl = TextEditingController(text: _user?['vehiclePlate'] as String? ?? '');
     showDialog(
       context: context,
-      builder: (_) => Dialog(
+      builder: (_) {
+        bool saving = false;
+        return StatefulBuilder(builder: (ctx, setDialogState) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 28),
         child: Container(
@@ -430,20 +439,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: saving ? null : () => Navigator.pop(context),
                     child: Text(AppStrings.current.cancel,
                         style: TextStyle(color: Colors.white.withValues(alpha: 0.65))),
                   ),
                   const SizedBox(width: 4),
                   TextButton(
-                    onPressed: () async {
+                    onPressed: saving ? null : () async {
                       final plate = ctrl.text.trim().toUpperCase();
                       if (plate.isEmpty) return;
-                      Navigator.pop(context);
+                      setDialogState(() => saving = true);
                       try {
                         await ApiClient.dio.patch('/users/me/profile', data: {'vehiclePlate': plate});
                         await _load();
                         if (mounted) {
+                          Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Plaque mise à jour'),
@@ -452,6 +462,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                           );
                         }
                       } catch (e) {
+                        setDialogState(() => saving = false);
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
@@ -464,15 +475,18 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     ),
-                    child: Text(AppStrings.current.save,
-                        style: const TextStyle(color: Color(0xFF04317C), fontWeight: FontWeight.w700)),
+                    child: saving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF04317C)))
+                        : Text(AppStrings.current.save,
+                            style: const TextStyle(color: Color(0xFF04317C), fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
             ],
           ),
         ),
-      ),
+      ));
+      },
     );
   }
 

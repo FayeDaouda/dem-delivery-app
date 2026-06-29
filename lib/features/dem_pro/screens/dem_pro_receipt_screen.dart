@@ -79,7 +79,7 @@ class DemProReceiptScreen extends StatelessWidget {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: EdgeInsets.fromLTRB(20, 8, 20, MediaQuery.of(context).viewPadding.bottom + 32),
         child: Column(children: [
 
           // ── Statut ─────────────────────────────────────────────────────

@@ -358,7 +358,12 @@ class _State extends State<DemProBatchCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !_placingMap,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _placingMap = false);
+      },
+      child: Scaffold(
       backgroundColor: DemProColors.bg,
       body: Stack(children: [
 
@@ -410,6 +415,7 @@ class _State extends State<DemProBatchCreateScreen> {
             child: _placingMap ? _buildPlacementPanel() : _buildPanel(),
           )),
       ]),
+    ),
     );
   }
 

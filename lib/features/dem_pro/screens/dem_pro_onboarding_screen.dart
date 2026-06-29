@@ -273,6 +273,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                             label: 'Prénom *',
                             hint: 'Ex: Awa',
                             textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
                           ),
                           const SizedBox(height: 12),
                           _LightField(
@@ -280,6 +281,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                             label: 'Nom *',
                             hint: 'Ex: Ndiaye',
                             textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
                           ),
                           const SizedBox(height: 28),
 
@@ -290,6 +292,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                             label: 'Nom de l\'entreprise *',
                             hint: 'Ex: Boutique Awa',
                             textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
                           ),
                           const SizedBox(height: 12),
                           _SectorDropdown(
@@ -302,6 +305,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                             label: 'Email (optionnel)',
                             hint: 'contact@entreprise.com',
                             keyboard: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.done,
                             suffixIcon: const Icon(Icons.mail_outline, color: Color(0xFF9CA3AF), size: 18),
                           ),
                           const SizedBox(height: 28),
@@ -374,11 +378,13 @@ class _LightField extends StatelessWidget {
   final TextCapitalization textCapitalization;
   final TextInputType keyboard;
   final Widget? suffixIcon;
+  final TextInputAction? textInputAction;
   const _LightField({
     required this.ctrl, required this.label, required this.hint,
     this.textCapitalization = TextCapitalization.none,
     this.keyboard = TextInputType.text,
     this.suffixIcon,
+    this.textInputAction,
   });
   @override
   Widget build(BuildContext context) => Column(
@@ -397,6 +403,7 @@ class _LightField extends StatelessWidget {
         controller: ctrl,
         textCapitalization: textCapitalization,
         keyboardType: keyboard,
+        textInputAction: textInputAction,
         style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14),
         decoration: InputDecoration(
           hintText: hint,

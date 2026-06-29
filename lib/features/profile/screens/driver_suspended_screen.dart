@@ -54,7 +54,7 @@ class _State extends State<DriverSuspendedScreen> {
           ),
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -141,7 +141,9 @@ class _State extends State<DriverSuspendedScreen> {
     final fix   = parts.length > 1 ? parts.sublist(1).join('\n') : null;
     final t = DemLayout.isTablet(context);
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: Colors.white,
       body: Center(
         child: ConstrainedBox(
@@ -181,7 +183,7 @@ class _State extends State<DriverSuspendedScreen> {
 
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 28, 20, 40),
+                    padding: EdgeInsets.fromLTRB(20, 28, 20, MediaQuery.of(context).viewPadding.bottom + 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -279,7 +281,8 @@ class _State extends State<DriverSuspendedScreen> {
             ),          // Column
         ),          // ConstrainedBox
       ),            // Center
-    );
+    ),              // Scaffold
+    );              // PopScope
   }
 }
 

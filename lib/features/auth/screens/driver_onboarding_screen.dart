@@ -226,6 +226,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                       controller: _nameController,
                       style: const TextStyle(color: AppColors.textPrimary),
                       textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
                       inputFormatters: [NameInputFormatter()],
                       decoration: InputDecoration(
                         hintText: 'Ex : Mamadou Diallo',
@@ -250,6 +251,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                         fontWeight: FontWeight.w600,
                       ),
                       textCapitalization: TextCapitalization.characters,
+                      textInputAction: TextInputAction.next,
                       inputFormatters: [_PlateFormatter()],
                       decoration: InputDecoration(
                         hintText: _isMoto ? 'Plaque d\'immatriculation de votre moto' : 'Plaque d\'immatriculation de votre véhicule',
@@ -267,6 +269,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                     TextField(
                       controller: _refCodeController,
                       textCapitalization: TextCapitalization.characters,
+                      textInputAction: TextInputAction.done,
                       style: const TextStyle(color: AppColors.textPrimary, letterSpacing: 1.5, fontSize: 14),
                       decoration: const InputDecoration(
                         hintText: 'Si vous avez un code de parrainage, renseignez-le ici',

@@ -29,6 +29,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   bool _isLoading       = false;
   bool _uploadingAvatar = false;
   bool _headerCollapsed = false;
+  bool _savingPhone     = false;
   final _picker            = ImagePicker();
   final _scrollController  = ScrollController();
 
@@ -210,6 +211,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       ),
     );
     if (ok != true || ctrl.text.trim().isEmpty) return;
+    if (_savingPhone) return;
+    setState(() => _savingPhone = true);
     try {
       await ApiClient.dio.post('/users/client/phone-change', data: {
         'newPhone': '+221${ctrl.text.replaceAll(RegExp(r'\s'), '').replaceFirst('+221', '')}',
@@ -219,6 +222,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       );
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+    } finally {
+      if (mounted) setState(() => _savingPhone = false);
     }
   }
 

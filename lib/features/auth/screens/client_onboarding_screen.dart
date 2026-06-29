@@ -123,6 +123,7 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                   controller: _nameController,
                   textCapitalization: TextCapitalization.words,
                   keyboardType: TextInputType.name,
+                  textInputAction: TextInputAction.next,
                   inputFormatters: [NameInputFormatter()],
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                   decoration: InputDecoration(
@@ -155,6 +156,7 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                 TextField(
                   controller: _refCodeController,
                   textCapitalization: TextCapitalization.characters,
+                  textInputAction: TextInputAction.done,
                   style: const TextStyle(color: Colors.white, fontSize: 15, letterSpacing: 1.5),
                   decoration: InputDecoration(
                     hintText: 'Si vous avez un code de parrainage, renseignez-le ici',
