@@ -564,19 +564,12 @@ class _DemProOrderTrackingScreenState
                           style: TextStyle(color: Color(0xFF6B8BAA), fontSize: 12)),
                     ]),
                   ),
-                  if (dPhone != null) ...[
-                    _ActionChip(
-                      icon: Icons.chat_bubble_outline,
-                      label: 'WhatsApp',
-                      onTap: () => _whatsAppDriver(dPhone),
-                    ),
-                    const SizedBox(width: 6),
+                  if (dPhone != null)
                     _ActionChip(
                       icon: Icons.phone_outlined,
                       label: 'Appeler',
                       onTap: _callDriver,
                     ),
-                  ],
                 ]),
                 const SizedBox(height: 16),
 
