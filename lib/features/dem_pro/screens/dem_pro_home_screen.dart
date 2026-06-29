@@ -1015,7 +1015,7 @@ class _CompteTabState extends State<_CompteTab> {
             ),
 
             const SizedBox(height: 16),
-            Center(child: Text('DEM v1.0.0', style: TextStyle(color: t.muted.withValues(alpha: 0.5), fontSize: 11))),
+            Center(child: Text('DEM v1.1.0', style: TextStyle(color: t.muted.withValues(alpha: 0.5), fontSize: 11))),
           ],
         ),
       ),
