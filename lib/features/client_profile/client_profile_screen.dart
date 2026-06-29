@@ -327,10 +327,17 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     if (mounted) setState(() => _isLoading = true);
     try {
       await ApiClient.dio.delete('/users/me');
-    } catch (_) {}
-    await AuthStorage.clear();
-    appStartupNotifier.markLoggedOut();
-    if (mounted) context.go('/phone');
+      await AuthStorage.clear();
+      appStartupNotifier.markLoggedOut();
+      if (mounted) context.go('/phone');
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Échec de la suppression. Réessayez.')),
+        );
+      }
+    }
   }
 
   // ── BUILD ────────────────────────────────────────────────────────────────────

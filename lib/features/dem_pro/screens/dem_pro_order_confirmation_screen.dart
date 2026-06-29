@@ -425,7 +425,7 @@ class _DemProOrderConfirmationScreenState
         const Icon(Icons.payments_outlined, color: Color(0xFF6B8BAA), size: 14),
         const SizedBox(width: 6),
         Text(
-          '${price.toInt()} FCFA',
+          '${_fmtFcfa(price.toInt())} FCFA',
           style: const TextStyle(
               color: Color(0xFFE8F4F8), fontWeight: FontWeight.w700, fontSize: 14),
         ),
@@ -607,4 +607,14 @@ class _RadarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RadarPainter old) => old.progress != progress;
+}
+
+String _fmtFcfa(int v) {
+  final s = v.toString();
+  final buf = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
+    buf.write(s[i]);
+  }
+  return buf.toString();
 }

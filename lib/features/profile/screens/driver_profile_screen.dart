@@ -509,7 +509,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final s        = AppStrings.current;
-    final name     = _user?['name']  as String? ?? 'Driver';
+    final name     = _user?['name']  as String? ?? 'Livreur';
     final phone    = _user?['phone'] as String? ?? '';
     final plate    = _user?['vehiclePlate'] as String? ?? '—';
     final driverStatus = _user?['driverStatus'] as String?;

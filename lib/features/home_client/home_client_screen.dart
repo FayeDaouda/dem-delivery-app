@@ -758,7 +758,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('$price CFA', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('$price FCFA', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           Text(isPending ? 'Voir →' : 'Suivre →',
                               style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),

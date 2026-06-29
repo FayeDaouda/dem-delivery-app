@@ -579,7 +579,10 @@ class _State extends State<DemProOrderCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: _step == 0,
+      onPopInvokedWithResult: (didPop, _) { if (!didPop) _back(); },
+      child: Scaffold(
       backgroundColor: DemProColors.bg,
       body: Stack(children: [
 
@@ -651,6 +654,7 @@ class _State extends State<DemProOrderCreateScreen> {
             },
           ),
       ]),
+    ),
     );
   }
 

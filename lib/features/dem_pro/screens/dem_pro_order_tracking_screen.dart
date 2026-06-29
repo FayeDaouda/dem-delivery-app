@@ -578,7 +578,7 @@ class _DemProOrderTrackingScreenState
                       color: Color(0xFF6B8BAA), size: 14),
                   const SizedBox(width: 6),
                   Text(
-                    '${price.toInt()} FCFA',
+                    '${_fmtPrice(price.toInt())} FCFA',
                     style: const TextStyle(
                         color: Color(0xFFE8F4F8),
                         fontWeight: FontWeight.w700,
@@ -711,4 +711,14 @@ class _AddressCard extends StatelessWidget {
       ]),
     ]),
   );
+}
+
+String _fmtPrice(int v) {
+  final s = v.toString();
+  final buf = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buf.write(" ");
+    buf.write(s[i]);
+  }
+  return buf.toString();
 }
