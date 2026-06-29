@@ -1057,8 +1057,12 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       (_order['clientPhone'] as String?) ??
       ((_order['client'] as Map<String, dynamic>?)?['phone'] as String?);
 
-  Future<void> _callPickup() async {
-    final phone = _clientPhone;
+  String? get _receiverPhone => _order['receiverPhone'] as String?;
+
+  String? get _activePhone => _isPickedUp ? (_receiverPhone ?? _clientPhone) : _clientPhone;
+
+  Future<void> _callActiveContact() async {
+    final phone = _activePhone;
     if (phone == null || phone.isEmpty) return;
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) await launchUrl(uri);
@@ -1536,10 +1540,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                     ),
 
                         // Cercle appel — visible jusqu'à livraison
-                        if (_clientPhone != null) ...[
+                        if (_activePhone != null) ...[
                           const SizedBox(width: 10),
                           GestureDetector(
-                            onTap: _callPickup,
+                            onTap: _callActiveContact,
                             child: Container(
                               width: 54,
                               height: 54,
