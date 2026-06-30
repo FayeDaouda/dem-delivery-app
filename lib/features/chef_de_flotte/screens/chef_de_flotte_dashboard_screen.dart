@@ -338,6 +338,14 @@ class _DriverTile extends StatelessWidget {
   final Map<String, dynamic> driver;
   const _DriverTile({required this.driver});
 
+  bool get _hasName => (driver['name'] as String?)?.trim().isNotEmpty == true;
+
+  String get _avatarLetter {
+    if (_hasName) return (driver['name'] as String).trim()[0].toUpperCase();
+    final phone = driver['phone'] as String?;
+    return (phone != null && phone.isNotEmpty) ? phone[phone.startsWith('+') ? 1 : 0] : '?';
+  }
+
   Color get _statusColor {
     final s = driver['chefDeFlotteStatus'] as String? ?? '';
     final active = driver['isActive'] as bool? ?? false;
@@ -368,12 +376,15 @@ class _DriverTile extends StatelessWidget {
       child: Row(children: [
         CircleAvatar(
           backgroundColor: AppColors.primaryMid.withValues(alpha: 0.12),
-          child: Text((driver['name'] ?? '?').toString()[0].toUpperCase(), style: const TextStyle(color: AppColors.primaryMid, fontWeight: FontWeight.w700)),
+          child: Text(_avatarLetter, style: const TextStyle(color: AppColors.primaryMid, fontWeight: FontWeight.w700)),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(driver['name'] ?? '—', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-          Text(driver['phone'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          Text(
+            _hasName ? driver['name'].toString() : (driver['phone'] ?? '—').toString(),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          ),
+          if (_hasName) Text(driver['phone'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 3),
           Row(children: [
             Text('$courses courses', style: const TextStyle(fontSize: 11, color: Colors.grey)),
