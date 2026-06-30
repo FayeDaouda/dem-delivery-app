@@ -282,23 +282,25 @@ class NotificationService {
 
   // ── Notifications système locales ─────────────────────────────────────────
   static Future<void> showSystemNotification({required String title, required String body}) async {
-    const androidDetails = AndroidNotificationDetails(
-      'dem_high_importance',
-      'Notifications Importantes DEM',
-      channelDescription: 'Notifications de courses en temps réel',
-      importance: Importance.max,
+    final androidDetails = AndroidNotificationDetails(
+      'dem_notify',
+      'Notifications DEM',
+      channelDescription: 'Notifications générales DEM',
+      importance: Importance.high,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
+      sound: const RawResourceAndroidNotificationSound('dem_notify'),
+      enableVibration: true,
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
+      sound: 'dem_notify.wav',
     );
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-    
+    final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
     await _localNotificationsPlugin.show(
-      id: DateTime.now().millisecond, // ID unique
+      id: DateTime.now().millisecond,
       title: title,
       body: body,
       notificationDetails: details,
