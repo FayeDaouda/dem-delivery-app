@@ -27,11 +27,12 @@ import '../../shared/widgets/map_location_mode_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/nudging_chevron.dart';
 import '../../shared/widgets/pressable.dart';
+import '../deliveries/data/orders_repository.dart';
 import '../deliveries/providers/orders_provider.dart';
+import '../../shared/widgets/promo_highlight_popup.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
 import '../../core/utils/location_gate.dart';
-
 
 // Centre par défaut : Dakar
 const _dakar = LatLng(14.6937, -17.4441);
@@ -51,7 +52,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>> _pendingOrders = [];
   List<Map<String, dynamic>> _activeOrders = [];
-  bool _isInitialLoad = true; // redirection auto tracking seulement au premier chargement
+  bool _isInitialLoad =
+      true; // redirection auto tracking seulement au premier chargement
   static const _kDeliveredKey = 'dem_shown_delivered_ids';
 
   // ── Map ──────────────────────────────────────────────────────────────────
@@ -61,8 +63,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   BitmapDescriptor? _locationDotIcon;
 
   // ── POI ───────────────────────────────────────────────────────────────────
-  PoiIconSet?      _poiIconSet;
-  List<PoiPoint>?  _pois;
+  PoiIconSet? _poiIconSet;
+  List<PoiPoint>? _pois;
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _orderAcceptedSub;
@@ -72,7 +74,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   StreamSubscription<Position>? _locationSub;
   Position? _clientPosition;
   double _travelHeading = 0;
-  late final _locationModeCtrl = MapLocationModeController(onUpdate: _onLocationModeUpdate);
+  late final _locationModeCtrl = MapLocationModeController(
+    onUpdate: _onLocationModeUpdate,
+  );
   bool _programmaticMove = false;
   Timer? _programmaticMoveTimer;
 
@@ -80,7 +84,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   // (contrairement au point de départ figé de la création de commande, la
   // position GPS live du client n'a pas de "fausse position de départ"
   // pertinente d'où tomber).
-  late final _positionReveal = LocationRevealController(vsync: this, onUpdate: () => setState(() {}));
+  late final _positionReveal = LocationRevealController(
+    vsync: this,
+    onUpdate: () => setState(() {}),
+  );
 
   // ── Sheet rétractable ──────────────────────────────────────────────────────
   bool _sheetExpanded = true;
@@ -106,7 +113,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     });
     PoiService.loadPois().then((pois) {
       buildPoiIconSet(pois).then((set) {
-        if (mounted) setState(() { _pois = pois; _poiIconSet = set; });
+        if (mounted)
+          setState(() {
+            _pois = pois;
+            _poiIconSet = set;
+          });
       });
     });
     _startGPS();
@@ -118,6 +129,13 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
         _checkPendingOrder();
       });
+      // Popup "vous avez une réduction disponible" — une seule fois par
+      // campagne (voir promo_highlight_popup.dart), silencieuse s'il n'y en
+      // a aucune ou en cas d'échec réseau.
+      maybeShowPromoHighlight(
+        context,
+        fetch: OrdersRepository().getHighlightPromo,
+      );
     });
   }
 
@@ -173,18 +191,21 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       });
       if (acceptedId != null && driverId != null) {
         final eta = data['etaPickupMin'] as int?;
-        
+
         // Affiche une vraie notification système locale
         NotificationService.showSystemNotification(
           title: 'Course acceptée !',
           body: 'Un livreur est en route${eta != null ? ' (~$eta min)' : '.'}',
         );
 
-        context.push('/orders/tracking', extra: {
-          'orderId': acceptedId,
-          'driverId': driverId,
-          'etaPickupMin': eta,
-        });
+        context.push(
+          '/orders/tracking',
+          extra: {
+            'orderId': acceptedId,
+            'driverId': driverId,
+            'etaPickupMin': eta,
+          },
+        );
       }
     });
 
@@ -235,22 +256,34 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     const double cx = size / 2;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    canvas.drawCircle(const Offset(cx, cx), 28,
-        Paint()..color = const Color(0x3300D4FF));
-    canvas.drawCircle(const Offset(cx, cx), 11,
-        Paint()..color = const Color(0xFF00D4FF));
     canvas.drawCircle(
-        const Offset(cx, cx), 11,
-        Paint()
-          ..color = Colors.white
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5);
-    final img = await recorder
-        .endRecording()
-        .toImage(size.toInt(), size.toInt());
+      const Offset(cx, cx),
+      28,
+      Paint()..color = const Color(0x3300D4FF),
+    );
+    canvas.drawCircle(
+      const Offset(cx, cx),
+      11,
+      Paint()..color = const Color(0xFF00D4FF),
+    );
+    canvas.drawCircle(
+      const Offset(cx, cx),
+      11,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+    final img = await recorder.endRecording().toImage(
+      size.toInt(),
+      size.toInt(),
+    );
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(),
-        width: size / 2, height: size / 2);
+    return BitmapDescriptor.bytes(
+      bytes!.buffer.asUint8List(),
+      width: size / 2,
+      height: size / 2,
+    );
   }
 
   // ── GPS ──────────────────────────────────────────────────────────────────
@@ -295,12 +328,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       _programmaticMove = false;
     });
     _mapController!.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(
-        target: LatLng(pos.latitude, pos.longitude),
-        zoom: _currentZoom < 13 ? 15 : _currentZoom,
-        bearing: bearing ?? 0,
-        tilt: 40,
-      )),
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(pos.latitude, pos.longitude),
+          zoom: _currentZoom < 13 ? 15 : _currentZoom,
+          bearing: bearing ?? 0,
+          tilt: 40,
+        ),
+      ),
     );
   }
 
@@ -309,12 +344,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     if (_clientPosition == null || _mapController == null) return;
     _programmaticMove = true;
     _mapController!.moveCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(
-        target: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
-        zoom: _currentZoom < 13 ? 15 : _currentZoom,
-        bearing: heading,
-        tilt: 50,
-      )),
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
+          zoom: _currentZoom < 13 ? 15 : _currentZoom,
+          bearing: heading,
+          tilt: 50,
+        ),
+      ),
     );
   }
 
@@ -337,18 +374,26 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     final markers = <Marker>{};
     // En mode libre : marker natif Google Maps (suit la carte sans lag)
     if (_locationModeCtrl.isFree && _clientPosition != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('client'),
-        position: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
-        icon: _locationDotIcon ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        flat: true,
-        anchor: const Offset(0.5, 0.5),
-        zIndexInt: 10,
-      ));
+      markers.add(
+        Marker(
+          markerId: const MarkerId('client'),
+          position: LatLng(
+            _clientPosition!.latitude,
+            _clientPosition!.longitude,
+          ),
+          icon:
+              _locationDotIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          flat: true,
+          anchor: const Offset(0.5, 0.5),
+          zIndexInt: 10,
+        ),
+      );
     }
     if (_poiIconSet != null && _pois != null) {
-      markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom, _pois!));
+      markers.addAll(
+        buildPoiMarkersForZoom(_poiIconSet!, _currentZoom, _pois!),
+      );
     }
     return markers;
   }
@@ -358,7 +403,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     final cached = await AuthStorage.getUser();
     if (mounted) setState(() => _user = cached);
     try {
-      final res  = await ApiClient.dio.get('/users/me');
+      final res = await ApiClient.dio.get('/users/me');
       final user = res.data as Map<String, dynamic>;
       await AuthStorage.saveUser(user);
       if (mounted) setState(() => _user = user);
@@ -375,15 +420,21 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       // Priorité 1 : course active (driver en route)
       const activeStatuses = ['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'];
       final activeList = orders
-          .where((o) => activeStatuses.contains((o['status'] as String? ?? '').toUpperCase()))
+          .where(
+            (o) => activeStatuses.contains(
+              (o['status'] as String? ?? '').toUpperCase(),
+            ),
+          )
           .toList();
 
       if (activeList.isNotEmpty) {
         final active = activeList.first;
-        final orderId  = active['id'] as String?;
-        final driverId = (active['driver'] as Map?)?['id'] as String?
-            ?? active['driverId'] as String?;
-        final delivery = active['deliveryAddress'] as String? ?? 'votre destination';
+        final orderId = active['id'] as String?;
+        final driverId =
+            (active['driver'] as Map?)?['id'] as String? ??
+            active['driverId'] as String?;
+        final delivery =
+            active['deliveryAddress'] as String? ?? 'votre destination';
 
         NotificationService.showOngoingNotification(
           id: 8888,
@@ -391,19 +442,21 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           body: 'En route vers : $delivery',
         );
 
-        final shouldRedirect = _isInitialLoad &&
+        final shouldRedirect =
+            _isInitialLoad &&
             !ref.read(trackingMinimizedProvider) &&
-            orderId != null && driverId != null;
+            orderId != null &&
+            driverId != null;
         _isInitialLoad = false;
 
         if (shouldRedirect && mounted) {
           setState(() => _activeOrders = activeList);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              context.push('/orders/tracking', extra: {
-                'orderId': orderId,
-                'driverId': driverId,
-              });
+              context.push(
+                '/orders/tracking',
+                extra: {'orderId': orderId, 'driverId': driverId},
+              );
             }
           });
           return;
@@ -422,13 +475,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       // Priorité 2 : commande récemment livrée → dialog (une seule fois)
       const doneStatuses = ['DELIVERED', 'PAYMENT_CONFIRMED'];
       final delivered = orders.firstWhere(
-        (o) => doneStatuses.contains((o['status'] as String? ?? '').toUpperCase()),
+        (o) =>
+            doneStatuses.contains((o['status'] as String? ?? '').toUpperCase()),
         orElse: () => {},
       );
 
       if (delivered.isNotEmpty && mounted) {
         final orderId = delivered['id'] as String? ?? '';
-        final prefs   = await SharedPreferences.getInstance();
+        final prefs = await SharedPreferences.getInstance();
         if (!mounted) return;
         final shownIds = prefs.getStringList(_kDeliveredKey) ?? [];
         if (!shownIds.contains(orderId)) {
@@ -447,12 +501,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
       // Priorité 3 : commandes PENDING → badge
       final pendingList = orders
-          .where((o) => (o['status'] as String? ?? '').toUpperCase() == 'PENDING')
+          .where(
+            (o) => (o['status'] as String? ?? '').toUpperCase() == 'PENDING',
+          )
           .toList();
 
       if (mounted) {
         setState(() {
-          _activeOrders  = activeList;
+          _activeOrders = activeList;
           _pendingOrders = pendingList;
         });
       }
@@ -468,7 +524,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     SharedPreferences prefs,
     List<String> shownIds,
   ) {
-    final price    = (order['price'] as num?)?.toInt() ?? 0;
+    final price = (order['price'] as num?)?.toInt() ?? 0;
     final delivery = order['deliveryAddress'] as String? ?? '—';
 
     Timer? autoClose;
@@ -489,13 +545,19 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
         return Dialog(
           backgroundColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
+                colors: [
+                  AppColors.primary,
+                  AppColors.primaryMid,
+                  AppColors.primaryDark,
+                ],
               ),
               borderRadius: BorderRadius.all(Radius.circular(24)),
             ),
@@ -511,7 +573,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
                   ),
-                  child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: Colors.white,
+                    size: 40,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -527,7 +593,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                   delivery,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.75), fontSize: 13),
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontSize: 13,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -553,18 +621,24 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                       foregroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
-                    child: const Text('Voir mes commandes',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Voir mes commandes',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
                 TextButton(
                   onPressed: dismiss,
-                  child: Text('Fermer',
-                      style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.70))),
+                  child: Text(
+                    'Fermer',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.70),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -580,35 +654,40 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     if (allOrders.isEmpty) return null;
 
     // Couleur/icône selon la priorité la plus haute présente
-    final hasEnRoute  = _activeOrders.any((o) {
+    final hasEnRoute = _activeOrders.any((o) {
       final s = (o['status'] as String? ?? '').toUpperCase();
       return s == 'PICKED_UP' || s == 'IN_TRANSIT';
     });
-    final hasAccepted = _activeOrders.any((o) =>
-        (o['status'] as String? ?? '').toUpperCase() == 'ACCEPTED');
+    final hasAccepted = _activeOrders.any(
+      (o) => (o['status'] as String? ?? '').toUpperCase() == 'ACCEPTED',
+    );
 
     final Color color;
     final IconData icon;
     if (hasEnRoute) {
       color = AppColors.primary;
-      icon  = Icons.delivery_dining;
+      icon = Icons.delivery_dining;
     } else if (hasAccepted) {
       color = AppColors.accentMint;
-      icon  = Icons.two_wheeler;
+      icon = Icons.two_wheeler;
     } else {
       color = AppColors.warning;
-      icon  = Icons.timer;
+      icon = Icons.timer;
     }
 
-    final n     = allOrders.length;
+    final n = allOrders.length;
     final label = n == 1
-        ? (hasEnRoute ? 'Livraison en cours' : hasAccepted ? 'Course en cours' : '1 en attente')
+        ? (hasEnRoute
+              ? 'Livraison en cours'
+              : hasAccepted
+              ? 'Course en cours'
+              : '1 en attente')
         : '$n livraisons actives';
 
     // Tap : direct si 1 seule commande, sheet de choix sinon
     final VoidCallback onTap;
     if (n == 1) {
-      final single  = allOrders.first;
+      final single = allOrders.first;
       final sStatus = (single['status'] as String? ?? '').toUpperCase();
       onTap = sStatus == 'PENDING'
           ? () => context.push('/orders/confirmation', extra: single)
@@ -633,14 +712,27 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(30),
-          boxShadow: [BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 12, offset: const Offset(0, 4))],
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.45),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: Colors.white, size: 18),
             const SizedBox(width: 7),
-            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
           ],
         ),
       ),
@@ -648,13 +740,18 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   }
 
   void _goToTracking(Map<String, dynamic> order) {
-    final driverId = (order['driver'] as Map?)?['id'] as String? ?? order['driverId'] as String?;
+    final driverId =
+        (order['driver'] as Map?)?['id'] as String? ??
+        order['driverId'] as String?;
     if (driverId == null) return;
-    context.push('/orders/tracking', extra: {
-      'orderId': order['id'],
-      'driverId': driverId,
-      'initialOrder': order, // données pré-chargées → zéro latence
-    });
+    context.push(
+      '/orders/tracking',
+      extra: {
+        'orderId': order['id'],
+        'driverId': driverId,
+        'initialOrder': order, // données pré-chargées → zéro latence
+      },
+    );
   }
 
   // ── Sheet unifiée : toutes les commandes actives + en attente ───────────
@@ -668,38 +765,61 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           gradient: AppColors.gradientSplash,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(ctx).viewPadding.bottom + 20),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          12,
+          20,
+          MediaQuery.of(ctx).viewPadding.bottom + 20,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 36, height: 3,
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 36,
+              height: 3,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const SizedBox(height: 16),
-            Row(children: [
-              const Icon(Icons.delivery_dining, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Text('Choisir une livraison (${orders.length})',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-            ]),
+            Row(
+              children: [
+                const Icon(
+                  Icons.delivery_dining,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Choisir une livraison (${orders.length})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 14),
             ...orders.map((o) {
-              final status   = (o['status'] as String? ?? '').toUpperCase();
+              final status = (o['status'] as String? ?? '').toUpperCase();
               final delivery = o['deliveryAddress'] as String? ?? '—';
-              final pickup   = o['pickupAddress']  as String? ?? '—';
-              final price    = (o['price'] as num?)?.toInt() ?? 0;
+              final pickup = o['pickupAddress'] as String? ?? '—';
+              final price = (o['price'] as num?)?.toInt() ?? 0;
               final isPending = status == 'PENDING';
 
               final String statusLabel = switch (status) {
                 'PICKED_UP' || 'IN_TRANSIT' => 'En route vers vous',
-                'ACCEPTED'                  => 'Livreur en route',
-                'PENDING'                   => 'En attente de livreur',
-                _                           => 'En traitement',
+                'ACCEPTED' => 'Livreur en route',
+                'PENDING' => 'En attente de livreur',
+                _ => 'En traitement',
               };
               final Color statusColor = switch (status) {
                 'PICKED_UP' || 'IN_TRANSIT' => AppColors.success,
-                'ACCEPTED'                  => AppColors.primary,
-                'PENDING'                   => AppColors.warning,
-                _                           => Colors.white54,
+                'ACCEPTED' => AppColors.primary,
+                'PENDING' => AppColors.warning,
+                _ => Colors.white54,
               };
 
               return GestureDetector(
@@ -717,30 +837,64 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.35),
+                    ),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), shape: BoxShape.circle),
-                        child: Icon(isPending ? Icons.timer : Icons.two_wheeler, color: statusColor, size: 20),
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isPending ? Icons.timer : Icons.two_wheeler,
+                          color: statusColor,
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(delivery, style: ClientText.body.copyWith(color: Colors.white),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              delivery,
+                              style: ClientText.body.copyWith(
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             const SizedBox(height: 2),
-                            Text(pickup, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              pickup,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 11,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             const SizedBox(height: 4),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                              child: Text(statusLabel, style: ClientText.caption.copyWith(color: statusColor)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: ClientText.caption.copyWith(
+                                  color: statusColor,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -749,10 +903,21 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(formatFcfa(price), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text(
+                            formatFcfa(price),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          Text(isPending ? 'Voir →' : 'Suivre →',
-                              style: ClientText.caption.copyWith(color: statusColor)),
+                          Text(
+                            isPending ? 'Voir →' : 'Suivre →',
+                            style: ClientText.caption.copyWith(
+                              color: statusColor,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -798,7 +963,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               markers: _clientMarkers,
               circles: _clientPosition != null
                   ? _positionReveal.haloCircles(
-                      LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
+                      LatLng(
+                        _clientPosition!.latitude,
+                        _clientPosition!.longitude,
+                      ),
                       color: AppColors.primary,
                       idPrefix: 'client-halo',
                     )
@@ -851,12 +1019,15 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               children: [
                 // ── Flottants juste au dessus du bottom sheet ──
                 Padding(
-                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                  padding: const EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-
                       // ── GAUCHE : Nuit/Jour ────────────────────────────────
                       MapThemeToggleButton(onTap: _toggleMapTheme),
 
@@ -865,15 +1036,17 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Builder(builder: (_) {
-                            final badge = _buildSmartBadge();
-                            return badge != null
-                                ? Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: badge,
-                                  )
-                                : const SizedBox.shrink();
-                          }),
+                          Builder(
+                            builder: (_) {
+                              final badge = _buildSmartBadge();
+                              return badge != null
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: badge,
+                                    )
+                                  : const SizedBox.shrink();
+                            },
+                          ),
                           MapLocationModeButton(
                             mode: _locationModeCtrl.mode,
                             compassBearing: _locationModeCtrl.compassBearing,
@@ -881,7 +1054,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                           ),
                         ],
                       ),
-
                     ],
                   ),
                 ),
@@ -905,7 +1077,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       ),
     );
   }
-
 
   // ── Contenu choix du service ───────────────────────────────────────────────
   Widget _buildServiceContent() {
@@ -1067,24 +1238,30 @@ class _ClientNavBar extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Expanded(child: _NavItem(
-              icon: Icons.home_rounded,
-              label: 'Accueil',
-              active: true,
-              onTap: () {},
-            )),
-            Expanded(child: _NavItem(
-              icon: Icons.receipt_long_outlined,
-              label: 'Commandes',
-              active: false,
-              onTap: () => context.push('/orders/my'),
-            )),
-            Expanded(child: _NavItem(
-              icon: Icons.person_outline_rounded,
-              label: 'Profil',
-              active: false,
-              onTap: () => context.push('/client/profile'),
-            )),
+            Expanded(
+              child: _NavItem(
+                icon: Icons.home_rounded,
+                label: 'Accueil',
+                active: true,
+                onTap: () {},
+              ),
+            ),
+            Expanded(
+              child: _NavItem(
+                icon: Icons.receipt_long_outlined,
+                label: 'Commandes',
+                active: false,
+                onTap: () => context.push('/orders/my'),
+              ),
+            ),
+            Expanded(
+              child: _NavItem(
+                icon: Icons.person_outline_rounded,
+                label: 'Profil',
+                active: false,
+                onTap: () => context.push('/client/profile'),
+              ),
+            ),
           ],
         ),
       ),
@@ -1117,7 +1294,9 @@ class _NavItem extends StatelessWidget {
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
             decoration: BoxDecoration(
-              color: active ? AppColors.primary.withValues(alpha: 0.14) : Colors.transparent,
+              color: active
+                  ? AppColors.primary.withValues(alpha: 0.14)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(
@@ -1207,14 +1386,17 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Pointe de la flèche au-dessus du dot
-                  Icon(Icons.navigation,
-                      color: Colors.white,
-                      size: 22,
-                      shadows: [
-                        Shadow(
-                            color: cyan.withValues(alpha: 0.9),
-                            blurRadius: 10)
-                      ]),
+                  Icon(
+                    Icons.navigation,
+                    color: Colors.white,
+                    size: 22,
+                    shadows: [
+                      Shadow(
+                        color: cyan.withValues(alpha: 0.9),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 2),
                 ],
               ),
@@ -1229,9 +1411,10 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
               border: Border.all(color: Colors.white, width: 2.5),
               boxShadow: [
                 BoxShadow(
-                    color: cyan.withValues(alpha: 0.65),
-                    blurRadius: 10,
-                    spreadRadius: 2),
+                  color: cyan.withValues(alpha: 0.65),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                ),
               ],
             ),
           ),
@@ -1253,14 +1436,17 @@ class _BreathingBadge extends StatefulWidget {
   State<_BreathingBadge> createState() => _BreathingBadgeState();
 }
 
-class _BreathingBadgeState extends State<_BreathingBadge> with SingleTickerProviderStateMixin {
+class _BreathingBadgeState extends State<_BreathingBadge>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2600))
-      ..repeat(reverse: true);
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2600),
+    )..repeat(reverse: true);
   }
 
   @override
@@ -1325,7 +1511,10 @@ class _ServiceCard extends StatelessWidget {
         onTap: onTap,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.l, horizontal: AppSpacing.xl),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.l,
+            horizontal: AppSpacing.xl,
+          ),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(16),
@@ -1339,10 +1528,17 @@ class _ServiceCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: ClientText.subtitle.copyWith(color: Colors.white)),
-                  Text(subtitle!,
-                      style: ClientText.body.copyWith(
-                          color: Colors.white.withValues(alpha: 0.65), fontWeight: FontWeight.w500)),
+                  Text(
+                    label,
+                    style: ClientText.subtitle.copyWith(color: Colors.white),
+                  ),
+                  Text(
+                    subtitle!,
+                    style: ClientText.body.copyWith(
+                      color: Colors.white.withValues(alpha: 0.65),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ],
               ),
               const Spacer(),
@@ -1366,9 +1562,13 @@ class _ServiceCard extends StatelessWidget {
             children: [
               Icon(icon, color: AppColors.primary, size: 28),
               const SizedBox(height: 6),
-              Text(label,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary, fontSize: 13)),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
         ),

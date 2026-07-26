@@ -42,13 +42,19 @@ class OrdersRepository {
     int limit = 30,
   }) async {
     try {
-      final response = await _dio.get('/orders/my', queryParameters: {'page': page, 'limit': limit});
+      final response = await _dio.get(
+        '/orders/my',
+        queryParameters: {'page': page, 'limit': limit},
+      );
       final data = response.data;
       final orders = _parseList(data);
       if (data is Map) {
         final currentPage = (data['page'] as num?)?.toInt();
-        final totalPages  = (data['totalPages'] as num?)?.toInt();
-        final hasMore = currentPage != null && totalPages != null && currentPage < totalPages;
+        final totalPages = (data['totalPages'] as num?)?.toInt();
+        final hasMore =
+            currentPage != null &&
+            totalPages != null &&
+            currentPage < totalPages;
         return (orders: orders, hasMore: hasMore);
       }
       return (orders: orders, hasMore: false);
@@ -73,7 +79,10 @@ class OrdersRepository {
     } else {
       raw = [];
     }
-    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   Future<Map<String, dynamic>> getOrderById(String id) async {
@@ -129,7 +138,10 @@ class OrdersRepository {
   }
 
   Future<Map<String, dynamic>> confirmPayment(
-      String id, String status, {String? note}) async {
+    String id,
+    String status, {
+    String? note,
+  }) async {
     try {
       final response = await _dio.patch(
         '/orders/$id/confirm-payment',
@@ -160,7 +172,10 @@ class OrdersRepository {
 
   Future<double> getSurgeMultiplier(double lat, double lng) async {
     try {
-      final response = await _dio.get('/orders/surge', queryParameters: {'lat': lat, 'lng': lng});
+      final response = await _dio.get(
+        '/orders/surge',
+        queryParameters: {'lat': lat, 'lng': lng},
+      );
       return ((response.data['surgeMultiplier'] as num?) ?? 1.0).toDouble();
     } on DioException {
       return 1.0;
@@ -170,23 +185,32 @@ class OrdersRepository {
   /// Estimation officielle depuis le backend (source de vérité unique).
   /// Retourne null si hors ligne — l'appelant affiche un fallback.
   Future<Map<String, dynamic>?> getEstimate({
-    required double pickupLat, required double pickupLng,
-    required double deliveryLat, required double deliveryLng,
+    required double pickupLat,
+    required double pickupLng,
+    required double deliveryLat,
+    required double deliveryLng,
     String orderType = 'DELIVERY',
   }) async {
-    debugPrint('[getEstimate] CALLING pickup=($pickupLat,$pickupLng) delivery=($deliveryLat,$deliveryLng)');
+    debugPrint(
+      '[getEstimate] CALLING pickup=($pickupLat,$pickupLng) delivery=($deliveryLat,$deliveryLng)',
+    );
     try {
-      final res = await _dio.get('/orders/estimate', queryParameters: {
-        'pickupLat':   pickupLat,
-        'pickupLng':   pickupLng,
-        'deliveryLat': deliveryLat,
-        'deliveryLng': deliveryLng,
-        'orderType':   orderType,
-      });
+      final res = await _dio.get(
+        '/orders/estimate',
+        queryParameters: {
+          'pickupLat': pickupLat,
+          'pickupLng': pickupLng,
+          'deliveryLat': deliveryLat,
+          'deliveryLng': deliveryLng,
+          'orderType': orderType,
+        },
+      );
       debugPrint('[getEstimate] OK: ${res.data}');
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
-      debugPrint('[getEstimate] ERROR ${e.response?.statusCode} ${e.response?.data} ${e.message}');
+      debugPrint(
+        '[getEstimate] ERROR ${e.response?.statusCode} ${e.response?.data} ${e.message}',
+      );
       return null;
     } catch (e) {
       debugPrint('[getEstimate] UNEXPECTED: $e');
@@ -201,16 +225,24 @@ class OrdersRepository {
   /// auto-appliquée (peut renvoyer null, ce n'est pas une erreur). Avec
   /// [code] : throw une [AppException] si le code n'est pas valide/éligible.
   Future<Map<String, dynamic>?> getPromoPreview({
-    required int price, required int demFee, String? code,
+    required int price,
+    required int demFee,
+    String? code,
   }) async {
     try {
-      final res = await _dio.get('/orders/promo/preview', queryParameters: {
-        'price': price,
-        'demFee': demFee,
-        if (code != null && code.isNotEmpty) 'code': code,
-      });
+      final res = await _dio.get(
+        '/orders/promo/preview',
+        queryParameters: {
+          'price': price,
+          'demFee': demFee,
+          if (code != null && code.isNotEmpty) 'code': code,
+        },
+      );
       final data = res.data as Map<String, dynamic>;
-      return data['discountAmount'] != null && (data['discountAmount'] as num) > 0 ? data : null;
+      return data['discountAmount'] != null &&
+              (data['discountAmount'] as num) > 0
+          ? data
+          : null;
     } on DioException catch (e) {
       if (code != null && code.isNotEmpty) {
         throw AppException(
@@ -227,7 +259,10 @@ class OrdersRepository {
   /// sans calculer de montant précis (aucun prix connu à ce stade).
   Future<Map<String, dynamic>> validatePromoCode(String code) async {
     try {
-      final res = await _dio.get('/promo/validate', queryParameters: {'code': code});
+      final res = await _dio.get(
+        '/promo/validate',
+        queryParameters: {'code': code},
+      );
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
@@ -237,12 +272,26 @@ class OrdersRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getHeatmap({int hours = 24, String? type}) async {
+  /// Promo à mettre en avant à l'ouverture de l'app (popup d'accueil) —
+  /// `null` si aucune, ce n'est pas une erreur (jamais bloquant).
+  Future<Map<String, dynamic>?> getHighlightPromo() async {
     try {
-      final response = await _dio.get('/orders/heatmap', queryParameters: {
-        'hours': hours,
-        'type': ?type,
-      });
+      final res = await _dio.get('/promo/highlight');
+      return res.data as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getHeatmap({
+    int hours = 24,
+    String? type,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/orders/heatmap',
+        queryParameters: {'hours': hours, 'type': ?type},
+      );
       return _parseList(response.data);
     } catch (_) {
       return [];
@@ -256,12 +305,15 @@ class OrdersRepository {
     String? comment,
   }) async {
     try {
-      await _dio.post('/ratings', data: {
-        'orderId': orderId,
-        'ratedId': driverId,
-        'score': score,
-        'comment': comment,
-      });
+      await _dio.post(
+        '/ratings',
+        data: {
+          'orderId': orderId,
+          'ratedId': driverId,
+          'score': score,
+          'comment': comment,
+        },
+      );
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible d\'envoyer la note.',
@@ -335,11 +387,15 @@ class OrdersRepository {
   /// intégré capable de lire ce type de QR.
   Future<Map<String, dynamic>> payOnline(String id, String operatorName) async {
     try {
-      final response = await _dio.post('/orders/$id/pay', data: {'operatorName': operatorName});
+      final response = await _dio.post(
+        '/orders/$id/pay',
+        data: {'operatorName': operatorName},
+      );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible de lancer le paiement en ligne.',
+        e.response?.data?['message'] ??
+            'Impossible de lancer le paiement en ligne.',
         e.response?.statusCode,
       );
     }

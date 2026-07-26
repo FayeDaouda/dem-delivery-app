@@ -25,14 +25,17 @@ class DriverWalletScreen extends StatefulWidget {
 }
 
 class _DriverWalletScreenState extends State<DriverWalletScreen> {
-  final _walletRepo  = WalletRepository();
+  final _walletRepo = WalletRepository();
   final _profileRepo = ProfileRepository();
 
   bool _loading = true;
   String? _error;
   double _balance = 0;
   double _withdrawableBalance = 0;
-  Map<String, double> _receivedByOperator = const {'WAVE': 0, 'ORANGE_MONEY': 0};
+  Map<String, double> _receivedByOperator = const {
+    'WAVE': 0,
+    'ORANGE_MONEY': 0,
+  };
   List<Map<String, dynamic>> _transactions = [];
   Map<String, dynamic>? _forfaitStatus;
   String? _vehicleType;
@@ -76,7 +79,10 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final user = await AuthStorage.getUser();
       final results = await Future.wait([
@@ -87,23 +93,31 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
       final forfait = results[1];
       if (!mounted) return;
       setState(() {
-        _vehicleType         = user?['vehicleType'] as String?;
-        _balance             = (summary['balance'] as num?)?.toDouble() ?? 0;
-        _withdrawableBalance = (summary['withdrawableBalance'] as num?)?.toDouble() ?? 0;
+        _vehicleType = user?['vehicleType'] as String?;
+        _balance = (summary['balance'] as num?)?.toDouble() ?? 0;
+        _withdrawableBalance =
+            (summary['withdrawableBalance'] as num?)?.toDouble() ?? 0;
         final byOp = summary['receivedByOperator'] as Map<String, dynamic>?;
-        _receivedByOperator  = {
-          'WAVE':         (byOp?['WAVE'] as num?)?.toDouble() ?? 0,
+        _receivedByOperator = {
+          'WAVE': (byOp?['WAVE'] as num?)?.toDouble() ?? 0,
           'ORANGE_MONEY': (byOp?['ORANGE_MONEY'] as num?)?.toDouble() ?? 0,
         };
-        _transactions        = (summary['recentTransactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-        _forfaitStatus       = forfait;
-        _loading             = false;
-        _page                = 1;
-        _hasMore             = _transactions.length >= 20;
+        _transactions =
+            (summary['recentTransactions'] as List?)
+                ?.cast<Map<String, dynamic>>() ??
+            [];
+        _forfaitStatus = forfait;
+        _loading = false;
+        _page = 1;
+        _hasMore = _transactions.length >= 20;
       });
       _checkForfaitPromo();
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = friendlyError(e); });
+      if (mounted)
+        setState(() {
+          _loading = false;
+          _error = friendlyError(e);
+        });
     }
   }
 
@@ -117,7 +131,7 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
       if (discount <= 0) return;
       setState(() {
         _forfaitDiscountAmount = discount;
-        _forfaitPromoLabel     = result['promoCode'] as String?;
+        _forfaitPromoLabel = result['promoCode'] as String?;
       });
     } catch (_) {} // jamais bloquant
   }
@@ -125,15 +139,18 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   Future<void> _applyForfaitPromoCode() async {
     final code = _forfaitPromoCodeCtrl.text.trim();
     if (code.isEmpty) return;
-    setState(() { _checkingForfaitPromo = true; _forfaitPromoError = null; });
+    setState(() {
+      _checkingForfaitPromo = true;
+      _forfaitPromoError = null;
+    });
     try {
       final result = await _walletRepo.getForfaitPromoPreview(code: code);
       if (!mounted) return;
       final discount = (result?['discountAmount'] as num?)?.toDouble() ?? 0;
       setState(() {
         _forfaitDiscountAmount = discount > 0 ? discount : null;
-        _forfaitPromoLabel     = result?['promoCode'] as String?;
-        _checkingForfaitPromo  = false;
+        _forfaitPromoLabel = result?['promoCode'] as String?;
+        _checkingForfaitPromo = false;
       });
       if (discount > 0) showDemToast(context, 'Code promo appliqué !');
     } catch (e) {
@@ -153,7 +170,8 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
     try {
       final nextPage = _page + 1;
       final result = await _walletRepo.getWalletTransactions(page: nextPage);
-      final more = (result['transactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final more =
+          (result['transactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final total = (result['total'] as num?)?.toInt() ?? _transactions.length;
       if (!mounted) return;
       setState(() {
@@ -169,7 +187,9 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
 
   List<Map<String, dynamic>> get _filteredTransactions {
     if (_filter == _TxFilter.all) return _transactions;
-    return _transactions.where((t) => _filter.types.contains(t['type'] as String? ?? '')).toList();
+    return _transactions
+        .where((t) => _filter.types.contains(t['type'] as String? ?? ''))
+        .toList();
   }
 
   double get _forfaitAmount {
@@ -183,7 +203,10 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   // Estimation affichée avant confirmation — le montant réel est toujours
   // recalculé côté serveur (voir forfait.service.js:prepareForfaitPurchase).
   double get _forfaitAmountAfterDiscount =>
-      (_forfaitAmount - (_forfaitDiscountAmount ?? 0)).clamp(0, double.infinity);
+      (_forfaitAmount - (_forfaitDiscountAmount ?? 0)).clamp(
+        0,
+        double.infinity,
+      );
 
   // Paie la passe directement via SamirPay, sans passer par une recharge
   // générale du wallet — le montant exact de la passe est payé et active
@@ -191,7 +214,9 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   Future<void> _payForfaitOnline() async {
     // Uniquement si saisi manuellement et validé — une promo auto-appliquée
     // n'a pas besoin d'être renvoyée, le serveur la retrouve tout seul.
-    final manualCode = _forfaitPromoError == null && _forfaitPromoCodeCtrl.text.trim().isNotEmpty
+    final manualCode =
+        _forfaitPromoError == null &&
+            _forfaitPromoCodeCtrl.text.trim().isNotEmpty
         ? _forfaitPromoCodeCtrl.text.trim()
         : null;
 
@@ -206,7 +231,9 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
         if (!mounted) return;
         showDemToast(
           context,
-          result['alreadyActive'] == true ? 'Votre passe du jour est déjà active.' : 'Passe activée !',
+          result['alreadyActive'] == true
+              ? 'Votre passe du jour est déjà active.'
+              : 'Passe activée !',
         );
         await _load();
       } catch (e) {
@@ -217,7 +244,10 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
       return;
     }
 
-    final operatorName = await chooseOperator(context, title: 'Payer ma passe avec');
+    final operatorName = await chooseOperator(
+      context,
+      title: 'Payer ma passe avec',
+    );
     if (operatorName == null || !mounted) return;
 
     await SamirpayPaymentSheet.show(
@@ -225,14 +255,18 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
       amount: _forfaitAmountAfterDiscount.toInt(),
       title: 'Paiement de la passe journalière',
       initPayment: () async {
-        final result = await _walletRepo.payForfaitOnline(operatorName, promoCode: manualCode);
+        final result = await _walletRepo.payForfaitOnline(
+          operatorName,
+          promoCode: manualCode,
+        );
         if (result['alreadyActive'] == true) {
           throw AppException('Votre passe du jour est déjà active.');
         }
         return result;
       },
       confirmationStream: SocketService.instance.onWalletUpdated,
-      matchesConfirmation: (event, payment) => event['orderRef'] == payment['orderRef'],
+      matchesConfirmation: (event, payment) =>
+          event['orderRef'] == payment['orderRef'],
       onSuccess: () {
         showDemToast(context, 'Passe activée !');
         _load();
@@ -246,21 +280,40 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
         context: context,
         builder: (_) => AlertDialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          icon: const Icon(Icons.info_outline, color: AppColors.primary, size: 32),
-          title: const Text('Aucun solde retirable',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16), textAlign: TextAlign.center),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          icon: const Icon(
+            Icons.info_outline,
+            color: AppColors.primary,
+            size: 32,
+          ),
+          title: const Text(
+            'Aucun solde retirable',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
           content: const Text(
             'Seuls les paiements encaissés en ligne par DEM (Wave, Orange Money) sont retirables ici. '
             'Les livraisons payées en espèces sont déjà dans votre poche — il n\'y a donc rien à retirer pour le moment.',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4),
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 13,
+              height: 1.4,
+            ),
             textAlign: TextAlign.center,
           ),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Compris', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
+              child: const Text(
+                'Compris',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
@@ -271,7 +324,10 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CashoutSheet(repo: _walletRepo, withdrawableBalance: _withdrawableBalance),
+      builder: (_) => _CashoutSheet(
+        repo: _walletRepo,
+        withdrawableBalance: _withdrawableBalance,
+      ),
     );
     // Le toast (succès ou vérification en cours) est déjà affiché par la
     // feuille elle-même avant de se fermer — voir _CashoutSheetState._submit.
@@ -280,6 +336,12 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Lu AVANT le Scaffold : à l'intérieur de `body`, Scaffold met déjà
+    // viewInsets.bottom à 0 pour son sous-arbre (c'est ce qui lui permet de
+    // rétrécir `body` lui-même via `resizeToAvoidBottomInset`) — le lire
+    // plus bas renvoie donc toujours 0, clavier ouvert ou non.
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardOpen = keyboardInset > 0;
     return Scaffold(
       backgroundColor: AppColors.lightBg,
       body: Column(
@@ -295,11 +357,17 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     const Spacer(),
-                    Text('Portefeuille',
-                        style: ClientText.subtitle.copyWith(color: Colors.white)),
+                    Text(
+                      'Portefeuille',
+                      style: ClientText.subtitle.copyWith(color: Colors.white),
+                    ),
                     const Spacer(),
                     const SizedBox(width: 48),
                   ],
@@ -309,50 +377,58 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
                 : _error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.wifi_off_outlined, color: AppColors.textMuted, size: 48),
-                            const SizedBox(height: 12),
-                            Text(_error!,
-                                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-                                textAlign: TextAlign.center),
-                            const SizedBox(height: 16),
-                            TextButton(
-                              onPressed: _load,
-                              child: const Text('Réessayer', style: TextStyle(color: AppColors.primary)),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.wifi_off_outlined,
+                          color: AppColors.textMuted,
+                          size: 48,
                         ),
-                      )
-                    : Builder(builder: (context) {
-                        // Quand le clavier s'ouvre (ex. saisie du code promo),
-                        // le bloc fixe seul peut dépasser l'espace restant :
-                        // on le rend alors scrollable et on masque l'historique
-                        // (non pertinent pendant la saisie) plutôt que de
-                        // laisser l'Expanded passer en espace négatif.
-                        final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-                        if (keyboardOpen) {
-                          return SingleChildScrollView(
-                            padding: EdgeInsets.only(
-                              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                            ),
-                            child: _buildWalletTopSection(),
-                          );
-                        }
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildWalletTopSection(),
-                            const SizedBox(height: 10),
-                            // ── Seule cette liste défile — le bloc au-dessus reste fixe ──
-                            Expanded(child: _buildHistoryList()),
-                          ],
-                        );
-                      }),
+                        const SizedBox(height: 12),
+                        Text(
+                          _error!,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: _load,
+                          child: const Text(
+                            'Réessayer',
+                            style: TextStyle(color: AppColors.primary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                // Quand le clavier s'ouvre (ex. saisie du code promo), le
+                // bloc fixe seul peut dépasser l'espace restant : on le
+                // rend alors scrollable et on masque l'historique (non
+                // pertinent pendant la saisie) plutôt que de laisser
+                // l'Expanded passer en espace négatif.
+                : keyboardOpen
+                ? SingleChildScrollView(
+                    padding: EdgeInsets.only(bottom: keyboardInset + 16),
+                    child: _buildWalletTopSection(),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildWalletTopSection(),
+                      const SizedBox(height: 10),
+                      // ── Seule cette liste défile — le bloc au-dessus reste fixe ──
+                      Expanded(child: _buildHistoryList()),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -379,8 +455,14 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
           const SizedBox(height: 16),
           _buildForfaitSection(),
           const SizedBox(height: 24),
-          const Text('Historique',
-              style: TextStyle(color: AppColors.textDark, fontSize: 15, fontWeight: FontWeight.w700)),
+          const Text(
+            'Historique',
+            style: TextStyle(
+              color: AppColors.textDark,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           if (_transactions.isNotEmpty) ...[
             const SizedBox(height: 10),
             _TxFilterBar(
@@ -406,51 +488,77 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.receipt_long_outlined, color: AppColors.lightIconMuted, size: 56),
+                      Icon(
+                        Icons.receipt_long_outlined,
+                        color: AppColors.lightIconMuted,
+                        size: 56,
+                      ),
                       SizedBox(height: 10),
-                      Text('Aucune transaction pour le moment',
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                      Text(
+                        'Aucune transaction pour le moment',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             )
           : _filteredTransactions.isEmpty
-              ? ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    const SizedBox(height: 24),
-                    Center(
-                      child: Text('Aucune transaction dans cette catégorie',
-                          style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          ? ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                const SizedBox(height: 24),
+                Center(
+                  child: Text(
+                    'Aucune transaction dans cette catégorie',
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 13,
                     ),
-                  ],
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  itemCount: _filteredTransactions.length +
-                      (_filter == _TxFilter.all && _hasMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index < _filteredTransactions.length) {
-                      return _TransactionTile(transaction: _filteredTransactions[index]);
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Center(
-                        child: TextButton(
-                          onPressed: _loadingMore ? null : _loadMore,
-                          child: _loadingMore
-                              ? const SizedBox(
-                                  width: 18, height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                                )
-                              : const Text('Charger plus',
-                                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
-                        ),
-                      ),
-                    );
-                  },
+                  ),
                 ),
+              ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              itemCount:
+                  _filteredTransactions.length +
+                  (_filter == _TxFilter.all && _hasMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index < _filteredTransactions.length) {
+                  return _TransactionTile(
+                    transaction: _filteredTransactions[index],
+                  );
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Center(
+                    child: TextButton(
+                      onPressed: _loadingMore ? null : _loadMore,
+                      child: _loadingMore
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            )
+                          : const Text(
+                              'Charger plus',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
@@ -462,11 +570,14 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
     if (!active) {
       return _InfoBanner(
         icon: Icons.info_outline,
-        message: 'Le forfait journalier n\'est pas encore activé sur la plateforme.',
+        message:
+            'Le forfait journalier n\'est pas encore activé sur la plateforme.',
       );
     }
     if (todayCharged) {
-      final expiresAt = DateTime.tryParse(forfait?['passExpiresAt'] as String? ?? '');
+      final expiresAt = DateTime.tryParse(
+        forfait?['passExpiresAt'] as String? ?? '',
+      );
       return _ActivePassBanner(expiresAt: expiresAt);
     }
     // La passe se paie toujours en direct via Wave/Orange Money — jamais
@@ -474,7 +585,8 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
     // de _openTopup) : elle s'active automatiquement dès confirmation SamirPay.
     final discount = _forfaitDiscountAmount ?? 0;
     final displayAmount = _forfaitAmountAfterDiscount;
-    final baseMessage = 'Payez votre passe directement via Wave ou Orange Money — elle s\'active automatiquement dès confirmation.';
+    final baseMessage =
+        'Payez votre passe directement via Wave ou Orange Money — elle s\'active automatiquement dès confirmation.';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -482,14 +594,14 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
           icon: Icons.confirmation_number_outlined,
           message: discount > 0
               ? '$baseMessage\nRéduction : -${discount.toStringAsFixed(0)} FCFA'
-                  '${_forfaitPromoLabel != null ? ' ($_forfaitPromoLabel)' : ''}'
+                    '${_forfaitPromoLabel != null ? ' ($_forfaitPromoLabel)' : ''}'
               : baseMessage,
           color: discount > 0 ? AppColors.successLight : AppColors.primary,
           actionLabel: _activatingFreeForfait
               ? 'Activation...'
               : displayAmount <= 0
-                  ? 'Activer ma passe (gratuite)'
-                  : 'Payer ma passe (${displayAmount.toStringAsFixed(0)} FCFA)',
+              ? 'Activer ma passe (gratuite)'
+              : 'Payer ma passe (${displayAmount.toStringAsFixed(0)} FCFA)',
           onAction: _activatingFreeForfait ? null : _payForfaitOnline,
         ),
         const SizedBox(height: 10),
@@ -499,58 +611,93 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   }
 
   Widget _buildForfaitPromoCodeField() {
-    final applied = _forfaitDiscountAmount != null && _forfaitDiscountAmount! > 0;
+    final applied =
+        _forfaitDiscountAmount != null && _forfaitDiscountAmount! > 0;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _forfaitPromoCodeCtrl,
-                textCapitalization: TextCapitalization.characters,
-                style: const TextStyle(fontSize: 13, color: AppColors.textDark),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: 'Code promo passe (optionnel)',
-                  hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.8), fontSize: 13),
-                  filled: true,
-                  fillColor: AppColors.lightBg,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _forfaitPromoCodeCtrl,
+                  textCapitalization: TextCapitalization.characters,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textDark,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Code promo passe (optionnel)',
+                    hintStyle: TextStyle(
+                      color: AppColors.textMuted.withValues(alpha: 0.8),
+                      fontSize: 13,
+                    ),
+                    filled: true,
+                    fillColor: AppColors.lightBg,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _checkingForfaitPromo ? null : _applyForfaitPromoCode,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                decoration: BoxDecoration(
-                  color: (applied ? AppColors.successLight : AppColors.primary).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: _checkingForfaitPromo
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-                    : Text(
-                        applied ? 'Appliqué ✓' : 'Appliquer',
-                        style: TextStyle(
-                          color: applied ? AppColors.successLight : AppColors.primary,
-                          fontSize: 13, fontWeight: FontWeight.w600,
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _checkingForfaitPromo ? null : _applyForfaitPromoCode,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        (applied ? AppColors.successLight : AppColors.primary)
+                            .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: _checkingForfaitPromo
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : Text(
+                          applied ? 'Appliqué ✓' : 'Appliquer',
+                          style: TextStyle(
+                            color: applied
+                                ? AppColors.successLight
+                                : AppColors.primary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           if (_forfaitPromoError != null) ...[
             const SizedBox(height: 4),
-            Text(_forfaitPromoError!, style: const TextStyle(color: AppColors.error, fontSize: 11.5)),
+            Text(
+              _forfaitPromoError!,
+              style: const TextStyle(color: AppColors.error, fontSize: 11.5),
+            ),
           ],
         ],
       ),
@@ -584,16 +731,30 @@ class _BalanceCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: AppColors.gradientDialog,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Solde total',
-              style: ClientText.body.copyWith(color: Colors.white70)),
+          Text(
+            'Solde total',
+            style: ClientText.body.copyWith(color: Colors.white70),
+          ),
           const SizedBox(height: 8),
-          Text('${balance.toStringAsFixed(0)} FCFA',
-              style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800)),
+          Text(
+            '${balance.toStringAsFixed(0)} FCFA',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -601,32 +762,63 @@ class _BalanceCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(children: [
-              const Icon(Icons.account_balance_wallet_outlined, color: Colors.white, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('${withdrawableBalance.toStringAsFixed(0)} FCFA retirables',
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
-              ),
-            ]),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${withdrawableBalance.toStringAsFixed(0)} FCFA retirables',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           if (hasGap) ...[
             const SizedBox(height: 8),
             Text(
               'Les livraisons payées en espèces sont déjà dans votre poche — seuls les paiements encaissés en ligne par DEM sont retirables ici.',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11.5, height: 1.4),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.65),
+                fontSize: 11.5,
+                height: 1.4,
+              ),
             ),
           ],
-          if ((receivedByOperator['WAVE'] ?? 0) > 0 || (receivedByOperator['ORANGE_MONEY'] ?? 0) > 0) ...[
+          if ((receivedByOperator['WAVE'] ?? 0) > 0 ||
+              (receivedByOperator['ORANGE_MONEY'] ?? 0) > 0) ...[
             const SizedBox(height: 14),
-            Text('Reçu de vos clients en ligne',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 11.5, fontWeight: FontWeight.w600)),
+            Text(
+              'Reçu de vos clients en ligne',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.70),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 8),
-            Row(children: [
-              _OperatorReceivedChip(operatorName: 'WAVE', amount: receivedByOperator['WAVE'] ?? 0),
-              const SizedBox(width: 10),
-              _OperatorReceivedChip(operatorName: 'ORANGE_MONEY', amount: receivedByOperator['ORANGE_MONEY'] ?? 0),
-            ]),
+            Row(
+              children: [
+                _OperatorReceivedChip(
+                  operatorName: 'WAVE',
+                  amount: receivedByOperator['WAVE'] ?? 0,
+                ),
+                const SizedBox(width: 10),
+                _OperatorReceivedChip(
+                  operatorName: 'ORANGE_MONEY',
+                  amount: receivedByOperator['ORANGE_MONEY'] ?? 0,
+                ),
+              ],
+            ),
           ],
         ],
       ),
@@ -637,7 +829,10 @@ class _BalanceCard extends StatelessWidget {
 class _OperatorReceivedChip extends StatelessWidget {
   final String operatorName;
   final double amount;
-  const _OperatorReceivedChip({required this.operatorName, required this.amount});
+  const _OperatorReceivedChip({
+    required this.operatorName,
+    required this.amount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -648,15 +843,23 @@ class _OperatorReceivedChip extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Row(children: [
-          PaymentOperatorBadge(operatorName: operatorName, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text('${amount.toStringAsFixed(0)} FCFA',
+        child: Row(
+          children: [
+            PaymentOperatorBadge(operatorName: operatorName, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${amount.toStringAsFixed(0)} FCFA',
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700)),
-          ),
-        ]),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -694,18 +897,25 @@ class _TxFilterBar extends StatelessWidget {
               onTap: () => onChanged(f),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: active ? AppColors.primary : Colors.white,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: active ? AppColors.primary : AppColors.lightBorder),
+                  border: Border.all(
+                    color: active ? AppColors.primary : AppColors.lightBorder,
+                  ),
                 ),
-                child: Text(f.label,
-                    style: TextStyle(
-                      color: active ? Colors.white : AppColors.textDark,
-                      fontSize: 12.5,
-                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                    )),
+                child: Text(
+                  f.label,
+                  style: TextStyle(
+                    color: active ? Colors.white : AppColors.textDark,
+                    fontSize: 12.5,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
               ),
             ),
           );
@@ -736,16 +946,25 @@ class _InfoBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 10),
-            Expanded(child: Text(message, style: ClientText.body.copyWith(color: color))),
-          ]),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: ClientText.body.copyWith(color: color),
+                ),
+              ),
+            ],
+          ),
           if (actionLabel != null) ...[
             const SizedBox(height: 10),
             SizedBox(
@@ -756,9 +975,17 @@ class _InfoBanner extends StatelessWidget {
                   foregroundColor: color,
                   side: BorderSide(color: color),
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-                child: Text(actionLabel!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                child: Text(
+                  actionLabel!,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
               ),
             ),
           ],
@@ -811,7 +1038,9 @@ class _ActivePassBannerState extends State<_ActivePassBanner> {
       } else {
         final h = remaining.inHours;
         final m = remaining.inMinutes % 60;
-        timeLabel = h > 0 ? '${h}h${m.toString().padLeft(2, '0')} restantes' : '$m min restantes';
+        timeLabel = h > 0
+            ? '${h}h${m.toString().padLeft(2, '0')} restantes'
+            : '$m min restantes';
         if (remaining.inHours < 2) {
           timeColor = AppColors.error;
         } else if (remaining.inHours < 6) {
@@ -827,32 +1056,51 @@ class _ActivePassBannerState extends State<_ActivePassBanner> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
-      ),
-      child: Row(children: [
-        const Icon(Icons.check_circle_outline, color: AppColors.successLight, size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text('Votre passe du jour est active.',
-              style: ClientText.body.copyWith(color: AppColors.successLight)),
-        ),
-        if (timeLabel != null) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: timeColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.timer_outlined, size: 13, color: timeColor),
-              const SizedBox(width: 4),
-              Text(timeLabel,
-                  style: TextStyle(color: timeColor, fontSize: 11.5, fontWeight: FontWeight.w700)),
-            ]),
-          ),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6),
         ],
-      ]),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.check_circle_outline,
+            color: AppColors.successLight,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Votre passe du jour est active.',
+              style: ClientText.body.copyWith(color: AppColors.successLight),
+            ),
+          ),
+          if (timeLabel != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: timeColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.timer_outlined, size: 13, color: timeColor),
+                  const SizedBox(width: 4),
+                  Text(
+                    timeLabel,
+                    style: TextStyle(
+                      color: timeColor,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -879,8 +1127,8 @@ class _TransactionTile extends StatelessWidget {
     }
     return switch (transaction['samirpayStatus'] as String?) {
       'PENDING' => ('En cours', AppColors.pending),
-      'FAILED'  => ('Échoué — remboursé', AppColors.error),
-      _         => null, // SUCCESS ou ancien retrait pré-SamirPay : rien à signaler
+      'FAILED' => ('Échoué — remboursé', AppColors.error),
+      _ => null, // SUCCESS ou ancien retrait pré-SamirPay : rien à signaler
     };
   }
 
@@ -893,9 +1141,12 @@ class _TransactionTile extends StatelessWidget {
     final isCredit = type.startsWith('CREDIT_');
     final amount = (transaction['amount'] as num?)?.toDouble() ?? 0;
     final description = transaction['description'] as String? ?? '';
-    final createdAt = DateTime.tryParse(transaction['createdAt'] as String? ?? '');
+    final createdAt = DateTime.tryParse(
+      transaction['createdAt'] as String? ?? '',
+    );
     final color = isCredit ? AppColors.successLight : AppColors.error;
-    final isOnlinePayment = type == 'CREDIT_DELIVERY' && transaction['paymentMethod'] == 'online';
+    final isOnlinePayment =
+        type == 'CREDIT_DELIVERY' && transaction['paymentMethod'] == 'online';
     final cashoutStatus = _cashoutStatus();
 
     return Container(
@@ -904,63 +1155,105 @@ class _TransactionTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6),
+        ],
       ),
-      child: Row(children: [
-        Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
-          child: Icon(
-            isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-            color: color, size: 18,
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isCredit
+                  ? Icons.arrow_downward_rounded
+                  : Icons.arrow_upward_rounded,
+              color: color,
+              size: 18,
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Flexible(
-                  child: Text(description,
-                      style: ClientText.body.copyWith(color: AppColors.textDark),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        description,
+                        style: ClientText.body.copyWith(
+                          color: AppColors.textDark,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isOnlinePayment) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'En ligne',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                if (isOnlinePayment) ...[
-                  const SizedBox(width: 6),
+                const SizedBox(height: 2),
+                Text(
+                  _formatDate(createdAt),
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
+                if (cashoutStatus != null) ...[
+                  const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
+                      color: cashoutStatus.$2.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text('En ligne',
-                        style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+                    child: Text(
+                      cashoutStatus.$1,
+                      style: TextStyle(
+                        color: cashoutStatus.$2,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ],
-              ]),
-              const SizedBox(height: 2),
-              Text(_formatDate(createdAt), style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-              if (cashoutStatus != null) ...[
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: cashoutStatus.$2.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(cashoutStatus.$1,
-                      style: TextStyle(color: cashoutStatus.$2, fontSize: 10.5, fontWeight: FontWeight.w700)),
-                ),
               ],
-            ],
+            ),
           ),
-        ),
-        Text(
-          '${isCredit ? '+' : ''}${amount.toStringAsFixed(0)} FCFA',
-          style: ClientText.bodyStrong.copyWith(color: color),
-        ),
-      ]),
+          Text(
+            '${isCredit ? '+' : ''}${amount.toStringAsFixed(0)} FCFA',
+            style: ClientText.bodyStrong.copyWith(color: color),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -969,7 +1262,11 @@ class _WalletActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
-  const _WalletActionButton({required this.icon, required this.label, required this.onTap});
+  const _WalletActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -984,19 +1281,32 @@ class _WalletActionButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 6,
+              ),
+            ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: disabled ? AppColors.lightIconMuted : AppColors.primary, size: 20),
+              Icon(
+                icon,
+                color: disabled ? AppColors.lightIconMuted : AppColors.primary,
+                size: 20,
+              ),
               const SizedBox(width: 8),
-              Text(label,
-                  style: TextStyle(
-                    color: disabled ? AppColors.lightIconMuted : AppColors.textDark,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  )),
+              Text(
+                label,
+                style: TextStyle(
+                  color: disabled
+                      ? AppColors.lightIconMuted
+                      : AppColors.textDark,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
         ),
@@ -1016,10 +1326,10 @@ class _CashoutSheet extends StatefulWidget {
 }
 
 class _CashoutSheetState extends State<_CashoutSheet> {
-  final _amountCtrl    = TextEditingController();
+  final _amountCtrl = TextEditingController();
   final _destPhoneCtrl = TextEditingController();
-  final _destNameCtrl  = TextEditingController();
-  final _otpCtrl       = TextEditingController();
+  final _destNameCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
 
   String _operator = 'WAVE';
   bool _thirdParty = false;
@@ -1065,8 +1375,14 @@ class _CashoutSheetState extends State<_CashoutSheet> {
       setState(() => _swipeKey = UniqueKey());
       return;
     }
-    if (_thirdParty && (_destNameCtrl.text.trim().isEmpty || _destPhoneCtrl.text.trim().isEmpty)) {
-      showDemToast(context, 'Nom et numéro du bénéficiaire requis.', isError: true);
+    if (_thirdParty &&
+        (_destNameCtrl.text.trim().isEmpty ||
+            _destPhoneCtrl.text.trim().isEmpty)) {
+      showDemToast(
+        context,
+        'Nom et numéro du bénéficiaire requis.',
+        isError: true,
+      );
       setState(() => _swipeKey = UniqueKey());
       return;
     }
@@ -1105,23 +1421,23 @@ class _CashoutSheetState extends State<_CashoutSheet> {
   }
 
   InputDecoration _decoration(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.70)),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.10),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white, width: 1.5),
-        ),
-      );
+    labelText: label,
+    labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.70)),
+    filled: true,
+    fillColor: Colors.white.withValues(alpha: 0.10),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.white, width: 1.5),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1135,7 +1451,8 @@ class _CashoutSheetState extends State<_CashoutSheet> {
           children: [
             Center(
               child: Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(4),
@@ -1143,11 +1460,18 @@ class _CashoutSheetState extends State<_CashoutSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            Text('Retirer vers Wave / Orange Money',
-                style: ClientText.subtitle.copyWith(color: Colors.white)),
+            Text(
+              'Retirer vers Wave / Orange Money',
+              style: ClientText.subtitle.copyWith(color: Colors.white),
+            ),
             const SizedBox(height: 4),
-            Text('Solde retirable : ${widget.withdrawableBalance.toStringAsFixed(0)} FCFA',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 12)),
+            Text(
+              'Solde retirable : ${widget.withdrawableBalance.toStringAsFixed(0)} FCFA',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.60),
+                fontSize: 12,
+              ),
+            ),
             const SizedBox(height: 20),
             TextField(
               controller: _amountCtrl,
@@ -1157,28 +1481,32 @@ class _CashoutSheetState extends State<_CashoutSheet> {
               decoration: _decoration('Montant (FCFA)'),
             ),
             const SizedBox(height: 12),
-            Row(children: [
-              Expanded(
-                child: _OperatorChip(
-                  operatorName: 'WAVE',
-                  selected: _operator == 'WAVE',
-                  onTap: () => setState(() => _operator = 'WAVE'),
+            Row(
+              children: [
+                Expanded(
+                  child: _OperatorChip(
+                    operatorName: 'WAVE',
+                    selected: _operator == 'WAVE',
+                    onTap: () => setState(() => _operator = 'WAVE'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _OperatorChip(
-                  operatorName: 'ORANGE_MONEY',
-                  selected: _operator == 'ORANGE_MONEY',
-                  onTap: () => setState(() => _operator = 'ORANGE_MONEY'),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _OperatorChip(
+                    operatorName: 'ORANGE_MONEY',
+                    selected: _operator == 'ORANGE_MONEY',
+                    onTap: () => setState(() => _operator = 'ORANGE_MONEY'),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
             const SizedBox(height: 12),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text('Retirer vers un autre numéro',
-                  style: ClientText.body.copyWith(color: Colors.white)),
+              title: Text(
+                'Retirer vers un autre numéro',
+                style: ClientText.body.copyWith(color: Colors.white),
+              ),
               value: _thirdParty,
               onChanged: (v) => setState(() {
                 _thirdParty = v;
@@ -1208,15 +1536,24 @@ class _CashoutSheetState extends State<_CashoutSheet> {
                   child: OutlinedButton(
                     onPressed: _sendingOtp ? null : _sendOtp,
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.40)),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.40),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: _sendingOtp
                         ? const SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
-                        : const Text('Envoyer le code de confirmation', style: TextStyle(color: Colors.white)),
+                        : const Text(
+                            'Envoyer le code de confirmation',
+                            style: TextStyle(color: Colors.white),
+                          ),
                   ),
                 )
               else
@@ -1250,7 +1587,11 @@ class _OperatorChip extends StatelessWidget {
   final String operatorName;
   final bool selected;
   final VoidCallback onTap;
-  const _OperatorChip({required this.operatorName, required this.selected, required this.onTap});
+  const _OperatorChip({
+    required this.operatorName,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1261,7 +1602,9 @@ class _OperatorChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
         decoration: BoxDecoration(
-          color: selected ? brandColor.withValues(alpha: 0.22) : Colors.white.withValues(alpha: 0.10),
+          color: selected
+              ? brandColor.withValues(alpha: 0.22)
+              : Colors.white.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected ? brandColor : Colors.white.withValues(alpha: 0.25),
@@ -1273,12 +1616,14 @@ class _OperatorChip extends StatelessWidget {
           children: [
             PaymentOperatorBadge(operatorName: operatorName, size: 22),
             const SizedBox(width: 8),
-            Text(PaymentOperatorBadge.labelFor(operatorName),
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                )),
+            Text(
+              PaymentOperatorBadge.labelFor(operatorName),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+              ),
+            ),
           ],
         ),
       ),

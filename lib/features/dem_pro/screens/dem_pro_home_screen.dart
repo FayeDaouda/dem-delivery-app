@@ -8,7 +8,9 @@ import '../../../core/api/api_client.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../profile/data/profile_repository.dart';
+import '../../deliveries/data/orders_repository.dart';
 import '../data/dem_pro_repository.dart';
+import '../../../shared/widgets/promo_highlight_popup.dart';
 import '../theme/dem_pro_colors.dart';
 import '../theme/dem_pro_text.dart';
 import '../utils/dem_pro_format.dart';
@@ -17,22 +19,42 @@ import '../../../core/utils/location_gate.dart';
 import '../../../shared/widgets/swipe_to_confirm.dart';
 
 const _sectorLabels = {
-  'commerce':     'Commerce',
+  'commerce': 'Commerce',
   'restauration': 'Restauration',
-  'services':     'Services',
-  'artisanat':    'Artisanat',
-  'autre':        'Autre',
+  'services': 'Services',
+  'artisanat': 'Artisanat',
+  'autre': 'Autre',
 };
 
 const _volumeLabels = {
-  'low':    '1 à 4 livraisons / semaine',
+  'low': '1 à 4 livraisons / semaine',
   'medium': '5 à 8 livraisons / semaine',
-  'high':   '9 ou plus / semaine',
+  'high': '9 ou plus / semaine',
 };
 
-const _dayNames   = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
-const _monthNames = ['janvier','février','mars','avril','mai','juin','juillet',
-                     'août','septembre','octobre','novembre','décembre'];
+const _dayNames = [
+  'Lundi',
+  'Mardi',
+  'Mercredi',
+  'Jeudi',
+  'Vendredi',
+  'Samedi',
+  'Dimanche',
+];
+const _monthNames = [
+  'janvier',
+  'février',
+  'mars',
+  'avril',
+  'mai',
+  'juin',
+  'juillet',
+  'août',
+  'septembre',
+  'octobre',
+  'novembre',
+  'décembre',
+];
 
 // ── Filtre livraisons ─────────────────────────────────────────────────────────
 enum _OrderFilter {
@@ -40,6 +62,7 @@ enum _OrderFilter {
   active('En cours'),
   delivered('Livrées'),
   cancelled('Annulées');
+
   final String label;
   const _OrderFilter(this.label);
 }
@@ -48,23 +71,23 @@ enum _ViewType { orders, batches }
 
 // ── Helpers statut tournée ────────────────────────────────────────────────────
 String _batchStatusLabel(String s) => switch (s) {
-  'PENDING'     => 'En attente',
-  'ACCEPTED'    => 'Livreur assigné',
+  'PENDING' => 'En attente',
+  'ACCEPTED' => 'Livreur assigné',
   'IN_PROGRESS' => 'En cours',
-  'COMPLETED'   => 'Terminée',
-  'CANCELLED'   => 'Annulée',
-  'SCHEDULED'   => 'Programmée',
-  _             => s,
+  'COMPLETED' => 'Terminée',
+  'CANCELLED' => 'Annulée',
+  'SCHEDULED' => 'Programmée',
+  _ => s,
 };
 
 Color _batchStatusColor(String s) => switch (s) {
-  'PENDING'     => DemProColors.warning,
-  'ACCEPTED'    => DemProColors.accent,
+  'PENDING' => DemProColors.warning,
+  'ACCEPTED' => DemProColors.accent,
   'IN_PROGRESS' => DemProColors.accent,
-  'COMPLETED'   => DemProColors.success,
-  'CANCELLED'   => DemProColors.danger,
-  'SCHEDULED'   => DemProColors.muted,
-  _             => DemProColors.muted,
+  'COMPLETED' => DemProColors.success,
+  'CANCELLED' => DemProColors.danger,
+  'SCHEDULED' => DemProColors.muted,
+  _ => DemProColors.muted,
 };
 
 // ── Helpers statut ────────────────────────────────────────────────────────────
@@ -72,23 +95,23 @@ bool _isActiveStatus(String s) =>
     const {'PENDING', 'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'}.contains(s);
 
 String _statusLabel(String s) => switch (s) {
-  'PENDING'    => 'En attente',
-  'ACCEPTED'   => 'Acceptée',
-  'PICKED_UP'  => 'Récupéré',
+  'PENDING' => 'En attente',
+  'ACCEPTED' => 'Acceptée',
+  'PICKED_UP' => 'Récupéré',
   'IN_TRANSIT' => 'En route',
-  'DELIVERED'  => 'Livré',
-  'CANCELLED'  => 'Annulé',
-  _            => s,
+  'DELIVERED' => 'Livré',
+  'CANCELLED' => 'Annulé',
+  _ => s,
 };
 
 Color _statusColor(String s) => switch (s) {
-  'PENDING'    => DemProColors.warning,
-  'ACCEPTED'   => DemProColors.accent,
-  'PICKED_UP'  => DemProColors.accent,
+  'PENDING' => DemProColors.warning,
+  'ACCEPTED' => DemProColors.accent,
+  'PICKED_UP' => DemProColors.accent,
   'IN_TRANSIT' => DemProColors.accent,
-  'DELIVERED'  => DemProColors.success,
-  'CANCELLED'  => DemProColors.danger,
-  _            => DemProColors.muted,
+  'DELIVERED' => DemProColors.success,
+  'CANCELLED' => DemProColors.danger,
+  _ => DemProColors.muted,
 };
 
 String _shortAddress(String addr) => addr.split(',').first.trim();
@@ -98,13 +121,18 @@ void _navigateToOrder(BuildContext context, Map<String, dynamic> order) {
   if (status == 'PENDING') {
     context.push('/dem-pro/orders/confirmation', extra: order);
   } else if (const {'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'}.contains(status)) {
-    final driverId = (order['driver'] as Map?)?['id'] as String?
-        ?? order['driverId'] as String? ?? '';
-    context.push('/dem-pro/orders/tracking', extra: {
-      'orderId': order['id'],
-      'driverId': driverId,
-      'initialOrder': order,
-    });
+    final driverId =
+        (order['driver'] as Map?)?['id'] as String? ??
+        order['driverId'] as String? ??
+        '';
+    context.push(
+      '/dem-pro/orders/tracking',
+      extra: {
+        'orderId': order['id'],
+        'driverId': driverId,
+        'initialOrder': order,
+      },
+    );
   } else if (status == 'DELIVERED' || status == 'CANCELLED') {
     context.push('/dem-pro/orders/receipt', extra: order);
   }
@@ -113,7 +141,9 @@ void _navigateToOrder(BuildContext context, Map<String, dynamic> order) {
 String _driverInitials(String? name) {
   if (name == null || name.isEmpty) return '?';
   final p = name.trim().split(RegExp(r'\s+'));
-  return p.length >= 2 ? '${p[0][0]}${p[1][0]}'.toUpperCase() : p[0][0].toUpperCase();
+  return p.length >= 2
+      ? '${p[0][0]}${p[1][0]}'.toUpperCase()
+      : p[0][0].toUpperCase();
 }
 
 String _timeAgo(String? iso) {
@@ -121,17 +151,30 @@ String _timeAgo(String? iso) {
   final dt = DateTime.tryParse(iso);
   if (dt == null) return '';
   final diff = DateTime.now().difference(dt);
-  if (diff.inMinutes < 1)  return 'À l\'instant';
+  if (diff.inMinutes < 1) return 'À l\'instant';
   if (diff.inMinutes < 60) return 'Il y a ${diff.inMinutes}min';
-  if (diff.inHours < 24)   return 'Il y a ${diff.inHours}h';
+  if (diff.inHours < 24) return 'Il y a ${diff.inHours}h';
   return 'Il y a ${diff.inDays}j';
 }
 
 String _formatDateTime(String? iso) {
   final dt = iso != null ? DateTime.tryParse(iso)?.toLocal() : null;
   if (dt == null) return '';
-  const m = ['jan.','fév.','mars','avr.','mai','juin','juil.','août','sep.','oct.','nov.','déc.'];
-  const d = ['Lun.','Mar.','Mer.','Jeu.','Ven.','Sam.','Dim.'];
+  const m = [
+    'jan.',
+    'fév.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'août',
+    'sep.',
+    'oct.',
+    'nov.',
+    'déc.',
+  ];
+  const d = ['Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.', 'Dim.'];
   final h = dt.hour.toString().padLeft(2, '0');
   final mn = dt.minute.toString().padLeft(2, '0');
   return '${d[dt.weekday - 1]} ${dt.day} ${m[dt.month - 1]} · $h:$mn';
@@ -143,13 +186,13 @@ class _T {
   final bool dark;
   const _T(this.dark);
 
-  Color get scaffoldBg => dark ? DemProColors.bg    : DemProColors.lightBg;
-  Color get cardBg     => dark ? DemProColors.bg2   : Colors.white;
-  Color get cardBg2    => dark ? DemProColors.bg3   : DemProColors.lightCardBg2;
-  Color get cardBg3    => dark ? DemProColors.bg4   : DemProColors.lightCardBg3;
-  Color get border     => dark ? DemProColors.bg3   : DemProColors.lightBorder;
-  Color get text       => dark ? DemProColors.text  : DemProColors.lightText;
-  Color get muted      => dark ? DemProColors.muted : DemProColors.lightMuted;
+  Color get scaffoldBg => dark ? DemProColors.bg : DemProColors.lightBg;
+  Color get cardBg => dark ? DemProColors.bg2 : Colors.white;
+  Color get cardBg2 => dark ? DemProColors.bg3 : DemProColors.lightCardBg2;
+  Color get cardBg3 => dark ? DemProColors.bg4 : DemProColors.lightCardBg3;
+  Color get border => dark ? DemProColors.bg3 : DemProColors.lightBorder;
+  Color get text => dark ? DemProColors.text : DemProColors.lightText;
+  Color get muted => dark ? DemProColors.muted : DemProColors.lightMuted;
 
   List<Color> get statGradient => dark
       ? [DemProColors.bg3, DemProColors.bg4]
@@ -169,12 +212,12 @@ class DemProHomeScreen extends StatefulWidget {
 }
 
 class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
-  int  _currentIndex = 0;
-  bool _darkMode     = true;
+  int _currentIndex = 0;
+  bool _darkMode = true;
 
   final _demProRepo = DemProRepository(ApiClient.dio);
   final _livraisonsKey = GlobalKey<_LivraisonsTabState>();
-  final _financesKey   = GlobalKey<_FinancesTabState>();
+  final _financesKey = GlobalKey<_FinancesTabState>();
 
   Map<String, dynamic>? _user;
   Map<String, dynamic>? _stats;
@@ -187,6 +230,16 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Popup "vous avez une réduction disponible" — une seule fois par
+      // campagne (voir promo_highlight_popup.dart), silencieuse s'il n'y en
+      // a aucune ou en cas d'échec réseau.
+      maybeShowPromoHighlight(
+        context,
+        fetch: OrdersRepository().getHighlightPromo,
+        accentColor: DemProColors.accent,
+      );
+    });
   }
 
   @override
@@ -211,7 +264,12 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
       final orders = results[2] as List<Map<String, dynamic>>;
       final active = orders.where((o) {
         final s = o['status'] as String? ?? '';
-        return const {'PENDING', 'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'}.contains(s);
+        return const {
+          'PENDING',
+          'ACCEPTED',
+          'PICKED_UP',
+          'IN_TRANSIT',
+        }.contains(s);
       }).toList();
       setState(() {
         _user = results[0] as Map<String, dynamic>;
@@ -240,16 +298,21 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
         index: _currentIndex,
         children: [
           _AccueilTab(
-            user: _user, stats: _stats, loading: _loading,
+            user: _user,
+            stats: _stats,
+            loading: _loading,
             activeOrders: _activeOrders,
             allOrders: _allOrders,
-            onRefresh: _load, t: t,
+            onRefresh: _load,
+            t: t,
           ),
           _LivraisonsTab(key: _livraisonsKey, t: t),
           _AdressesTab(t: t),
           _FinancesTab(key: _financesKey, t: t),
           _CompteTab(
-            user: _user, onLogout: _handleLogout, t: t,
+            user: _user,
+            onLogout: _handleLogout,
+            t: t,
             darkMode: _darkMode,
             onThemeToggle: () => setState(() => _darkMode = !_darkMode),
             onRefresh: _load,
@@ -258,17 +321,19 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
       ),
       floatingActionButton: switch (_currentIndex) {
         1 => FloatingActionButton(
-              backgroundColor: DemProColors.accent,
-              foregroundColor: Colors.white,
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              onPressed: () async {
-                if (!await ensureLocationEnabled(context)) return;
-                if (!context.mounted) return;
-                context.push('/dem-pro/orders/create');
-              },
-              child: const Icon(Icons.add, size: 28),
-            ),
+          backgroundColor: DemProColors.accent,
+          foregroundColor: Colors.white,
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          onPressed: () async {
+            if (!await ensureLocationEnabled(context)) return;
+            if (!context.mounted) return;
+            context.push('/dem-pro/orders/create');
+          },
+          child: const Icon(Icons.add, size: 28),
+        ),
         _ => null,
       },
       bottomNavigationBar: DemProNavBar(
@@ -298,10 +363,13 @@ class _AccueilTab extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final _T t;
   const _AccueilTab({
-    required this.user, required this.stats,
-    required this.loading, required this.activeOrders,
+    required this.user,
+    required this.stats,
+    required this.loading,
+    required this.activeOrders,
     required this.allOrders,
-    required this.onRefresh, required this.t,
+    required this.onRefresh,
+    required this.t,
   });
 
   void _goToActiveOrder(BuildContext context, Map<String, dynamic> o) {
@@ -309,13 +377,14 @@ class _AccueilTab extends StatelessWidget {
     if (status == 'PENDING') {
       context.push('/dem-pro/orders/confirmation', extra: o);
     } else {
-      final driverId = (o['driver'] as Map?)?['id'] as String?
-          ?? o['driverId'] as String? ?? '';
-      context.push('/dem-pro/orders/tracking', extra: {
-        'orderId': o['id'],
-        'driverId': driverId,
-        'initialOrder': o,
-      });
+      final driverId =
+          (o['driver'] as Map?)?['id'] as String? ??
+          o['driverId'] as String? ??
+          '';
+      context.push(
+        '/dem-pro/orders/tracking',
+        extra: {'orderId': o['id'], 'driverId': driverId, 'initialOrder': o},
+      );
     }
   }
 
@@ -323,8 +392,10 @@ class _AccueilTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final businessName = (user?['proBusinessName'] as String?)?.trim();
 
-    final delivered  = (stats?['deliveriesToday']?['completed']  as num?)?.toInt() ?? 0;
-    final inProgress = (stats?['deliveriesToday']?['inProgress'] as num?)?.toInt() ?? 0;
+    final delivered =
+        (stats?['deliveriesToday']?['completed'] as num?)?.toInt() ?? 0;
+    final inProgress =
+        (stats?['deliveriesToday']?['inProgress'] as num?)?.toInt() ?? 0;
 
     final now0 = DateTime.now();
     int salesToday = 0;
@@ -336,7 +407,9 @@ class _AccueilTab extends StatelessWidget {
       if (items == null) continue;
       int orderSales = 0;
       for (final item in items) {
-        orderSales += ((item['price'] as num?)?.toInt() ?? 0) * ((item['quantity'] as num?)?.toInt() ?? 1);
+        orderSales +=
+            ((item['price'] as num?)?.toInt() ?? 0) *
+            ((item['quantity'] as num?)?.toInt() ?? 1);
       }
       final dt = DateTime.tryParse(o['createdAt'] as String? ?? '')?.toLocal();
       if (dt != null && dt.year == now0.year && dt.month == now0.month) {
@@ -345,18 +418,21 @@ class _AccueilTab extends StatelessWidget {
       }
     }
 
-    final recentHistory = allOrders.where((o) {
-      final s = o['status'] as String? ?? '';
-      return s == 'DELIVERED' || s == 'CANCELLED';
-    }).take(5).toList();
+    final recentHistory = allOrders
+        .where((o) {
+          final s = o['status'] as String? ?? '';
+          return s == 'DELIVERED' || s == 'CANCELLED';
+        })
+        .take(5)
+        .toList();
 
-    final now      = DateTime.now();
-    final dateStr  = '${_dayNames[now.weekday - 1]} ${now.day} ${_monthNames[now.month - 1]}';
+    final now = DateTime.now();
+    final dateStr =
+        '${_dayNames[now.weekday - 1]} ${now.day} ${_monthNames[now.month - 1]}';
 
     return SafeArea(
       child: Column(
         children: [
-
           // ── Header — fixe, ne défile pas avec le contenu ─────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
@@ -382,8 +458,13 @@ class _AccueilTab extends StatelessWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
-                              style: DemProText.headline.copyWith(color: t.text, fontSize: 22),
+                              businessName?.isNotEmpty == true
+                                  ? businessName!
+                                  : 'Mon entreprise',
+                              style: DemProText.headline.copyWith(
+                                color: t.text,
+                                fontSize: 22,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -401,7 +482,8 @@ class _AccueilTab extends StatelessWidget {
                       const SizedBox(height: 8),
                       _ActiveOrderIcon(
                         count: activeOrders.length,
-                        onTap: () => _goToActiveOrder(context, activeOrders.first),
+                        onTap: () =>
+                            _goToActiveOrder(context, activeOrders.first),
                       ),
                     ],
                   ],
@@ -421,174 +503,219 @@ class _AccueilTab extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ── Carte résumé ─────────────────────────────────────────────
+                    if (loading)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: DemProColors.accent,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: t.statGradient,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: DemProColors.accent.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // En-tête avec date dynamique
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.two_wheeler,
+                                  color: DemProColors.accent,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Livraisons — $dateStr',
+                                  style: DemProText.caption.copyWith(
+                                    color: t.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
 
-              // ── Carte résumé ─────────────────────────────────────────────
-              if (loading)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(child: CircularProgressIndicator(color: DemProColors.accent)),
-                )
-              else
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: t.statGradient,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                            // Grandes stats livrées / en cours
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _BigStatBox(
+                                    value: '$delivered',
+                                    label: 'Livrées',
+                                    color: DemProColors.success,
+                                    t: t,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _BigStatBox(
+                                    value: '$inProgress',
+                                    label: 'En cours',
+                                    color: DemProColors.warning,
+                                    t: t,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+
+                            // Ventes en 2 mini-cards distinctes
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: t.cardBg,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Ventes aujourd\'hui',
+                                          style: DemProText.micro.copyWith(
+                                            color: t.muted,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          DemProFormat.fcfa(salesToday),
+                                          style: DemProText.subtitle.copyWith(
+                                            color: DemProColors.success,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: t.cardBg,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Ventes ce mois',
+                                          style: DemProText.micro.copyWith(
+                                            color: t.muted,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          DemProFormat.fcfa(salesMonth),
+                                          style: DemProText.subtitle.copyWith(
+                                            color: DemProColors.success,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+
+                    // ── Actions ──────────────────────────────────────────────────
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ActionButton(
+                            label: 'Livraison',
+                            icon: Icons.two_wheeler,
+                            filled: true,
+                            onTap: () async {
+                              if (!await ensureLocationEnabled(context)) return;
+                              if (!context.mounted) return;
+                              context.push('/dem-pro/orders/create');
+                            },
+                            t: t,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _ActionButton(
+                            label: 'Programmer',
+                            icon: Icons.schedule_outlined,
+                            filled: false,
+                            onTap: () async {
+                              if (!await ensureLocationEnabled(context)) return;
+                              if (!context.mounted) return;
+                              context.push(
+                                '/dem-pro/orders/create?scheduled=true',
+                              );
+                            },
+                            t: t,
+                          ),
+                        ),
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: DemProColors.accent.withValues(alpha: 0.15)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // En-tête avec date dynamique
-                      Row(children: [
-                        const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 16),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Livraisons — $dateStr',
-                          style: DemProText.caption.copyWith(color: t.muted),
-                        ),
-                      ]),
-                      const SizedBox(height: 14),
+                    const SizedBox(height: 28),
 
-                      // Grandes stats livrées / en cours
-                      Row(children: [
-                        Expanded(
-                          child: _BigStatBox(
-                            value: '$delivered',
-                            label: 'Livrées',
-                            color: DemProColors.success,
+                    // ── En cours ─────────────────────────────────────────────────
+                    _SectionLabel(label: 'EN COURS', t: t),
+                    const SizedBox(height: 12),
+                    if (activeOrders.isEmpty)
+                      _EnCoursEmpty(
+                        onOrder: () => context.push('/dem-pro/orders/create'),
+                        t: t,
+                      )
+                    else
+                      ...activeOrders.map(
+                        (o) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _OrderMiniCard(
+                            order: o,
                             t: t,
+                            onTap: () => _goToActiveOrder(context, o),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _BigStatBox(
-                            value: '$inProgress',
-                            label: 'En cours',
-                            color: DemProColors.warning,
+                      ),
+                    const SizedBox(height: 24),
+
+                    // ── Historique récent ─────────────────────────────────────────
+                    _SectionLabel(label: 'HISTORIQUE RÉCENT', t: t),
+                    const SizedBox(height: 12),
+                    if (recentHistory.isEmpty)
+                      _HistoriqueEmpty(t: t)
+                    else
+                      ...recentHistory.map(
+                        (o) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _OrderMiniCard(
+                            order: o,
                             t: t,
+                            onTap: () => _navigateToOrder(context, o),
                           ),
                         ),
-                      ]),
-                      const SizedBox(height: 14),
-
-                      // Ventes en 2 mini-cards distinctes
-                      Row(children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: t.cardBg,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Ventes aujourd\'hui',
-                                  style: DemProText.micro.copyWith(color: t.muted),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  DemProFormat.fcfa(salesToday),
-                                  style: DemProText.subtitle.copyWith(color: DemProColors.success, fontWeight: FontWeight.w800),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: t.cardBg,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Ventes ce mois',
-                                  style: DemProText.micro.copyWith(color: t.muted),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  DemProFormat.fcfa(salesMonth),
-                                  style: DemProText.subtitle.copyWith(color: DemProColors.success, fontWeight: FontWeight.w800),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ]),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 20),
-
-              // ── Actions ──────────────────────────────────────────────────
-              Row(children: [
-                Expanded(
-                  child: _ActionButton(
-                    label: 'Livraison',
-                    icon: Icons.two_wheeler,
-                    filled: true,
-                    onTap: () async {
-                      if (!await ensureLocationEnabled(context)) return;
-                      if (!context.mounted) return;
-                      context.push('/dem-pro/orders/create');
-                    },
-                    t: t,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _ActionButton(
-                    label: 'Programmer',
-                    icon: Icons.schedule_outlined,
-                    filled: false,
-                    onTap: () async {
-                      if (!await ensureLocationEnabled(context)) return;
-                      if (!context.mounted) return;
-                      context.push('/dem-pro/orders/create?scheduled=true');
-                    },
-                    t: t,
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 28),
-
-              // ── En cours ─────────────────────────────────────────────────
-              _SectionLabel(label: 'EN COURS', t: t),
-              const SizedBox(height: 12),
-              if (activeOrders.isEmpty)
-                _EnCoursEmpty(
-                  onOrder: () => context.push('/dem-pro/orders/create'),
-                  t: t,
-                )
-              else
-                ...activeOrders.map((o) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _OrderMiniCard(order: o, t: t, onTap: () => _goToActiveOrder(context, o)),
-                )),
-              const SizedBox(height: 24),
-
-              // ── Historique récent ─────────────────────────────────────────
-              _SectionLabel(label: 'HISTORIQUE RÉCENT', t: t),
-              const SizedBox(height: 12),
-              if (recentHistory.isEmpty)
-                _HistoriqueEmpty(t: t)
-              else
-                ...recentHistory.map((o) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _OrderMiniCard(order: o, t: t, onTap: () => _navigateToOrder(context, o)),
-                )),
+                      ),
                   ],
                 ),
               ),
@@ -612,8 +739,11 @@ class _CompteTab extends StatefulWidget {
   final _T t;
   final Future<void> Function() onRefresh;
   const _CompteTab({
-    required this.user, required this.onLogout,
-    required this.onThemeToggle, required this.darkMode, required this.t,
+    required this.user,
+    required this.onLogout,
+    required this.onThemeToggle,
+    required this.darkMode,
+    required this.t,
     required this.onRefresh,
   });
   @override
@@ -624,11 +754,11 @@ class _CompteTabState extends State<_CompteTab> {
   final _repo = DemProRepository(ApiClient.dio);
 
   bool _uploading = false;
-  bool _logoutLoading   = false;
-  bool _deleteLoading   = false;
-  int  _logoutSwipeTick = 0;
-  int  _deleteSwipeTick = 0;
-  int  _pendingRequestCount = 0;
+  bool _logoutLoading = false;
+  bool _deleteLoading = false;
+  int _logoutSwipeTick = 0;
+  int _deleteSwipeTick = 0;
+  int _pendingRequestCount = 0;
 
   @override
   void initState() {
@@ -648,21 +778,32 @@ class _CompteTabState extends State<_CompteTab> {
     if (id == null) return;
     final businessName = (widget.user?['proBusinessName'] as String?)?.trim();
     final link = 'https://www.dem.sn/commander/$id';
-    final label = businessName?.isNotEmpty == true ? businessName! : 'ma boutique';
-    SharePlus.instance.share(ShareParams(
-      text: 'Commandez chez $label et faites-vous livrer par DEM : $link',
-    ));
+    final label = businessName?.isNotEmpty == true
+        ? businessName!
+        : 'ma boutique';
+    SharePlus.instance.share(
+      ShareParams(
+        text: 'Commandez chez $label et faites-vous livrer par DEM : $link',
+      ),
+    );
   }
 
   Future<void> _pickAndUploadAvatar() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 512, imageQuality: 80);
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      imageQuality: 80,
+    );
     if (picked == null) return;
 
     setState(() => _uploading = true);
     try {
       final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(picked.path, filename: picked.name),
+        'file': await MultipartFile.fromFile(
+          picked.path,
+          filename: picked.name,
+        ),
         'field': 'avatar',
       });
       await ApiClient.dio.post('/users/driver/documents', data: formData);
@@ -687,24 +828,47 @@ class _CompteTabState extends State<_CompteTab> {
       isDismissible: false,
       enableDrag: false,
       backgroundColor: t.cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (sheetCtx) => StatefulBuilder(
         builder: (sheetCtx, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(sheetCtx).viewPadding.bottom + 24),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(sheetCtx).viewPadding.bottom + 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4,
-                  decoration: BoxDecoration(color: t.border, borderRadius: BorderRadius.circular(2))),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: t.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(height: 20),
               Container(
-                width: 56, height: 56,
-                decoration: BoxDecoration(color: DemProColors.accent.withValues(alpha: 0.12), shape: BoxShape.circle),
-                child: const Icon(Icons.logout_rounded, color: DemProColors.accent, size: 26),
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: DemProColors.accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: DemProColors.accent,
+                  size: 26,
+                ),
               ),
               const SizedBox(height: 14),
-              Text('Se déconnecter ?',
-                  style: DemProText.title.copyWith(color: t.text, fontSize: 16)),
+              Text(
+                'Se déconnecter ?',
+                style: DemProText.title.copyWith(color: t.text, fontSize: 16),
+              ),
               const SizedBox(height: 6),
               Text(
                 'Vous devrez vous reconnecter avec votre numéro de téléphone pour retrouver votre espace DEM Pro.',
@@ -728,8 +892,13 @@ class _CompteTabState extends State<_CompteTab> {
               ),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: _logoutLoading ? null : () => Navigator.pop(sheetCtx),
-                child: Text('Annuler', style: DemProText.body.copyWith(color: t.muted)),
+                onPressed: _logoutLoading
+                    ? null
+                    : () => Navigator.pop(sheetCtx),
+                child: Text(
+                  'Annuler',
+                  style: DemProText.body.copyWith(color: t.muted),
+                ),
               ),
             ],
           ),
@@ -746,24 +915,47 @@ class _CompteTabState extends State<_CompteTab> {
       isDismissible: false,
       enableDrag: false,
       backgroundColor: t.cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (sheetCtx) => StatefulBuilder(
         builder: (sheetCtx, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(sheetCtx).viewPadding.bottom + 24),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(sheetCtx).viewPadding.bottom + 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4,
-                  decoration: BoxDecoration(color: t.border, borderRadius: BorderRadius.circular(2))),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: t.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(height: 20),
               Container(
-                width: 56, height: 56,
-                decoration: BoxDecoration(color: DemProColors.danger.withValues(alpha: 0.12), shape: BoxShape.circle),
-                child: const Icon(Icons.delete_forever_outlined, color: DemProColors.danger, size: 28),
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: DemProColors.danger.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delete_forever_outlined,
+                  color: DemProColors.danger,
+                  size: 28,
+                ),
               ),
               const SizedBox(height: 14),
-              Text('Supprimer mon compte ?',
-                  style: DemProText.title.copyWith(color: t.text, fontSize: 16)),
+              Text(
+                'Supprimer mon compte ?',
+                style: DemProText.title.copyWith(color: t.text, fontSize: 16),
+              ),
               const SizedBox(height: 6),
               Text(
                 'Cette action est irréversible. Toutes vos données, livraisons et adresses seront définitivement supprimées.',
@@ -794,7 +986,9 @@ class _CompteTabState extends State<_CompteTab> {
                     });
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Échec de la suppression. Réessayez.')),
+                        const SnackBar(
+                          content: Text('Échec de la suppression. Réessayez.'),
+                        ),
                       );
                     }
                   }
@@ -802,8 +996,13 @@ class _CompteTabState extends State<_CompteTab> {
               ),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: _deleteLoading ? null : () => Navigator.pop(sheetCtx),
-                child: Text('Annuler', style: DemProText.body.copyWith(color: t.muted)),
+                onPressed: _deleteLoading
+                    ? null
+                    : () => Navigator.pop(sheetCtx),
+                child: Text(
+                  'Annuler',
+                  style: DemProText.body.copyWith(color: t.muted),
+                ),
               ),
             ],
           ),
@@ -818,24 +1017,52 @@ class _CompteTabState extends State<_CompteTab> {
       builder: (_) => SimpleDialog(
         backgroundColor: widget.t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Domaine d\'activité', style: DemProText.title.copyWith(color: widget.t.text)),
-        children: _sectorLabels.entries.map((e) => SimpleDialogOption(
-          onPressed: () => Navigator.pop(context, e.key),
-          child: Row(children: [
-            Icon(e.key == current ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: e.key == current ? DemProColors.accent : widget.t.muted, size: 20),
-            const SizedBox(width: 12),
-            Text(e.value, style: DemProText.body.copyWith(color: widget.t.text, fontSize: 14)),
-          ]),
-        )).toList(),
+        title: Text(
+          'Domaine d\'activité',
+          style: DemProText.title.copyWith(color: widget.t.text),
+        ),
+        children: _sectorLabels.entries
+            .map(
+              (e) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, e.key),
+                child: Row(
+                  children: [
+                    Icon(
+                      e.key == current
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      color: e.key == current
+                          ? DemProColors.accent
+                          : widget.t.muted,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      e.value,
+                      style: DemProText.body.copyWith(
+                        color: widget.t.text,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
       ),
     );
     if (result == null || result == current) return;
     try {
-      await ApiClient.dio.patch('/users/me/profile', data: {'proSector': result});
+      await ApiClient.dio.patch(
+        '/users/me/profile',
+        data: {'proSector': result},
+      );
       await widget.onRefresh();
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Une erreur est survenue.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Une erreur est survenue.')),
+        );
     }
   }
 
@@ -845,24 +1072,52 @@ class _CompteTabState extends State<_CompteTab> {
       builder: (_) => SimpleDialog(
         backgroundColor: widget.t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Volume hebdomadaire', style: DemProText.title.copyWith(color: widget.t.text)),
-        children: _volumeLabels.entries.map((e) => SimpleDialogOption(
-          onPressed: () => Navigator.pop(context, e.key),
-          child: Row(children: [
-            Icon(e.key == current ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: e.key == current ? DemProColors.accent : widget.t.muted, size: 20),
-            const SizedBox(width: 12),
-            Text(e.value, style: DemProText.body.copyWith(color: widget.t.text, fontSize: 14)),
-          ]),
-        )).toList(),
+        title: Text(
+          'Volume hebdomadaire',
+          style: DemProText.title.copyWith(color: widget.t.text),
+        ),
+        children: _volumeLabels.entries
+            .map(
+              (e) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, e.key),
+                child: Row(
+                  children: [
+                    Icon(
+                      e.key == current
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      color: e.key == current
+                          ? DemProColors.accent
+                          : widget.t.muted,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      e.value,
+                      style: DemProText.body.copyWith(
+                        color: widget.t.text,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
       ),
     );
     if (result == null || result == current) return;
     try {
-      await ApiClient.dio.patch('/users/me/profile', data: {'proWeeklyVolume': result});
+      await ApiClient.dio.patch(
+        '/users/me/profile',
+        data: {'proWeeklyVolume': result},
+      );
       await widget.onRefresh();
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Une erreur est survenue.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Une erreur est survenue.')),
+        );
     }
   }
 
@@ -873,62 +1128,104 @@ class _CompteTabState extends State<_CompteTab> {
       builder: (_) => AlertDialog(
         backgroundColor: widget.t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Changer de numéro', style: DemProText.title.copyWith(color: widget.t.text)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Numéro actuel : $currentPhone', style: DemProText.body.copyWith(color: widget.t.muted)),
-          const SizedBox(height: 12),
-          TextField(
-            controller: ctrl,
-            autofocus: true,
-            keyboardType: TextInputType.phone,
-            style: DemProText.body.copyWith(color: widget.t.text),
-            decoration: InputDecoration(
-              hintText: '77 000 00 00',
-              prefixText: '+221 ',
-              prefixStyle: DemProText.body.copyWith(color: widget.t.muted),
-              hintStyle: DemProText.body.copyWith(color: widget.t.muted),
-              filled: true,
-              fillColor: widget.t.cardBg2,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        title: Text(
+          'Changer de numéro',
+          style: DemProText.title.copyWith(color: widget.t.text),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Numéro actuel : $currentPhone',
+              style: DemProText.body.copyWith(color: widget.t.muted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.phone,
+              style: DemProText.body.copyWith(color: widget.t.text),
+              decoration: InputDecoration(
+                hintText: '77 000 00 00',
+                prefixText: '+221 ',
+                prefixStyle: DemProText.body.copyWith(color: widget.t.muted),
+                hintStyle: DemProText.body.copyWith(color: widget.t.muted),
+                filled: true,
+                fillColor: widget.t.cardBg2,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'La demande sera validée par l\'équipe DEM.',
+              style: DemProText.caption.copyWith(color: widget.t.muted),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Annuler',
+              style: DemProText.body.copyWith(color: widget.t.muted),
             ),
           ),
-          const SizedBox(height: 8),
-          Text('La demande sera validée par l\'équipe DEM.', style: DemProText.caption.copyWith(color: widget.t.muted)),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Annuler', style: DemProText.body.copyWith(color: widget.t.muted))),
           TextButton(
             onPressed: () => Navigator.pop(context, ctrl.text.trim()),
-            child: Text('Envoyer', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
+            child: Text(
+              'Envoyer',
+              style: DemProText.bodyStrong.copyWith(color: DemProColors.accent),
+            ),
           ),
         ],
       ),
     );
     if (result == null || result.length < 9) return;
     try {
-      await ApiClient.dio.post('/users/dem-pro/phone-change', data: {'newPhone': '+221$result'});
+      await ApiClient.dio.post(
+        '/users/dem-pro/phone-change',
+        data: {'newPhone': '+221$result'},
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Demande envoyée. L\'équipe DEM va la valider.')),
+          const SnackBar(
+            content: Text('Demande envoyée. L\'équipe DEM va la valider.'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e is DioException ? (e.response?.data?['message'] ?? 'Erreur') : 'Erreur')),
+          SnackBar(
+            content: Text(
+              e is DioException
+                  ? (e.response?.data?['message'] ?? 'Erreur')
+                  : 'Erreur',
+            ),
+          ),
         );
       }
     }
   }
 
-  Future<void> _editField(String label, String currentValue, String fieldKey) async {
+  Future<void> _editField(
+    String label,
+    String currentValue,
+    String fieldKey,
+  ) async {
     final ctrl = TextEditingController(text: currentValue);
     final result = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: widget.t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Modifier $label', style: DemProText.title.copyWith(color: widget.t.text)),
+        title: Text(
+          'Modifier $label',
+          style: DemProText.title.copyWith(color: widget.t.text),
+        ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
@@ -938,14 +1235,26 @@ class _CompteTabState extends State<_CompteTab> {
             hintStyle: DemProText.body.copyWith(color: widget.t.muted),
             filled: true,
             fillColor: widget.t.cardBg2,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Annuler', style: DemProText.body.copyWith(color: widget.t.muted))),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Annuler',
+              style: DemProText.body.copyWith(color: widget.t.muted),
+            ),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, ctrl.text.trim()),
-            child: Text('Enregistrer', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
+            child: Text(
+              'Enregistrer',
+              style: DemProText.bodyStrong.copyWith(color: DemProColors.accent),
+            ),
           ),
         ],
       ),
@@ -968,11 +1277,11 @@ class _CompteTabState extends State<_CompteTab> {
     final t = widget.t;
     final user = widget.user;
     final businessName = (user?['proBusinessName'] as String?)?.trim();
-    final name         = user?['name']  as String?;
-    final phone        = user?['phone'] as String?;
-    final email        = user?['email'] as String?;
-    final sector       = user?['proSector']       as String?;
-    final volume       = user?['proWeeklyVolume'] as String?;
+    final name = user?['name'] as String?;
+    final phone = user?['phone'] as String?;
+    final email = user?['email'] as String?;
+    final sector = user?['proSector'] as String?;
+    final volume = user?['proWeeklyVolume'] as String?;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -980,7 +1289,6 @@ class _CompteTabState extends State<_CompteTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // ── Carte entreprise ──────────────────────────────────────────
             Container(
               width: double.infinity,
@@ -992,60 +1300,91 @@ class _CompteTabState extends State<_CompteTab> {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: DemProColors.accent.withValues(alpha: 0.15)),
+                border: Border.all(
+                  color: DemProColors.accent.withValues(alpha: 0.15),
+                ),
               ),
-              child: Row(children: [
-                GestureDetector(
-                  onTap: _uploading ? null : _pickAndUploadAvatar,
-                  child: Stack(
-                    children: [
-                      _ProAvatar(
-                        avatarUrl: user?['avatar'] as String?,
-                        businessName: businessName,
-                        size: 56,
-                      ),
-                      Positioned(
-                        bottom: 0, right: 0,
-                        child: Container(
-                          width: 22, height: 22,
-                          decoration: BoxDecoration(
-                            color: DemProColors.accent,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: t.cardBg, width: 2),
-                          ),
-                          child: _uploading
-                              ? const Padding(
-                                  padding: EdgeInsets.all(3),
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 1.5),
-                                )
-                              : const Icon(Icons.camera_alt, color: Colors.white, size: 12),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: _uploading ? null : _pickAndUploadAvatar,
+                    child: Stack(
+                      children: [
+                        _ProAvatar(
+                          avatarUrl: user?['avatar'] as String?,
+                          businessName: businessName,
+                          size: 56,
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: DemProColors.accent,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: t.cardBg, width: 2),
+                            ),
+                            child: _uploading
+                                ? const Padding(
+                                    padding: EdgeInsets.all(3),
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 1.5,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                    size: 12,
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: () => _editField('Nom entreprise', businessName ?? '', 'proBusinessName'),
-                        child: Row(children: [
-                          Expanded(child: Text(
-                            businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
-                            style: DemProText.title.copyWith(color: t.text, fontSize: 17),
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
-                          )),
-                          Icon(Icons.edit_outlined, color: t.muted, size: 14),
-                        ]),
-                      ),
-                      const SizedBox(height: 4),
-                      const _ProBadge(),
-                    ],
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () => _editField(
+                            'Nom entreprise',
+                            businessName ?? '',
+                            'proBusinessName',
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  businessName?.isNotEmpty == true
+                                      ? businessName!
+                                      : 'Mon entreprise',
+                                  style: DemProText.title.copyWith(
+                                    color: t.text,
+                                    fontSize: 17,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Icon(
+                                Icons.edit_outlined,
+                                color: t.muted,
+                                size: 14,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const _ProBadge(),
+                      ],
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
             ),
             const SizedBox(height: 24),
 
@@ -1054,21 +1393,45 @@ class _CompteTabState extends State<_CompteTab> {
             _InfoCard(
               t: t,
               children: [
-                _EditableInfoRow(icon: Icons.person_outline, label: 'Responsable', value: name ?? '—', t: t,
-                  onTap: () => _editField('Responsable', name ?? '', 'name')),
-                _EditableInfoRow(icon: Icons.phone_outlined, label: 'Téléphone', value: phone ?? '—', t: t,
-                  onTap: () => _requestPhoneChange(phone ?? '')),
                 _EditableInfoRow(
-                  icon: Icons.email_outlined, label: 'Email',
-                  value: email?.isNotEmpty == true ? email! : 'Ajouter un email',
+                  icon: Icons.person_outline,
+                  label: 'Responsable',
+                  value: name ?? '—',
+                  t: t,
+                  onTap: () => _editField('Responsable', name ?? '', 'name'),
+                ),
+                _EditableInfoRow(
+                  icon: Icons.phone_outlined,
+                  label: 'Téléphone',
+                  value: phone ?? '—',
+                  t: t,
+                  onTap: () => _requestPhoneChange(phone ?? ''),
+                ),
+                _EditableInfoRow(
+                  icon: Icons.email_outlined,
+                  label: 'Email',
+                  value: email?.isNotEmpty == true
+                      ? email!
+                      : 'Ajouter un email',
                   isPlaceholder: email == null || email.isEmpty,
                   t: t,
                   onTap: () => _editField('Email', email ?? '', 'email'),
                 ),
-                _EditableInfoRow(icon: Icons.category_outlined, label: 'Secteur', value: _sectorLabels[sector] ?? '—', t: t,
-                  onTap: () => _showSectorPicker(sector)),
-                _EditableInfoRow(icon: Icons.bar_chart_outlined, label: 'Volume hebdo', value: _volumeLabels[volume] ?? '—', t: t, isLast: true,
-                  onTap: () => _showVolumePicker(volume)),
+                _EditableInfoRow(
+                  icon: Icons.category_outlined,
+                  label: 'Secteur',
+                  value: _sectorLabels[sector] ?? '—',
+                  t: t,
+                  onTap: () => _showSectorPicker(sector),
+                ),
+                _EditableInfoRow(
+                  icon: Icons.bar_chart_outlined,
+                  label: 'Volume hebdo',
+                  value: _volumeLabels[volume] ?? '—',
+                  t: t,
+                  isLast: true,
+                  onTap: () => _showVolumePicker(volume),
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -1076,69 +1439,86 @@ class _CompteTabState extends State<_CompteTab> {
             // ── Catalogue ────────────────────────────────────────────────
             _SectionLabel(label: 'CATALOGUE', t: t),
             const SizedBox(height: 12),
-            _InfoCard(t: t, children: [
-              _TapRow(
-                icon: Icons.inventory_2_outlined,
-                label: 'Mes produits',
-                subtitle: 'Réutilisez-les à chaque commande',
-                t: t,
-                isLast: true,
-                onTap: () => context.push('/dem-pro/products'),
-              ),
-            ]),
+            _InfoCard(
+              t: t,
+              children: [
+                _TapRow(
+                  icon: Icons.inventory_2_outlined,
+                  label: 'Mes produits',
+                  subtitle: 'Réutilisez-les à chaque commande',
+                  t: t,
+                  isLast: true,
+                  onTap: () => context.push('/dem-pro/products'),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
 
             // ── Lien de commande ───────────────────────────────────────────
             _SectionLabel(label: 'LIEN DE COMMANDE', t: t),
             const SizedBox(height: 12),
-            _InfoCard(t: t, children: [
-              _TapRow(
-                icon: Icons.share_outlined,
-                label: 'Partager mon lien de commande',
-                subtitle: 'Vos clients commandent directement, sans compte',
-                t: t,
-                onTap: _shareOrderLink,
-              ),
-              _TapRow(
-                icon: Icons.inbox_outlined,
-                label: 'Demandes reçues',
-                subtitle: _pendingRequestCount > 0
-                    ? '$_pendingRequestCount en attente de confirmation'
-                    : 'Aucune demande en attente',
-                t: t,
-                isLast: true,
-                trailing: _pendingRequestCount > 0
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: DemProColors.warning.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text('$_pendingRequestCount',
-                            style: DemProText.caption.copyWith(color: DemProColors.warning, fontWeight: FontWeight.w800)),
-                      )
-                    : null,
-                onTap: () async {
-                  await context.push('/dem-pro/order-requests');
-                  _loadPendingRequestCount();
-                },
-              ),
-            ]),
+            _InfoCard(
+              t: t,
+              children: [
+                _TapRow(
+                  icon: Icons.share_outlined,
+                  label: 'Partager mon lien de commande',
+                  subtitle: 'Vos clients commandent directement, sans compte',
+                  t: t,
+                  onTap: _shareOrderLink,
+                ),
+                _TapRow(
+                  icon: Icons.inbox_outlined,
+                  label: 'Demandes reçues',
+                  subtitle: _pendingRequestCount > 0
+                      ? '$_pendingRequestCount en attente de confirmation'
+                      : 'Aucune demande en attente',
+                  t: t,
+                  isLast: true,
+                  trailing: _pendingRequestCount > 0
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: DemProColors.warning.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '$_pendingRequestCount',
+                            style: DemProText.caption.copyWith(
+                              color: DemProColors.warning,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        )
+                      : null,
+                  onTap: () async {
+                    await context.push('/dem-pro/order-requests');
+                    _loadPendingRequestCount();
+                  },
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
 
             // ── Promotions ───────────────────────────────────────────────
             _SectionLabel(label: 'PROMOTIONS', t: t),
             const SizedBox(height: 12),
-            _InfoCard(t: t, children: [
-              _TapRow(
-                icon: Icons.local_offer_outlined,
-                label: 'Code promo',
-                subtitle: 'Réduction sur votre prochaine commande',
-                t: t,
-                isLast: true,
-                onTap: () => context.push('/dem-pro/promo-code'),
-              ),
-            ]),
+            _InfoCard(
+              t: t,
+              children: [
+                _TapRow(
+                  icon: Icons.local_offer_outlined,
+                  label: 'Code promo',
+                  subtitle: 'Réduction sur votre prochaine commande',
+                  t: t,
+                  isLast: true,
+                  onTap: () => context.push('/dem-pro/promo-code'),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
 
             // ── Abonnement ───────────────────────────────────────────────
@@ -1150,24 +1530,46 @@ class _CompteTabState extends State<_CompteTab> {
               decoration: BoxDecoration(
                 color: DemProColors.accent.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: DemProColors.accent.withValues(alpha: 0.2)),
-              ),
-              child: Row(children: [
-                Container(
-                  width: 40, height: 40,
-                  decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.workspace_premium, color: DemProColors.accent, size: 22),
+                border: Border.all(
+                  color: DemProColors.accent.withValues(alpha: 0.2),
                 ),
-                const SizedBox(width: 14),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('DEM Pro', style: DemProText.subtitle.copyWith(color: t.text)),
-                  const SizedBox(height: 2),
-                  Text('Plan gratuit — lancement', style: DemProText.caption.copyWith(color: DemProColors.accent)),
-                ])),
-              ]),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: DemProColors.accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium,
+                      color: DemProColors.accent,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'DEM Pro',
+                          style: DemProText.subtitle.copyWith(color: t.text),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Plan gratuit — lancement',
+                          style: DemProText.caption.copyWith(
+                            color: DemProColors.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 24),
 
@@ -1181,47 +1583,77 @@ class _CompteTabState extends State<_CompteTab> {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: t.border),
               ),
-              child: Row(children: [
-                Icon(
-                  widget.darkMode ? Icons.dark_mode_outlined : Icons.wb_sunny_outlined,
-                  color: DemProColors.accent,
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    widget.darkMode ? 'Mode sombre' : 'Mode clair',
-                    style: DemProText.subtitle.copyWith(color: t.text),
+              child: Row(
+                children: [
+                  Icon(
+                    widget.darkMode
+                        ? Icons.dark_mode_outlined
+                        : Icons.wb_sunny_outlined,
+                    color: DemProColors.accent,
+                    size: 20,
                   ),
-                ),
-                Switch(
-                  value: widget.darkMode,
-                  onChanged: (_) => widget.onThemeToggle(),
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: DemProColors.accent,
-                  inactiveThumbColor: Colors.white,
-                  inactiveTrackColor: t.border,
-                ),
-              ]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.darkMode ? 'Mode sombre' : 'Mode clair',
+                      style: DemProText.subtitle.copyWith(color: t.text),
+                    ),
+                  ),
+                  Switch(
+                    value: widget.darkMode,
+                    onChanged: (_) => widget.onThemeToggle(),
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: DemProColors.accent,
+                    inactiveThumbColor: Colors.white,
+                    inactiveTrackColor: t.border,
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 24),
 
             // ── Support ──────────────────────────────────────────────────
             _SectionLabel(label: 'SUPPORT', t: t),
             const SizedBox(height: 12),
-            _InfoCard(t: t, children: [
-              _TapRow(icon: Icons.phone_outlined, label: 'Appeler le support', t: t,
-                subtitle: '+221 71 006 46 64',
-                onTap: () => launchUrl(Uri.parse('tel:+221710064664'))),
-              _TapRow(icon: Icons.chat_bubble_outline, label: 'WhatsApp', t: t,
-                subtitle: '+221 71 006 46 64',
-                onTap: () => launchUrl(Uri.parse('https://wa.me/221710064664'), mode: LaunchMode.externalApplication)),
-              _TapRow(icon: Icons.email_outlined, label: 'Envoyer un e-mail', t: t,
-                subtitle: 'support@dem.sn',
-                onTap: () => launchUrl(Uri.parse('mailto:support@dem.sn'))),
-              _TapRow(icon: Icons.description_outlined, label: 'Conditions d\'utilisation', t: t, isLast: true,
-                onTap: () => launchUrl(Uri.parse('https://www.dem.sn/#cgu'), mode: LaunchMode.externalApplication)),
-            ]),
+            _InfoCard(
+              t: t,
+              children: [
+                _TapRow(
+                  icon: Icons.phone_outlined,
+                  label: 'Appeler le support',
+                  t: t,
+                  subtitle: '+221 71 006 46 64',
+                  onTap: () => launchUrl(Uri.parse('tel:+221710064664')),
+                ),
+                _TapRow(
+                  icon: Icons.chat_bubble_outline,
+                  label: 'WhatsApp',
+                  t: t,
+                  subtitle: '+221 71 006 46 64',
+                  onTap: () => launchUrl(
+                    Uri.parse('https://wa.me/221710064664'),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+                _TapRow(
+                  icon: Icons.email_outlined,
+                  label: 'Envoyer un e-mail',
+                  t: t,
+                  subtitle: 'support@dem.sn',
+                  onTap: () => launchUrl(Uri.parse('mailto:support@dem.sn')),
+                ),
+                _TapRow(
+                  icon: Icons.description_outlined,
+                  label: 'Conditions d\'utilisation',
+                  t: t,
+                  isLast: true,
+                  onTap: () => launchUrl(
+                    Uri.parse('https://www.dem.sn/#cgu'),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
 
             // ── Déconnexion ───────────────────────────────────────────────
@@ -1237,18 +1669,39 @@ class _CompteTabState extends State<_CompteTab> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: DemProColors.danger.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: DemProColors.danger.withValues(alpha: 0.3),
+                  ),
                 ),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Icon(Icons.delete_outline, color: DemProColors.danger, size: 18),
-                  const SizedBox(width: 8),
-                  Text('Supprimer mon compte', style: DemProText.bodyStrong.copyWith(color: DemProColors.danger)),
-                ]),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.delete_outline,
+                      color: DemProColors.danger,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Supprimer mon compte',
+                      style: DemProText.bodyStrong.copyWith(
+                        color: DemProColors.danger,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
 
             const SizedBox(height: 16),
-            Center(child: Text('DEM v1.1.1', style: DemProText.caption.copyWith(color: t.muted.withValues(alpha: 0.5)))),
+            Center(
+              child: Text(
+                'DEM v1.1.1',
+                style: DemProText.caption.copyWith(
+                  color: t.muted.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1269,8 +1722,14 @@ class _ProBadge extends StatelessWidget {
       color: DemProColors.accent.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(20),
     ),
-    child: Text('DEM PRO',
-      style: DemProText.micro.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+    child: Text(
+      'DEM PRO',
+      style: DemProText.micro.copyWith(
+        color: DemProColors.accent,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
+      ),
+    ),
   );
 }
 
@@ -1307,12 +1766,17 @@ class _ActiveOrderIconState extends State<_ActiveOrderIcon>
     child: AnimatedBuilder(
       animation: _ctrl,
       builder: (_, child) => Container(
-        width: 40, height: 40,
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
-          color: DemProColors.accent.withValues(alpha: 0.12 + _ctrl.value * 0.08),
+          color: DemProColors.accent.withValues(
+            alpha: 0.12 + _ctrl.value * 0.08,
+          ),
           shape: BoxShape.circle,
           border: Border.all(
-            color: DemProColors.accent.withValues(alpha: 0.4 + _ctrl.value * 0.3),
+            color: DemProColors.accent.withValues(
+              alpha: 0.4 + _ctrl.value * 0.3,
+            ),
             width: 1.5,
           ),
         ),
@@ -1324,17 +1788,24 @@ class _ActiveOrderIconState extends State<_ActiveOrderIcon>
           const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 20),
           if (widget.count > 1)
             Positioned(
-              top: 2, right: 2,
+              top: 2,
+              right: 2,
               child: Container(
-                width: 14, height: 14,
+                width: 14,
+                height: 14,
                 decoration: const BoxDecoration(
                   color: DemProColors.accent,
                   shape: BoxShape.circle,
                 ),
-                child: Center(child: Text(
-                  '${widget.count}',
-                  style: DemProText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
-                )),
+                child: Center(
+                  child: Text(
+                    '${widget.count}',
+                    style: DemProText.micro.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
               ),
             ),
         ],
@@ -1366,7 +1837,10 @@ class _ProAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: DemProColors.accent.withValues(alpha: 0.15),
-        border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3), width: 1.5),
+        border: Border.all(
+          color: DemProColors.accent.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: hasUrl
@@ -1376,14 +1850,22 @@ class _ProAvatar extends StatelessWidget {
               errorBuilder: (_, __, ___) => Center(
                 child: Text(
                   _initials,
-                  style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800, fontSize: size * 0.38),
+                  style: DemProText.bodyStrong.copyWith(
+                    color: DemProColors.accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: size * 0.38,
+                  ),
                 ),
               ),
             )
           : Center(
               child: Text(
                 _initials,
-                style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800, fontSize: size * 0.38),
+                style: DemProText.bodyStrong.copyWith(
+                  color: DemProColors.accent,
+                  fontWeight: FontWeight.w800,
+                  fontSize: size * 0.38,
+                ),
               ),
             ),
     );
@@ -1395,7 +1877,12 @@ class _BigStatBox extends StatelessWidget {
   final String value, label;
   final Color color;
   final _T t;
-  const _BigStatBox({required this.value, required this.label, required this.color, required this.t});
+  const _BigStatBox({
+    required this.value,
+    required this.label,
+    required this.color,
+    required this.t,
+  });
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1404,17 +1891,13 @@ class _BigStatBox extends StatelessWidget {
       color: color.withValues(alpha: 0.12),
       borderRadius: BorderRadius.circular(10),
     ),
-    child: Column(children: [
-      Text(
-        value,
-        style: DemProText.hero.copyWith(color: color, height: 1),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        label,
-        style: DemProText.caption.copyWith(color: t.muted),
-      ),
-    ]),
+    child: Column(
+      children: [
+        Text(value, style: DemProText.hero.copyWith(color: color, height: 1)),
+        const SizedBox(height: 4),
+        Text(label, style: DemProText.caption.copyWith(color: t.muted)),
+      ],
+    ),
   );
 }
 
@@ -1424,7 +1907,13 @@ class _ActionButton extends StatelessWidget {
   final bool filled;
   final VoidCallback onTap;
   final _T t;
-  const _ActionButton({required this.label, required this.icon, required this.filled, required this.onTap, required this.t});
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.filled,
+    required this.onTap,
+    required this.t,
+  });
 
   @override
   Widget build(BuildContext context) => Material(
@@ -1439,15 +1928,24 @@ class _ActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: filled ? null : Border.all(color: t.border),
         ),
-        child: Column(children: [
-          Icon(icon, color: filled ? Colors.white : DemProColors.accent, size: 22),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: DemProText.caption.copyWith(color: filled ? Colors.white : t.text, fontWeight: FontWeight.w700),
-          ),
-        ]),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: filled ? Colors.white : DemProColors.accent,
+              size: 22,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: DemProText.caption.copyWith(
+                color: filled ? Colors.white : t.text,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -1460,7 +1958,11 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: DemProText.caption.copyWith(color: t.muted, fontWeight: FontWeight.w700, letterSpacing: 1),
+    style: DemProText.caption.copyWith(
+      color: t.muted,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1,
+    ),
   );
 }
 
@@ -1479,34 +1981,51 @@ class _EnCoursEmpty extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       border: Border.all(color: DemProColors.accent.withValues(alpha: 0.20)),
     ),
-    child: Column(children: [
-      Icon(Icons.two_wheeler, color: DemProColors.accent.withValues(alpha: 0.55), size: 30),
-      const SizedBox(height: 10),
-      Text(
-        'Aucune livraison en cours',
-        style: DemProText.body.copyWith(color: t.muted),
-      ),
-      const SizedBox(height: 14),
-      GestureDetector(
-        onTap: onOrder,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: DemProColors.accent.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: DemProColors.accent.withValues(alpha: 0.30)),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(
-              'Passez votre première commande',
-              style: DemProText.caption.copyWith(color: DemProColors.accent),
-            ),
-            const SizedBox(width: 4),
-            const Icon(Icons.arrow_forward, color: DemProColors.accent, size: 14),
-          ]),
+    child: Column(
+      children: [
+        Icon(
+          Icons.two_wheeler,
+          color: DemProColors.accent.withValues(alpha: 0.55),
+          size: 30,
         ),
-      ),
-    ]),
+        const SizedBox(height: 10),
+        Text(
+          'Aucune livraison en cours',
+          style: DemProText.body.copyWith(color: t.muted),
+        ),
+        const SizedBox(height: 14),
+        GestureDetector(
+          onTap: onOrder,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: DemProColors.accent.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: DemProColors.accent.withValues(alpha: 0.30),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Passez votre première commande',
+                  style: DemProText.caption.copyWith(
+                    color: DemProColors.accent,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.arrow_forward,
+                  color: DemProColors.accent,
+                  size: 14,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -1524,19 +2043,27 @@ class _HistoriqueEmpty extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       border: Border.all(color: t.border),
     ),
-    child: Column(children: [
-      Icon(Icons.receipt_long_outlined, color: t.muted.withValues(alpha: 0.5), size: 28),
-      const SizedBox(height: 10),
-      Text(
-        'Aucune livraison récente',
-        style: DemProText.body.copyWith(color: t.muted),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        'Votre historique apparaîtra ici',
-        style: DemProText.caption.copyWith(color: t.muted.withValues(alpha: 0.55)),
-      ),
-    ]),
+    child: Column(
+      children: [
+        Icon(
+          Icons.receipt_long_outlined,
+          color: t.muted.withValues(alpha: 0.5),
+          size: 28,
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Aucune livraison récente',
+          style: DemProText.body.copyWith(color: t.muted),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Votre historique apparaîtra ici',
+          style: DemProText.caption.copyWith(
+            color: t.muted.withValues(alpha: 0.55),
+          ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -1544,7 +2071,11 @@ class _OrderMiniCard extends StatelessWidget {
   final Map<String, dynamic> order;
   final _T t;
   final VoidCallback onTap;
-  const _OrderMiniCard({required this.order, required this.t, required this.onTap});
+  const _OrderMiniCard({
+    required this.order,
+    required this.t,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1564,47 +2095,80 @@ class _OrderMiniCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: t.border),
         ),
-        child: Row(children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              _isActiveStatus(status) ? Icons.two_wheeler : status == 'DELIVERED' ? Icons.check_circle_outline : Icons.cancel_outlined,
-              color: color, size: 18,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _shortAddress(dropoff),
-                style: DemProText.bodyStrong.copyWith(color: t.text),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(height: 2),
-              Row(children: [
-                Text(_statusLabel(status), style: DemProText.caption.copyWith(color: color)),
-                if (driverName != null) ...[
-                  Text(' · ', style: DemProText.caption.copyWith(color: t.muted)),
-                  Text(driverName, style: DemProText.caption.copyWith(color: t.muted)),
+              child: Icon(
+                _isActiveStatus(status)
+                    ? Icons.two_wheeler
+                    : status == 'DELIVERED'
+                    ? Icons.check_circle_outline
+                    : Icons.cancel_outlined,
+                color: color,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _shortAddress(dropoff),
+                    style: DemProText.bodyStrong.copyWith(color: t.text),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        _statusLabel(status),
+                        style: DemProText.caption.copyWith(color: color),
+                      ),
+                      if (driverName != null) ...[
+                        Text(
+                          ' · ',
+                          style: DemProText.caption.copyWith(color: t.muted),
+                        ),
+                        Text(
+                          driverName,
+                          style: DemProText.caption.copyWith(color: t.muted),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
-              ]),
-            ],
-          )),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (price != null) Text(DemProFormat.fcfa(price), style: DemProText.caption.copyWith(color: t.text, fontWeight: FontWeight.w700)),
-              if (createdAt.isNotEmpty) Text(createdAt, style: DemProText.micro.copyWith(color: t.muted)),
-            ],
-          ),
-          const SizedBox(width: 4),
-          Icon(Icons.chevron_right, color: t.muted, size: 16),
-        ]),
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (price != null)
+                  Text(
+                    DemProFormat.fcfa(price),
+                    style: DemProText.caption.copyWith(
+                      color: t.text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                if (createdAt.isNotEmpty)
+                  Text(
+                    createdAt,
+                    style: DemProText.micro.copyWith(color: t.muted),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, color: t.muted, size: 16),
+          ],
+        ),
       ),
     );
   }
@@ -1632,7 +2196,15 @@ class _EditableInfoRow extends StatelessWidget {
   final VoidCallback onTap;
   final bool isPlaceholder;
   final bool isLast;
-  const _EditableInfoRow({required this.icon, required this.label, required this.value, required this.t, required this.onTap, this.isPlaceholder = false, this.isLast = false});
+  const _EditableInfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.t,
+    required this.onTap,
+    this.isPlaceholder = false,
+    this.isLast = false,
+  });
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1641,14 +2213,27 @@ class _EditableInfoRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: isLast ? null : Border(bottom: BorderSide(color: t.border)),
       ),
-      child: Row(children: [
-        Icon(icon, color: DemProColors.accent, size: 18),
-        const SizedBox(width: 12),
-        Expanded(child: Text(label, style: DemProText.body.copyWith(color: t.muted))),
-        Text(value, style: DemProText.body.copyWith(color: isPlaceholder ? DemProColors.accent.withValues(alpha: 0.6) : t.text, fontWeight: isPlaceholder ? FontWeight.w500 : FontWeight.w600, fontStyle: isPlaceholder ? FontStyle.italic : FontStyle.normal)),
-        const SizedBox(width: 6),
-        Icon(Icons.edit_outlined, color: t.muted, size: 14),
-      ]),
+      child: Row(
+        children: [
+          Icon(icon, color: DemProColors.accent, size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(label, style: DemProText.body.copyWith(color: t.muted)),
+          ),
+          Text(
+            value,
+            style: DemProText.body.copyWith(
+              color: isPlaceholder
+                  ? DemProColors.accent.withValues(alpha: 0.6)
+                  : t.text,
+              fontWeight: isPlaceholder ? FontWeight.w500 : FontWeight.w600,
+              fontStyle: isPlaceholder ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(Icons.edit_outlined, color: t.muted, size: 14),
+        ],
+      ),
     ),
   );
 }
@@ -1661,7 +2246,15 @@ class _TapRow extends StatelessWidget {
   final VoidCallback onTap;
   final bool isLast;
   final Widget? trailing;
-  const _TapRow({required this.icon, required this.label, this.subtitle, required this.t, required this.onTap, this.isLast = false, this.trailing});
+  const _TapRow({
+    required this.icon,
+    required this.label,
+    this.subtitle,
+    required this.t,
+    required this.onTap,
+    this.isLast = false,
+    this.trailing,
+  });
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1670,17 +2263,30 @@ class _TapRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: isLast ? null : Border(bottom: BorderSide(color: t.border)),
       ),
-      child: Row(children: [
-        Icon(icon, color: DemProColors.accent, size: 18),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: DemProText.bodyStrong.copyWith(color: t.text)),
-          if (subtitle != null)
-            Text(subtitle!, style: DemProText.caption.copyWith(color: t.muted)),
-        ])),
-        if (trailing != null) ...[trailing!, const SizedBox(width: 8)],
-        Icon(Icons.chevron_right, color: t.muted, size: 18),
-      ]),
+      child: Row(
+        children: [
+          Icon(icon, color: DemProColors.accent, size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: DemProText.bodyStrong.copyWith(color: t.text),
+                ),
+                if (subtitle != null)
+                  Text(
+                    subtitle!,
+                    style: DemProText.caption.copyWith(color: t.muted),
+                  ),
+              ],
+            ),
+          ),
+          if (trailing != null) ...[trailing!, const SizedBox(width: 8)],
+          Icon(Icons.chevron_right, color: t.muted, size: 18),
+        ],
+      ),
     ),
   );
 }
@@ -1703,14 +2309,21 @@ class _LogoutButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: t.border),
         ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.logout_outlined, color: DemProColors.danger, size: 18),
-          const SizedBox(width: 10),
-          Text(
-            'Se déconnecter',
-            style: DemProText.subtitle.copyWith(color: DemProColors.danger),
-          ),
-        ]),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.logout_outlined,
+              color: DemProColors.danger,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Se déconnecter',
+              style: DemProText.subtitle.copyWith(color: DemProColors.danger),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -1731,15 +2344,15 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
   late final DemProRepository _repo;
 
   // ── Livraisons ─────────────────────────────────────────────────────────────
-  List<Map<String, dynamic>> _orders   = [];
-  bool         _loadingOrders          = true;
-  _OrderFilter _filter                 = _OrderFilter.all;
+  List<Map<String, dynamic>> _orders = [];
+  bool _loadingOrders = true;
+  _OrderFilter _filter = _OrderFilter.all;
 
   // ── Tournées ───────────────────────────────────────────────────────────────
-  List<Map<String, dynamic>> _batches  = [];
-  bool         _loadingBatches         = false;
+  List<Map<String, dynamic>> _batches = [];
+  bool _loadingBatches = false;
 
-  _ViewType    _viewType               = _ViewType.orders;
+  _ViewType _viewType = _ViewType.orders;
 
   @override
   void initState() {
@@ -1753,7 +2366,10 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
     try {
       final orders = await _repo.getMyOrders();
       if (!mounted) return;
-      setState(() { _orders = orders; _loadingOrders = false; });
+      setState(() {
+        _orders = orders;
+        _loadingOrders = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _loadingOrders = false);
     }
@@ -1764,7 +2380,10 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
     try {
       final batches = await _repo.getMyBatches();
       if (!mounted) return;
-      setState(() { _batches = batches; _loadingBatches = false; });
+      setState(() {
+        _batches = batches;
+        _loadingBatches = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _loadingBatches = false);
     }
@@ -1787,12 +2406,16 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
     if (_filter == _OrderFilter.cancelled) {
       return _orders.where((o) => o['status'] == 'CANCELLED').toList();
     }
-    return _orders.where((o) => !_isActiveStatus(o['status'] as String)).toList();
+    return _orders
+        .where((o) => !_isActiveStatus(o['status'] as String))
+        .toList();
   }
 
-  int get _activeCount    => _activeOrders.length;
-  int get _deliveredCount => _orders.where((o) => o['status'] == 'DELIVERED').length;
-  int get _cancelledCount => _orders.where((o) => o['status'] == 'CANCELLED').length;
+  int get _activeCount => _activeOrders.length;
+  int get _deliveredCount =>
+      _orders.where((o) => o['status'] == 'DELIVERED').length;
+  int get _cancelledCount =>
+      _orders.where((o) => o['status'] == 'CANCELLED').length;
 
   @override
   Widget build(BuildContext context) {
@@ -1815,15 +2438,20 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
     if (_loadingOrders) {
       return Container(
         color: t.scaffoldBg,
-        child: const Center(child: CircularProgressIndicator(color: DemProColors.accent)),
+        child: const Center(
+          child: CircularProgressIndicator(color: DemProColors.accent),
+        ),
       );
     }
 
-    final showActive    = _filter == _OrderFilter.all || _filter == _OrderFilter.active;
-    final showHistory   = _filter != _OrderFilter.active;
-    final activeToShow  = showActive  ? _activeOrders  : <Map<String, dynamic>>[];
-    final historyToShow = showHistory ? _historyOrders : <Map<String, dynamic>>[];
-    final isEmpty       = activeToShow.isEmpty && historyToShow.isEmpty;
+    final showActive =
+        _filter == _OrderFilter.all || _filter == _OrderFilter.active;
+    final showHistory = _filter != _OrderFilter.active;
+    final activeToShow = showActive ? _activeOrders : <Map<String, dynamic>>[];
+    final historyToShow = showHistory
+        ? _historyOrders
+        : <Map<String, dynamic>>[];
+    final isEmpty = activeToShow.isEmpty && historyToShow.isEmpty;
 
     return RefreshIndicator(
       color: DemProColors.accent,
@@ -1836,8 +2464,8 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
           children: [
             _FilterTabs(
               filter: _filter,
-              totalCount:     _orders.length,
-              activeCount:    _activeCount,
+              totalCount: _orders.length,
+              activeCount: _activeCount,
               deliveredCount: _deliveredCount,
               cancelledCount: _cancelledCount,
               t: t,
@@ -1860,7 +2488,12 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
                 ),
                 for (int i = 0; i < activeToShow.length; i++)
                   Padding(
-                    padding: EdgeInsets.fromLTRB(20, 0, 20, i < activeToShow.length - 1 ? 12 : 0),
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      0,
+                      20,
+                      i < activeToShow.length - 1 ? 12 : 0,
+                    ),
                     child: _ActiveOrderCard(order: activeToShow[i], t: t),
                   ),
               ],
@@ -1900,7 +2533,12 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
 
   Widget _buildBatchesView(_T t) {
     if (_loadingBatches && _batches.isEmpty) {
-      return Center(child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2));
+      return Center(
+        child: CircularProgressIndicator(
+          color: DemProColors.accent,
+          strokeWidth: 2,
+        ),
+      );
     }
 
     if (_batches.isEmpty) {
@@ -1919,36 +2557,62 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      width: 72, height: 72,
+                      width: 72,
+                      height: 72,
                       decoration: BoxDecoration(
                         color: DemProColors.accent.withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.route_outlined, color: DemProColors.accent, size: 34),
+                      child: const Icon(
+                        Icons.route_outlined,
+                        color: DemProColors.accent,
+                        size: 34,
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    Text('Aucune tournée', style: DemProText.title.copyWith(color: t.text, fontSize: 17)),
+                    Text(
+                      'Aucune tournée',
+                      style: DemProText.title.copyWith(
+                        color: t.text,
+                        fontSize: 17,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'Créez une tournée pour regrouper plusieurs livraisons avec un seul livreur.',
-                      style: DemProText.body.copyWith(color: t.muted, height: 1.5),
+                      style: DemProText.body.copyWith(
+                        color: t.muted,
+                        height: 1.5,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
                     GestureDetector(
                       onTap: () => context.push('/dem-pro/batch/create'),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: DemProColors.accent,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.add, color: Colors.white, size: 18),
-                          const SizedBox(width: 8),
-                          Text('Créer une tournée',
-                              style: DemProText.button.copyWith(fontSize: 14)),
-                        ]),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Créer une tournée',
+                              style: DemProText.button.copyWith(fontSize: 14),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -1960,9 +2624,12 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
       );
     }
 
-    final active  = _batches.where((b) {
+    final active = _batches.where((b) {
       final s = b['status'] as String? ?? '';
-      return s == 'PENDING' || s == 'ACCEPTED' || s == 'IN_PROGRESS' || s == 'SCHEDULED';
+      return s == 'PENDING' ||
+          s == 'ACCEPTED' ||
+          s == 'IN_PROGRESS' ||
+          s == 'SCHEDULED';
     }).toList();
     final history = _batches.where((b) {
       final s = b['status'] as String? ?? '';
@@ -2021,24 +2688,54 @@ class _FilterTabs extends StatelessWidget {
   final ValueChanged<_OrderFilter> onFilterChanged;
   final _T t;
   const _FilterTabs({
-    required this.filter, required this.totalCount, required this.activeCount,
-    required this.deliveredCount, required this.cancelledCount,
-    required this.onFilterChanged, required this.t,
+    required this.filter,
+    required this.totalCount,
+    required this.activeCount,
+    required this.deliveredCount,
+    required this.cancelledCount,
+    required this.onFilterChanged,
+    required this.t,
   });
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     scrollDirection: Axis.horizontal,
     padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-    child: Row(children: [
-      _FilterChip(label: 'Toutes',   count: totalCount,     active: filter == _OrderFilter.all,       onTap: () => onFilterChanged(_OrderFilter.all),       t: t),
-      const SizedBox(width: 8),
-      _FilterChip(label: 'En cours', count: activeCount,    active: filter == _OrderFilter.active,    onTap: () => onFilterChanged(_OrderFilter.active),    t: t),
-      const SizedBox(width: 8),
-      _FilterChip(label: 'Livrées',  count: deliveredCount, active: filter == _OrderFilter.delivered, onTap: () => onFilterChanged(_OrderFilter.delivered), t: t),
-      const SizedBox(width: 8),
-      _FilterChip(label: 'Annulées', count: cancelledCount, active: filter == _OrderFilter.cancelled, onTap: () => onFilterChanged(_OrderFilter.cancelled), t: t),
-    ]),
+    child: Row(
+      children: [
+        _FilterChip(
+          label: 'Toutes',
+          count: totalCount,
+          active: filter == _OrderFilter.all,
+          onTap: () => onFilterChanged(_OrderFilter.all),
+          t: t,
+        ),
+        const SizedBox(width: 8),
+        _FilterChip(
+          label: 'En cours',
+          count: activeCount,
+          active: filter == _OrderFilter.active,
+          onTap: () => onFilterChanged(_OrderFilter.active),
+          t: t,
+        ),
+        const SizedBox(width: 8),
+        _FilterChip(
+          label: 'Livrées',
+          count: deliveredCount,
+          active: filter == _OrderFilter.delivered,
+          onTap: () => onFilterChanged(_OrderFilter.delivered),
+          t: t,
+        ),
+        const SizedBox(width: 8),
+        _FilterChip(
+          label: 'Annulées',
+          count: cancelledCount,
+          active: filter == _OrderFilter.cancelled,
+          onTap: () => onFilterChanged(_OrderFilter.cancelled),
+          t: t,
+        ),
+      ],
+    ),
   );
 }
 
@@ -2048,7 +2745,13 @@ class _FilterChip extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
   final _T t;
-  const _FilterChip({required this.label, required this.count, required this.active, required this.onTap, required this.t});
+  const _FilterChip({
+    required this.label,
+    required this.count,
+    required this.active,
+    required this.onTap,
+    required this.t,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -2061,28 +2764,37 @@ class _FilterChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: active ? DemProColors.accent : t.border),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(
-          label,
-          style: DemProText.body.copyWith(color: active ? Colors.white : t.muted, fontWeight: active ? FontWeight.w700 : FontWeight.w500),
-        ),
-        if (count > 0) ...[
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: active
-                  ? Colors.white.withValues(alpha: 0.25)
-                  : DemProColors.accent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$count',
-              style: DemProText.caption.copyWith(color: active ? Colors.white : DemProColors.accent, fontWeight: FontWeight.w700),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: DemProText.body.copyWith(
+              color: active ? Colors.white : t.muted,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
+          if (count > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: active
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : DemProColors.accent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: DemProText.caption.copyWith(
+                  color: active ? Colors.white : DemProColors.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ],
-      ]),
+      ),
     ),
   );
 }
@@ -2096,17 +2808,17 @@ class _ActiveOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status      = order['status'] as String;
-    final pickup      = _shortAddress(order['pickupAddress']   as String? ?? '');
-    final delivery    = _shortAddress(order['deliveryAddress'] as String? ?? '');
-    final price       = order['price']     as num? ?? 0;
-    final createdAt   = order['createdAt'] as String?;
-    final driver       = order['driver']       as Map<String, dynamic>?;
-    final driverName   = driver?['name']       as String?;
-    final hasDriver    = driver != null;
+    final status = order['status'] as String;
+    final pickup = _shortAddress(order['pickupAddress'] as String? ?? '');
+    final delivery = _shortAddress(order['deliveryAddress'] as String? ?? '');
+    final price = order['price'] as num? ?? 0;
+    final createdAt = order['createdAt'] as String?;
+    final driver = order['driver'] as Map<String, dynamic>?;
+    final driverName = driver?['name'] as String?;
+    final hasDriver = driver != null;
     final batchOrderId = order['batchOrderId'] as String?;
-    final statusColor  = _statusColor(status);
-    final statusLbl    = _statusLabel(status);
+    final statusColor = _statusColor(status);
+    final statusLbl = _statusLabel(status);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2126,94 +2838,146 @@ class _ActiveOrderCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Livreur + badge statut ──────────────────────────────────────
-          Row(children: [
-            Container(
-              width: 38, height: 38,
-              decoration: BoxDecoration(
-                color: hasDriver
-                    ? DemProColors.accent.withValues(alpha: 0.15)
-                    : t.cardBg2,
-                shape: BoxShape.circle,
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: hasDriver
+                      ? DemProColors.accent.withValues(alpha: 0.15)
+                      : t.cardBg2,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: hasDriver
+                      ? Text(
+                          _driverInitials(driverName),
+                          style: DemProText.bodyStrong.copyWith(
+                            color: DemProColors.accent,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        )
+                      : Icon(Icons.two_wheeler, color: t.muted, size: 18),
+                ),
               ),
-              child: Center(
-                child: hasDriver
-                    ? Text(
-                        _driverInitials(driverName),
-                        style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800),
-                      )
-                    : Icon(Icons.two_wheeler, color: t.muted, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      hasDriver
+                          ? (driverName ?? 'Livreur')
+                          : 'En attente d\'un livreur…',
+                      style: DemProText.bodyStrong.copyWith(color: t.text),
+                    ),
+                    if (hasDriver)
+                      Text(
+                        'Moto · DEM',
+                        style: DemProText.caption.copyWith(color: t.muted),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    hasDriver ? (driverName ?? 'Livreur') : 'En attente d\'un livreur…',
-                    style: DemProText.bodyStrong.copyWith(color: t.text),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  statusLbl,
+                  style: DemProText.caption.copyWith(
+                    color: statusColor,
+                    fontWeight: FontWeight.w700,
                   ),
-                  if (hasDriver)
-                    Text('Moto · DEM', style: DemProText.caption.copyWith(color: t.muted)),
-                ],
+                ),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                statusLbl,
-                style: DemProText.caption.copyWith(color: statusColor, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: 12),
 
           // ── Adresses ─────────────────────────────────────────────────────
-          _AddressRow(icon: Icons.radio_button_on, color: DemProColors.success, label: pickup,   t: t),
+          _AddressRow(
+            icon: Icons.radio_button_on,
+            color: DemProColors.success,
+            label: pickup,
+            t: t,
+          ),
           Padding(
             padding: const EdgeInsets.only(left: 7, top: 2, bottom: 2),
             child: Container(width: 1.5, height: 12, color: t.border),
           ),
-          _AddressRow(icon: Icons.location_on, color: DemProColors.danger, label: delivery, t: t),
+          _AddressRow(
+            icon: Icons.location_on,
+            color: DemProColors.danger,
+            label: delivery,
+            t: t,
+          ),
           const SizedBox(height: 12),
 
           // ── Pied : prix · temps · bouton Suivre ───────────────────────
-          Row(children: [
-            Icon(Icons.payments_outlined, color: t.muted, size: 14),
-            const SizedBox(width: 4),
-            Text(DemProFormat.fcfa(price), style: DemProText.bodyStrong.copyWith(color: t.text)),
-            const SizedBox(width: 14),
-            Icon(Icons.schedule_outlined, color: t.muted, size: 14),
-            const SizedBox(width: 4),
-            Text(_timeAgo(createdAt), style: DemProText.caption.copyWith(color: t.muted)),
-            const Spacer(),
-            GestureDetector(
-              onTap: () {
-                if (batchOrderId != null) {
-                  context.push('/dem-pro/batch/tracking', extra: {'batchId': batchOrderId});
-                } else {
-                  _navigateToOrder(context, order);
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.map_outlined, color: DemProColors.accent, size: 13),
-                  const SizedBox(width: 4),
-                  Text('Suivre', style: DemProText.caption.copyWith(color: DemProColors.accent)),
-                ]),
+          Row(
+            children: [
+              Icon(Icons.payments_outlined, color: t.muted, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                DemProFormat.fcfa(price),
+                style: DemProText.bodyStrong.copyWith(color: t.text),
               ),
-            ),
-          ]),
+              const SizedBox(width: 14),
+              Icon(Icons.schedule_outlined, color: t.muted, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                _timeAgo(createdAt),
+                style: DemProText.caption.copyWith(color: t.muted),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  if (batchOrderId != null) {
+                    context.push(
+                      '/dem-pro/batch/tracking',
+                      extra: {'batchId': batchOrderId},
+                    );
+                  } else {
+                    _navigateToOrder(context, order);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: DemProColors.accent.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.map_outlined,
+                        color: DemProColors.accent,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Suivre',
+                        style: DemProText.caption.copyWith(
+                          color: DemProColors.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -2225,20 +2989,27 @@ class _AddressRow extends StatelessWidget {
   final Color color;
   final String label;
   final _T t;
-  const _AddressRow({required this.icon, required this.color, required this.label, required this.t});
+  const _AddressRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.t,
+  });
 
   @override
-  Widget build(BuildContext context) => Row(children: [
-    Icon(icon, color: color, size: 14),
-    const SizedBox(width: 8),
-    Expanded(
-      child: Text(
-        label,
-        style: DemProText.body.copyWith(color: t.text),
-        overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, color: color, size: 14),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          label,
+          style: DemProText.body.copyWith(color: t.text),
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
-    ),
-  ]);
+    ],
+  );
 }
 
 // ── Ligne historique compacte ─────────────────────────────────────────────────
@@ -2247,19 +3018,23 @@ class _HistoriqueRow extends StatelessWidget {
   final Map<String, dynamic> order;
   final bool isLast;
   final _T t;
-  const _HistoriqueRow({required this.order, required this.isLast, required this.t});
+  const _HistoriqueRow({
+    required this.order,
+    required this.isLast,
+    required this.t,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final status      = order['status'] as String;
-    final pickup      = _shortAddress(order['pickupAddress']   as String? ?? '');
-    final delivery    = _shortAddress(order['deliveryAddress'] as String? ?? '');
-    final price       = order['price'] as num? ?? 0;
-    final date        = _formatDateTime(
+    final status = order['status'] as String;
+    final pickup = _shortAddress(order['pickupAddress'] as String? ?? '');
+    final delivery = _shortAddress(order['deliveryAddress'] as String? ?? '');
+    final price = order['price'] as num? ?? 0;
+    final date = _formatDateTime(
       order['deliveredAt'] as String? ?? order['createdAt'] as String?,
     );
     final statusColor = _statusColor(status);
-    final statusLbl   = _statusLabel(status);
+    final statusLbl = _statusLabel(status);
     final radius = isLast
         ? const BorderRadius.vertical(bottom: Radius.circular(16))
         : BorderRadius.zero;
@@ -2272,49 +3047,61 @@ class _HistoriqueRow extends StatelessWidget {
         decoration: BoxDecoration(
           border: isLast ? null : Border(bottom: BorderSide(color: t.border)),
         ),
-        child: Row(children: [
-          Container(
-            width: 8, height: 8,
-            decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$pickup → $delivery',
+                    style: DemProText.bodyStrong.copyWith(color: t.text),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    date,
+                    style: DemProText.caption.copyWith(color: t.muted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '$pickup → $delivery',
+                  DemProFormat.fcfa(price),
                   style: DemProText.bodyStrong.copyWith(color: t.text),
-                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                Text(date, style: DemProText.caption.copyWith(color: t.muted)),
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    statusLbl,
+                    style: DemProText.micro.copyWith(color: statusColor),
+                  ),
+                ),
               ],
             ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                DemProFormat.fcfa(price),
-                style: DemProText.bodyStrong.copyWith(color: t.text),
-              ),
-              const SizedBox(height: 3),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  statusLbl,
-                  style: DemProText.micro.copyWith(color: statusColor),
-                ),
-              ),
-            ],
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -2329,8 +3116,11 @@ class _ViewToggleBtn extends StatelessWidget {
   final VoidCallback onTap;
   final _T t;
   const _ViewToggleBtn({
-    required this.label, required this.icon, required this.active,
-    required this.onTap, required this.t,
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+    required this.t,
   });
 
   @override
@@ -2351,7 +3141,10 @@ class _ViewToggleBtn extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: DemProText.body.copyWith(color: active ? Colors.white : t.muted, fontWeight: active ? FontWeight.w700 : FontWeight.w500),
+              style: DemProText.body.copyWith(
+                color: active ? Colors.white : t.muted,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -2369,19 +3162,23 @@ class _BatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status     = batch['status'] as String? ?? 'PENDING';
-    final orders     = (batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final total      = (batch['totalPrice'] as num?) ?? 0;
-    final pickup     = batch['pickupAddress'] as String? ?? '';
-    final driver     = batch['driver'] as Map<String, dynamic>?;
-    final createdAt  = batch['createdAt'] as String?;
-    final delivered  = orders.where((o) => o['status'] == 'DELIVERED').length;
+    final status = batch['status'] as String? ?? 'PENDING';
+    final orders =
+        (batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final total = (batch['totalPrice'] as num?) ?? 0;
+    final pickup = batch['pickupAddress'] as String? ?? '';
+    final driver = batch['driver'] as Map<String, dynamic>?;
+    final createdAt = batch['createdAt'] as String?;
+    final delivered = orders.where((o) => o['status'] == 'DELIVERED').length;
     final statusColor = _batchStatusColor(status);
-    final statusLbl   = _batchStatusLabel(status);
-    final isActive    = status == 'ACCEPTED' || status == 'IN_PROGRESS';
+    final statusLbl = _batchStatusLabel(status);
+    final isActive = status == 'ACCEPTED' || status == 'IN_PROGRESS';
 
     return GestureDetector(
-      onTap: () => context.push('/dem-pro/batch/tracking', extra: {'batchId': batch['id'] as String}),
+      onTap: () => context.push(
+        '/dem-pro/batch/tracking',
+        extra: {'batchId': batch['id'] as String},
+      ),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -2400,55 +3197,79 @@ class _BatchCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Header ──────────────────────────────────────────────────────
-            Row(children: [
-              Container(
-                width: 38, height: 38,
-                decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.route_outlined, color: DemProColors.accent, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(
-                    '${orders.length} arrêt${orders.length > 1 ? 's' : ''}',
-                    style: DemProText.subtitle.copyWith(color: t.text),
+            Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  Text(
-                    driver != null
-                        ? 'Livreur : ${driver['name'] as String? ?? 'DEM'}'
-                        : 'En recherche de livreur…',
-                    style: DemProText.caption.copyWith(color: t.muted),
+                  child: const Icon(
+                    Icons.route_outlined,
+                    color: DemProColors.accent,
+                    size: 20,
                   ),
-                ]),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(statusLbl,
-                    style: DemProText.caption.copyWith(color: statusColor, fontWeight: FontWeight.w700)),
-              ),
-            ]),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${orders.length} arrêt${orders.length > 1 ? 's' : ''}',
+                        style: DemProText.subtitle.copyWith(color: t.text),
+                      ),
+                      Text(
+                        driver != null
+                            ? 'Livreur : ${driver['name'] as String? ?? 'DEM'}'
+                            : 'En recherche de livreur…',
+                        style: DemProText.caption.copyWith(color: t.muted),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    statusLbl,
+                    style: DemProText.caption.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
 
             // ── Pickup ───────────────────────────────────────────────────────
-            Row(children: [
-              const Icon(Icons.radio_button_on, color: DemProColors.accent, size: 13),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  pickup.split(',').first.trim(),
-                  style: DemProText.caption.copyWith(color: t.muted),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+            Row(
+              children: [
+                const Icon(
+                  Icons.radio_button_on,
+                  color: DemProColors.accent,
+                  size: 13,
                 ),
-              ),
-            ]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    pickup.split(',').first.trim(),
+                    style: DemProText.caption.copyWith(color: t.muted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
 
             // ── Barre de progression ─────────────────────────────────────────
@@ -2471,29 +3292,54 @@ class _BatchCard extends StatelessWidget {
             ],
 
             // ── Pied ─────────────────────────────────────────────────────────
-            Row(children: [
-              Icon(Icons.payments_outlined, color: t.muted, size: 13),
-              const SizedBox(width: 4),
-              Text(DemProFormat.fcfa(total), style: DemProText.bodyStrong.copyWith(color: t.text)),
-              const SizedBox(width: 12),
-              Icon(Icons.schedule_outlined, color: t.muted, size: 13),
-              const SizedBox(width: 4),
-              Text(_timeAgo(createdAt), style: DemProText.caption.copyWith(color: t.muted)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
+            Row(
+              children: [
+                Icon(Icons.payments_outlined, color: t.muted, size: 13),
+                const SizedBox(width: 4),
+                Text(
+                  DemProFormat.fcfa(total),
+                  style: DemProText.bodyStrong.copyWith(color: t.text),
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.map_outlined, color: DemProColors.accent, size: 13),
-                  const SizedBox(width: 4),
-                  Text('Suivi', style: DemProText.caption.copyWith(color: DemProColors.accent)),
-                ]),
-              ),
-            ]),
+                const SizedBox(width: 12),
+                Icon(Icons.schedule_outlined, color: t.muted, size: 13),
+                const SizedBox(width: 4),
+                Text(
+                  _timeAgo(createdAt),
+                  style: DemProText.caption.copyWith(color: t.muted),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: DemProColors.accent.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.map_outlined,
+                        color: DemProColors.accent,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Suivi',
+                        style: DemProText.caption.copyWith(
+                          color: DemProColors.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -2507,59 +3353,89 @@ class _BatchHistoryRow extends StatelessWidget {
   final Map<String, dynamic> batch;
   final bool isLast;
   final _T t;
-  const _BatchHistoryRow({required this.batch, required this.isLast, required this.t});
+  const _BatchHistoryRow({
+    required this.batch,
+    required this.isLast,
+    required this.t,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final status      = batch['status'] as String? ?? '';
-    final total       = (batch['totalPrice'] as num?) ?? 0;
-    final orders      = (batch['orders'] as List?)?.length ?? 0;
-    final createdAt   = batch['createdAt'] as String?;
+    final status = batch['status'] as String? ?? '';
+    final total = (batch['totalPrice'] as num?) ?? 0;
+    final orders = (batch['orders'] as List?)?.length ?? 0;
+    final createdAt = batch['createdAt'] as String?;
     final statusColor = _batchStatusColor(status);
-    final statusLbl   = _batchStatusLabel(status);
-    final radius      = isLast
+    final statusLbl = _batchStatusLabel(status);
+    final radius = isLast
         ? const BorderRadius.vertical(bottom: Radius.circular(16))
         : BorderRadius.zero;
 
     return InkWell(
-      onTap: () => context.push('/dem-pro/batch/tracking', extra: {'batchId': batch['id'] as String}),
+      onTap: () => context.push(
+        '/dem-pro/batch/tracking',
+        extra: {'batchId': batch['id'] as String},
+      ),
       borderRadius: radius,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           border: isLast ? null : Border(bottom: BorderSide(color: t.border)),
         ),
-        child: Row(children: [
-          Container(
-            width: 8, height: 8,
-            decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                '$orders arrêt${orders > 1 ? 's' : ''}',
-                style: DemProText.bodyStrong.copyWith(color: t.text),
-              ),
-              const SizedBox(height: 2),
-              Text(_formatDateTime(createdAt), style: DemProText.caption.copyWith(color: t.muted)),
-            ]),
-          ),
-          const SizedBox(width: 12),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(DemProFormat.fcfa(total), style: DemProText.bodyStrong.copyWith(color: t.text)),
-            const SizedBox(height: 3),
+        child: Row(
+          children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              width: 8,
+              height: 8,
               decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
+                color: statusColor,
+                shape: BoxShape.circle,
               ),
-              child: Text(statusLbl,
-                  style: DemProText.micro.copyWith(color: statusColor)),
             ),
-          ]),
-        ]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$orders arrêt${orders > 1 ? 's' : ''}',
+                    style: DemProText.bodyStrong.copyWith(color: t.text),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatDateTime(createdAt),
+                    style: DemProText.caption.copyWith(color: t.muted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  DemProFormat.fcfa(total),
+                  style: DemProText.bodyStrong.copyWith(color: t.text),
+                ),
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    statusLbl,
+                    style: DemProText.micro.copyWith(color: statusColor),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2571,7 +3447,11 @@ class _EmptyOrdersState extends StatelessWidget {
   final _T t;
   final bool globallyEmpty;
   final VoidCallback onOrder;
-  const _EmptyOrdersState({required this.t, required this.globallyEmpty, required this.onOrder});
+  const _EmptyOrdersState({
+    required this.t,
+    required this.globallyEmpty,
+    required this.onOrder,
+  });
 
   @override
   Widget build(BuildContext context) => Center(
@@ -2581,12 +3461,17 @@ class _EmptyOrdersState extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 80, height: 80,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
               color: DemProColors.accent.withValues(alpha: 0.10),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 40),
+            child: const Icon(
+              Icons.two_wheeler,
+              color: DemProColors.accent,
+              size: 40,
+            ),
           ),
           const SizedBox(height: 20),
           Text(
@@ -2606,19 +3491,25 @@ class _EmptyOrdersState extends StatelessWidget {
             GestureDetector(
               onTap: onOrder,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: DemProColors.accent,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.add, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Commander maintenant',
-                    style: DemProText.button.copyWith(fontSize: 14),
-                  ),
-                ]),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.add, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Commander maintenant',
+                      style: DemProText.button.copyWith(fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -2633,11 +3524,11 @@ class _EmptyOrdersState extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _iconMeta = {
-  'store':     (Icons.storefront_outlined,     'Boutique'),
-  'warehouse': (Icons.warehouse_outlined,       'Entrepôt'),
-  'office':    (Icons.business_outlined,        'Bureau'),
-  'home':      (Icons.home_outlined,            'Domicile'),
-  'other':     (Icons.place_outlined,           'Autre'),
+  'store': (Icons.storefront_outlined, 'Boutique'),
+  'warehouse': (Icons.warehouse_outlined, 'Entrepôt'),
+  'office': (Icons.business_outlined, 'Bureau'),
+  'home': (Icons.home_outlined, 'Domicile'),
+  'other': (Icons.place_outlined, 'Autre'),
 };
 
 class _AdressesTab extends StatefulWidget {
@@ -2648,13 +3539,13 @@ class _AdressesTab extends StatefulWidget {
 }
 
 class _AdressesTabState extends State<_AdressesTab> {
-  final _repo    = DemProRepository(ApiClient.dio);
-  final _search  = TextEditingController();
+  final _repo = DemProRepository(ApiClient.dio);
+  final _search = TextEditingController();
 
   List<Map<String, dynamic>> _addresses = [];
-  List<Map<String, dynamic>> _recent    = [];
-  bool _loading  = true;
-  String _query  = '';
+  List<Map<String, dynamic>> _recent = [];
+  bool _loading = true;
+  String _query = '';
 
   _T get t => widget.t;
 
@@ -2662,7 +3553,9 @@ class _AdressesTabState extends State<_AdressesTab> {
   void initState() {
     super.initState();
     _load();
-    _search.addListener(() => setState(() => _query = _search.text.toLowerCase()));
+    _search.addListener(
+      () => setState(() => _query = _search.text.toLowerCase()),
+    );
   }
 
   @override
@@ -2674,12 +3567,15 @@ class _AdressesTabState extends State<_AdressesTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final results = await Future.wait([_repo.getAddresses(), _repo.getRecentPickups()]);
+      final results = await Future.wait([
+        _repo.getAddresses(),
+        _repo.getRecentPickups(),
+      ]);
       if (!mounted) return;
       setState(() {
         _addresses = results[0];
-        _recent    = results[1];
-        _loading   = false;
+        _recent = results[1];
+        _loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -2689,7 +3585,7 @@ class _AdressesTabState extends State<_AdressesTab> {
   List<Map<String, dynamic>> get _filtered {
     if (_query.isEmpty) return _addresses;
     return _addresses.where((a) {
-      final label   = (a['label']   as String? ?? '').toLowerCase();
+      final label = (a['label'] as String? ?? '').toLowerCase();
       final address = (a['address'] as String? ?? '').toLowerCase();
       return label.contains(_query) || address.contains(_query);
     }).toList();
@@ -2711,16 +3607,28 @@ class _AdressesTabState extends State<_AdressesTab> {
       builder: (_) => AlertDialog(
         backgroundColor: t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Supprimer ?', style: DemProText.title.copyWith(color: t.text)),
+        title: Text(
+          'Supprimer ?',
+          style: DemProText.title.copyWith(color: t.text),
+        ),
         content: Text(
           'Voulez-vous supprimer "${addr['label']}" ?',
           style: DemProText.body.copyWith(color: t.muted),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Annuler', style: DemProText.body.copyWith(color: t.muted))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Annuler',
+              style: DemProText.body.copyWith(color: t.muted),
+            ),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Supprimer', style: DemProText.body.copyWith(color: DemProColors.danger)),
+            child: Text(
+              'Supprimer',
+              style: DemProText.body.copyWith(color: DemProColors.danger),
+            ),
           ),
         ],
       ),
@@ -2730,7 +3638,10 @@ class _AdressesTabState extends State<_AdressesTab> {
       await _repo.deleteAddress(addr['id'] as String);
       _load();
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Une erreur est survenue.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Une erreur est survenue.')),
+        );
     }
   }
 
@@ -2739,182 +3650,267 @@ class _AdressesTabState extends State<_AdressesTab> {
       await _repo.setDefaultAddress(addr['id'] as String);
       _load();
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Une erreur est survenue.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Une erreur est survenue.')),
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(children: [
-        // ── Header ────────────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Mes adresses', style: DemProText.headline.copyWith(color: t.text, fontSize: 22)),
-                Text('Points de départ favoris', style: DemProText.caption.copyWith(color: t.muted)),
-              ]),
-            ),
-            IconButton(
-              onPressed: () => _showForm(),
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.add, color: DemProColors.accent, size: 22),
-              ),
-              tooltip: 'Ajouter une adresse',
-            ),
-          ]),
-        ),
-
-        // ── Barre de recherche ────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: t.cardBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: t.border),
-            ),
-            child: TextField(
-              controller: _search,
-              style: DemProText.body.copyWith(color: t.text, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Rechercher une adresse…',
-                hintStyle: DemProText.body.copyWith(color: t.muted, fontSize: 14),
-                prefixIcon: Icon(Icons.search, color: t.muted, size: 20),
-                suffixIcon: _query.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.close, color: t.muted, size: 18),
-                        onPressed: () { _search.clear(); setState(() => _query = ''); },
-                      )
-                    : null,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-        ),
-
-        // ── Contenu ───────────────────────────────────────────────────────
-        Expanded(
-          child: _loading
-              ? Center(child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2))
-              : RefreshIndicator(
-                  color: DemProColors.accent,
-                  backgroundColor: t.cardBg,
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                    physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        children: [
+          // ── Header ────────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (_filtered.isEmpty && _query.isNotEmpty) ...[
-                        _buildEmptySearch(),
-                      ] else if (_filtered.isEmpty && _recent.isEmpty) ...[
-                        _buildEmptyState(),
-                      ] else ...[
-                        if (_filtered.isNotEmpty) ...[
-                          _buildSectionHeader('Favoris', '${_filtered.length}'),
-                          const SizedBox(height: 10),
-                          ..._filtered.map((a) => _AddressCard(
-                            addr: a, t: t,
-                            onEdit:       () => _showForm(existing: a),
-                            onDelete:     () => _delete(a),
-                            onSetDefault: () => _setDefault(a),
-                          )),
-                          const SizedBox(height: 20),
-                        ],
-                        if (_recent.isNotEmpty && _query.isEmpty) ...[
-                          _buildSectionHeader('Depuis vos commandes', null),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Adresses utilisées récemment comme point de départ',
-                            style: DemProText.caption.copyWith(color: t.muted),
-                          ),
-                          const SizedBox(height: 10),
-                          ..._recent.map((r) => _RecentPickupRow(
-                            addr: r, t: t,
-                            onSave: () => _showForm(existing: {
-                              'address': r['address'],
-                              'lat': r['lat'],
-                              'lng': r['lng'],
-                            }),
-                          )),
-                        ],
-                      ],
+                      Text(
+                        'Mes adresses',
+                        style: DemProText.headline.copyWith(
+                          color: t.text,
+                          fontSize: 22,
+                        ),
+                      ),
+                      Text(
+                        'Points de départ favoris',
+                        style: DemProText.caption.copyWith(color: t.muted),
+                      ),
                     ],
                   ),
                 ),
-        ),
-      ]),
+                IconButton(
+                  onPressed: () => _showForm(),
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: DemProColors.accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.add,
+                      color: DemProColors.accent,
+                      size: 22,
+                    ),
+                  ),
+                  tooltip: 'Ajouter une adresse',
+                ),
+              ],
+            ),
+          ),
+
+          // ── Barre de recherche ────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: t.cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: t.border),
+              ),
+              child: TextField(
+                controller: _search,
+                style: DemProText.body.copyWith(color: t.text, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Rechercher une adresse…',
+                  hintStyle: DemProText.body.copyWith(
+                    color: t.muted,
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(Icons.search, color: t.muted, size: 20),
+                  suffixIcon: _query.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.close, color: t.muted, size: 18),
+                          onPressed: () {
+                            _search.clear();
+                            setState(() => _query = '');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Contenu ───────────────────────────────────────────────────────
+          Expanded(
+            child: _loading
+                ? Center(
+                    child: CircularProgressIndicator(
+                      color: DemProColors.accent,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : RefreshIndicator(
+                    color: DemProColors.accent,
+                    backgroundColor: t.cardBg,
+                    onRefresh: _load,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        if (_filtered.isEmpty && _query.isNotEmpty) ...[
+                          _buildEmptySearch(),
+                        ] else if (_filtered.isEmpty && _recent.isEmpty) ...[
+                          _buildEmptyState(),
+                        ] else ...[
+                          if (_filtered.isNotEmpty) ...[
+                            _buildSectionHeader(
+                              'Favoris',
+                              '${_filtered.length}',
+                            ),
+                            const SizedBox(height: 10),
+                            ..._filtered.map(
+                              (a) => _AddressCard(
+                                addr: a,
+                                t: t,
+                                onEdit: () => _showForm(existing: a),
+                                onDelete: () => _delete(a),
+                                onSetDefault: () => _setDefault(a),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                          if (_recent.isNotEmpty && _query.isEmpty) ...[
+                            _buildSectionHeader('Depuis vos commandes', null),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Adresses utilisées récemment comme point de départ',
+                              style: DemProText.caption.copyWith(
+                                color: t.muted,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            ..._recent.map(
+                              (r) => _RecentPickupRow(
+                                addr: r,
+                                t: t,
+                                onSave: () => _showForm(
+                                  existing: {
+                                    'address': r['address'],
+                                    'lat': r['lat'],
+                                    'lng': r['lng'],
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildSectionHeader(String title, String? count) => Row(children: [
-    Text(title, style: DemProText.bodyStrong.copyWith(color: t.text)),
-    if (count != null) ...[
-      const SizedBox(width: 8),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(
-          color: DemProColors.accent.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
+  Widget _buildSectionHeader(String title, String? count) => Row(
+    children: [
+      Text(title, style: DemProText.bodyStrong.copyWith(color: t.text)),
+      if (count != null) ...[
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: DemProColors.accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            count,
+            style: DemProText.caption.copyWith(
+              color: DemProColors.accent,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
-        child: Text(count, style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
-      ),
+      ],
     ],
-  ]);
+  );
 
   Widget _buildEmptySearch() => Padding(
     padding: const EdgeInsets.only(top: 60),
-    child: Column(children: [
-      Icon(Icons.search_off, color: t.muted, size: 40),
-      const SizedBox(height: 12),
-      Text('Aucun résultat pour "$_query"', style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15)),
-      const SizedBox(height: 6),
-      Text('Essayez avec un autre terme.', style: DemProText.body.copyWith(color: t.muted)),
-    ]),
+    child: Column(
+      children: [
+        Icon(Icons.search_off, color: t.muted, size: 40),
+        const SizedBox(height: 12),
+        Text(
+          'Aucun résultat pour "$_query"',
+          style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Essayez avec un autre terme.',
+          style: DemProText.body.copyWith(color: t.muted),
+        ),
+      ],
+    ),
   );
 
   Widget _buildEmptyState() => Padding(
     padding: const EdgeInsets.only(top: 60),
-    child: Column(children: [
-      Container(
-        width: 72, height: 72,
-        decoration: BoxDecoration(
-          color: DemProColors.accent.withValues(alpha: 0.08),
-          shape: BoxShape.circle,
-          border: Border.all(color: DemProColors.accent.withValues(alpha: 0.20), width: 1.5),
+    child: Column(
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: DemProColors.accent.withValues(alpha: 0.08),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: DemProColors.accent.withValues(alpha: 0.20),
+              width: 1.5,
+            ),
+          ),
+          child: const Icon(
+            Icons.place_outlined,
+            color: DemProColors.accent,
+            size: 32,
+          ),
         ),
-        child: const Icon(Icons.place_outlined, color: DemProColors.accent, size: 32),
-      ),
-      const SizedBox(height: 16),
-      Text('Aucune adresse enregistrée', style: DemProText.title.copyWith(color: t.text, fontSize: 17)),
-      const SizedBox(height: 8),
-      Text(
-        'Ajoutez vos points de départ favoris\n(boutique, entrepôt, bureau…)',
-        style: DemProText.body.copyWith(color: t.muted, height: 1.5),
-        textAlign: TextAlign.center,
-      ),
-      const SizedBox(height: 24),
-      GestureDetector(
-        onTap: () => _showForm(),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(12)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.add, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text('Ajouter une adresse', style: DemProText.button.copyWith(fontSize: 14)),
-          ]),
+        const SizedBox(height: 16),
+        Text(
+          'Aucune adresse enregistrée',
+          style: DemProText.title.copyWith(color: t.text, fontSize: 17),
         ),
-      ),
-    ]),
+        const SizedBox(height: 8),
+        Text(
+          'Ajoutez vos points de départ favoris\n(boutique, entrepôt, bureau…)',
+          style: DemProText.body.copyWith(color: t.muted, height: 1.5),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        GestureDetector(
+          onTap: () => _showForm(),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: DemProColors.accent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.add, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Ajouter une adresse',
+                  style: DemProText.button.copyWith(fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -2928,18 +3924,21 @@ class _AddressCard extends StatelessWidget {
   final VoidCallback onSetDefault;
 
   const _AddressCard({
-    required this.addr, required this.t,
-    required this.onEdit, required this.onDelete, required this.onSetDefault,
+    required this.addr,
+    required this.t,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onSetDefault,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDefault = addr['isDefault'] as bool? ?? false;
-    final icon      = addr['icon'] as String? ?? 'other';
-    final label     = addr['label'] as String? ?? '';
-    final address   = addr['address'] as String? ?? '';
-    final landmark  = addr['landmark'] as String?;
-    final meta      = _iconMeta[icon] ?? _iconMeta['other']!;
+    final icon = addr['icon'] as String? ?? 'other';
+    final label = addr['label'] as String? ?? '';
+    final address = addr['address'] as String? ?? '';
+    final landmark = addr['landmark'] as String?;
+    final meta = _iconMeta[icon] ?? _iconMeta['other']!;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -2947,7 +3946,9 @@ class _AddressCard extends StatelessWidget {
         color: t.cardBg,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isDefault ? DemProColors.accent.withValues(alpha: 0.5) : t.border,
+          color: isDefault
+              ? DemProColors.accent.withValues(alpha: 0.5)
+              : t.border,
           width: isDefault ? 1.5 : 1,
         ),
       ),
@@ -2958,70 +3959,130 @@ class _AddressCard extends StatelessWidget {
           onTap: onEdit,
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: Row(children: [
-              Container(
-                width: 42, height: 42,
-                decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(meta.$1, color: DemProColors.accent, size: 22),
                 ),
-                child: Icon(meta.$1, color: DemProColors.accent, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Text(label, style: DemProText.subtitle.copyWith(color: t.text)),
-                  if (isDefault) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: DemProColors.accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            label,
+                            style: DemProText.subtitle.copyWith(color: t.text),
+                          ),
+                          if (isDefault) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: DemProColors.accent.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'Par défaut',
+                                style: DemProText.micro.copyWith(
+                                  color: DemProColors.accent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      child: Text('Par défaut', style: DemProText.micro.copyWith(color: DemProColors.accent)),
+                      const SizedBox(height: 3),
+                      Text(
+                        address,
+                        style: DemProText.caption.copyWith(color: t.muted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (landmark != null && landmark.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, color: t.muted, size: 12),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                landmark,
+                                style: DemProText.caption.copyWith(
+                                  color: t.muted,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, color: t.muted, size: 20),
+                  color: t.cardBg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: (v) {
+                    if (v == 'edit') onEdit();
+                    if (v == 'default') onSetDefault();
+                    if (v == 'delete') onDelete();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: _menuItem(Icons.edit_outlined, 'Modifier', t.text),
+                    ),
+                    if (!isDefault)
+                      PopupMenuItem(
+                        value: 'default',
+                        child: _menuItem(
+                          Icons.star_outline,
+                          'Définir par défaut',
+                          t.text,
+                        ),
+                      ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: _menuItem(
+                        Icons.delete_outline,
+                        'Supprimer',
+                        DemProColors.danger,
+                      ),
                     ),
                   ],
-                ]),
-                const SizedBox(height: 3),
-                Text(address, style: DemProText.caption.copyWith(color: t.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (landmark != null && landmark.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Row(children: [
-                    Icon(Icons.info_outline, color: t.muted, size: 12),
-                    const SizedBox(width: 4),
-                    Expanded(child: Text(landmark, style: DemProText.caption.copyWith(color: t.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                  ]),
-                ],
-              ])),
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert, color: t.muted, size: 20),
-                color: t.cardBg,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                onSelected: (v) {
-                  if (v == 'edit')    onEdit();
-                  if (v == 'default') onSetDefault();
-                  if (v == 'delete')  onDelete();
-                },
-                itemBuilder: (_) => [
-                  PopupMenuItem(value: 'edit', child: _menuItem(Icons.edit_outlined, 'Modifier', t.text)),
-                  if (!isDefault)
-                    PopupMenuItem(value: 'default', child: _menuItem(Icons.star_outline, 'Définir par défaut', t.text)),
-                  PopupMenuItem(value: 'delete', child: _menuItem(Icons.delete_outline, 'Supprimer', DemProColors.danger)),
-                ],
-              ),
-            ]),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _menuItem(IconData icon, String label, Color color) => Row(children: [
-    Icon(icon, color: color, size: 18),
-    const SizedBox(width: 10),
-    Text(label, style: DemProText.body.copyWith(color: color)),
-  ]);
+  Widget _menuItem(IconData icon, String label, Color color) => Row(
+    children: [
+      Icon(icon, color: color, size: 18),
+      const SizedBox(width: 10),
+      Text(label, style: DemProText.body.copyWith(color: color)),
+    ],
+  );
 }
 
 // ── Ligne adresse récente (depuis commandes) ──────────────────────────────────
@@ -3031,22 +4092,39 @@ class _RecentPickupRow extends StatelessWidget {
   final _T t;
   final VoidCallback onSave;
 
-  const _RecentPickupRow({required this.addr, required this.t, required this.onSave});
+  const _RecentPickupRow({
+    required this.addr,
+    required this.t,
+    required this.onSave,
+  });
 
   @override
   Widget build(BuildContext context) {
     final address = addr['address'] as String? ?? '';
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(color: t.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: t.border)),
+      decoration: BoxDecoration(
+        color: t.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: t.border),
+      ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         leading: Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(color: t.cardBg2, borderRadius: BorderRadius.circular(8)),
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: t.cardBg2,
+            borderRadius: BorderRadius.circular(8),
+          ),
           child: Icon(Icons.history, color: t.muted, size: 18),
         ),
-        title: Text(address, style: DemProText.bodyStrong.copyWith(color: t.text), maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          address,
+          style: DemProText.bodyStrong.copyWith(color: t.text),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         trailing: GestureDetector(
           onTap: onSave,
           child: Container(
@@ -3055,7 +4133,13 @@ class _RecentPickupRow extends StatelessWidget {
               color: DemProColors.accent.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text('Sauvegarder', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
+            child: Text(
+              'Sauvegarder',
+              style: DemProText.caption.copyWith(
+                color: DemProColors.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
       ),
@@ -3075,31 +4159,34 @@ class _AddressFormSheet extends StatefulWidget {
 }
 
 class _AddressFormSheetState extends State<_AddressFormSheet> {
-  final _formKey  = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _label;
   late final TextEditingController _address;
   late final TextEditingController _landmark;
-  String _icon      = 'other';
-  bool   _isDefault = false;
-  bool   _saving    = false;
+  String _icon = 'other';
+  bool _isDefault = false;
+  bool _saving = false;
 
-  bool get _isEdit => widget.existing != null && widget.existing!.containsKey('id');
-  _T   get t       => widget.t;
+  bool get _isEdit =>
+      widget.existing != null && widget.existing!.containsKey('id');
+  _T get t => widget.t;
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
-    _label    = TextEditingController(text: e?['label']    as String? ?? '');
-    _address  = TextEditingController(text: e?['address']  as String? ?? '');
+    _label = TextEditingController(text: e?['label'] as String? ?? '');
+    _address = TextEditingController(text: e?['address'] as String? ?? '');
     _landmark = TextEditingController(text: e?['landmark'] as String? ?? '');
-    _icon     = e?['icon']      as String? ?? 'other';
+    _icon = e?['icon'] as String? ?? 'other';
     _isDefault = e?['isDefault'] as bool? ?? false;
   }
 
   @override
   void dispose() {
-    _label.dispose(); _address.dispose(); _landmark.dispose();
+    _label.dispose();
+    _address.dispose();
+    _landmark.dispose();
     super.dispose();
   }
 
@@ -3108,10 +4195,12 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
     setState(() => _saving = true);
     try {
       final data = {
-        'label':     _label.text.trim(),
-        'address':   _address.text.trim(),
-        'landmark':  _landmark.text.trim().isEmpty ? null : _landmark.text.trim(),
-        'icon':      _icon,
+        'label': _label.text.trim(),
+        'address': _address.text.trim(),
+        'landmark': _landmark.text.trim().isEmpty
+            ? null
+            : _landmark.text.trim(),
+        'icon': _icon,
         'isDefault': _isDefault,
       };
       if (_isEdit) {
@@ -3124,7 +4213,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: DemProColors.danger),
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: DemProColors.danger,
+        ),
       );
     }
   }
@@ -3141,133 +4233,195 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // ── Handle + titre ─────────────────────────────────────────────
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Container(
-                  width: 36, height: 4,
-                  decoration: BoxDecoration(color: t.border, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-            ),
-            Text(
-              _isEdit ? 'Modifier l\'adresse' : 'Nouvelle adresse',
-              style: DemProText.title.copyWith(color: t.text, fontSize: 18),
-            ),
-            const SizedBox(height: 20),
-
-            // ── Sélecteur d'icône ──────────────────────────────────────────
-            Text('Type de lieu', style: DemProText.caption.copyWith(color: t.muted)),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 64,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: _iconMeta.entries.map((e) {
-                  final selected = _icon == e.key;
-                  return GestureDetector(
-                    onTap: () => setState(() => _icon = e.key),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: selected ? DemProColors.accent : t.cardBg2,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: selected ? DemProColors.accent : t.border,
-                          width: selected ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(e.value.$1, color: selected ? Colors.white : t.muted, size: 20),
-                        const SizedBox(height: 3),
-                        Text(e.value.$2, style: DemProText.micro.copyWith(color: selected ? Colors.white : t.muted)),
-                      ]),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Libellé ────────────────────────────────────────────────────
-            _FieldLabel('Libellé', t),
-            const SizedBox(height: 6),
-            _FormField(
-              controller: _label, t: t,
-              hint: 'ex: Boutique Médina, Entrepôt Pikine…',
-              validator: (v) => (v == null || v.trim().length < 2) ? 'Minimum 2 caractères' : null,
-            ),
-            const SizedBox(height: 14),
-
-            // ── Adresse ────────────────────────────────────────────────────
-            _FieldLabel('Adresse', t),
-            const SizedBox(height: 6),
-            _FormField(
-              controller: _address, t: t,
-              hint: 'ex: Rue 10 x Gueule Tapée, Médina, Dakar',
-              validator: (v) => (v == null || v.trim().length < 4) ? 'Adresse trop courte' : null,
-            ),
-            const SizedBox(height: 14),
-
-            // ── Repère ─────────────────────────────────────────────────────
-            _FieldLabel('Repère (optionnel)', t),
-            const SizedBox(height: 6),
-            _FormField(
-              controller: _landmark, t: t,
-              hint: 'ex: Face à la mosquée, derrière la station Total…',
-              validator: null,
-            ),
-            const SizedBox(height: 16),
-
-            // ── Adresse par défaut ─────────────────────────────────────────
-            Container(
-              decoration: BoxDecoration(color: t.cardBg2, borderRadius: BorderRadius.circular(12), border: Border.all(color: t.border)),
-              child: SwitchListTile(
-                value: _isDefault,
-                onChanged: (v) => setState(() => _isDefault = v),
-                activeTrackColor: DemProColors.accent,
-                activeThumbColor: Colors.white,
-                inactiveThumbColor: Colors.white,
-                inactiveTrackColor: t.border,
-                title: Text('Adresse par défaut', style: DemProText.subtitle.copyWith(color: t.text)),
-                subtitle: Text('Pré-sélectionnée lors d\'une nouvelle commande', style: DemProText.caption.copyWith(color: t.muted)),
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ── CTA ────────────────────────────────────────────────────────
-            SizedBox(
-              width: double.infinity, height: 52,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: DemProColors.accent,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [BoxShadow(color: DemProColors.accent.withValues(alpha: 0.30), blurRadius: 10, offset: const Offset(0, 4))],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: _saving ? null : _submit,
-                    child: Center(
-                      child: _saving
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(
-                              _isEdit ? 'Enregistrer les modifications' : 'Ajouter l\'adresse',
-                              style: DemProText.button,
-                            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Handle + titre ─────────────────────────────────────────────
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: t.border,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
               ),
-            ),
-          ]),
+              Text(
+                _isEdit ? 'Modifier l\'adresse' : 'Nouvelle adresse',
+                style: DemProText.title.copyWith(color: t.text, fontSize: 18),
+              ),
+              const SizedBox(height: 20),
+
+              // ── Sélecteur d'icône ──────────────────────────────────────────
+              Text(
+                'Type de lieu',
+                style: DemProText.caption.copyWith(color: t.muted),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 64,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: _iconMeta.entries.map((e) {
+                    final selected = _icon == e.key;
+                    return GestureDetector(
+                      onTap: () => setState(() => _icon = e.key),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: selected ? DemProColors.accent : t.cardBg2,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selected ? DemProColors.accent : t.border,
+                            width: selected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              e.value.$1,
+                              color: selected ? Colors.white : t.muted,
+                              size: 20,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              e.value.$2,
+                              style: DemProText.micro.copyWith(
+                                color: selected ? Colors.white : t.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ── Libellé ────────────────────────────────────────────────────
+              _FieldLabel('Libellé', t),
+              const SizedBox(height: 6),
+              _FormField(
+                controller: _label,
+                t: t,
+                hint: 'ex: Boutique Médina, Entrepôt Pikine…',
+                validator: (v) => (v == null || v.trim().length < 2)
+                    ? 'Minimum 2 caractères'
+                    : null,
+              ),
+              const SizedBox(height: 14),
+
+              // ── Adresse ────────────────────────────────────────────────────
+              _FieldLabel('Adresse', t),
+              const SizedBox(height: 6),
+              _FormField(
+                controller: _address,
+                t: t,
+                hint: 'ex: Rue 10 x Gueule Tapée, Médina, Dakar',
+                validator: (v) => (v == null || v.trim().length < 4)
+                    ? 'Adresse trop courte'
+                    : null,
+              ),
+              const SizedBox(height: 14),
+
+              // ── Repère ─────────────────────────────────────────────────────
+              _FieldLabel('Repère (optionnel)', t),
+              const SizedBox(height: 6),
+              _FormField(
+                controller: _landmark,
+                t: t,
+                hint: 'ex: Face à la mosquée, derrière la station Total…',
+                validator: null,
+              ),
+              const SizedBox(height: 16),
+
+              // ── Adresse par défaut ─────────────────────────────────────────
+              Container(
+                decoration: BoxDecoration(
+                  color: t.cardBg2,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: t.border),
+                ),
+                child: SwitchListTile(
+                  value: _isDefault,
+                  onChanged: (v) => setState(() => _isDefault = v),
+                  activeTrackColor: DemProColors.accent,
+                  activeThumbColor: Colors.white,
+                  inactiveThumbColor: Colors.white,
+                  inactiveTrackColor: t.border,
+                  title: Text(
+                    'Adresse par défaut',
+                    style: DemProText.subtitle.copyWith(color: t.text),
+                  ),
+                  subtitle: Text(
+                    'Pré-sélectionnée lors d\'une nouvelle commande',
+                    style: DemProText.caption.copyWith(color: t.muted),
+                  ),
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── CTA ────────────────────────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: DemProColors.accent.withValues(alpha: 0.30),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: _saving ? null : _submit,
+                      child: Center(
+                        child: _saving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                _isEdit
+                                    ? 'Enregistrer les modifications'
+                                    : 'Ajouter l\'adresse',
+                                style: DemProText.button,
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -3288,7 +4442,12 @@ class _FormField extends StatelessWidget {
   final _T t;
   final String hint;
   final String? Function(String?)? validator;
-  const _FormField({required this.controller, required this.t, required this.hint, required this.validator});
+  const _FormField({
+    required this.controller,
+    required this.t,
+    required this.hint,
+    required this.validator,
+  });
 
   @override
   Widget build(BuildContext context) => TextFormField(
@@ -3300,11 +4459,26 @@ class _FormField extends StatelessWidget {
       hintStyle: DemProText.body.copyWith(color: t.muted),
       filled: true,
       fillColor: t.cardBg2,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: t.border)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: t.border)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
-      errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.danger)),
-      focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.danger, width: 1.5)),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: t.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: t.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: DemProColors.accent, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: DemProColors.danger),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: DemProColors.danger, width: 1.5),
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     ),
   );
@@ -3315,10 +4489,10 @@ class _FormField extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _periodOptions = [
-  ('today',      'Jour'),
-  ('this_week',  'Semaine'),
+  ('today', 'Jour'),
+  ('this_week', 'Semaine'),
   ('this_month', 'Mois'),
-  ('3months',    '3 mois'),
+  ('3months', '3 mois'),
 ];
 
 enum _FinanceView { sales, deliveries }
@@ -3331,14 +4505,14 @@ class _FinancesTab extends StatefulWidget {
 }
 
 class _FinancesTabState extends State<_FinancesTab> {
-  final _repo    = DemProRepository(ApiClient.dio);
+  final _repo = DemProRepository(ApiClient.dio);
 
   String _period = 'this_month';
   _FinanceView _view = _FinanceView.sales;
 
   Map<String, dynamic>? _financeData;
   List<Map<String, dynamic>> _orders = [];
-  bool   _loading = true;
+  bool _loading = true;
   String? _error;
 
   _T get t => widget.t;
@@ -3350,7 +4524,10 @@ class _FinancesTabState extends State<_FinancesTab> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final results = await Future.wait([
         _repo.getMyFinances(_period),
@@ -3364,7 +4541,10 @@ class _FinancesTabState extends State<_FinancesTab> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.toString(); _loading = false; });
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
@@ -3377,21 +4557,31 @@ class _FinancesTabState extends State<_FinancesTab> {
   // ── Filtrage des commandes par période ────────────────────────────────────
   List<Map<String, dynamic>> get _filteredOrders {
     final now = DateTime.now();
-    final delivered = _orders.where((o) {
-      final s = (o['status'] as String? ?? '').toUpperCase();
-      return s == 'DELIVERED' || s == 'PAYMENT_CONFIRMED';
-    }).where((o) {
-      final dt = DateTime.tryParse(o['createdAt'] as String? ?? '')?.toLocal();
-      if (dt == null) return false;
-      return switch (_period) {
-        'today'      => dt.year == now.year && dt.month == now.month && dt.day == now.day,
-        'this_week'  => now.difference(dt).inDays < 7,
-        'this_month' => dt.year == now.year && dt.month == now.month,
-        '3months'    => now.difference(dt).inDays < 90,
-        _            => true,
-      };
-    }).toList();
-    delivered.sort((a, b) => (b['createdAt'] as String? ?? '').compareTo(a['createdAt'] as String? ?? ''));
+    final delivered = _orders
+        .where((o) {
+          final s = (o['status'] as String? ?? '').toUpperCase();
+          return s == 'DELIVERED' || s == 'PAYMENT_CONFIRMED';
+        })
+        .where((o) {
+          final dt = DateTime.tryParse(
+            o['createdAt'] as String? ?? '',
+          )?.toLocal();
+          if (dt == null) return false;
+          return switch (_period) {
+            'today' =>
+              dt.year == now.year && dt.month == now.month && dt.day == now.day,
+            'this_week' => now.difference(dt).inDays < 7,
+            'this_month' => dt.year == now.year && dt.month == now.month,
+            '3months' => now.difference(dt).inDays < 90,
+            _ => true,
+          };
+        })
+        .toList();
+    delivered.sort(
+      (a, b) => (b['createdAt'] as String? ?? '').compareTo(
+        a['createdAt'] as String? ?? '',
+      ),
+    );
     return delivered;
   }
 
@@ -3401,7 +4591,9 @@ class _FinancesTabState extends State<_FinancesTab> {
       final items = o['items'] as List?;
       if (items != null) {
         for (final item in items) {
-          total += ((item['price'] as num?)?.toInt() ?? 0) * ((item['quantity'] as num?)?.toInt() ?? 1);
+          total +=
+              ((item['price'] as num?)?.toInt() ?? 0) *
+              ((item['quantity'] as num?)?.toInt() ?? 1);
         }
       }
     }
@@ -3419,107 +4611,153 @@ class _FinancesTabState extends State<_FinancesTab> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(children: [
-
-        // ── Header ────────────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-          child: Row(children: [
-            Expanded(child: Text('Finances', style: DemProText.headline.copyWith(color: t.text, fontSize: 22))),
-          ]),
-        ),
-
-        // ── Filtre 1 — Période ───────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-          child: Row(children: _periodOptions.map((opt) {
-            final selected = _period == opt.$1;
-            return Expanded(child: GestureDetector(
-              onTap: () => _selectPeriod(opt.$1),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                margin: EdgeInsets.only(right: opt.$1 != '3months' ? 6 : 0),
-                padding: const EdgeInsets.symmetric(vertical: 9),
-                decoration: BoxDecoration(
-                  color: selected ? DemProColors.accent : t.cardBg,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: selected ? DemProColors.accent : t.border),
+      child: Column(
+        children: [
+          // ── Header ────────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Finances',
+                    style: DemProText.headline.copyWith(
+                      color: t.text,
+                      fontSize: 22,
+                    ),
+                  ),
                 ),
-                child: Text(
-                  opt.$2,
-                  textAlign: TextAlign.center,
-                  style: DemProText.caption.copyWith(color: selected ? Colors.white : t.muted, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
-                ),
-              ),
-            ));
-          }).toList()),
-        ),
-
-        // ── Filtre 2 — Ventes / Livraisons ──────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-          child: Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: t.cardBg2,
-              borderRadius: BorderRadius.circular(12),
+              ],
             ),
-            child: Row(children: [
-              _FinanceToggle(
-                label: 'Ventes',
-                icon: Icons.shopping_bag_outlined,
-                active: _view == _FinanceView.sales,
-                onTap: () => setState(() => _view = _FinanceView.sales),
-                t: t,
-              ),
-              _FinanceToggle(
-                label: 'Livraisons',
-                icon: Icons.two_wheeler,
-                active: _view == _FinanceView.deliveries,
-                onTap: () => setState(() => _view = _FinanceView.deliveries),
-                t: t,
-              ),
-            ]),
           ),
-        ),
 
-        // ── Contenu ───────────────────────────────────────────────────────
-        Expanded(
-          child: _loading
-              ? Center(child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2))
-              : _error != null
-                  ? _buildError()
-                  : RefreshIndicator(
-                      color: DemProColors.accent,
-                      backgroundColor: t.cardBg,
-                      onRefresh: _load,
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: _view == _FinanceView.sales
-                            ? _buildSalesContent()
-                            : _buildDeliveriesContent(),
+          // ── Filtre 1 — Période ───────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+            child: Row(
+              children: _periodOptions.map((opt) {
+                final selected = _period == opt.$1;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => _selectPeriod(opt.$1),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      margin: EdgeInsets.only(
+                        right: opt.$1 != '3months' ? 6 : 0,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: BoxDecoration(
+                        color: selected ? DemProColors.accent : t.cardBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: selected ? DemProColors.accent : t.border,
+                        ),
+                      ),
+                      child: Text(
+                        opt.$2,
+                        textAlign: TextAlign.center,
+                        style: DemProText.caption.copyWith(
+                          color: selected ? Colors.white : t.muted,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
                       ),
                     ),
-        ),
-      ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          // ── Filtre 2 — Ventes / Livraisons ──────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: t.cardBg2,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  _FinanceToggle(
+                    label: 'Ventes',
+                    icon: Icons.shopping_bag_outlined,
+                    active: _view == _FinanceView.sales,
+                    onTap: () => setState(() => _view = _FinanceView.sales),
+                    t: t,
+                  ),
+                  _FinanceToggle(
+                    label: 'Livraisons',
+                    icon: Icons.two_wheeler,
+                    active: _view == _FinanceView.deliveries,
+                    onTap: () =>
+                        setState(() => _view = _FinanceView.deliveries),
+                    t: t,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Contenu ───────────────────────────────────────────────────────
+          Expanded(
+            child: _loading
+                ? Center(
+                    child: CircularProgressIndicator(
+                      color: DemProColors.accent,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : _error != null
+                ? _buildError()
+                : RefreshIndicator(
+                    color: DemProColors.accent,
+                    backgroundColor: t.cardBg,
+                    onRefresh: _load,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: _view == _FinanceView.sales
+                          ? _buildSalesContent()
+                          : _buildDeliveriesContent(),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildError() => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-    Icon(Icons.wifi_off_rounded, color: t.muted, size: 36),
-    const SizedBox(height: 12),
-    Text('Impossible de charger les données', style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15)),
-    const SizedBox(height: 16),
-    GestureDetector(
-      onTap: _load,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(10)),
-        child: Text('Réessayer', style: DemProText.button.copyWith(fontSize: 14)),
-      ),
+  Widget _buildError() => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.wifi_off_rounded, color: t.muted, size: 36),
+        const SizedBox(height: 12),
+        Text(
+          'Impossible de charger les données',
+          style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15),
+        ),
+        const SizedBox(height: 16),
+        GestureDetector(
+          onTap: _load,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: DemProColors.accent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              'Réessayer',
+              style: DemProText.button.copyWith(fontSize: 14),
+            ),
+          ),
+        ),
+      ],
     ),
-  ]));
+  );
 
   // ── Vue VENTES ──────────────────────────────────────────────────────────────
 
@@ -3540,63 +4778,96 @@ class _FinancesTabState extends State<_FinancesTab> {
             colors: t.dark
                 ? [DemProColors.bg3, DemProColors.bg4]
                 : DemProColors.lightGradientBlue,
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: t.border),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: DemProColors.success.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.trending_up, color: DemProColors.success, size: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: DemProColors.success.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.trending_up,
+                    color: DemProColors.success,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Ventes',
+                  style: DemProText.caption.copyWith(color: t.muted),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text('Ventes', style: DemProText.caption.copyWith(color: t.muted)),
-          ]),
-          const SizedBox(height: 14),
-          Text(
-            DemProFormat.fcfa(_totalSales),
-            style: DemProText.hero.copyWith(color: t.text),
-          ),
-          Text('Chiffre d\'affaires', style: DemProText.caption.copyWith(color: t.muted)),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: _MiniStat(
-              value: orders.length.toString(),
-              label: 'Commandes',
-              color: DemProColors.accent,
-              t: t,
-            )),
-            Container(width: 1, height: 40, color: t.border),
-            Expanded(child: _MiniStat(
-              value: totalItems.toString(),
-              label: 'Articles vendus',
-              color: DemProColors.success,
-              t: t,
-            )),
-          ]),
-        ]),
+            const SizedBox(height: 14),
+            Text(
+              DemProFormat.fcfa(_totalSales),
+              style: DemProText.hero.copyWith(color: t.text),
+            ),
+            Text(
+              'Chiffre d\'affaires',
+              style: DemProText.caption.copyWith(color: t.muted),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStat(
+                    value: orders.length.toString(),
+                    label: 'Commandes',
+                    color: DemProColors.accent,
+                    t: t,
+                  ),
+                ),
+                Container(width: 1, height: 40, color: t.border),
+                Expanded(
+                  child: _MiniStat(
+                    value: totalItems.toString(),
+                    label: 'Articles vendus',
+                    color: DemProColors.success,
+                    t: t,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
       const SizedBox(height: 20),
 
       // Historique ventes
-      Row(children: [
-        Text('Historique des ventes', style: DemProText.bodyStrong.copyWith(color: t.text)),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: DemProColors.accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(20),
+      Row(
+        children: [
+          Text(
+            'Historique des ventes',
+            style: DemProText.bodyStrong.copyWith(color: t.text),
           ),
-          child: Text('${orders.length}', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
-        ),
-      ]),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: DemProColors.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${orders.length}',
+              style: DemProText.caption.copyWith(
+                color: DemProColors.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
       const SizedBox(height: 10),
       if (orders.isEmpty)
         _buildEmpty('Aucune vente sur cette période')
@@ -3608,12 +4879,16 @@ class _FinancesTabState extends State<_FinancesTab> {
   // ── Vue LIVRAISONS ─────────────────────────────────────────────────────────
 
   List<Widget> _buildDeliveriesContent() {
-    final orders  = _filteredOrders;
+    final orders = _filteredOrders;
     final summary = _financeData?['summary'] as Map<String, dynamic>? ?? {};
-    final total   = (summary['totalSpent']         as num?) ?? _totalDelivery;
-    final count   = (summary['deliveriesCount']    as num?) ?? orders.length;
-    final avg     = (summary['avgCostPerDelivery'] as num?) ?? (orders.isNotEmpty ? _totalDelivery / orders.length : 0);
-    final breakdown = (_financeData?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final total = (summary['totalSpent'] as num?) ?? _totalDelivery;
+    final count = (summary['deliveriesCount'] as num?) ?? orders.length;
+    final avg =
+        (summary['avgCostPerDelivery'] as num?) ??
+        (orders.isNotEmpty ? _totalDelivery / orders.length : 0);
+    final breakdown =
+        (_financeData?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ??
+        [];
 
     return [
       // Résumé livraisons
@@ -3624,47 +4899,69 @@ class _FinancesTabState extends State<_FinancesTab> {
             colors: t.dark
                 ? [DemProColors.bg3, DemProColors.bg4]
                 : DemProColors.lightGradientBlue,
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: t.border),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: DemProColors.accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.two_wheeler,
+                    color: DemProColors.accent,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Livraisons',
+                  style: DemProText.caption.copyWith(color: t.muted),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text('Livraisons', style: DemProText.caption.copyWith(color: t.muted)),
-          ]),
-          const SizedBox(height: 14),
-          Text(
-            DemProFormat.fcfa(total.toInt()),
-            style: DemProText.hero.copyWith(color: t.text),
-          ),
-          Text('Total dépensé', style: DemProText.caption.copyWith(color: t.muted)),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: _MiniStat(
-              value: count.toInt().toString(),
-              label: 'Livraisons',
-              color: DemProColors.accent,
-              t: t,
-            )),
-            Container(width: 1, height: 40, color: t.border),
-            Expanded(child: _MiniStat(
-              value: '${DemProFormat.fcfa(avg.toInt())}',
-              label: 'Coût moyen',
-              color: DemProColors.success,
-              t: t,
-            )),
-          ]),
-        ]),
+            const SizedBox(height: 14),
+            Text(
+              DemProFormat.fcfa(total.toInt()),
+              style: DemProText.hero.copyWith(color: t.text),
+            ),
+            Text(
+              'Total dépensé',
+              style: DemProText.caption.copyWith(color: t.muted),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStat(
+                    value: count.toInt().toString(),
+                    label: 'Livraisons',
+                    color: DemProColors.accent,
+                    t: t,
+                  ),
+                ),
+                Container(width: 1, height: 40, color: t.border),
+                Expanded(
+                  child: _MiniStat(
+                    value: '${DemProFormat.fcfa(avg.toInt())}',
+                    label: 'Coût moyen',
+                    color: DemProColors.success,
+                    t: t,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
       const SizedBox(height: 16),
 
@@ -3675,18 +4972,29 @@ class _FinancesTabState extends State<_FinancesTab> {
       ],
 
       // Transactions
-      Row(children: [
-        Text('Transactions', style: DemProText.bodyStrong.copyWith(color: t.text)),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: DemProColors.accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(20),
+      Row(
+        children: [
+          Text(
+            'Transactions',
+            style: DemProText.bodyStrong.copyWith(color: t.text),
           ),
-          child: Text('${orders.length}', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
-        ),
-      ]),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: DemProColors.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${orders.length}',
+              style: DemProText.caption.copyWith(
+                color: DemProColors.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
       const SizedBox(height: 10),
       if (orders.isEmpty)
         _buildEmpty('Aucune livraison sur cette période')
@@ -3707,53 +5015,80 @@ class _FinancesTabState extends State<_FinancesTab> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: t.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Évolution', style: DemProText.bodyStrong.copyWith(color: t.text)),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 120,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: breakdown.asMap().entries.map((entry) {
-              final b      = entry.value;
-              final amount = (b['amount'] as num?)?.toDouble() ?? 0.0;
-              final label  = b['label'] as String? ?? '';
-              final count  = (b['count'] as num?)?.toInt() ?? 0;
-              final ratio  = maxAmt > 0 ? amount / maxAmt : 0.0;
-              final barH   = ratio == 0 ? 4.0 : 8.0 + ratio * 72.0;
-              final isLast = entry.key == breakdown.length - 1;
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Évolution',
+            style: DemProText.bodyStrong.copyWith(color: t.text),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 120,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: breakdown.asMap().entries.map((entry) {
+                final b = entry.value;
+                final amount = (b['amount'] as num?)?.toDouble() ?? 0.0;
+                final label = b['label'] as String? ?? '';
+                final count = (b['count'] as num?)?.toInt() ?? 0;
+                final ratio = maxAmt > 0 ? amount / maxAmt : 0.0;
+                final barH = ratio == 0 ? 4.0 : 8.0 + ratio * 72.0;
+                final isLast = entry.key == breakdown.length - 1;
 
-              return Expanded(child: Padding(
-                padding: EdgeInsets.only(right: isLast ? 0 : 6),
-                child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                  if (count > 0) ...[
-                    Text(DemProFormat.fcfa(amount.toInt()),
-                      style: DemProText.micro.copyWith(color: DemProColors.accent),
-                      textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 3),
-                  ] else
-                    const SizedBox(height: 18),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeOut,
-                    height: barH,
-                    decoration: BoxDecoration(
-                      color: count > 0
-                          ? DemProColors.accent.withValues(alpha: 0.25 + 0.75 * ratio)
-                          : t.border,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: isLast ? 0 : 6),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (count > 0) ...[
+                          Text(
+                            DemProFormat.fcfa(amount.toInt()),
+                            style: DemProText.micro.copyWith(
+                              color: DemProColors.accent,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                        ] else
+                          const SizedBox(height: 18),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 400),
+                          curve: Curves.easeOut,
+                          height: barH,
+                          decoration: BoxDecoration(
+                            color: count > 0
+                                ? DemProColors.accent.withValues(
+                                    alpha: 0.25 + 0.75 * ratio,
+                                  )
+                                : t.border,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(4),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          label,
+                          style: DemProText.micro.copyWith(
+                            color: t.muted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(label,
-                    style: DemProText.micro.copyWith(color: t.muted, fontWeight: FontWeight.w500),
-                    textAlign: TextAlign.center, maxLines: 2),
-                ]),
-              ));
-            }).toList(),
+                );
+              }).toList(),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 
@@ -3764,11 +5099,13 @@ class _FinancesTabState extends State<_FinancesTab> {
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: t.border),
     ),
-    child: Column(children: [
-      Icon(Icons.receipt_long_outlined, color: t.muted, size: 36),
-      const SizedBox(height: 10),
-      Text(msg, style: DemProText.subtitle.copyWith(color: t.text)),
-    ]),
+    child: Column(
+      children: [
+        Icon(Icons.receipt_long_outlined, color: t.muted, size: 36),
+        const SizedBox(height: 10),
+        Text(msg, style: DemProText.subtitle.copyWith(color: t.text)),
+      ],
+    ),
   );
 }
 
@@ -3780,7 +5117,13 @@ class _FinanceToggle extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
   final _T t;
-  const _FinanceToggle({required this.label, required this.icon, required this.active, required this.onTap, required this.t});
+  const _FinanceToggle({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+    required this.t,
+  });
 
   @override
   Widget build(BuildContext context) => Expanded(
@@ -3793,11 +5136,20 @@ class _FinanceToggle extends StatelessWidget {
           color: active ? DemProColors.accent : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, size: 14, color: active ? Colors.white : t.muted),
-          const SizedBox(width: 6),
-          Text(label, style: DemProText.caption.copyWith(color: active ? Colors.white : t.muted, fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
-        ]),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: active ? Colors.white : t.muted),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: DemProText.caption.copyWith(
+                color: active ? Colors.white : t.muted,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -3808,18 +5160,26 @@ class _FinanceToggle extends StatelessWidget {
 class _MiniStat extends StatelessWidget {
   final String value;
   final String label;
-  final Color  color;
-  final _T     t;
-  const _MiniStat({required this.value, required this.label, required this.color, required this.t});
+  final Color color;
+  final _T t;
+  const _MiniStat({
+    required this.value,
+    required this.label,
+    required this.color,
+    required this.t,
+  });
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(value, style: DemProText.title.copyWith(color: color)),
-      const SizedBox(height: 2),
-      Text(label, style: DemProText.caption.copyWith(color: t.muted)),
-    ]),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value, style: DemProText.title.copyWith(color: color)),
+        const SizedBox(height: 2),
+        Text(label, style: DemProText.caption.copyWith(color: t.muted)),
+      ],
+    ),
   );
 }
 
@@ -3832,16 +5192,18 @@ class _SaleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items     = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final desc      = order['description'] as String? ?? '';
-    final date      = _formatDateTime(order['createdAt'] as String?);
-    final receiver  = order['receiverName'] as String?;
-    final address   = _shortAddress(order['deliveryAddress'] as String? ?? '');
-    final payMode   = order['paymentMode'] as String?;
+    final items = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final desc = order['description'] as String? ?? '';
+    final date = _formatDateTime(order['createdAt'] as String?);
+    final receiver = order['receiverName'] as String?;
+    final address = _shortAddress(order['deliveryAddress'] as String? ?? '');
+    final payMode = order['paymentMode'] as String?;
 
     int saleTotal = 0;
     for (final item in items) {
-      saleTotal += ((item['price'] as num?)?.toInt() ?? 0) * ((item['quantity'] as num?)?.toInt() ?? 1);
+      saleTotal +=
+          ((item['price'] as num?)?.toInt() ?? 0) *
+          ((item['quantity'] as num?)?.toInt() ?? 1);
     }
 
     return Container(
@@ -3852,72 +5214,126 @@ class _SaleRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: t.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Header
-        Row(children: [
-          Container(
-            width: 34, height: 34,
-            decoration: BoxDecoration(
-              color: DemProColors.success.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.shopping_bag_outlined, color: DemProColors.success, size: 17),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: DemProColors.success.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.shopping_bag_outlined,
+                  color: DemProColors.success,
+                  size: 17,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      receiver ?? address,
+                      style: DemProText.bodyStrong.copyWith(color: t.text),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      date,
+                      style: DemProText.caption.copyWith(color: t.muted),
+                    ),
+                  ],
+                ),
+              ),
+              if (saleTotal > 0)
+                Text(
+                  DemProFormat.fcfa(saleTotal),
+                  style: DemProText.subtitle.copyWith(
+                    color: DemProColors.success,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(receiver ?? address, style: DemProText.bodyStrong.copyWith(color: t.text), maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(date, style: DemProText.caption.copyWith(color: t.muted)),
-          ])),
-          if (saleTotal > 0)
-            Text(DemProFormat.fcfa(saleTotal), style: DemProText.subtitle.copyWith(color: DemProColors.success, fontWeight: FontWeight.w800)),
-        ]),
 
-        // Articles
-        if (items.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: t.cardBg2,
-              borderRadius: BorderRadius.circular(8),
+          // Articles
+          if (items.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: t.cardBg2,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: items.map((item) {
+                  final name = item['name'] as String? ?? '—';
+                  final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+                  final price = (item['price'] as num?)?.toInt();
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Text(
+                          '$name',
+                          style: DemProText.caption.copyWith(color: t.text),
+                        ),
+                        Text(
+                          '  × $qty',
+                          style: DemProText.caption.copyWith(color: t.muted),
+                        ),
+                        const Spacer(),
+                        if (price != null)
+                          Text(
+                            DemProFormat.fcfa(price * qty),
+                            style: DemProText.caption.copyWith(color: t.text),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
-            child: Column(children: items.map((item) {
-              final name = item['name'] as String? ?? '—';
-              final qty  = (item['quantity'] as num?)?.toInt() ?? 1;
-              final price = (item['price'] as num?)?.toInt();
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(children: [
-                  Text('$name', style: DemProText.caption.copyWith(color: t.text)),
-                  Text('  × $qty', style: DemProText.caption.copyWith(color: t.muted)),
-                  const Spacer(),
-                  if (price != null)
-                    Text(DemProFormat.fcfa(price * qty), style: DemProText.caption.copyWith(color: t.text)),
-                ]),
-              );
-            }).toList()),
-          ),
-        ] else if (desc.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(desc, style: DemProText.caption.copyWith(color: t.muted), maxLines: 2, overflow: TextOverflow.ellipsis),
-        ],
-
-        // Paiement
-        if (payMode != null) ...[
-          const SizedBox(height: 8),
-          Row(children: [
-            Icon(
-              payMode == 'merchant' ? Icons.storefront_outlined : Icons.payments_outlined,
-              color: t.muted, size: 13,
-            ),
-            const SizedBox(width: 4),
+          ] else if (desc.isNotEmpty) ...[
+            const SizedBox(height: 6),
             Text(
-              payMode == 'merchant' ? 'Payé par vous' : 'Payé à la livraison',
+              desc,
               style: DemProText.caption.copyWith(color: t.muted),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ]),
+          ],
+
+          // Paiement
+          if (payMode != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  payMode == 'merchant'
+                      ? Icons.storefront_outlined
+                      : Icons.payments_outlined,
+                  color: t.muted,
+                  size: 13,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  payMode == 'merchant'
+                      ? 'Payé par vous'
+                      : 'Payé à la livraison',
+                  style: DemProText.caption.copyWith(color: t.muted),
+                ),
+              ],
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -3931,11 +5347,11 @@ class _DeliveryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final address    = _shortAddress(order['deliveryAddress'] as String? ?? '—');
-    final amount     = (order['price'] as num?)?.toInt() ?? 0;
-    final driver     = order['driver'] as Map<String, dynamic>?;
+    final address = _shortAddress(order['deliveryAddress'] as String? ?? '—');
+    final amount = (order['price'] as num?)?.toInt() ?? 0;
+    final driver = order['driver'] as Map<String, dynamic>?;
     final driverName = driver?['name'] as String?;
-    final date       = _formatDateTime(order['createdAt'] as String?);
+    final date = _formatDateTime(order['createdAt'] as String?);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3945,30 +5361,68 @@ class _DeliveryRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: t.border),
       ),
-      child: Row(children: [
-        Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            color: DemProColors.accent.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(8),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: DemProColors.accent.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.two_wheeler,
+              color: DemProColors.accent,
+              size: 18,
+            ),
           ),
-          child: const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(address, style: DemProText.bodyStrong.copyWith(color: t.text), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          Row(children: [
-            Text(date, style: DemProText.caption.copyWith(color: t.muted)),
-            if (driverName != null && driverName.isNotEmpty) ...[
-              Text('  ·  ', style: DemProText.caption.copyWith(color: t.muted)),
-              Expanded(child: Text(driverName, style: DemProText.caption.copyWith(color: t.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            ],
-          ]),
-        ])),
-        const SizedBox(width: 12),
-        Text(DemProFormat.fcfa(amount), style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800)),
-      ]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  address,
+                  style: DemProText.bodyStrong.copyWith(color: t.text),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Text(
+                      date,
+                      style: DemProText.caption.copyWith(color: t.muted),
+                    ),
+                    if (driverName != null && driverName.isNotEmpty) ...[
+                      Text(
+                        '  ·  ',
+                        style: DemProText.caption.copyWith(color: t.muted),
+                      ),
+                      Expanded(
+                        child: Text(
+                          driverName,
+                          style: DemProText.caption.copyWith(color: t.muted),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            DemProFormat.fcfa(amount),
+            style: DemProText.bodyStrong.copyWith(
+              color: DemProColors.accent,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
