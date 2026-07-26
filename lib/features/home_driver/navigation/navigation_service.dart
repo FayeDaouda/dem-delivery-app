@@ -1,7 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/gradient_dialog.dart';
 
 class NavigationService {
   static const _kCachedLat = 'dem_gps_lat';
@@ -121,24 +125,22 @@ class NavigationService {
     return null;
   }
 
-  static Future<bool> isLocationEnabled() async {
+  /// Si la permission de localisation a été refusée définitivement, affiche
+  /// un dialogue invitant le livreur à l'activer dans les réglages système —
+  /// sans ça, la carte reste figée sans qu'il comprenne pourquoi.
+  static Future<void> promptOpenSettingsIfPermanentlyDenied(BuildContext context) async {
     final permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      return false;
-    }
-    return Geolocator.isLocationServiceEnabled();
-  }
-
-  static Future<bool> requestLocationWithPrompt() async {
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.deniedForever) {
-      await Geolocator.openAppSettings();
-      return false;
-    }
-    return permission == LocationPermission.whileInUse || permission == LocationPermission.always;
+    if (permission != LocationPermission.deniedForever) return;
+    if (!context.mounted) return;
+    final confirmed = await showGradientConfirmDialog(
+      context,
+      title: 'Localisation désactivée',
+      message: 'DEM a besoin de votre position pour vous proposer des courses et vous guider. '
+          'Activez la localisation dans les réglages de l\'appareil.',
+      confirmLabel: 'Ouvrir les réglages',
+      confirmColor: AppColors.primary,
+    );
+    if (confirmed == true) Geolocator.openAppSettings();
   }
 
   // ── Stream continu ─────────────────────────────────────────────────────────

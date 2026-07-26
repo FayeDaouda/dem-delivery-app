@@ -4,18 +4,24 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import '../../core/error/app_exception.dart';
 import '../../core/utils/dem_toast.dart';
+import '../../core/utils/price_format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../shared/widgets/address_row.dart';
+import '../../shared/widgets/map_theme_toggle_button.dart';
+import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/share_tracking_sheet.dart';
+import '../../shared/widgets/swipe_to_confirm.dart';
 
 import '../../core/router/app_startup_notifier.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/client_text.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
@@ -48,7 +54,12 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   // Panel drag
   double _panelDragOffset = 0.0;
   bool _isDragging = false;
-  double get _kMaxContent => 370.0 + _bottomInset;
+  // Hauteur du panneau ajustée au contenu réel de chaque état — la bannière
+  // de timeout (icône + titre + sous-titre + 2 boutons) est bien plus haute
+  // que la ligne radar normale ; une valeur fixe unique pour les deux
+  // laissait un grand vide au-dessus du contenu en état normal (le Column
+  // interne est aligné en bas via `mainAxisAlignment.end`).
+  double get _kMaxContent => (_waitTimedOut ? 370.0 : 300.0) + _bottomInset;
   static const double _kMinContent = 64.0;
   double get _bottomInset => MediaQuery.of(context).viewPadding.bottom;
 
@@ -213,6 +224,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
         backgroundColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
+          width: 280,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: AppColors.gradientSplash,
@@ -229,33 +241,20 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
               Text('Voulez-vous vraiment annuler cette commande en attente ?',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14)),
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text('Non', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(ctx, true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF5252),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text('Oui, annuler', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                    ),
-                  ),
-                ],
+              SwipeToConfirm(
+                label: 'Glissez pour annuler',
+                onConfirmed: () async => Navigator.pop(ctx, true),
+                trackColor: AppColors.error,
+                thumbColor: Colors.white,
+                iconColor: AppColors.error,
+                labelColor: Colors.white,
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text('Non', style: TextStyle(color: Colors.white.withValues(alpha: 0.65))),
+                ),
               ),
             ],
           ),
@@ -269,19 +268,15 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
     try {
       await ref.read(ordersRepositoryProvider).cancelOrder(orderId);
       if (mounted) {
-        _showToast(context, message: 'Commande annulée avec succès', icon: Icons.check_circle_rounded, isError: false);
+        showDemToast(context, 'Commande annulée avec succès');
         context.pop();
       }
     } catch (e) {
       if (mounted) {
         setState(() => _cancelling = false);
-        _showToast(context, message: friendlyError(e), icon: Icons.error_outline_rounded, isError: true);
+        showDemToast(context, friendlyError(e), isError: true);
       }
     }
-  }
-
-  void _showToast(BuildContext ctx, {required String message, required IconData icon, required bool isError}) {
-    showDemToast(ctx, message, isError: isError);
   }
 
   @override
@@ -289,6 +284,8 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
     final order           = widget.order;
     final price           = (order['price'] as num?)?.toDouble();
     final demFee          = (order['demFee'] as num?)?.toDouble() ?? 0.0;
+    final discountAmount  = (order['discountAmount'] as num?)?.toDouble() ?? 0.0;
+    final promoCode       = order['promoCode'] as String?;
     final surge           = (order['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
     final pickupAddress   = order['pickupAddress'] as String? ?? 'Départ';
     final deliveryAddress = order['deliveryAddress'] as String? ?? 'Arrivée';
@@ -378,21 +375,7 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
             bottom: max(_kMinContent + 22.0, _kMaxContent - _panelDragOffset + 22.0)
                 + 60
                 + MediaQuery.of(context).viewPadding.bottom,
-            child: GestureDetector(
-              onTap: _toggleMapTheme,
-              child: Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0A1535), shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
-                ),
-                child: Icon(
-                  ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                  color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                  size: 20,
-                ),
-              ),
-            ),
+            child: MapThemeToggleButton(onTap: _toggleMapTheme),
           ),
 
           // ── Panneau bas dégradé cyan ──
@@ -518,12 +501,12 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _RouteRow(icon: Icons.circle, color: const Color(0xFF69F0AE), text: pickupAddress),
+                                  AddressRow(icon: Icons.circle, iconColor: AppColors.successBright, address: pickupAddress, dark: true),
                                   Padding(
                                     padding: const EdgeInsets.only(left: 6),
                                     child: Container(width: 2, height: 14, color: Colors.white.withValues(alpha: 0.25)),
                                   ),
-                                  _RouteRow(icon: Icons.location_on, color: AppColors.error, text: deliveryAddress),
+                                  AddressRow(icon: Icons.location_on, iconColor: AppColors.error, address: deliveryAddress, dark: true),
                                 ],
                               ),
                             ),
@@ -541,10 +524,10 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                   Text('Course', style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
                                   const Spacer(),
                                   if (surge > 1.0) ...[
-                                    const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 13),
+                                    const Icon(Icons.flash_on, color: AppColors.surge, size: 13),
                                     const SizedBox(width: 3),
                                   ],
-                                  Text('${price?.toInt() ?? '—'} FCFA',
+                                  Text(price != null ? formatFcfa(price) : '—',
                                       style: const TextStyle(color: Colors.white, fontSize: 13)),
                                 ]),
                                 if (demFee > 0) ...[
@@ -552,8 +535,31 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                   Row(children: [
                                     Text('Frais DEM', style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
                                     const Spacer(),
-                                    Text('+${demFee.toInt()} FCFA',
+                                    Text('+${formatFcfa(demFee)}',
                                         style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
+                                  ]),
+                                ],
+                                if (discountAmount > 0) ...[
+                                  const SizedBox(height: 4),
+                                  Row(children: [
+                                    Text(promoCode != null ? 'Réduction ($promoCode)' : 'Réduction',
+                                        style: const TextStyle(color: AppColors.successLight, fontSize: 13, fontWeight: FontWeight.w600)),
+                                    const Spacer(),
+                                    Text('-${formatFcfa(discountAmount)}',
+                                        style: const TextStyle(color: AppColors.successLight, fontSize: 13, fontWeight: FontWeight.w600)),
+                                  ]),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
+                                  ),
+                                  Row(children: [
+                                    const Text('Total à payer',
+                                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+                                    const Spacer(),
+                                    Text(
+                                      formatFcfa((((price ?? 0) + demFee - discountAmount)).clamp(0, double.infinity)),
+                                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800),
+                                    ),
                                   ]),
                                 ],
                               ]),
@@ -571,43 +577,28 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                                     decoration: BoxDecoration(
                                       color: Colors.transparent,
                                       borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.6)),
+                                      border: Border.all(color: AppColors.error.withValues(alpha: 0.6)),
                                     ),
                                     child: Center(
                                       child: _cancelling
-                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF5252)))
-                                          : const Text('Annuler', style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.w600, fontSize: 14)),
+                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error))
+                                          : const Text('Annuler', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w600, fontSize: 14)),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: GestureDetector(
+                                  child: PrimaryButton(
+                                    label: 'Retour à l\'accueil',
+                                    height: 50,
                                     onTap: _cancelling ? null : () {
-                      context.go(appStartupNotifier.homeForRole);
-                      Future.microtask(() {
-                        if (context.mounted) {
-                          showDemToast(context, 'Votre commande est en attente — vous serez notifié dès qu\'un livreur est trouvé.');
-                        }
-                      });
-                    },
-                                    child: Container(
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [Color(0xFF00D2FF), Color(0xFF0086C8)],
-                                          begin: Alignment.centerLeft,
-                                          end: Alignment.centerRight,
-                                        ),
-                                        borderRadius: BorderRadius.circular(14),
-                                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.20), blurRadius: 8, offset: const Offset(0, 3))],
-                                      ),
-                                      child: const Center(
-                                        child: Text('Retour à l\'accueil',
-                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      ),
-                                    ),
+                                      context.go(appStartupNotifier.homeForRole);
+                                      Future.microtask(() {
+                                        if (context.mounted) {
+                                          showDemToast(context, 'Votre commande est en attente — vous serez notifié dès qu\'un livreur est trouvé.');
+                                        }
+                                      });
+                                    },
                                   ),
                                 ),
                               ],
@@ -628,26 +619,6 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
 ],
       ),
     );
-  }
-}
-
-class _RouteRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String text;
-  const _RouteRow({required this.icon, required this.color, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(children: [
-      Icon(icon, color: color, size: 14),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(text,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-            maxLines: 1, overflow: TextOverflow.ellipsis),
-      ),
-    ]);
   }
 }
 
@@ -684,12 +655,12 @@ class _TimeoutBanner extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF5252).withValues(alpha: 0.20),
+                  color: AppColors.error.withValues(alpha: 0.20),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.60)),
+                  border: Border.all(color: AppColors.error.withValues(alpha: 0.60)),
                 ),
-                child: const Text('Annuler',
-                    style: TextStyle(color: Color(0xFFFF5252), fontSize: 13, fontWeight: FontWeight.w600)),
+                child: Text('Annuler',
+                    style: ClientText.body.copyWith(color: AppColors.error)),
               ),
             ),
             const SizedBox(width: 12),
@@ -702,8 +673,8 @@ class _TimeoutBanner extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppColors.primary.withValues(alpha: 0.60)),
                 ),
-                child: const Text('Continuer d\'attendre',
-                    style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600)),
+                child: Text('Continuer d\'attendre',
+                    style: ClientText.body.copyWith(color: AppColors.primary)),
               ),
             ),
           ],

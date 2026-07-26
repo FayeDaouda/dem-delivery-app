@@ -6,13 +6,31 @@ import 'package:geocoding/geocoding.dart' as geo;
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/config/app_config.dart';
+import '../../core/services/places_autocomplete_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/client_text.dart';
+import '../../core/utils/dem_toast.dart';
+import '../../shared/widgets/place_suggestions_list.dart';
+import '../../shared/widgets/pressable.dart';
+import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import 'data/favorite_addresses_repository.dart';
 
 
 const _kIcons = ['📍', '🏠', '💼', '❤️', '🛒', '🏫', '🏥', '🕌', '⭐'];
 const _kMax   = 6;
+
+const _placeSuggestionsColors = PlaceSuggestionsColors(
+  background: Colors.white,
+  border: AppColors.lightBorder,
+  divider: AppColors.lightBorder,
+  iconBg: Color.fromRGBO(12, 184, 222, 0.08), // AppColors.primary à 8%
+  icon: AppColors.primary,
+  mainText: AppColors.textDark,
+  secondaryText: AppColors.textMuted,
+  accent: AppColors.primary,
+  shadow: Color(0x14000000),
+);
 
 class FavoriteAddressesScreen extends StatefulWidget {
   const FavoriteAddressesScreen({super.key});
@@ -60,7 +78,7 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
         });
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
     }
   }
 
@@ -71,12 +89,12 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Supprimer "${addr['label']}" ?',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            style: ClientText.button),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer', style: TextStyle(color: Color(0xFFEF4444))),
+            child: const Text('Supprimer', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -86,14 +104,14 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
       await _repo.delete(addr['id'] as String);
       if (mounted) setState(() => _addresses.removeWhere((a) => a['id'] == addr['id']));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: AppColors.lightBg,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -110,8 +128,8 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
                   icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                 ),
                 const Spacer(),
-                const Text('Adresses favorites',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                Text('Adresses favorites',
+                    style: ClientText.subtitle.copyWith(color: Colors.white)),
                 const Spacer(),
                 const SizedBox(width: 48),
               ]),
@@ -122,7 +140,12 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
         // ── Corps ───────────────────────────────────────────────────────────
         Expanded(
           child: _loading
-              ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+              ? ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),
+                  itemCount: 4,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (_, _) => const _AddressTileSkeleton(),
+                )
               : _addresses.isEmpty
                   ? _EmptyState(onAdd: () => _openForm())
                   : RefreshIndicator(
@@ -144,23 +167,17 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
       ),
 
       floatingActionButton: _addresses.length < _kMax
-          ? GestureDetector(
+          ? Pressable(
               onTap: () => _openForm(),
               child: Container(
                 height: 48,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF0CB8DE), Color(0xFF0671BA)],
+                    colors: [AppColors.primary, AppColors.primaryMid],
                   ),
                   borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF0CB8DE).withValues(alpha: 0.40),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  boxShadow: AppShadows.tinted(AppColors.primary),
                 ),
                 child: const Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.add_location_alt_outlined, color: Colors.white, size: 20),
@@ -170,6 +187,42 @@ class _FavoriteAddressesScreenState extends State<FavoriteAddressesScreen> {
               ),
             )
           : null,
+    );
+  }
+}
+
+// ── Skeleton (chargement) — épouse la forme de _AddressTile ─────────────────
+class _AddressTileSkeleton extends StatelessWidget {
+  const _AddressTileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 82,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppShadows.card,
+      ),
+      child: Row(children: [
+        Container(
+          width: 54, height: 54,
+          margin: const EdgeInsets.all(14),
+          decoration: const BoxDecoration(color: AppColors.lightFill, shape: BoxShape.circle),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SkeletonBox(width: 120, height: 13),
+              const SizedBox(height: 8),
+              SkeletonBox(width: MediaQuery.of(context).size.width * 0.4, height: 11),
+            ],
+          ),
+        ),
+        const SizedBox(width: 14),
+      ]),
     );
   }
 }
@@ -187,7 +240,7 @@ class _AddressTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: AppShadows.card,
       ),
       child: Row(children: [
         // Icône
@@ -204,10 +257,10 @@ class _AddressTile extends StatelessWidget {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(address['label'] as String? ?? '',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
+                style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)),
             const SizedBox(height: 2),
             Text(address['address'] as String? ?? '',
-                style: const TextStyle(fontSize: 12, color: Color(0xFF7B8CA0)),
+                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             if ((address['details'] as String?)?.isNotEmpty == true) ...[
               const SizedBox(height: 2),
@@ -220,7 +273,7 @@ class _AddressTile extends StatelessWidget {
         // Actions
         Column(mainAxisSize: MainAxisSize.min, children: [
           IconButton(onPressed: onEdit,   icon: Icon(Icons.edit_outlined,  color: AppColors.primary, size: 20)),
-          IconButton(onPressed: onDelete, icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 20)),
+          IconButton(onPressed: onDelete, icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20)),
         ]),
       ]),
     );
@@ -236,34 +289,28 @@ class _EmptyState extends StatelessWidget {
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       Text('📍', style: const TextStyle(fontSize: 56)),
       const SizedBox(height: 16),
-      const Text('Aucune adresse favorite',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
+      Text('Aucune adresse favorite',
+          style: ClientText.subtitle.copyWith(color: AppColors.textDark)),
       const SizedBox(height: 6),
       const Text('Enregistrez vos adresses fréquentes\npour commander plus vite.',
-          style: TextStyle(fontSize: 13, color: Color(0xFF7B8CA0)), textAlign: TextAlign.center),
+          style: TextStyle(fontSize: 13, color: AppColors.textMuted), textAlign: TextAlign.center),
       const SizedBox(height: 24),
-      GestureDetector(
+      Pressable(
         onTap: onAdd,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA)],
+              colors: [AppColors.primary, AppColors.primaryMid],
             ),
             borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0CB8DE).withValues(alpha: 0.40),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            boxShadow: AppShadows.tinted(AppColors.primary),
           ),
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.add_location_alt_outlined, color: Colors.white),
-            SizedBox(width: 8),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.add_location_alt_outlined, color: Colors.white),
+            const SizedBox(width: 8),
             Text('Ajouter une adresse',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                style: ClientText.button.copyWith(color: Colors.white)),
           ]),
         ),
       ),
@@ -287,8 +334,12 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
   double? _lat, _lng;
   List<Map<String, dynamic>> _suggestions = [];
   bool _searching = false;
+  String? _searchError;
+  String? _sessionToken;
   bool _locating  = false;
   Timer? _debounce;
+  final _dio = Dio();
+  late final _placesService = PlacesAutocompleteService(_dio);
 
   @override
   void initState() {
@@ -322,27 +373,37 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
       if (perm == LocationPermission.deniedForever) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Autorisez la localisation dans les réglages.')));
+        if (mounted) showDemToast(context, 'Autorisez la localisation dans les réglages.', isError: true);
         return;
       }
       final pos = await Geolocator.getCurrentPosition();
-      final marks = await geo.placemarkFromCoordinates(pos.latitude, pos.longitude)
-          .timeout(const Duration(seconds: 5));
+
+      // Google Geocoding en premier (couvre bien mieux Dakar que le
+      // géocodeur natif) puis le géocodeur natif iOS/Android en secours —
+      // jamais de coordonnées brutes affichées à l'utilisateur.
+      String? addr = await _placesService.reverseGeocode(pos.latitude, pos.longitude);
+      if (addr == null || addr.isEmpty) {
+        try {
+          final marks = await geo.placemarkFromCoordinates(pos.latitude, pos.longitude)
+              .timeout(const Duration(seconds: 5));
+          if (marks.isNotEmpty) {
+            final p = marks.first;
+            final street = p.street ?? p.name ?? '';
+            final local  = p.subLocality ?? p.locality ?? '';
+            final built  = street.isNotEmpty ? '$street, $local' : local;
+            if (built.isNotEmpty) addr = built;
+          }
+        } catch (_) {}
+      }
+
       if (!mounted) return;
-      final p = marks.isNotEmpty ? marks.first : null;
-      final street = p?.street ?? p?.name ?? '';
-      final local  = p?.subLocality ?? p?.locality ?? '';
-      final addr   = street.isNotEmpty ? '$street, $local' : local.isNotEmpty
-          ? local : '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
       setState(() {
         _lat = pos.latitude;
         _lng = pos.longitude;
-        _addressCtrl.text = addr;
+        _addressCtrl.text = (addr != null && addr.isNotEmpty) ? addr : 'Position sélectionnée';
       });
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Impossible de récupérer la position.')));
+      if (mounted) showDemToast(context, 'Impossible de récupérer la position.', isError: true);
     } finally {
       if (mounted) setState(() => _locating = false);
     }
@@ -352,41 +413,32 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
     setState(() { _lat = null; _lng = null; });
     _debounce?.cancel();
     if (q.trim().length < 3) { if (_suggestions.isNotEmpty) setState(() => _suggestions = []); return; }
+    _sessionToken ??= PlacesAutocompleteService.newSessionToken();
     _debounce = Timer(const Duration(milliseconds: 450), () async {
       if (!mounted) return;
-      setState(() => _searching = true);
+      setState(() { _searching = true; _searchError = null; });
       try {
-        final res = await Dio().get(
-          'https://maps.googleapis.com/maps/api/place/autocomplete/json',
-          queryParameters: {
-            'input': q, 'location': '14.6937,-17.4441', 'radius': '60000',
-            'components': 'country:sn', 'language': 'fr', 'key': AppConfig.mapsApiKey,
-          },
-        );
-        if (mounted && res.statusCode == 200) {
-          final preds = res.data['status'] == 'OK'
-              ? List<Map<String, dynamic>>.from(res.data['predictions'])
-              : <Map<String, dynamic>>[];
-          setState(() { _suggestions = preds; _searching = false; });
-        }
-      } catch (_) { if (mounted) setState(() => _searching = false); }
+        final preds = await _placesService.autocomplete(query: q, sessionToken: _sessionToken!);
+        if (mounted) setState(() { _suggestions = preds; _searching = false; });
+      } catch (e) {
+        if (mounted) setState(() { _searching = false; _searchError = friendlyError(e); });
+      }
     });
   }
+
+  void _retryAddressSearch() => _onAddressChanged(_addressCtrl.text);
 
   Future<void> _selectSuggestion(Map<String, dynamic> place) async {
     FocusScope.of(context).unfocus();
     setState(() => _suggestions = []);
+    final placeId = place['place_id'] as String?;
+    if (placeId == null) return;
+    final token = _sessionToken ?? PlacesAutocompleteService.newSessionToken();
     try {
-      final res = await Dio().get(
-        'https://maps.googleapis.com/maps/api/place/details/json',
-        queryParameters: {
-          'place_id': place['place_id'], 'fields': 'geometry,formatted_address',
-          'language': 'fr', 'key': AppConfig.mapsApiKey,
-        },
-      );
-      if (res.statusCode == 200 && res.data['status'] == 'OK') {
-        final loc  = res.data['result']['geometry']['location'];
-        final addr = res.data['result']['formatted_address'] as String?
+      final result = await _placesService.details(placeId: placeId, sessionToken: token);
+      if (result != null) {
+        final loc  = result['geometry']['location'];
+        final addr = result['formatted_address'] as String?
             ?? (place['structured_formatting']?['main_text'] as String? ?? '');
         setState(() {
           _lat = (loc['lat'] as num).toDouble();
@@ -394,7 +446,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
           _addressCtrl.text = addr;
         });
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _sessionToken = null;
+    }
   }
 
   void _save() {
@@ -427,11 +482,11 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
 
           // Titre
           Text(isEdit ? 'Modifier l\'adresse' : 'Nouvelle adresse favorite',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
+              style: ClientText.subtitle.copyWith(color: AppColors.textDark)),
           const SizedBox(height: 20),
 
           // Sélecteur d'icône
-          const Text('Icône', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF7B8CA0))),
+          Text('Icône', style: ClientText.label.copyWith(color: AppColors.textMuted)),
           const SizedBox(height: 8),
           Wrap(spacing: 8, children: _kIcons.map((ic) => GestureDetector(
             onTap: () => setState(() => _icon = ic),
@@ -439,7 +494,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               duration: const Duration(milliseconds: 180),
               width: 42, height: 42,
               decoration: BoxDecoration(
-                color: _icon == ic ? AppColors.primary.withValues(alpha: 0.12) : const Color(0xFFF1F5F9),
+                color: _icon == ic ? AppColors.primary.withValues(alpha: 0.12) : AppColors.lightFill,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: _icon == ic ? AppColors.primary : Colors.transparent,
@@ -461,8 +516,23 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               onChanged: _onAddressChanged,
               suffix: _lat != null
                   ? Icon(Icons.check_circle, color: Colors.green.shade600, size: 18)
-                  : (_searching ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)) : null)),
+                  : _searching
+                      ? const SizedBox(width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                      : _addressCtrl.text.trim().isNotEmpty
+                          ? Icon(Icons.error_outline, color: Colors.orange.shade700, size: 18)
+                          : null),
+          // Adresse tapée mais pas encore confirmée (coordonnées GPS
+          // manquantes) — ex. après modification du texte d'une adresse
+          // existante. Sans ce message, "Enregistrer" reste grisé sans
+          // explication visible.
+          if (_addressCtrl.text.trim().isNotEmpty && _lat == null && !_searching) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Sélectionnez une adresse dans la liste ou utilisez votre position actuelle.',
+              style: TextStyle(fontSize: 11.5, color: Colors.orange.shade800),
+            ),
+          ],
           const SizedBox(height: 8),
           // Bouton position actuelle
           GestureDetector(
@@ -482,50 +552,22 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                 const SizedBox(width: 8),
                 Text(
                   _locating ? 'Localisation en cours…' : 'Utiliser ma position actuelle',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: ClientText.body.copyWith(color: AppColors.primary),
                 ),
               ]),
             ),
           ),
           // Dropdown suggestions
-          if (_suggestions.isNotEmpty) ...[
+          if (_suggestions.isNotEmpty || _searching || _searchError != null) ...[
             const SizedBox(height: 4),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 200),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFEEF0F5)),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12)],
-              ),
-              child: ListView.separated(
-                padding: EdgeInsets.zero, shrinkWrap: true,
-                itemCount: _suggestions.length,
-                separatorBuilder: (_, _) => const Divider(height: 1, color: Color(0xFFEEF0F5)),
-                itemBuilder: (_, i) {
-                  final p = _suggestions[i];
-                  final main = (p['structured_formatting']?['main_text'] as String?) ?? '';
-                  final sec  = (p['structured_formatting']?['secondary_text'] as String?) ?? '';
-                  return InkWell(
-                    onTap: () => _selectSuggestion(p),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                      child: Row(children: [
-                        Icon(Icons.place_outlined, size: 16, color: AppColors.primary.withValues(alpha: 0.70)),
-                        const SizedBox(width: 10),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(main, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                          if (sec.isNotEmpty) Text(sec, style: const TextStyle(fontSize: 11, color: Color(0xFF7B8CA0))),
-                        ])),
-                      ]),
-                    ),
-                  );
-                },
-              ),
+            PlaceSuggestionsList(
+              suggestions: _suggestions,
+              loading: _searching,
+              error: _searchError,
+              onRetry: _retryAddressSearch,
+              onSelect: _selectSuggestion,
+              colors: _placeSuggestionsColors,
+              maxHeight: 200,
             ),
           ],
           const SizedBox(height: 12),
@@ -535,21 +577,11 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
           const SizedBox(height: 24),
 
           // Bouton
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _canSave ? _save : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                disabledBackgroundColor: const Color(0xFFEEF0F5),
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 0,
-              ),
-              child: Text(isEdit ? 'Enregistrer' : 'Ajouter l\'adresse',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-            ),
+          PrimaryButton(
+            label: isEdit ? 'Enregistrer' : 'Ajouter l\'adresse',
+            color: AppColors.primary,
+            disabledColor: AppColors.lightBorder,
+            onTap: _canSave ? _save : null,
           ),
         ]),
       ),
@@ -569,14 +601,14 @@ class _Field extends StatelessWidget {
   Widget build(BuildContext context) => TextField(
     controller: ctrl,
     onChanged: onChanged,
-    style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A2E)),
+    style: const TextStyle(fontSize: 14, color: AppColors.textDark),
     decoration: InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon, size: 18, color: AppColors.primary.withValues(alpha: 0.70)),
       suffixIcon: suffix != null ? Padding(padding: const EdgeInsets.only(right: 12), child: suffix) : null,
       suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-      filled: true, fillColor: const Color(0xFFF1F5F9),
-      labelStyle: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
+      filled: true, fillColor: AppColors.lightFill,
+      labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),

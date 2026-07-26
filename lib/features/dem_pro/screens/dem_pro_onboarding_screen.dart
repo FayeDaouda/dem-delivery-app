@@ -10,11 +10,12 @@ import '../../../core/api/api_client.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../../core/router/app_startup_notifier.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../../profile/data/profile_repository.dart';
 import '../providers/dem_pro_provider.dart';
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
+import '../widgets/dem_pro_button.dart';
 
 final _emailRegex = RegExp(r'^[\w.\-]+@[\w\-]+\.[\w\-.]+$');
 
@@ -158,7 +159,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
     final isTablet = DemLayout.isTablet(context);
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+      decoration: const BoxDecoration(color: DemProColors.bg2),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -220,17 +221,12 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
               const SizedBox(height: 12),
               Text(
                 'Profil de votre entreprise',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: isTablet ? 24.0 : 20.0,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
-                ),
+                style: DemProText.headline.copyWith(color: Colors.white, fontSize: isTablet ? 24.0 : 20.0, letterSpacing: -0.3),
               ),
               const SizedBox(height: 6),
               Text(
                 'Ces informations seront examinées par notre équipe',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12),
+                style: DemProText.caption.copyWith(color: Colors.white.withValues(alpha: 0.75)),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -243,7 +239,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DemProColors.bg,
       body: Column(
         children: [
           // Header bord-à-bord — jamais contraint par le formMaxWidth
@@ -306,15 +302,15 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                             hint: 'contact@entreprise.com',
                             keyboard: TextInputType.emailAddress,
                             textInputAction: TextInputAction.done,
-                            suffixIcon: const Icon(Icons.mail_outline, color: Color(0xFF9CA3AF), size: 18),
+                            suffixIcon: const Icon(Icons.mail_outline, color: DemProColors.muted, size: 18),
                           ),
                           const SizedBox(height: 28),
 
                           _SectionTitle(title: 'Activité', icon: Icons.two_wheeler),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'Combien de livraisons effectuez-vous par semaine ?',
-                            style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                            style: DemProText.body.copyWith(color: DemProColors.muted),
                           ),
                           const SizedBox(height: 12),
                           Row(
@@ -338,7 +334,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                           ],
 
                           const SizedBox(height: 32),
-                          _GradientButton(
+                          DemProButton(
                             label: 'Envoyer ma demande',
                             loading: _submitting,
                             onTap: _submit,
@@ -365,9 +361,9 @@ class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title, required this.icon});
   @override
   Widget build(BuildContext context) => Row(children: [
-    Icon(icon, color: AppColors.primaryMid, size: 18),
+    Icon(icon, color: DemProColors.accent, size: 18),
     const SizedBox(width: 8),
-    Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.primaryMid)),
+    Text(title, style: DemProText.subtitle.copyWith(color: DemProColors.accent)),
   ]);
 }
 
@@ -392,11 +388,7 @@ class _LightField extends StatelessWidget {
     children: [
       Text(
         label,
-        style: const TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF374151),
-        ),
+        style: DemProText.caption.copyWith(color: DemProColors.muted),
       ),
       const SizedBox(height: 6),
       TextField(
@@ -404,20 +396,20 @@ class _LightField extends StatelessWidget {
         textCapitalization: textCapitalization,
         keyboardType: keyboard,
         textInputAction: textInputAction,
-        style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14),
+        style: DemProText.body.copyWith(color: DemProColors.text, fontSize: 14),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+          hintStyle: DemProText.body.copyWith(color: DemProColors.muted),
           suffixIcon: suffixIcon,
           filled: true,
-          fillColor: const Color(0xFFF1F5F9),
+          fillColor: DemProColors.bg3,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+            borderSide: const BorderSide(color: DemProColors.bg4),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+            borderSide: const BorderSide(color: DemProColors.bg4),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
@@ -439,21 +431,17 @@ class _SectorDropdown extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Text(
+      Text(
         'Domaine d\'activité *',
-        style: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF374151),
-        ),
+        style: DemProText.caption.copyWith(color: DemProColors.muted),
       ),
       const SizedBox(height: 6),
       DropdownButtonFormField<String>(
         initialValue: value,
         onChanged: onChanged,
-        hint: const Text(
+        hint: Text(
           'Sélectionner un domaine',
-          style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+          style: DemProText.body.copyWith(color: DemProColors.muted),
         ),
         icon: Container(
           padding: const EdgeInsets.all(4),
@@ -463,18 +451,18 @@ class _SectorDropdown extends StatelessWidget {
           ),
           child: const Icon(Icons.keyboard_arrow_down_rounded, color: DemProColors.accent, size: 18),
         ),
-        style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14),
-        dropdownColor: Colors.white,
+        style: DemProText.body.copyWith(color: DemProColors.text, fontSize: 14),
+        dropdownColor: DemProColors.bg2,
         decoration: InputDecoration(
           filled: true,
-          fillColor: const Color(0xFFF1F5F9),
+          fillColor: DemProColors.bg3,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+            borderSide: const BorderSide(color: DemProColors.bg4),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+            borderSide: const BorderSide(color: DemProColors.bg4),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
@@ -501,10 +489,10 @@ class _VolumeCard extends StatelessWidget {
     duration: const Duration(milliseconds: 200),
     curve: Curves.easeInOut,
     decoration: BoxDecoration(
-      color: selected ? DemProColors.accent : const Color(0xFFF1F5F9),
+      color: selected ? DemProColors.accent : DemProColors.bg3,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: selected ? DemProColors.accent : const Color(0xFFE5E7EB),
+        color: selected ? DemProColors.accent : DemProColors.bg4,
         width: selected ? 2 : 1,
       ),
       boxShadow: selected
@@ -524,21 +512,13 @@ class _VolumeCard extends StatelessWidget {
             children: [
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
-                style: TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w800,
-                  color: selected ? Colors.white : const Color(0xFF1F2937),
-                ),
+                style: DemProText.subtitle.copyWith(fontWeight: FontWeight.w800, color: selected ? Colors.white : DemProColors.text),
                 child: Text(option.title, textAlign: TextAlign.center),
               ),
               const SizedBox(height: 2),
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
-                style: TextStyle(
-                  fontSize: 10, height: 1.2,
-                  color: selected
-                      ? Colors.white.withValues(alpha: 0.85)
-                      : const Color(0xFF6B7280),
-                ),
+                style: DemProText.micro.copyWith(height: 1.2, fontWeight: FontWeight.w600, color: selected ? Colors.white.withValues(alpha: 0.85) : DemProColors.muted),
                 child: const Text('livraisons /\nsemaine', textAlign: TextAlign.center),
               ),
             ],
@@ -556,46 +536,15 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: Colors.red.shade50,
+      color: DemProColors.danger.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: Colors.red.shade200),
+      border: Border.all(color: DemProColors.danger.withValues(alpha: 0.25)),
     ),
     child: Row(children: [
-      Icon(Icons.error_outline, color: Colors.red.shade600, size: 16),
+      const Icon(Icons.error_outline, color: DemProColors.danger, size: 16),
       const SizedBox(width: 8),
-      Expanded(child: Text(message, style: TextStyle(color: Colors.red.shade700, fontSize: 13))),
+      Expanded(child: Text(message, style: DemProText.body.copyWith(color: DemProColors.danger))),
     ]),
   );
 }
 
-class _GradientButton extends StatelessWidget {
-  final String label;
-  final bool loading;
-  final VoidCallback onTap;
-  const _GradientButton({required this.label, required this.onTap, this.loading = false});
-  @override
-  Widget build(BuildContext context) => Container(
-    height: DemLayout.isTablet(context) ? 56.0 : 52.0,
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-      ),
-      borderRadius: BorderRadius.circular(14),
-      boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))],
-    ),
-    child: Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: loading ? null : onTap,
-        child: Center(
-          child: loading
-              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-        ),
-      ),
-    ),
-  );
-}

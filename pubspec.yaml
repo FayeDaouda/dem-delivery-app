@@ -57,6 +57,7 @@ dependencies:
   url_launcher: ^6.3.1             # Support (tel, email, WhatsApp)
   flutter_local_notifications: ^21.0.0
   share_plus: ^13.1.0
+  qr_flutter: ^4.1.0               # QR généré côté app (lien de paiement Wave — pas d'image fournie par SamirPay)
 
 dev_dependencies:
   flutter_test:
@@ -79,7 +80,22 @@ flutter:
   uses-material-design: true
   assets:
     - assets/DEM.png
+    - assets/logo_Wave.png
+    - assets/logo_OM.png
     - assets/map_style_day.json
     - assets/map_style_waze.json
     - assets/icons/
     - assets/images/
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Light.ttf
+          weight: 300
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800

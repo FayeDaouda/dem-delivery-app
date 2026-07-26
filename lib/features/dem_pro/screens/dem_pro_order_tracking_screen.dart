@@ -13,10 +13,16 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/services/socket_service.dart';
 import '../../../core/storage/auth_storage.dart';
+import '../../../core/utils/price_format.dart';
 import '../../../core/theme/map_theme_provider.dart';
 import '../../deliveries/providers/orders_provider.dart';
 import '../../home_driver/navigation/map_theme.dart';
+import '../../home_driver/navigation/route_tracker.dart';
+import '../../../shared/widgets/operator_picker_sheet.dart';
+import '../../../shared/widgets/samirpay_payment_sheet.dart';
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
+import '../utils/dem_pro_format.dart';
 
 class DemProOrderTrackingScreen extends ConsumerStatefulWidget {
   final String orderId;
@@ -52,6 +58,9 @@ class _DemProOrderTrackingScreenState
 
   // ── Route ─────────────────────────────────────────────────────────────────
   List<LatLng> _routePoints = [];
+  List<LatLng> _displayRoute = [];
+  int _lastTrimIdx = 0;
+  DateTime? _lastReroute;
 
   // ── Sockets ───────────────────────────────────────────────────────────────
   StreamSubscription<Map<String, dynamic>>? _locationSub;
@@ -118,20 +127,52 @@ class _DemProOrderTrackingScreenState
       final lat = (data['lat'] as num?)?.toDouble();
       final lng = (data['lng'] as num?)?.toDouble();
       if (lat == null || lng == null) return;
-      setState(() => _driverPos = LatLng(lat, lng));
-      _mapCtrl?.animateCamera(CameraUpdate.newLatLng(LatLng(lat, lng)));
+      final loc = LatLng(lat, lng);
+      setState(() => _driverPos = loc);
+      _mapCtrl?.animateCamera(CameraUpdate.newLatLng(loc));
+      _matchAndTrimRoute(loc);
     });
 
     _statusSub = SocketService.instance.onOrderStatusUpdated.listen((data) {
       if (!mounted) return;
       if (data['orderId'] != widget.orderId) return;
       final s = (data['status'] as String? ?? '').toUpperCase();
+      final phaseChanged = s != _status;
       setState(() => _status = s);
+      // Changement de phase (récupération → livraison) : l'itinéraire doit
+      // repartir du livreur vers la nouvelle destination, pas rester sur
+      // l'ancien trajet pickup→livraison.
+      if (phaseChanged) _fetchRoute();
       if (s == 'DELIVERED') {
         _pollTimer?.cancel();
         _showCompletionDialog();
       }
     });
+  }
+
+  // ── Recalage position ↔ tracé ────────────────────────────────────────────
+  // Raccourcit le tracé affiché jusqu'à la position projetée du livreur (pas
+  // seulement le sommet le plus proche — voir RouteTracker) et déclenche un
+  // recalcul si le livreur dévie de plus de 70 m, limité à 1 fois/15s.
+  void _matchAndTrimRoute(LatLng driverLoc) {
+    if (_routePoints.isEmpty) return;
+    final match = RouteTracker.closestMatch(_routePoints, driverLoc, _lastTrimIdx);
+    if (match == null) return;
+
+    if (match.segmentIndex >= _lastTrimIdx) {
+      _lastTrimIdx = match.segmentIndex;
+      if (mounted) {
+        setState(() => _displayRoute = RouteTracker.remainingRoute(_routePoints, match));
+      }
+    }
+
+    final now = DateTime.now();
+    if (match.distanceMeters > 70 &&
+        (_lastReroute == null || now.difference(_lastReroute!).inSeconds >= 15)) {
+      _lastReroute = now;
+      _lastTrimIdx = 0;
+      _fetchRoute();
+    }
   }
 
   // ── Polling ───────────────────────────────────────────────────────────────
@@ -147,13 +188,19 @@ class _DemProOrderTrackingScreenState
         final driver = order['driver'] as Map<String, dynamic>?;
         final lat = (driver?['latitude'] as num?)?.toDouble();
         final lng = (driver?['longitude'] as num?)?.toDouble();
+        final phaseChanged = s != _status;
+        LatLng? newPos;
+        if (lat != null && lng != null && lat != 0 && lng != 0) newPos = LatLng(lat, lng);
         setState(() {
           _order = order;
           _status = s;
-          if (lat != null && lng != null && lat != 0 && lng != 0) {
-            _driverPos = LatLng(lat, lng);
-          }
+          if (newPos != null) _driverPos = newPos;
         });
+        if (phaseChanged) {
+          _fetchRoute();
+        } else if (newPos != null) {
+          _matchAndTrimRoute(newPos);
+        }
         if (s == 'DELIVERED' || s == 'CANCELLED') {
           _pollTimer?.cancel();
           if (s == 'DELIVERED') _showCompletionDialog();
@@ -172,12 +219,29 @@ class _DemProOrderTrackingScreenState
     final dLat = o['deliveryLatitude']  as double?;
     final dLng = o['deliveryLongitude'] as double?;
     if (pLat == null || pLng == null || dLat == null || dLng == null) return;
+
+    // Origine/destination selon la phase — avant récupération le trajet va
+    // du livreur vers le point de collecte, après vers le point de livraison
+    // (sinon le tracé reste figé sur pickup→livraison toute la course).
+    final double oLat, oLng, tLat, tLng;
+    if (_status == 'ACCEPTED' && _driverPos != null) {
+      oLat = _driverPos!.latitude;  oLng = _driverPos!.longitude;
+      tLat = pLat;                  tLng = pLng;
+    } else if (_status == 'PICKED_UP' || _status == 'IN_TRANSIT') {
+      oLat = _driverPos?.latitude  ?? pLat;
+      oLng = _driverPos?.longitude ?? pLng;
+      tLat = dLat;                  tLng = dLng;
+    } else {
+      oLat = pLat; oLng = pLng;
+      tLat = dLat; tLng = dLng;
+    }
+
     try {
       final res = await Dio().get(
         'https://maps.googleapis.com/maps/api/directions/json',
         queryParameters: {
-          'origin':      '$pLat,$pLng',
-          'destination': '$dLat,$dLng',
+          'origin':      '$oLat,$oLng',
+          'destination': '$tLat,$tLng',
           'key':         AppConfig.mapsApiKey,
         },
       );
@@ -187,7 +251,13 @@ class _DemProOrderTrackingScreenState
       for (final s in steps) {
         pts.addAll(_decodePolyline(s['polyline']['points'] as String));
       }
-      if (mounted) setState(() => _routePoints = pts);
+      if (mounted) {
+        setState(() {
+          _routePoints = pts;
+          _displayRoute = pts;
+          _lastTrimIdx = 0;
+        });
+      }
     } catch (_) {}
   }
 
@@ -216,7 +286,7 @@ class _DemProOrderTrackingScreenState
       barrierDismissible: false,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF0C1628),
+          backgroundColor: DemProColors.bg2,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(
@@ -228,18 +298,18 @@ class _DemProOrderTrackingScreenState
               child: const Icon(Icons.check_rounded, color: DemProColors.success, size: 36),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Livraison effectuée !',
-              style: TextStyle(color: Color(0xFFE8F4F8), fontSize: 18, fontWeight: FontWeight.w700),
+              style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 18),
             ),
             const SizedBox(height: 8),
             Text(
               'Commande #${widget.orderId.substring(0, 8).toUpperCase()} livrée avec succès.',
-              style: const TextStyle(color: Color(0xFF6B8BAA), fontSize: 13),
+              style: DemProText.body.copyWith(color: DemProColors.muted),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
-            const Text('Notez le livreur', style: TextStyle(color: Color(0xFFE8F4F8), fontSize: 14, fontWeight: FontWeight.w600)),
+            Text('Notez le livreur', style: DemProText.subtitle.copyWith(color: DemProColors.text)),
             const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -251,7 +321,7 @@ class _DemProOrderTrackingScreenState
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Icon(
                       star <= selectedRating ? Icons.star : Icons.star_border,
-                      color: star <= selectedRating ? const Color(0xFFFFD700) : const Color(0xFF6B8BAA),
+                      color: star <= selectedRating ? DemProColors.ratingGold : DemProColors.muted,
                       size: 32,
                     ),
                   ),
@@ -283,7 +353,7 @@ class _DemProOrderTrackingScreenState
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Voir le reçu', style: TextStyle(fontWeight: FontWeight.w600)),
+                child: Text('Voir le reçu', style: DemProText.body.copyWith(fontWeight: FontWeight.w600)),
               ),
             ),
             const SizedBox(height: 8),
@@ -294,7 +364,7 @@ class _DemProOrderTrackingScreenState
                   Navigator.pop(context);
                   context.go('/dem-pro/home');
                 },
-                child: const Text('Retour au tableau de bord', style: TextStyle(color: Color(0xFF6B8BAA))),
+                child: Text('Retour au tableau de bord', style: DemProText.body.copyWith(color: DemProColors.muted)),
               ),
             ),
           ]),
@@ -307,6 +377,30 @@ class _DemProOrderTrackingScreenState
     final baseUrl = 'https://api.dem.sn';
     final url = '$baseUrl/track/${widget.orderId}';
     SharePlus.instance.share(ShareParams(text: 'Suivez ma livraison DEM en temps réel : $url'));
+  }
+
+  // "Vous payez la livraison" (paymentMode merchant) : c'est l'entreprise
+  // DEM Pro elle-même qui règle en ligne, pas le destinataire — même flux
+  // que le client classique (payOnline autorise déjà order.clientId ===
+  // requesterId, quel que soit le rôle, voir samirpay.service.js).
+  Future<void> _payOnline() async {
+    final o = _order ?? widget.initialOrder ?? {};
+    final price = clientChargeFor(o);
+
+    final operatorName = await chooseOperator(context, title: 'Payer avec');
+    if (operatorName == null || !mounted) return;
+
+    await SamirpayPaymentSheet.show(
+      context,
+      amount: price,
+      title: 'Paiement de la livraison',
+      initPayment: () => ref.read(ordersRepositoryProvider).payOnline(widget.orderId, operatorName),
+      confirmationStream: SocketService.instance.onOrderPaymentConfirmed
+          .where((event) => event['orderId'] == widget.orderId),
+      onSuccess: () {
+        if (mounted) setState(() => _order = {..._order ?? widget.initialOrder ?? {}, 'paymentStatus': 'PAID'});
+      },
+    );
   }
 
   // ── Contact livreur ───────────────────────────────────────────────────────
@@ -335,7 +429,7 @@ class _DemProOrderTrackingScreenState
     'IN_TRANSIT' => ('En route vers la destination', DemProColors.accent),
     'DELIVERED'  => ('Livraison effectuée', DemProColors.success),
     'CANCELLED'  => ('Commande annulée', DemProColors.danger),
-    _            => ('En attente', const Color(0xFF6B8BAA)),
+    _            => ('En attente', DemProColors.muted),
   };
 
   String? get _distanceInfo {
@@ -375,6 +469,8 @@ class _DemProOrderTrackingScreenState
     final pickup   = _short(o['pickupAddress']   as String?);
     final delivery = _short(o['deliveryAddress'] as String?);
     final price    = (o['price'] as num?) ?? 0;
+    final needsMerchantPayment =
+        o['paymentMode'] == 'merchant' && o['paymentStatus'] != 'PAID';
     final driver   = o['driver'] as Map<String, dynamic>?;
     final dName    = driver?['name'] as String? ?? 'Livreur DEM';
     final dPhone   = driver?['phone'] as String?;
@@ -416,11 +512,11 @@ class _DemProOrderTrackingScreenState
               mapToolbarEnabled: false,
               style: _mapStyle,
               markers: markers,
-              polylines: _routePoints.isNotEmpty
+              polylines: _displayRoute.isNotEmpty
                   ? {
                       Polyline(
                         polylineId: const PolylineId('route'),
-                        points: _routePoints,
+                        points: _displayRoute,
                         color: DemProColors.accent,
                         width: 4,
                       ),
@@ -508,11 +604,7 @@ class _DemProOrderTrackingScreenState
                   child: Text(
                     statusLabel,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
+                    style: DemProText.bodyStrong.copyWith(color: statusColor),
                   ),
                 ),
                 if (_distanceInfo != null) ...[
@@ -522,7 +614,7 @@ class _DemProOrderTrackingScreenState
                     const SizedBox(width: 6),
                     Text(
                       _distanceInfo!,
-                      style: const TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w600),
+                      style: DemProText.bodyStrong.copyWith(color: DemProColors.accent),
                     ),
                   ]),
                 ],
@@ -539,11 +631,7 @@ class _DemProOrderTrackingScreenState
                     child: Center(
                       child: Text(
                         _initials(dName),
-                        style: const TextStyle(
-                          color: DemProColors.accent,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
+                        style: DemProText.title.copyWith(color: DemProColors.accent, fontSize: 15),
                       ),
                     ),
                   ),
@@ -551,21 +639,32 @@ class _DemProOrderTrackingScreenState
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(dName,
-                          style: const TextStyle(
-                              color: Color(0xFFE8F4F8),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700)),
-                      const Text('Livreur DEM',
-                          style: TextStyle(color: Color(0xFF6B8BAA), fontSize: 12)),
+                          style: DemProText.subtitle.copyWith(color: DemProColors.text)),
+                      Text('Livreur DEM',
+                          style: DemProText.caption.copyWith(color: DemProColors.muted)),
                     ]),
                   ),
-                  if (dPhone != null)
-                    _ActionChip(
-                      icon: Icons.phone_outlined,
-                      label: 'Appeler',
-                      onTap: _callDriver,
-                    ),
                 ]),
+                if (dPhone != null) ...[
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: _ActionChip(
+                        icon: Icons.chat_bubble_outline,
+                        label: 'WhatsApp',
+                        onTap: () => _whatsAppDriver(dPhone),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ActionChip(
+                        icon: Icons.phone_outlined,
+                        label: 'Appeler',
+                        onTap: _callDriver,
+                      ),
+                    ),
+                  ]),
+                ],
                 const SizedBox(height: 16),
 
                 // ── Adresses ───────────────────────────────────────────────
@@ -575,28 +674,53 @@ class _DemProOrderTrackingScreenState
                 // ── Prix ───────────────────────────────────────────────────
                 Row(children: [
                   const Icon(Icons.payments_outlined,
-                      color: Color(0xFF6B8BAA), size: 14),
+                      color: DemProColors.muted, size: 14),
                   const SizedBox(width: 6),
-                  Text(
-                    '${_fmtPrice(price.toInt())} FCFA',
-                    style: const TextStyle(
-                        color: Color(0xFFE8F4F8),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14),
-                  ),
+                  Builder(builder: (context) {
+                    final charge = clientChargeFor(o);
+                    if (charge >= price.round()) {
+                      return Text(
+                        DemProFormat.fcfa(price.toInt()),
+                        style: DemProText.subtitle.copyWith(color: DemProColors.text),
+                      );
+                    }
+                    return Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(DemProFormat.fcfa(price.toInt()),
+                          style: DemProText.caption.copyWith(decoration: TextDecoration.lineThrough)),
+                      const SizedBox(width: 6),
+                      Text(DemProFormat.fcfa(charge),
+                          style: DemProText.subtitle.copyWith(color: DemProColors.success)),
+                    ]);
+                  }),
                   const Spacer(),
                   Text(
                     '#${widget.orderId.substring(0, 8).toUpperCase()}',
-                    style: const TextStyle(color: Color(0xFF6B8BAA), fontSize: 12),
+                    style: DemProText.caption.copyWith(color: DemProColors.muted),
                   ),
                 ]),
+                if (needsMerchantPayment) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _payOnline,
+                      icon: const Icon(Icons.payments_outlined, size: 16),
+                      label: Text('Payer via SamirPay', style: DemProText.bodyStrong.copyWith(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: DemProColors.accent,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: _shareOrder,
                     icon: const Icon(Icons.share_outlined, size: 16),
-                    label: const Text('Partager le suivi', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    label: const Text('Partager le suivi', style: DemProText.bodyStrong),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: DemProColors.accent,
                       side: BorderSide(color: DemProColors.accent.withValues(alpha: 0.4)),
@@ -633,11 +757,11 @@ class _MapBtn extends StatelessWidget {
     child: Container(
       width: 40, height: 40,
       decoration: BoxDecoration(
-        color: const Color(0xFF0C1628).withValues(alpha: 0.9),
+        color: DemProColors.bg2.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Icon(icon, color: const Color(0xFFE8F4F8), size: 20),
+      child: Icon(icon, color: DemProColors.text, size: 20),
     ),
   );
 }
@@ -658,14 +782,11 @@ class _ActionChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         Icon(icon, color: DemProColors.accent, size: 14),
         const SizedBox(width: 5),
         Text(label,
-            style: const TextStyle(
-                color: DemProColors.accent,
-                fontSize: 12,
-                fontWeight: FontWeight.w600)),
+            style: DemProText.caption.copyWith(color: DemProColors.accent)),
       ]),
     ),
   );
@@ -680,16 +801,16 @@ class _AddressCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
-      color: const Color(0xFF111E35),
+      color: DemProColors.bg3,
       borderRadius: BorderRadius.circular(12),
     ),
     child: Column(children: [
       Row(children: [
-        const Icon(Icons.radio_button_on, color: Color(0xFF00E08C), size: 13),
+        const Icon(Icons.radio_button_on, color: DemProColors.success, size: 13),
         const SizedBox(width: 10),
         Expanded(
           child: Text(pickup,
-              style: const TextStyle(color: Color(0xFFE8F4F8), fontSize: 13),
+              style: DemProText.body.copyWith(color: DemProColors.text),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ]),
@@ -697,28 +818,18 @@ class _AddressCard extends StatelessWidget {
         padding: const EdgeInsets.only(left: 6, top: 3, bottom: 3),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Container(width: 1.5, height: 10, color: const Color(0xFF1E3050)),
+          child: Container(width: 1.5, height: 10, color: DemProColors.divider),
         ),
       ),
       Row(children: [
-        const Icon(Icons.location_on, color: Color(0xFFFF5C5C), size: 13),
+        const Icon(Icons.location_on, color: DemProColors.danger, size: 13),
         const SizedBox(width: 10),
         Expanded(
           child: Text(delivery,
-              style: const TextStyle(color: Color(0xFFE8F4F8), fontSize: 13),
+              style: DemProText.body.copyWith(color: DemProColors.text),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ]),
     ]),
   );
-}
-
-String _fmtPrice(int v) {
-  final s = v.toString();
-  final buf = StringBuffer();
-  for (int i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) buf.write(" ");
-    buf.write(s[i]);
-  }
-  return buf.toString();
 }

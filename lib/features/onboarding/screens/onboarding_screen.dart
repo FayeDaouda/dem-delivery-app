@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/router/app_startup_notifier.dart';
+import '../../../core/theme/app_theme.dart';
 
 // ── Données des slides ────────────────────────────────────────────────────────
 class _Slide {
@@ -274,7 +275,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               onPressed: isLast ? _finish : () => _goToPage(_page + 1),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF04317C),
+                foregroundColor: AppColors.primaryDark,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),

@@ -22,6 +22,7 @@ class SocketService {
   final _expiredOrderController         = StreamController<String>.broadcast();
   final _reconnectController            = StreamController<void>.broadcast();
   final _orderAcceptedController        = StreamController<Map<String, dynamic>>.broadcast();
+  final _orderAdminAssignedController   = StreamController<Map<String, dynamic>>.broadcast();
   final _orderStatusUpdatedController   = StreamController<Map<String, dynamic>>.broadcast();
   final _driverLocationController       = StreamController<Map<String, dynamic>>.broadcast();
   final _driverOfflineController        = StreamController<Map<String, dynamic>>.broadcast();
@@ -32,11 +33,16 @@ class SocketService {
   final _orderAdminCancelledController  = StreamController<Map<String, dynamic>>.broadcast();
   final _newBatchController             = StreamController<Map<String, dynamic>>.broadcast();
   final _batchExpiredController         = StreamController<String>.broadcast();
+  // Paiements SamirPay (recharge wallet livreur + paiement client en ligne)
+  final _walletUpdatedController         = StreamController<Map<String, dynamic>>.broadcast();
+  final _orderPaymentConfirmedController = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get onNewOrder             => _newOrderController.stream;
   Stream<String>               get onOrderExpired          => _expiredOrderController.stream;
   Stream<void>                 get onReconnect             => _reconnectController.stream;
   Stream<Map<String, dynamic>> get onOrderAccepted         => _orderAcceptedController.stream;
+  // Assignation manuelle par l'admin (dispatch direct, sans passer par une offre)
+  Stream<Map<String, dynamic>> get onOrderAdminAssigned    => _orderAdminAssignedController.stream;
   Stream<Map<String, dynamic>> get onOrderStatusUpdated    => _orderStatusUpdatedController.stream;
   Stream<Map<String, dynamic>> get onDriverLocation        => _driverLocationController.stream;
   Stream<Map<String, dynamic>> get onDriverOffline         => _driverOfflineController.stream;
@@ -50,6 +56,9 @@ class SocketService {
   // Tournées (batch)
   Stream<Map<String, dynamic>> get onNewBatch              => _newBatchController.stream;
   Stream<String>               get onBatchExpired          => _batchExpiredController.stream;
+  // Paiements SamirPay
+  Stream<Map<String, dynamic>> get onWalletUpdated         => _walletUpdatedController.stream;
+  Stream<Map<String, dynamic>> get onOrderPaymentConfirmed => _orderPaymentConfirmedController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -124,6 +133,11 @@ class SocketService {
           _orderAcceptedController.add(Map<String, dynamic>.from(data));
         }
       })
+      ..on('order:admin_assigned', (data) {
+        if (data is Map) {
+          _orderAdminAssignedController.add(Map<String, dynamic>.from(data));
+        }
+      })
       ..on('order:status_updated', (data) {
         if (data is Map) {
           _orderStatusUpdatedController.add(Map<String, dynamic>.from(data));
@@ -177,6 +191,16 @@ class SocketService {
       ..on('batch:taken', (data) {
         if (data is Map && data['batchId'] != null) {
           _batchExpiredController.add(data['batchId'] as String);
+        }
+      })
+      ..on('wallet:updated', (data) {
+        if (data is Map) {
+          _walletUpdatedController.add(Map<String, dynamic>.from(data));
+        }
+      })
+      ..on('order:payment_confirmed', (data) {
+        if (data is Map) {
+          _orderPaymentConfirmedController.add(Map<String, dynamic>.from(data));
         }
       })
       ..connect();

@@ -18,4 +18,10 @@ class AppConfig {
 
   static const privacyPolicyUrl = 'https://www.dem.sn/privacy';
   static const termsUrl         = 'https://www.dem.sn/terms';
+
+  // Contact support — centralisé ici pour éviter les numéros dupliqués/
+  // divergents d'un écran à l'autre (Signaler un problème, profil, suivi...).
+  static const supportPhone     = '+221710064664';
+  static const supportWhatsapp  = '221710064664';
+  static const supportEmail     = 'support@dem.sn';
 }

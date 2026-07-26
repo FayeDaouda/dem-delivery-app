@@ -34,6 +34,34 @@ class OrdersRepository {
     }
   }
 
+  /// Comme [getMyOrders] mais paginé — le backend supporte déjà `page`/`limit`
+  /// (réponse `{ orders, page, totalPages }`), utilisé par l'écran d'historique
+  /// pour éviter de charger tout l'historique du client d'un coup.
+  Future<({List<Map<String, dynamic>> orders, bool hasMore})> getMyOrdersPage({
+    int page = 1,
+    int limit = 30,
+  }) async {
+    try {
+      final response = await _dio.get('/orders/my', queryParameters: {'page': page, 'limit': limit});
+      final data = response.data;
+      final orders = _parseList(data);
+      if (data is Map) {
+        final currentPage = (data['page'] as num?)?.toInt();
+        final totalPages  = (data['totalPages'] as num?)?.toInt();
+        final hasMore = currentPage != null && totalPages != null && currentPage < totalPages;
+        return (orders: orders, hasMore: hasMore);
+      }
+      return (orders: orders, hasMore: false);
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger l\'historique.',
+        e.response?.statusCode,
+      );
+    } catch (_) {
+      throw const AppException('Impossible de charger l\'historique.');
+    }
+  }
+
   /// Parse sûre : accepte une liste directe ou un objet paginé { orders/data: [...] }.
   static List<Map<String, dynamic>> _parseList(dynamic data) {
     List<dynamic> raw;
@@ -166,9 +194,40 @@ class OrdersRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getHeatmap() async {
+  /// Aperçu de la promo applicable à cette commande, AVANT création — la
+  /// vraie source de vérité reste toujours createOrder côté serveur, qui
+  /// refait le calcul indépendamment (jamais fait confiance à ce que
+  /// renverrait un preview manipulé). Sans [code] : meilleure campagne
+  /// auto-appliquée (peut renvoyer null, ce n'est pas une erreur). Avec
+  /// [code] : throw une [AppException] si le code n'est pas valide/éligible.
+  Future<Map<String, dynamic>?> getPromoPreview({
+    required int price, required int demFee, String? code,
+  }) async {
     try {
-      final response = await _dio.get('/orders/heatmap');
+      final res = await _dio.get('/orders/promo/preview', queryParameters: {
+        'price': price,
+        'demFee': demFee,
+        if (code != null && code.isNotEmpty) 'code': code,
+      });
+      final data = res.data as Map<String, dynamic>;
+      return data['discountAmount'] != null && (data['discountAmount'] as num) > 0 ? data : null;
+    } on DioException catch (e) {
+      if (code != null && code.isNotEmpty) {
+        throw AppException(
+          e.response?.data?['message'] ?? 'Code promo invalide.',
+          e.response?.statusCode,
+        );
+      }
+      return null; // aperçu silencieux (auto-apply) — jamais bloquant
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getHeatmap({int hours = 24, String? type}) async {
+    try {
+      final response = await _dio.get('/orders/heatmap', queryParameters: {
+        'hours': hours,
+        'type': ?type,
+      });
       return _parseList(response.data);
     } catch (_) {
       return [];
@@ -254,6 +313,23 @@ class OrdersRepository {
     }
   }
 
+  /// Lance un paiement en ligne (SamirPay) pour cette commande — alternative
+  /// optionnelle au cash à la livraison. Le QR affiché est l'image fournie
+  /// par SamirPay pour Orange Money, ou généré côté app à partir du lien
+  /// pour Wave (voir SamirpayPaymentSheet) — les deux apps ont un scanner
+  /// intégré capable de lire ce type de QR.
+  Future<Map<String, dynamic>> payOnline(String id, String operatorName) async {
+    try {
+      final response = await _dio.post('/orders/$id/pay', data: {'operatorName': operatorName});
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de lancer le paiement en ligne.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> driverCancelOrder(String id) async {
     try {
       final response = await _dio.patch('/orders/$id/driver-cancel');
@@ -266,10 +342,10 @@ class OrdersRepository {
     }
   }
 
+  /// Propage l'échec (pas de catch silencieux) — [LocationQueueService] s'en
+  /// sert pour distinguer succès/échec et gérer la mise en file d'attente.
   Future<void> updateDriverLocation(double lat, double lng) async {
-    try {
-      await _dio.patch('/users/driver/location', data: {'lat': lat, 'lng': lng});
-    } catch (_) {}
+    await _dio.patch('/users/driver/location', data: {'lat': lat, 'lng': lng});
   }
 
   Future<bool> checkFreeCourse() async {
@@ -287,11 +363,18 @@ class OrdersRepository {
     String orderId, {
     required String type,
     String? message,
+    double? lat,
+    double? lng,
   }) async {
     try {
       final response = await _dio.post(
         '/orders/$orderId/report',
-        data: { 'type': type, if (message != null && message.isNotEmpty) 'message': message },
+        data: {
+          'type': type,
+          if (message != null && message.isNotEmpty) 'message': message,
+          if (lat != null && lng != null) 'lat': lat,
+          if (lat != null && lng != null) 'lng': lng,
+        },
       );
       return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (e) {

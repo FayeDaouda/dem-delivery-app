@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import '../../../core/notifications/notification_service.dart';
 
 import '../../core/error/app_exception.dart';
 import '../../core/utils/dem_toast.dart';
+import '../../core/utils/price_format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,13 +13,23 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
+import '../../core/services/location_queue_service.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
+import '../../shared/widgets/address_row.dart';
+import '../../shared/widgets/gradient_sheet.dart';
+import '../../shared/widgets/map_theme_toggle_button.dart';
+import '../../shared/widgets/payment_collection_dialog.dart';
+import '../../shared/widgets/swipe_to_confirm.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
+import '../../features/profile/data/profile_repository.dart';
 import '../../features/profile/providers/profile_provider.dart';
+import '../../features/profile/screens/driver_wallet_screen.dart';
 import 'navigation/directions_service.dart';
+import 'navigation/driver_marker_icon.dart';
 import 'navigation/map_theme.dart';
 import 'navigation/navigation_service.dart';
 import '../../core/map/poi_data.dart';
@@ -45,6 +55,9 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   PoiIconSet?     _poiIconSet;
   List<PoiPoint>? _pois;
 
+  // ── Heatmap de la demande (visible pendant les temps morts) ───────────────
+  Set<Circle> _heatmapCircles = {};
+
   // ── Pulse animation ───────────────────────────────────────────────────────
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseScale;
@@ -63,11 +76,21 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   StreamSubscription<Map<String, dynamic>>? _newBatchSub;
   StreamSubscription<String>?              _batchExpiredSub;
   StreamSubscription<Map<String, dynamic>>? _cancelledOrderSub;
+  StreamSubscription<Map<String, dynamic>>? _adminAssignedSub;
+  StreamSubscription<Map<String, dynamic>>? _paymentConfirmedSub;
 
   // ── Offre de tournée (batch) ──────────────────────────────────────────────
   Map<String, dynamic>? _currentBatch;
   int _batchCountdown = 25;
   Timer? _batchCountdownTimer;
+  bool _batchActionLoading = false;
+  // Incrémenté à chaque nouvelle offre et à chaque échec d'acceptation — force
+  // la réinitialisation visuelle du curseur "glisser pour accepter".
+  int _batchSwipeTick = 0;
+
+  // ── Offre de course simple : évite le double-tap Accepter/Refuser ────────
+  bool _orderActionLoading = false;
+  int _orderSwipeTick = 0;
 
   // ── Polling fallback (si socket déconnecté) ───────────────────────────────
   Timer? _pollTimer;
@@ -77,11 +100,13 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   // ── Route vers pickup (pendant notification) ──────────────────────────────
   List<LatLng> _pendingRoutePoints = [];
+  LatLng? _pendingPickup;
   int?    _pendingEtaSeconds;
   double? _pendingDistanceMeters;
 
   // ── Throttle émission position ────────────────────────────────────────────
   DateTime? _lastLocationEmit;
+  late final _locationQueue = LocationQueueService(ref.read(ordersRepositoryProvider));
 
   // ── Countdown nouvelle course ─────────────────────────────────────────────
   int _countdown = 60;
@@ -92,6 +117,13 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   int _todayGains   = 0;
   Map<String, dynamic>? _activeOrder;
   Map<String, dynamic>? _activeBatch;
+  // Course livrée mais jamais encaissée (driver parti sans conclure le
+  // paiement) — signalée par une bannière pour qu'il puisse la régulariser.
+  Map<String, dynamic>? _unpaidOrder;
+
+  // ── Passe journalière — bannière informative (le blocage réel est côté serveur) ──
+  final _profileRepo = ProfileRepository();
+  Map<String, dynamic>? _forfaitStatus;
 
   @override
   void initState() {
@@ -106,7 +138,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _pulseOpacity = Tween<double>(begin: 0.7, end: 0.0).animate(_pulseCtrl);
 
     _loadMapStyle();
-    _buildDriverIcon().then((icon) {
+    buildDriverMarkerIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
     });
     PoiService.loadPois().then((pois) {
@@ -116,6 +148,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     });
     _startGPS();
     _loadTodayStats();
+    _loadForfaitStatus();
+    _loadHeatmap();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(profileProvider.notifier).fetchProfile(goOnlineIfOffline: true);
       _connectSocket();
@@ -136,10 +170,62 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   void didPopNext() {
     // Rechargement auto des stats et des commandes disponibles au retour de la livraison
     _loadTodayStats();
+    _loadHeatmap();
+    _refreshAfterReturn();
+  }
+
+  Future<void> _refreshAfterReturn() async {
+    final hadValidPass = _forfaitStatus?['todayCharged'] == true;
+    await _loadForfaitStatus();
+    final hasValidPassNow = _forfaitStatus?['todayCharged'] == true;
+    // La passe vient d'être activée (typiquement depuis l'écran Portefeuille)
+    // — le livreur ne doit pas avoir à re-glisser manuellement pour se
+    // remettre en ligne. On ne retente PAS ça à chaque retour sur l'accueil
+    // (sinon ça écraserait un passage hors ligne volontaire du livreur qui
+    // avait déjà une passe valide) — seulement sur la transition invalide→valide.
+    final justActivated = !hadValidPass && hasValidPassNow;
+    // Solde affiché sur la pastille "Wallet" — sinon reste figé sur sa
+    // valeur de connexion après une recharge/retrait/livraison payée.
+    await ref.read(profileProvider.notifier).fetchProfile(goOnlineIfOffline: justActivated);
     final isAvailable = ref.read(profileProvider).isAvailable;
     if (isAvailable) {
       ref.read(availableOrdersProvider.notifier).refresh();
     }
+  }
+
+  Future<void> _loadForfaitStatus() async {
+    final status = await _profileRepo.getForfaitStatus();
+    if (mounted) setState(() => _forfaitStatus = status);
+  }
+
+  Future<void> _loadHeatmap() async {
+    final points = await ref.read(ordersRepositoryProvider).getHeatmap(type: 'DELIVERY');
+    if (mounted) setState(() => _heatmapCircles = _buildHeatmapCircles(points));
+  }
+
+  // Cercles semi-transparents dont la taille/couleur varie selon l'intensité
+  // (pas de vrai calque de chaleur natif dans google_maps_flutter).
+  Set<Circle> _buildHeatmapCircles(List<Map<String, dynamic>> points) {
+    if (points.isEmpty) return {};
+    final maxCount = points
+        .map((p) => (p['count'] as num?)?.toInt() ?? 0)
+        .fold(0, (a, b) => a > b ? a : b);
+    if (maxCount == 0) return {};
+
+    return points.map((p) {
+      final lat = (p['lat'] as num).toDouble();
+      final lng = (p['lng'] as num).toDouble();
+      final count = (p['count'] as num?)?.toInt() ?? 0;
+      final intensity = (count / maxCount).clamp(0.0, 1.0);
+      final color = Color.lerp(AppColors.primary, const Color(0xFFFF5C3C), intensity)!;
+      return Circle(
+        circleId: CircleId('heat-$lat-$lng'),
+        center: LatLng(lat, lng),
+        radius: 350 + intensity * 450,
+        fillColor: color.withValues(alpha: 0.18 + intensity * 0.22),
+        strokeWidth: 0,
+      );
+    }).toSet();
   }
 
   @override
@@ -154,6 +240,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _newOrderSub?.cancel();
     _expiredOrderSub?.cancel();
     _cancelledOrderSub?.cancel();
+    _adminAssignedSub?.cancel();
+    _paymentConfirmedSub?.cancel();
     _reconnectSub?.cancel();
     _newBatchSub?.cancel();
     _batchExpiredSub?.cancel();
@@ -209,9 +297,29 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       }
     });
 
+    _adminAssignedSub = SocketService.instance.onOrderAdminAssigned.listen((_) {
+      if (!mounted) return;
+      // Course attribuée directement par l'admin (sans passer par une offre) —
+      // recharge la course active immédiatement au lieu d'attendre un retour sur l'accueil.
+      _loadTodayStats();
+    });
+
     _reconnectSub = SocketService.instance.onReconnect.listen((_) {
       if (!mounted) return;
       ref.read(availableOrdersProvider.notifier).refresh();
+    });
+
+    // Notification globale : un paiement en ligne peut se confirmer après
+    // que le livreur ait quitté l'écran de paiement (QR fermé avant que le
+    // client ait fini de scanner, ou passé à une autre course entre-temps)
+    // — sans ça, il n'a aucun moyen de savoir que ça a finalement abouti.
+    _paymentConfirmedSub = SocketService.instance.onOrderPaymentConfirmed.listen((data) {
+      if (!mounted) return;
+      final amount = (data['amount'] as num?)?.toInt();
+      final address = data['deliveryAddress'] as String?;
+      final where = address != null && address.trim().isNotEmpty ? ' — $address' : '';
+      showDemToast(context, 'Paiement confirmé${amount != null ? ' : $amount FCFA' : ''}$where');
+      _loadTodayStats();
     });
 
     _newBatchSub = SocketService.instance.onNewBatch.listen((batch) {
@@ -219,6 +327,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       setState(() {
         _currentBatch = batch;
         _batchCountdown = 25;
+        _batchSwipeTick++;
       });
       _startBatchCountdown();
     });
@@ -253,7 +362,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
 
   void _startCountdown() {
     _countdownTimer?.cancel();
-    setState(() => _countdown = 60);
+    setState(() { _countdown = 60; _orderSwipeTick++; });
     NotificationService.startOrderAlert();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
@@ -285,10 +394,15 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       final now  = DateTime.now();
       int courses = 0, gains = 0;
       Map<String, dynamic>? active;
+      Map<String, dynamic>? unpaid;
       for (final o in List<Map<String, dynamic>>.from(list)) {
         final status = (o['status'] as String? ?? '').toUpperCase();
         if (['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].contains(status)) {
           active = o;
+        }
+        if (unpaid == null && status == 'DELIVERED' &&
+            (o['paymentStatus'] as String? ?? '').toUpperCase() == 'PENDING') {
+          unpaid = o;
         }
         if (status != 'DELIVERED' && status != 'PAYMENT_CONFIRMED') continue;
         final dt = DateTime.tryParse(o['createdAt'] as String? ?? '')?.toLocal();
@@ -330,6 +444,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
           _todayGains = gains;
           _activeOrder = active;
           _activeBatch = activeBatch;
+          _unpaidOrder = unpaid;
         });
       }
     } catch (_) {}
@@ -347,41 +462,6 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     await _loadMapStyle();
   }
 
-  // ── Marqueur triangle Waze ────────────────────────────────────────────────
-  static Future<BitmapDescriptor> _buildDriverIcon() async {
-    const double size = 96;
-    const double cx = size / 2;
-    const double cy = size / 2;
-    const double haloR = 40;
-    const double arrowR = 18;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    // Halo semi-transparent
-    canvas.drawCircle(
-      const Offset(cx, cy),
-      haloR,
-      Paint()..color = const Color(0x4033BCD4),
-    );
-
-    // Triangle pointant vers le haut
-    final path = Path()
-      ..moveTo(cx, cy - arrowR)
-      ..lineTo(cx + arrowR * 0.8, cy + arrowR * 0.6)
-      ..lineTo(cx - arrowR * 0.8, cy + arrowR * 0.6)
-      ..close();
-    canvas.drawPath(path, Paint()..color = const Color(0xFF33BCD4));
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(size.toInt(), size.toInt());
-    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(
-      bytes!.buffer.asUint8List(),
-      width: size / 2,
-      height: size / 2,
-    );
-  }
 
   // ── GPS ──────────────────────────────────────────────────────────────────
   Future<void> _startGPS() async {
@@ -398,6 +478,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       setState(() => _driverPosition = fresh);
       _centerOn(fresh);
       NavigationService.savePosition(fresh);
+    } else {
+      NavigationService.promptOpenSettingsIfPermanentlyDenied(context);
     }
 
     // Étape 3 : stream continu
@@ -413,21 +495,20 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _updateDriverScreenPos();
     _trySendFirstPosition(position);
 
-    // Émission position au backend toutes les 10s pour le dispatch
+    // Émission position au backend toutes les 10s pour le dispatch —
+    // socket ping (temps réel) + file REST résiliente (survit aux coupures
+    // réseau : la dernière position connue est retentée au tick suivant).
     final now = DateTime.now();
     if (_lastLocationEmit == null || now.difference(_lastLocationEmit!).inSeconds >= 10) {
       _lastLocationEmit = now;
       SocketService.instance.ping(lat: position.latitude, lng: position.longitude);
+      _locationQueue.emit(position.latitude, position.longitude);
     }
   }
 
   void _trySendFirstPosition(Position position) {
     if (_firstPositionSent) return;
     _firstPositionSent = true;
-    // Envoi via REST (fiable) + socket ping
-    ref.read(ordersRepositoryProvider).updateDriverLocation(
-      position.latitude, position.longitude,
-    ).catchError((_) {});
     if (SocketService.instance.isConnected) {
       SocketService.instance.ping(lat: position.latitude, lng: position.longitude);
     }
@@ -468,6 +549,11 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       (order['pickupLongitude'] as num).toDouble(),
     );
     final origin = LatLng(_driverPosition!.latitude, _driverPosition!.longitude);
+    // Affiche le repère de récupération immédiatement — pas besoin d'attendre
+    // la réponse de l'API Directions pour donner un premier repère visuel.
+    setState(() => _pendingPickup = pickup);
+    _fitBoundsDriverToPickup(origin, pickup);
+
     final result = await DirectionsService.getRoute(
       origin: origin,
       destination: pickup,
@@ -479,10 +565,29 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       _pendingEtaSeconds     = result.durationSeconds;
       _pendingDistanceMeters = result.distanceMeters;
     });
-    _fitBoundsDriverToPickup(origin, pickup);
   }
 
   void _fitBoundsDriverToPickup(LatLng driver, LatLng pickup) {
+    setState(() => _autoFollow = false);
+
+    // Livreur déjà quasiment sur le point de récupération : un cadrage sur
+    // les deux points produirait une boîte quasi nulle, donc un zoom extrême
+    // sur un fragment de rue sans aucun repère visuel (voir capture — c'est
+    // exactement ce qui arrivait). On centre plutôt à un niveau de zoom fixe
+    // "quartier", qui garde toujours assez de contexte de rue autour.
+    final latSpan = (driver.latitude - pickup.latitude).abs();
+    final lngSpan = (driver.longitude - pickup.longitude).abs();
+    if (latSpan < 0.0015 && lngSpan < 0.0015) {
+      final mid = LatLng(
+        (driver.latitude + pickup.latitude) / 2,
+        (driver.longitude + pickup.longitude) / 2,
+      );
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(CameraPosition(target: mid, zoom: 16.5)),
+      );
+      return;
+    }
+
     final bounds = LatLngBounds(
       southwest: LatLng(
         driver.latitude  < pickup.latitude  ? driver.latitude  : pickup.latitude,
@@ -493,7 +598,6 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
         driver.longitude > pickup.longitude ? driver.longitude : pickup.longitude,
       ),
     );
-    setState(() => _autoFollow = false);
     _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
   }
 
@@ -501,6 +605,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     if (!mounted) return;
     setState(() {
       _pendingRoutePoints    = [];
+      _pendingPickup         = null;
       _pendingEtaSeconds     = null;
       _pendingDistanceMeters = null;
     });
@@ -535,6 +640,17 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
         zIndexInt: 2,
       ));
     }
+    if (_pendingPickup != null) {
+      // Même couleur que le marqueur de récupération une fois la course
+      // acceptée (active_order_screen.dart) — repère visuel cohérent tout au
+      // long du parcours, de l'offre jusqu'à la récupération réelle.
+      markers.add(Marker(
+        markerId: const MarkerId('pending_pickup'),
+        position: _pendingPickup!,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        zIndexInt: 1,
+      ));
+    }
     if (_poiIconSet != null && _pois != null) {
       markers.addAll(buildPoiMarkersForZoom(_poiIconSet!, _currentZoom, _pois!));
     }
@@ -548,16 +664,100 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       final isAvailable = ref.read(profileProvider).isAvailable;
       if (isAvailable) ref.read(availableOrdersProvider.notifier).refresh();
     } catch (e) {
-      if (mounted) {
+      if (!mounted) return;
+      // Passe journalière non payée (blocage désactivé par défaut — voir
+      // forfait.service.js côté backend) : raccourci direct vers le wallet
+      // plutôt qu'un simple toast, pour ne pas laisser le driver deviner quoi
+      // faire.
+      if (e is AppException && e.statusCode == 402) {
+        _showForfaitRequiredSheet();
+      } else {
         showDemToast(context, friendlyError(e), isError: true);
       }
     }
   }
 
+  void _openUnpaidOrderDialog() {
+    final order = _unpaidOrder;
+    final orderId = order?['id'] as String?;
+    if (order == null || orderId == null) return;
+    showPaymentCollectionDialog(
+      context, ref,
+      orderId: orderId,
+      price: clientChargeFor(order),
+      isRide: order['orderType'] == 'RIDE',
+      onPaid: () {
+        if (mounted) setState(() => _unpaidOrder = null);
+      },
+    );
+  }
+
+  Future<void> _showForfaitRequiredSheet() {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Container(
+        decoration: const BoxDecoration(
+          gradient: AppColors.gradientDialog,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(sheetContext).viewPadding.bottom + 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.30), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            Container(
+              width: 56, height: 56,
+              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.20), shape: BoxShape.circle),
+              child: const Icon(Icons.confirmation_number_outlined, color: AppColors.primary, size: 28),
+            ),
+            const SizedBox(height: 14),
+            const Text('Passe journalière requise',
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            const Text(
+              'Activez votre passe du jour depuis votre portefeuille pour pouvoir passer en ligne et recevoir des courses.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverWalletScreen()));
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Payer ma passe maintenant', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(sheetContext),
+              child: Text('Plus tard', style: TextStyle(color: Colors.white.withValues(alpha: 0.60))),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _declineOrder(String orderId) async {
+    if (_orderActionLoading) return;
+    setState(() => _orderActionLoading = true);
     // Mode DEV — pas d'appel API, on vide juste la liste locale
     if (orderId.startsWith('dev-')) {
       ref.read(availableOrdersProvider.notifier).removeOrder(orderId);
+      if (mounted) setState(() => _orderActionLoading = false);
       return;
     }
     // Appel API — informe le backend que ce driver refuse.
@@ -569,16 +769,20 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       // Le backend déclenchera un re-dispatch après expiration des 30s.
     }
     ref.read(availableOrdersProvider.notifier).removeOrder(orderId);
+    if (mounted) setState(() => _orderActionLoading = false);
   }
 
   Future<void> _acceptOrder(String orderId) async {
+    if (_orderActionLoading) return;
     // GPS obligatoire — sans position le tracking client sera vide
     if (_driverPosition == null && !orderId.startsWith('dev-')) {
       if (mounted) {
+        setState(() => _orderSwipeTick++);
         showDemToast(context, 'GPS indisponible — activez la localisation pour accepter une course.', isError: true);
       }
       return;
     }
+    setState(() => _orderActionLoading = true);
 
     // Mode DEV — commande simulée, pas d'appel API
     if (orderId.startsWith('dev-')) {
@@ -586,7 +790,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
             (o) => o['id'] == orderId,
             orElse: () => {},
           ) ?? {};
-      if (mounted) context.push('/driver/order/active', extra: devOrder);
+      if (mounted) {
+        setState(() => _orderActionLoading = false);
+        context.push('/driver/order/active', extra: devOrder);
+      }
       return;
     }
     try {
@@ -602,10 +809,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       final merged = {...notifOrder, ...acceptedOrder};
       // Vide le provider avant de naviguer → évite la réapparition au retour home
       ref.read(availableOrdersProvider.notifier).clear();
-      
+
       if (mounted) {
         final pickup = merged['pickupAddress'] ?? '';
-        
+
         // Affiche une vraie notification système
         NotificationService.showSystemNotification(
           title: 'Course acceptée !',
@@ -616,8 +823,11 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _orderSwipeTick++);
         showDemToast(context, friendlyError(e), isError: true);
       }
+    } finally {
+      if (mounted) setState(() => _orderActionLoading = false);
     }
   }
 
@@ -639,25 +849,32 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   }
 
   Future<void> _declineBatch(String batchId) async {
+    if (_batchActionLoading) return;
     _cancelBatchCountdown();
-    setState(() => _currentBatch = null);
+    setState(() => _batchActionLoading = true);
     try {
       await ref.read(ordersRepositoryProvider).declineBatch(batchId);
     } catch (_) {}
+    if (mounted) setState(() { _currentBatch = null; _batchActionLoading = false; });
   }
 
   Future<void> _acceptBatch(String batchId) async {
+    if (_batchActionLoading) return;
     _cancelBatchCountdown();
     final notifBatch = _currentBatch;
-    setState(() => _currentBatch = null);
+    setState(() => _batchActionLoading = true);
     try {
       final acceptedBatch = await ref.read(ordersRepositoryProvider).acceptBatch(batchId);
       final merged = {...?notifBatch, ...acceptedBatch};
       if (mounted) {
+        setState(() { _currentBatch = null; _batchActionLoading = false; });
         context.push('/driver/batch/active', extra: merged);
       }
     } catch (e) {
-      if (mounted) showDemToast(context, friendlyError(e), isError: true);
+      if (mounted) {
+        setState(() { _batchActionLoading = false; _batchSwipeTick++; });
+        showDemToast(context, friendlyError(e), isError: true);
+      }
     }
   }
 
@@ -668,6 +885,9 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     final ordersAsync = ref.watch(availableOrdersProvider);
     // En cas d'erreur API, on traite comme liste vide (pas d'affichage d'erreur)
     final orders = ordersAsync.value ?? [];
+    // Heatmap visible seulement pendant les temps morts — en ligne, sans
+    // course/tournée active ni notification en cours.
+    final showHeatmap = isAvailable && _currentBatch == null && orders.isEmpty;
 
     // Mise en ligne auto → charge les commandes
     ref.listen<ProfileState>(profileProvider, (prev, next) {
@@ -716,6 +936,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
               onCameraIdle: _updateDriverScreenPos,
               markers: _driverMarkers,
               polylines: _pendingPolylines,
+              circles: showHeatmap ? _heatmapCircles : const {},
               trafficEnabled: false,
               buildingsEnabled: true,
               myLocationEnabled: false,
@@ -793,12 +1014,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                           const SizedBox(width: 8),
                           Text(
                             isAvailable ? 'En ligne' : 'Hors ligne',
-                            style: TextStyle(
+                            style: ClientText.body.copyWith(
                               color: isAvailable
                                   ? Colors.white
                                   : AppColors.textSecondary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -868,28 +1087,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
 
-                      // GAUCHE : Jour/Nuit
-                      Semantics(
-                        label: ref.watch(mapNightProvider) ? 'Passer en mode jour' : 'Passer en mode nuit',
-                        button: true,
-                        child: GestureDetector(
-                          onTap: _toggleMapTheme,
-                          child: Container(
-                            width: 52, height: 52,
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppColors.card, width: 1.5),
-                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
-                            ),
-                            child: Icon(
-                              ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                              color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                              size: 22,
-                            ),
-                          ),
-                        ),
-                      ),
+                      // GAUCHE : Jour/Nuit — widget partagé avec l'écran client
+                      MapThemeToggleButton(onTap: _toggleMapTheme),
 
                       // DROITE : Badge course active + Recenter
                       Column(
@@ -902,10 +1101,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF00AECB),
+                                  color: AppColors.driverAccent,
                                   borderRadius: BorderRadius.circular(30),
                                   boxShadow: [
-                                    BoxShadow(color: const Color(0xFF00AECB).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
+                                    BoxShadow(color: AppColors.driverAccent.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
                                   ],
                                 ),
                                 child: Row(
@@ -929,10 +1128,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF40F0C0),
+                                  color: AppColors.accentMint,
                                   borderRadius: BorderRadius.circular(30),
                                   boxShadow: [
-                                    BoxShadow(color: const Color(0xFF40F0C0).withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
+                                    BoxShadow(color: AppColors.accentMint.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
                                   ],
                                 ),
                                 child: const Row(
@@ -998,6 +1197,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                           key: const ValueKey('batch'),
                           batch: _currentBatch!,
                           countdown: _batchCountdown,
+                          loading: _batchActionLoading,
+                          swipeResetTick: _batchSwipeTick,
                           onAccept: () => _acceptBatch(_currentBatch!['id'] as String),
                           onDecline: () => _declineBatch(_currentBatch!['id'] as String),
                         )
@@ -1009,6 +1210,8 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                           countdown: _countdown,
                           etaSeconds: _pendingEtaSeconds,
                           distanceMeters: _pendingDistanceMeters,
+                          loading: _orderActionLoading,
+                          swipeResetTick: _orderSwipeTick,
                           onAccept: () {
                             _cancelCountdown();
                             _clearPendingRoute();
@@ -1026,10 +1229,14 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                           profile: profile,
                           isAvailable: isAvailable,
                           ordersLoading: ordersAsync.isLoading,
+                          hasActiveOrder: _activeOrder != null || _activeBatch != null,
                           todayCourses: _todayCourses,
                           todayGains: _todayGains,
+                          walletBalance: (profile.user?['balance'] as num?)?.round() ?? 0,
+                          forfaitStatus: _forfaitStatus,
+                          unpaidOrder: _unpaidOrder,
+                          onTapUnpaid: _openUnpaidOrderDialog,
                           onToggle: _toggleAvailability,
-                          onDevTap: null,
                         ),
                 ),
               ],
@@ -1041,74 +1248,62 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   }
 }
 
-// ── Glassmorphism sheet base ──────────────────────────────────────────────────
-class _GlassSheet extends StatelessWidget {
-  final Widget child;
-
-  const _GlassSheet({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    const radius = BorderRadius.vertical(top: Radius.circular(28));
-    return ClipRRect(
-      borderRadius: radius,
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-              stops: [0.0, 0.5, 1.0],
-            ),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.20),
-              width: 0.8,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 32,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-}
 
 // ── État 1 : accueil normal ───────────────────────────────────────────────────
 class _NormalSheet extends StatelessWidget {
   final dynamic profile;
   final bool isAvailable;
   final bool ordersLoading;
+  final bool hasActiveOrder;
   final int todayCourses;
   final int todayGains;
+  final int walletBalance;
+  final Map<String, dynamic>? forfaitStatus;
+  final Map<String, dynamic>? unpaidOrder;
+  final VoidCallback? onTapUnpaid;
   final VoidCallback onToggle;
-  final VoidCallback? onDevTap;
 
   const _NormalSheet({
     super.key,
     required this.profile,
     required this.isAvailable,
     required this.ordersLoading,
+    required this.hasActiveOrder,
     required this.todayCourses,
     required this.todayGains,
+    required this.walletBalance,
+    this.forfaitStatus,
+    this.unpaidOrder,
+    this.onTapUnpaid,
     required this.onToggle,
-    this.onDevTap,
   });
+
+  // Bandeau lié à la passe — deux cas bien distincts :
+  // - 'required' : le blocage dispatch est actif ET aucune passe valide en
+  //   ce moment → réellement impossible de recevoir des courses sans agir.
+  // - 'expiring' : une passe valide existe, mais expire dans moins de 3h
+  //   (24h glissantes depuis son activation, PAS minuit — voir
+  //   forfait.service.js) → rappel pour ne pas se faire couper brusquement
+  //   en pleine course.
+  // Si le blocage dispatch est désactivé (comportement actuel par défaut),
+  // aucun bandeau n'a de sens : rien n'empêche réellement de recevoir des
+  // courses, donc rien à signaler.
+  String? get _forfaitBannerKind {
+    if (forfaitStatus?['dispatchGatingActive'] != true) return null;
+    if (forfaitStatus?['todayCharged'] != true) return 'required';
+    final expiresAtRaw = forfaitStatus?['passExpiresAt'] as String?;
+    final expiresAt = expiresAtRaw != null ? DateTime.tryParse(expiresAtRaw) : null;
+    if (expiresAt == null) return null;
+    final hoursLeft = expiresAt.difference(DateTime.now()).inMinutes / 60;
+    return hoursLeft <= 3 ? 'expiring' : null;
+  }
 
   @override
   Widget build(BuildContext context) {
     const textPrimary = Colors.white;
     final textSecondary = Colors.white.withValues(alpha: 0.70);
 
-    return _GlassSheet(
+    return GradientSheet(
       child: Padding(
         padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 24),
         child: Column(
@@ -1142,9 +1337,11 @@ class _NormalSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        isAvailable
-                            ? 'En attente de courses...'
-                            : 'Activez pour recevoir des courses',
+                        hasActiveOrder
+                            ? 'Course en cours'
+                            : isAvailable
+                                ? 'En attente de courses...'
+                                : 'Activez pour recevoir des courses',
                         style: TextStyle(color: textSecondary, fontSize: 13),
                       ),
                     ],
@@ -1158,23 +1355,72 @@ class _NormalSheet extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.7),
                     ),
                   ),
-                if (onDevTap != null) ...[
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: onDevTap,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.deepPurple,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text('DEV',
-                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-                    ),
-                  ),
-                ],
               ],
             ),
+            if (_forfaitBannerKind != null) ...[
+              const SizedBox(height: 14),
+              Builder(builder: (context) {
+                final expiring = _forfaitBannerKind == 'expiring';
+                final color = expiring ? AppColors.warning : AppColors.surge;
+                String message;
+                if (expiring) {
+                  final expiresAt = DateTime.tryParse(forfaitStatus?['passExpiresAt'] as String? ?? '');
+                  final hoursLeft = expiresAt != null
+                      ? (expiresAt.difference(DateTime.now()).inMinutes / 60).ceil()
+                      : 0;
+                  message = 'Votre passe expire dans ${hoursLeft}h — renouvelez-la pour ne pas être coupé';
+                } else {
+                  message = 'Activez votre passe du jour pour recevoir des courses';
+                }
+                return GestureDetector(
+                  onTap: () => Navigator.push(
+                      context, MaterialPageRoute(builder: (_) => const DriverWalletScreen())),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: color.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(children: [
+                      Icon(Icons.info_outline, color: color, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(message,
+                            style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                      ),
+                      Icon(Icons.arrow_forward_ios, color: Colors.white.withValues(alpha: 0.6), size: 12),
+                    ]),
+                  ),
+                );
+              }),
+            ],
+            if (unpaidOrder != null) ...[
+              const SizedBox(height: 14),
+              GestureDetector(
+                onTap: onTapUnpaid,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.payments_outlined, color: AppColors.error, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Une course livrée n\'a pas encore été encaissée '
+                        '(${clientChargeFor(unpaidOrder!)} FCFA)',
+                        style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios, color: Colors.white.withValues(alpha: 0.6), size: 12),
+                  ]),
+                ),
+              ),
+            ],
             if (isAvailable) ...[
               const SizedBox(height: 20),
               Row(
@@ -1192,6 +1438,14 @@ class _NormalSheet extends StatelessWidget {
                     color: AppColors.primaryDark,
                     onTap: () => _showStatModal(context, _StatType.gains),
                   ),
+                  const SizedBox(width: 10),
+                  _StatPill(
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: '$walletBalance FCFA',
+                    color: AppColors.accentMint,
+                    onTap: () => Navigator.push(
+                        context, MaterialPageRoute(builder: (_) => const DriverWalletScreen())),
+                  ),
                 ],
               ),
             ],
@@ -1208,6 +1462,8 @@ class _OrderNotificationSheet extends StatelessWidget {
   final int countdown;
   final int?    etaSeconds;
   final double? distanceMeters;
+  final bool loading;
+  final int swipeResetTick;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
@@ -1217,6 +1473,8 @@ class _OrderNotificationSheet extends StatelessWidget {
     required this.countdown,
     this.etaSeconds,
     this.distanceMeters,
+    this.loading = false,
+    required this.swipeResetTick,
     required this.onAccept,
     required this.onDecline,
   });
@@ -1227,7 +1485,7 @@ class _OrderNotificationSheet extends StatelessWidget {
     final pickup = order['pickupAddress'] ?? '';
     final delivery = order['deliveryAddress'] ?? '';
 
-    return _GlassSheet(
+    return GradientSheet(
       child: Container(
         width: double.infinity,
         padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 24),
@@ -1237,15 +1495,7 @@ class _OrderNotificationSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Drag handle
-            Container(
-              width: 36, height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetDragHandle(),
 
             // Header : titre + countdown
             Row(
@@ -1263,15 +1513,15 @@ class _OrderNotificationSheet extends StatelessWidget {
                     alignment: Alignment.center,
                     children: [
                       CircularProgressIndicator(
-                        value: countdown / 20,
+                        value: countdown / 60,
                         strokeWidth: 3,
                         backgroundColor: AppColors.card,
-                        color: countdown > 8 ? AppColors.primary : Colors.orange,
+                        color: countdown > 24 ? AppColors.primary : AppColors.surge,
                       ),
                       Text(
                         '$countdown',
                         style: TextStyle(
-                          color: countdown > 8 ? AppColors.primary : Colors.orange,
+                          color: countdown > 24 ? AppColors.primary : AppColors.surge,
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1291,7 +1541,7 @@ class _OrderNotificationSheet extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       NavigationService.formatDuration(etaSeconds!),
-                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      style: ClientText.body.copyWith(color: Colors.white),
                     ),
                   ],
                   if (etaSeconds != null && distanceMeters != null)
@@ -1301,7 +1551,7 @@ class _OrderNotificationSheet extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       NavigationService.formatDistance(distanceMeters!),
-                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      style: ClientText.body.copyWith(color: Colors.white),
                     ),
                   ],
                 ],
@@ -1319,9 +1569,9 @@ class _OrderNotificationSheet extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _AddressRow(
+                  AddressRow(
                     icon: Icons.circle,
-                    color: Colors.black87,
+                    iconColor: Colors.black87,
                     label: 'Récupération',
                     address: pickup,
                   ),
@@ -1330,9 +1580,9 @@ class _OrderNotificationSheet extends StatelessWidget {
                     width: 1.5, height: 12,
                     color: Colors.black12,
                   ),
-                  _AddressRow(
+                  AddressRow(
                     icon: Icons.location_on,
-                    color: Colors.black87,
+                    iconColor: Colors.black87,
                     label: 'Livraison',
                     address: delivery,
                   ),
@@ -1361,48 +1611,38 @@ class _OrderNotificationSheet extends StatelessWidget {
 
             const SizedBox(height: 14),
 
-            // Boutons
+            // Boutons — refus en icône compacte (action secondaire), le
+            // glissement d'acceptation occupe presque toute la largeur pour
+            // ne jamais tronquer son libellé (voir SwipeToConfirm).
             Row(
               children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: onDecline,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        border: Border.all(color: Colors.red, width: 1.5),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Text(
-                        'Refuser',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.red, fontSize: 15, fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                GestureDetector(
+                  onTap: loading ? null : onDecline,
+                  child: Container(
+                    width: 52, height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: loading ? 0.3 : 0.55),
+                      border: Border.all(color: AppColors.error.withValues(alpha: loading ? 0.4 : 1), width: 1.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.close_rounded,
+                      color: AppColors.error.withValues(alpha: loading ? 0.4 : 1),
+                      size: 24,
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  flex: 2,
-                  child: GestureDetector(
-                    onTap: onAccept,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Text(
-                        'Accepter',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                  child: SwipeToConfirm(
+                    key: ValueKey('accept-order-$swipeResetTick'),
+                    label: 'Glissez pour accepter',
+                    onConfirmed: onAccept,
+                    loading: loading,
+                    trackColor: AppColors.primary,
+                    thumbColor: Colors.white,
+                    iconColor: AppColors.primary,
+                    labelColor: Colors.white,
                   ),
                 ),
               ],
@@ -1418,6 +1658,8 @@ class _OrderNotificationSheet extends StatelessWidget {
 class _BatchNotificationSheet extends StatelessWidget {
   final Map<String, dynamic> batch;
   final int countdown;
+  final bool loading;
+  final int swipeResetTick;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
@@ -1425,6 +1667,8 @@ class _BatchNotificationSheet extends StatelessWidget {
     super.key,
     required this.batch,
     required this.countdown,
+    this.loading = false,
+    required this.swipeResetTick,
     required this.onAccept,
     required this.onDecline,
   });
@@ -1436,28 +1680,21 @@ class _BatchNotificationSheet extends StatelessWidget {
     final pickup    = batch['pickupAddress'] as String? ?? '';
     final stopCount = orders.length;
 
-    return _GlassSheet(
+    return GradientSheet(
       child: Container(
         width: double.infinity,
         padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewPadding.bottom + 24),
         decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Color(0xFF00AECB), width: 2)),
+          border: Border(top: BorderSide(color: AppColors.driverAccent, width: 2)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 36, height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const SheetDragHandle(),
 
             // Header
             Row(children: [
-              const Icon(Icons.route, color: Color(0xFF00AECB), size: 26),
+              const Icon(Icons.route_outlined, color: AppColors.driverAccent, size: 26),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1474,12 +1711,12 @@ class _BatchNotificationSheet extends StatelessWidget {
                     value: countdown / 25,
                     strokeWidth: 3,
                     backgroundColor: AppColors.card,
-                    color: countdown > 10 ? const Color(0xFF00AECB) : Colors.orange,
+                    color: countdown > 10 ? AppColors.driverAccent : AppColors.surge,
                   ),
                   Text(
                     '$countdown',
                     style: TextStyle(
-                      color: countdown > 10 ? const Color(0xFF00AECB) : Colors.orange,
+                      color: countdown > 10 ? AppColors.driverAccent : AppColors.surge,
                       fontSize: 13, fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -1495,9 +1732,9 @@ class _BatchNotificationSheet extends StatelessWidget {
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
               child: Column(children: [
                 // Pickup row
-                _AddressRow(
+                AddressRow(
                   icon: Icons.circle,
-                  color: Colors.black87,
+                  iconColor: Colors.black87,
                   label: 'Récupération',
                   address: pickup,
                 ),
@@ -1511,9 +1748,9 @@ class _BatchNotificationSheet extends StatelessWidget {
                       width: 1.5, height: 10,
                       color: Colors.black12,
                     ),
-                    _AddressRow(
+                    AddressRow(
                       icon: Icons.location_on,
-                      color: Colors.black87,
+                      iconColor: Colors.black87,
                       label: 'Arrêt ${i + 1}',
                       address: o['deliveryAddress'] as String? ?? '',
                     ),
@@ -1536,7 +1773,7 @@ class _BatchNotificationSheet extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF00AECB).withValues(alpha: 0.15),
+                color: AppColors.driverAccent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -1548,39 +1785,37 @@ class _BatchNotificationSheet extends StatelessWidget {
 
             const SizedBox(height: 14),
 
-            // Buttons
+            // Boutons — refus en icône compacte (action secondaire), le
+            // glissement d'acceptation occupe presque toute la largeur pour
+            // ne jamais tronquer son libellé (voir SwipeToConfirm).
             Row(children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: onDecline,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      border: Border.all(color: Colors.red, width: 1.5),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Text('Refuser',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.red, fontSize: 15, fontWeight: FontWeight.w600)),
+              GestureDetector(
+                onTap: loading ? null : onDecline,
+                child: Container(
+                  width: 52, height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: loading ? 0.3 : 0.55),
+                    border: Border.all(color: AppColors.error.withValues(alpha: loading ? 0.4 : 1), width: 1.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: AppColors.error.withValues(alpha: loading ? 0.4 : 1),
+                    size: 24,
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                flex: 2,
-                child: GestureDetector(
-                  onTap: onAccept,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00AECB),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Text('Accepter la tournée',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                  ),
+                child: SwipeToConfirm(
+                  key: ValueKey('accept-batch-$swipeResetTick'),
+                  label: 'Glissez pour accepter',
+                  onConfirmed: onAccept,
+                  loading: loading,
+                  trackColor: AppColors.driverAccent,
+                  thumbColor: Colors.white,
+                  iconColor: AppColors.driverAccent,
+                  labelColor: Colors.white,
                 ),
               ),
             ]),
@@ -1591,55 +1826,6 @@ class _BatchNotificationSheet extends StatelessWidget {
   }
 }
 
-class _AddressRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String address;
-
-  const _AddressRow({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.address,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 14),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.black45,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3,
-                ),
-              ),
-              Text(
-                address,
-                style: const TextStyle(
-                  color: Colors.black87,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _StatPill extends StatelessWidget {
   final IconData icon;
@@ -1672,11 +1858,7 @@ class _StatPill extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: ClientText.caption.copyWith(color: Colors.white),
               ),
             ],
           ),
@@ -1771,7 +1953,7 @@ class _StatDetailModalState extends State<_StatDetailModal> {
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
+          colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
           stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -1884,11 +2066,7 @@ class _StatRow extends StatelessWidget {
               children: [
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: ClientText.subtitle.copyWith(color: Colors.white),
                 ),
                 if (sub != null)
                   Text(

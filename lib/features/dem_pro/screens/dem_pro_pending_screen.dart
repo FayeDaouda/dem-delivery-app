@@ -5,6 +5,9 @@ import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
+import '../widgets/dem_pro_button.dart';
+import '../widgets/dem_pro_support_tile.dart';
 
 class DemProPendingScreen extends StatefulWidget {
   const DemProPendingScreen({super.key});
@@ -37,7 +40,7 @@ class _State extends State<DemProPendingScreen> {
   Widget build(BuildContext context) {
     final isTablet = DemLayout.isTablet(context);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DemProColors.bg,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (ctx, constraints) => SingleChildScrollView(
@@ -85,22 +88,13 @@ class _State extends State<DemProPendingScreen> {
                       Text(
                         'Votre profil DEM Pro\nest en cours d\'examen',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: isTablet ? 24.0 : 20.0,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F2942),
-                          height: 1.25,
-                        ),
+                        style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: isTablet ? 24.0 : 20.0, height: 1.25),
                       ),
                       const SizedBox(height: 10),
-                      const Text(
+                      Text(
                         'Votre demande a été envoyée avec succès.\nNotre équipe l\'examinera sous 24 à 48h.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          color: Color(0xFF6B7280),
-                          height: 1.55,
-                        ),
+                        style: DemProText.body.copyWith(color: DemProColors.muted, height: 1.55),
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -110,7 +104,7 @@ class _State extends State<DemProPendingScreen> {
                           const SizedBox(width: 6),
                           Text(
                             'Vous serez notifié dès que votre demande sera traitée.',
-                            style: TextStyle(fontSize: 12, color: DemProColors.accent, fontWeight: FontWeight.w600),
+                            style: DemProText.caption.copyWith(color: DemProColors.accent),
                           ),
                         ],
                       ),
@@ -129,28 +123,29 @@ class _State extends State<DemProPendingScreen> {
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: DemProColors.accent.withValues(alpha: 0.18)),
                         ),
-                        child: const Column(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'Une fois validé, vous pourrez :',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13.5,
-                                color: Color(0xFF0F2942),
-                              ),
+                              style: DemProText.bodyStrong.copyWith(color: DemProColors.text),
                             ),
-                            SizedBox(height: 10),
-                            _Bullet('Commander vos livraisons en quelques tapotements'),
-                            _Bullet('Suivre vos dépenses et votre activité'),
-                            _Bullet('Gérer vos adresses de départ favorites'),
+                            const SizedBox(height: 10),
+                            const _Bullet('Commander vos livraisons en quelques tapotements'),
+                            const _Bullet('Suivre vos dépenses et votre activité'),
+                            const _Bullet('Gérer vos adresses de départ favorites'),
                           ],
                         ),
                       ),
                       const SizedBox(height: 24),
 
                       // ── Bouton actualiser ──────────────────────────────
-                      _RefreshButton(loading: _refreshing, onTap: _refresh),
+                      DemProButton(
+                        label: 'Actualiser le statut',
+                        icon: Icons.refresh_rounded,
+                        loading: _refreshing,
+                        onTap: _refresh,
+                      ),
 
                       // ── Feedback inline après refresh ──────────────────
                       AnimatedSwitcher(
@@ -164,16 +159,13 @@ class _State extends State<DemProPendingScreen> {
                                   children: [
                                     const Icon(
                                       Icons.check_circle_outline,
-                                      color: Color(0xFF10B981),
+                                      color: DemProColors.success,
                                       size: 14,
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
                                       _checkedText!,
-                                      style: const TextStyle(
-                                        fontSize: 12.5,
-                                        color: Color(0xFF6B7280),
-                                      ),
+                                      style: DemProText.caption.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w400),
                                     ),
                                   ],
                                 ),
@@ -188,8 +180,8 @@ class _State extends State<DemProPendingScreen> {
                         icon: const Icon(Icons.help_outline, size: 15),
                         label: const Text('Besoin d\'aide ? Contacter le support'),
                         style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF9CA3AF),
-                          textStyle: const TextStyle(fontSize: 12.5),
+                          foregroundColor: DemProColors.muted,
+                          textStyle: DemProText.caption.copyWith(fontWeight: FontWeight.w400),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -199,8 +191,8 @@ class _State extends State<DemProPendingScreen> {
                         icon: const Icon(Icons.logout, size: 15),
                         label: const Text('Se déconnecter'),
                         style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFEF4444),
-                          textStyle: const TextStyle(fontSize: 12.5),
+                          foregroundColor: DemProColors.danger,
+                          textStyle: DemProText.caption.copyWith(fontWeight: FontWeight.w400),
                         ),
                       ),
                     ],
@@ -217,6 +209,7 @@ class _State extends State<DemProPendingScreen> {
   void _showSupportDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: DemProColors.bg2,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -228,15 +221,15 @@ class _State extends State<DemProPendingScreen> {
             children: [
               const Icon(Icons.support_agent_outlined, color: DemProColors.accent, size: 36),
               const SizedBox(height: 10),
-              const Text('Support DEM', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              Text('Support DEM', style: DemProText.title.copyWith(fontSize: 17)),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Pour toute question sur votre demande DEM Pro',
-                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                style: DemProText.body.copyWith(color: DemProColors.muted),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
-              _SupportOption(
+              DemProSupportTile(
                 icon: Icons.phone_outlined,
                 label: 'Appeler le support',
                 sub: '+221 71 006 46 64',
@@ -246,7 +239,7 @@ class _State extends State<DemProPendingScreen> {
                 },
               ),
               const SizedBox(height: 10),
-              _SupportOption(
+              DemProSupportTile(
                 icon: Icons.chat_bubble_outline,
                 label: 'WhatsApp',
                 sub: '+221 71 006 46 64',
@@ -259,7 +252,7 @@ class _State extends State<DemProPendingScreen> {
                 },
               ),
               const SizedBox(height: 10),
-              _SupportOption(
+              DemProSupportTile(
                 icon: Icons.email_outlined,
                 label: 'Envoyer un e-mail',
                 sub: 'support@dem.sn',
@@ -279,20 +272,21 @@ class _State extends State<DemProPendingScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: DemProColors.bg2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Se déconnecter ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: const Text(
+        title: const Text('Se déconnecter ?', style: DemProText.title),
+        content: Text(
           'Vous pourrez vous reconnecter avec le même numéro.',
-          style: TextStyle(fontSize: 13.5, color: Color(0xFF6B7280)),
+          style: DemProText.body.copyWith(color: DemProColors.muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler', style: TextStyle(color: Color(0xFF6B7280))),
+            child: Text('Annuler', style: DemProText.body.copyWith(color: DemProColors.muted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Déconnexion', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+            child: Text('Déconnexion', style: DemProText.body.copyWith(color: DemProColors.danger, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -318,13 +312,9 @@ class _DemLogo extends StatelessWidget {
         child: Image.asset('assets/DEM.png', width: 56, height: 56, fit: BoxFit.cover),
       ),
       const SizedBox(height: 6),
-      const Text(
+      Text(
         'delivery express mobility',
-        style: TextStyle(
-          fontSize: 10,
-          color: Color(0xFF9CA3AF),
-          letterSpacing: 0.5,
-        ),
+        style: DemProText.micro.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w400, letterSpacing: 0.5),
       ),
     ],
   );
@@ -355,12 +345,7 @@ class _StepBadge extends StatelessWidget {
       const SizedBox(width: 8),
       Text(
         label,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF0F2942),
-          letterSpacing: 0.3,
-        ),
+        style: DemProText.caption.copyWith(color: DemProColors.text, fontWeight: FontWeight.w700, letterSpacing: 0.3),
       ),
     ]),
   );
@@ -386,7 +371,7 @@ class _Timeline extends StatelessWidget {
       Expanded(
         child: Padding(
           padding: const EdgeInsets.only(top: 15),
-          child: Container(height: 2, color: const Color(0xFFE5E7EB)),
+          child: Container(height: 2, color: DemProColors.bg4),
         ),
       ),
       const _TimelineStep(label: 'Validé'),
@@ -411,10 +396,10 @@ class _TimelineStep extends StatelessWidget {
               ? DemProColors.accent
               : active
                   ? DemProColors.accent.withValues(alpha: 0.12)
-                  : const Color(0xFFF3F4F6),
+                  : DemProColors.bg3,
           shape: BoxShape.circle,
           border: Border.all(
-            color: (done || active) ? DemProColors.accent : const Color(0xFFE5E7EB),
+            color: (done || active) ? DemProColors.accent : DemProColors.bg4,
             width: active ? 2 : 1,
           ),
         ),
@@ -423,17 +408,13 @@ class _TimelineStep extends StatelessWidget {
               ? const Icon(Icons.check, color: Colors.white, size: 16)
               : active
                   ? const _PulsingDot()
-                  : const Icon(Icons.circle_outlined, color: Color(0xFFD1D5DB), size: 12),
+                  : const Icon(Icons.circle_outlined, color: DemProColors.muted, size: 12),
         ),
       ),
       const SizedBox(height: 6),
       Text(
         label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: (done || active) ? FontWeight.w600 : FontWeight.w400,
-          color: (done || active) ? const Color(0xFF0F2942) : const Color(0xFF9CA3AF),
-        ),
+        style: DemProText.caption.copyWith(fontWeight: (done || active) ? FontWeight.w600 : FontWeight.w400, color: (done || active) ? DemProColors.text : DemProColors.muted),
       ),
     ],
   );
@@ -486,99 +467,9 @@ class _Bullet extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('• ', style: TextStyle(color: DemProColors.accent, fontWeight: FontWeight.w700)),
-      Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF374151)))),
+      Text('• ', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
+      Expanded(child: Text(text, style: DemProText.body.copyWith(color: DemProColors.muted))),
     ]),
   );
 }
 
-// ── Bouton actualiser ─────────────────────────────────────────────────────────
-
-class _RefreshButton extends StatelessWidget {
-  final bool loading;
-  final VoidCallback onTap;
-  const _RefreshButton({required this.loading, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: double.infinity,
-    height: DemLayout.isTablet(context) ? 56.0 : 52.0,
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: DemProColors.accent,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: DemProColors.accent.withValues(alpha: 0.30),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: loading ? null : onTap,
-          child: Center(
-            child: loading
-                ? const SizedBox(
-                    width: 22, height: 22,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
-                      SizedBox(width: 10),
-                      Text(
-                        'Actualiser le statut',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-// ── Tile support ─────────────────────────────────────────────────────────────
-
-class _SupportOption extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String sub;
-  final VoidCallback onTap;
-  const _SupportOption({required this.icon, required this.label, required this.sub, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: const Color(0xFFF8FAFC),
-    borderRadius: BorderRadius.circular(12),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(children: [
-          Icon(icon, color: DemProColors.accent, size: 20),
-          const SizedBox(width: 12),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Color(0xFF1F2937))),
-              Text(sub, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
-            ],
-          )),
-          const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFFD1D5DB)),
-        ]),
-      ),
-    ),
-  );
-}

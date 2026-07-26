@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
 
 /// Placeholder "Bientôt disponible" pour les onglets de l'espace DEM Pro
 /// pas encore implémentés (Livraisons, Adresses, Finances...).
@@ -22,9 +23,9 @@ class DemProComingSoon extends StatelessWidget {
               child: Icon(icon, color: DemProColors.accent, size: 36),
             ),
             const SizedBox(height: 20),
-            Text(title, style: const TextStyle(color: DemProColors.text, fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(title, style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Bientôt disponible', style: TextStyle(color: DemProColors.muted, fontSize: 13)),
+            Text('Bientôt disponible', style: DemProText.body.copyWith(color: DemProColors.muted)),
           ],
         ),
       ),

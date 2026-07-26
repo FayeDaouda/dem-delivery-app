@@ -4,7 +4,6 @@ import '../../../core/notifications/notification_service.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,10 +15,18 @@ import '../../core/api/api_client.dart';
 import '../../core/map/poi_data.dart';
 import '../../core/map/poi_service.dart';
 import '../../core/router/app_router.dart';
+import '../../core/services/location_reveal_controller.dart';
+import '../../core/services/map_location_mode_controller.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
+import '../../core/utils/price_format.dart';
+import '../../shared/widgets/map_location_mode_button.dart';
+import '../../shared/widgets/map_theme_toggle_button.dart';
+import '../../shared/widgets/nudging_chevron.dart';
+import '../../shared/widgets/pressable.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
@@ -28,8 +35,6 @@ import '../../core/utils/location_gate.dart';
 
 // Centre par défaut : Dakar
 const _dakar = LatLng(14.6937, -17.4441);
-
-enum _LocationMode { free, follow, compass }
 
 // Hauteur de la navbar
 const double _navBarHeight = 64;
@@ -42,7 +47,7 @@ class HomeClientScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
-    with SingleTickerProviderStateMixin, RouteAware {
+    with TickerProviderStateMixin, RouteAware {
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>> _pendingOrders = [];
   List<Map<String, dynamic>> _activeOrders = [];
@@ -65,13 +70,17 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
 
   // ── GPS + boussole ────────────────────────────────────────────────────────
   StreamSubscription<Position>? _locationSub;
-  StreamSubscription<CompassEvent>? _compassSub;
   Position? _clientPosition;
   double _travelHeading = 0;
-  _LocationMode _locationMode = _LocationMode.follow;
-  double _compassBearing = 0;
+  late final _locationModeCtrl = MapLocationModeController(onUpdate: _onLocationModeUpdate);
   bool _programmaticMove = false;
   Timer? _programmaticMoveTimer;
+
+  // Halo sonar une seule fois à l'acquisition de la position — pas de chute
+  // (contrairement au point de départ figé de la création de commande, la
+  // position GPS live du client n'a pas de "fausse position de départ"
+  // pertinente d'où tomber).
+  late final _positionReveal = LocationRevealController(vsync: this, onUpdate: () => setState(() {}));
 
   // ── Sheet rétractable ──────────────────────────────────────────────────────
   bool _sheetExpanded = true;
@@ -135,7 +144,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     _orderAcceptedSub?.cancel();
     _reconnectSub?.cancel();
     _locationSub?.cancel();
-    _compassSub?.cancel();
+    _locationModeCtrl.dispose();
+    _positionReveal.dispose();
     _programmaticMoveTimer?.cancel();
     _pollTimer?.cancel();
     _mapController?.dispose();
@@ -250,6 +260,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     if (cached != null && mounted) {
       setState(() => _clientPosition = cached);
       _setCamera(position: cached);
+      _positionReveal.reveal(withDrop: false);
     }
 
     // Étape 2 : position fraîche — requestLocation() sur iOS, jamais de cache
@@ -258,6 +269,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       setState(() => _clientPosition = fresh);
       _setCamera(position: fresh);
       NavigationService.savePosition(fresh);
+      _positionReveal.reveal(withDrop: false);
     }
 
     // Étape 3 : stream continu
@@ -270,7 +282,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       _clientPosition = position;
       if (position.heading >= 0) _travelHeading = position.heading;
     });
-    if (_locationMode != _LocationMode.free) _setCamera(position: position);
+    if (!_locationModeCtrl.isFree) _setCamera(position: position);
   }
 
   // ── Caméra GPS follow (animée, lisse) ─────────────────────────────────────
@@ -306,46 +318,25 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     );
   }
 
-  // ── Cycle : libre → suivi → boussole → libre ──────────────────────────────
-  void _cycleLocationMode() {
-    switch (_locationMode) {
-      case _LocationMode.free:
-        setState(() => _locationMode = _LocationMode.follow);
-        _setCamera();
-      case _LocationMode.follow:
-        setState(() => _locationMode = _LocationMode.compass);
-        _startCompassMode();
-        _setCamera();
-      case _LocationMode.compass:
-        _stopCompassMode();
-        setState(() => _locationMode = _LocationMode.free);
+  // Réagit à chaque changement de mode/cap venant du contrôleur partagé —
+  // recalcule la caméra selon le nouveau mode et rebuild (bouton, dot overlay).
+  void _onLocationModeUpdate() {
+    if (!mounted) return;
+    if (_locationModeCtrl.isFree) {
+      _programmaticMove = false;
+    } else if (_locationModeCtrl.isCompass) {
+      _compassCamera(_locationModeCtrl.compassBearing);
+    } else {
+      _setCamera();
     }
-  }
-
-  void _startCompassMode() {
-    _compassSub ??= FlutterCompass.events?.listen(_onCompassEvent);
-  }
-
-  void _stopCompassMode() {
-    _compassSub?.cancel();
-    _compassSub = null;
-    _programmaticMove = false;
-  }
-
-  void _onCompassEvent(CompassEvent event) {
-    final heading = event.heading;
-    if (heading == null || !mounted || _locationMode != _LocationMode.compass) return;
-    // Filtre : ignorer si changement < 2° pour éviter le tremblement
-    if ((_compassBearing - heading).abs() < 2.0) return;
-    setState(() => _compassBearing = heading);
-    _compassCamera(heading);
+    setState(() {});
   }
 
   // ── Marqueurs : GPS natif (free) + POI ────────────────────────────────────
   Set<Marker> get _clientMarkers {
     final markers = <Marker>{};
     // En mode libre : marker natif Google Maps (suit la carte sans lag)
-    if (_locationMode == _LocationMode.free && _clientPosition != null) {
+    if (_locationModeCtrl.isFree && _clientPosition != null) {
       markers.add(Marker(
         markerId: const MarkerId('client'),
         position: LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
@@ -504,7 +495,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
+                colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
               ),
               borderRadius: BorderRadius.all(Radius.circular(24)),
             ),
@@ -542,7 +533,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '$price FCFA',
+                  formatFcfa(price),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -602,10 +593,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       color = AppColors.primary;
       icon  = Icons.delivery_dining;
     } else if (hasAccepted) {
-      color = const Color(0xFF40F0C0);
+      color = AppColors.accentMint;
       icon  = Icons.two_wheeler;
     } else {
-      color = const Color(0xFFFFB300);
+      color = AppColors.warning;
       icon  = Icons.timer;
     }
 
@@ -705,9 +696,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                 _                           => 'En traitement',
               };
               final Color statusColor = switch (status) {
-                'PICKED_UP' || 'IN_TRANSIT' => const Color(0xFF00C853),
+                'PICKED_UP' || 'IN_TRANSIT' => AppColors.success,
                 'ACCEPTED'                  => AppColors.primary,
-                'PENDING'                   => const Color(0xFFFFB300),
+                'PENDING'                   => AppColors.warning,
                 _                           => Colors.white54,
               };
 
@@ -740,7 +731,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(delivery, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                            Text(delivery, style: ClientText.body.copyWith(color: Colors.white),
                                 maxLines: 1, overflow: TextOverflow.ellipsis),
                             const SizedBox(height: 2),
                             Text(pickup, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11),
@@ -749,7 +740,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                              child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                              child: Text(statusLabel, style: ClientText.caption.copyWith(color: statusColor)),
                             ),
                           ],
                         ),
@@ -758,10 +749,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('$price FCFA', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text(formatFcfa(price), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           Text(isPending ? 'Voir →' : 'Suivre →',
-                              style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                              style: ClientText.caption.copyWith(color: statusColor)),
                         ],
                       ),
                     ],
@@ -796,9 +787,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               },
               style: _mapStyle,
               onCameraMove: (pos) {
-                if (!_programmaticMove && _locationMode != _LocationMode.free) {
-                  _stopCompassMode();
-                  setState(() => _locationMode = _LocationMode.free);
+                if (!_programmaticMove && !_locationModeCtrl.isFree) {
+                  _locationModeCtrl.notifyManualPan();
                 }
                 if ((pos.zoom - _currentZoom).abs() > 0.5) {
                   setState(() => _currentZoom = pos.zoom);
@@ -806,6 +796,13 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
               },
               onCameraIdle: () => _programmaticMove = false,
               markers: _clientMarkers,
+              circles: _clientPosition != null
+                  ? _positionReveal.haloCircles(
+                      LatLng(_clientPosition!.latitude, _clientPosition!.longitude),
+                      color: AppColors.primary,
+                      idPrefix: 'client-halo',
+                    )
+                  : const {},
               myLocationEnabled: false,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -816,21 +813,30 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           ),
 
           // ── Dot overlay (follow/compass uniquement — free utilise un Marker) ──
-          if (_clientPosition != null && _locationMode != _LocationMode.free)
+          if (_clientPosition != null && !_locationModeCtrl.isFree)
             Center(
               child: _PulsingLocationDot(
-                heading: _locationMode == _LocationMode.compass
-                    ? _compassBearing
+                heading: _locationModeCtrl.isCompass
+                    ? _locationModeCtrl.compassBearing
                     : (_travelHeading > 0 ? _travelHeading : null),
               ),
             ),
 
-          // ── Header ──
-          SafeArea(
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: const SizedBox.shrink(),
+          // ── Scrim en haut de carte : lisibilité de la status bar sur le
+          // fond de carte clair/varié (pattern Uber/Yango), ignore les taps.
+          IgnorePointer(
+            child: Container(
+              height: MediaQuery.of(context).padding.top + 56,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.background.withValues(alpha: 0.55),
+                    AppColors.background.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
             ),
           ),
 
@@ -852,23 +858,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     children: [
 
                       // ── GAUCHE : Nuit/Jour ────────────────────────────────
-                      GestureDetector(
-                        onTap: _toggleMapTheme,
-                        child: Container(
-                          width: 52, height: 52,
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.card, width: 1.5),
-                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12)],
-                          ),
-                          child: Icon(
-                            ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                            color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                            size: 22,
-                          ),
-                        ),
-                      ),
+                      MapThemeToggleButton(onTap: _toggleMapTheme),
 
                       // ── DROITE : Badge + Recenter ────────────────────────
                       Column(
@@ -884,40 +874,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                                   )
                                 : const SizedBox.shrink();
                           }),
-                          GestureDetector(
-                            onTap: _cycleLocationMode,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 250),
-                              width: 52, height: 52,
-                              decoration: BoxDecoration(
-                                color: _locationMode == _LocationMode.free
-                                    ? AppColors.surface : AppColors.primary,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: _locationMode == _LocationMode.free
-                                      ? AppColors.card : AppColors.primary,
-                                  width: 1.5,
-                                ),
-                                boxShadow: [BoxShadow(
-                                  color: _locationMode == _LocationMode.free
-                                      ? Colors.black.withValues(alpha: 0.25)
-                                      : AppColors.primary.withValues(alpha: 0.45),
-                                  blurRadius: 12,
-                                )],
-                              ),
-                              child: _locationMode == _LocationMode.compass
-                                  ? Transform.rotate(
-                                      angle: -_compassBearing * pi / 180,
-                                      child: const Icon(Icons.navigation, color: Colors.white, size: 22),
-                                    )
-                                  : Icon(
-                                      _locationMode == _LocationMode.follow
-                                          ? Icons.navigation : Icons.navigation_outlined,
-                                      color: _locationMode == _LocationMode.free
-                                          ? AppColors.primary : Colors.white,
-                                      size: 22,
-                                    ),
-                            ),
+                          MapLocationModeButton(
+                            mode: _locationModeCtrl.mode,
+                            compassBearing: _locationModeCtrl.compassBearing,
+                            onTap: _locationModeCtrl.cycle,
                           ),
                         ],
                       ),
@@ -968,24 +928,20 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       children: [
         if (firstName.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: Text(
               '$greeting $firstName 👋',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w300,
+              style: ClientText.body.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
-        const Text(
+        Text(
           'Programmez une livraison en quelques clics.',
-          style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.bold),
+          style: ClientText.title.copyWith(color: AppColors.textPrimary),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.l),
         _ServiceCard(
           icon: Icons.inventory_2_outlined,
           label: 'Livraison',
@@ -998,44 +954,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             _checkPendingOrder();
           },
         ),
-        /*const Text(
-          'Livraison',
-          style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            _ServiceCard(
-              icon: Icons.inventory_2_outlined,
-              label: 'Colis',
-              onTap: () async {
-                await context.push('/orders/create?type=DELIVERY');
-                _checkPendingOrder();
-              },
-            ),
-            const SizedBox(width: 12),
-            _ServiceCard(
-              icon: Icons.restaurant_outlined,
-              label: 'Repas',
-              onTap: () async {
-                await context.push('/orders/create?type=DELIVERY');
-                _checkPendingOrder();
-              },
-            ),
-            const SizedBox(width: 12),
-            _ServiceCard(
-              icon: Icons.more_horiz,
-              label: 'Autre',
-              onTap: () async {
-                await context.push('/orders/create?type=DELIVERY');
-                _checkPendingOrder();
-              },
-            ),
-          ],
-        ),*/
       ],
     );
   }
@@ -1195,10 +1113,18 @@ class _NavItem extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            color: active ? AppColors.primary : AppColors.textSecondary,
-            size: 26,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+            decoration: BoxDecoration(
+              color: active ? AppColors.primary.withValues(alpha: 0.14) : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              icon,
+              color: active ? AppColors.primary : AppColors.textSecondary,
+              size: 24,
+            ),
           ),
           const SizedBox(height: 3),
           Text(
@@ -1315,6 +1241,66 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
   }
 }
 
+// ── Chevron qui "invite" doucement au tap — sans être agressif ─────────────────
+// ── Badge d'icône "respirant" — pulse doucement pour attirer l'œil sans être
+// criard (même principe que l'anneau de proximité du bouton livreur) ──────────
+class _BreathingBadge extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+  const _BreathingBadge({required this.icon, required this.color});
+
+  @override
+  State<_BreathingBadge> createState() => _BreathingBadgeState();
+}
+
+class _BreathingBadgeState extends State<_BreathingBadge> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2600))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        final t = Curves.easeInOut.transform(_ctrl.value);
+        return Transform.scale(
+          scale: 1.0 + t * 0.08,
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: widget.color.withValues(alpha: 0.35),
+              shape: BoxShape.circle,
+              border: Border.all(color: widget.color.withValues(alpha: 0.55)),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.color.withValues(alpha: 0.25 + t * 0.35),
+                  blurRadius: 14,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: Icon(widget.icon, color: Colors.white, size: 24),
+    );
+  }
+}
+
 // ── Service card ──────────────────────────────────────────────────────────────
 class _ServiceCard extends StatelessWidget {
   final IconData icon;
@@ -1334,35 +1320,33 @@ class _ServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (subtitle != null) {
-      return GestureDetector(
+      final badgeColor = color ?? AppColors.primary;
+      return Pressable(
         onTap: onTap,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.l, horizontal: AppSpacing.xl),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+            boxShadow: AppShadows.card,
           ),
           child: Row(
             children: [
-              Icon(icon, color: Colors.white, size: 32),
-              const SizedBox(width: 14),
+              _BreathingBadge(icon: icon, color: badgeColor),
+              const SizedBox(width: AppSpacing.m),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
+                  Text(label, style: ClientText.subtitle.copyWith(color: Colors.white)),
                   Text(subtitle!,
-                      style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
+                      style: ClientText.body.copyWith(
+                          color: Colors.white.withValues(alpha: 0.65), fontWeight: FontWeight.w500)),
                 ],
               ),
               const Spacer(),
-              Icon(Icons.arrow_forward_ios, color: Colors.white.withValues(alpha: 0.65), size: 16),
+              NudgingChevron(color: Colors.white.withValues(alpha: 0.65)),
             ],
           ),
         ),

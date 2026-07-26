@@ -128,6 +128,99 @@ class DemProRepository {
     } on DioException catch (_) {}
   }
 
+  // ── Catalogue produits ──────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getProducts() async {
+    try {
+      final res = await _dio.get('/dem-pro/products');
+      return (res.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger le catalogue.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> createProduct(Map<String, dynamic> data) async {
+    try {
+      final res = await _dio.post('/dem-pro/products', data: data);
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de créer le produit.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> updateProduct(String id, Map<String, dynamic> data) async {
+    try {
+      final res = await _dio.patch('/dem-pro/products/$id', data: data);
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de modifier le produit.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> deleteProduct(String id) async {
+    try {
+      await _dio.delete('/dem-pro/products/$id');
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de supprimer le produit.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> incrementProductUsage(String id) async {
+    try {
+      await _dio.post('/dem-pro/products/$id/use');
+    } on DioException catch (_) {}
+  }
+
+  // ── Demandes reçues (lien de commande public) ─────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getOrderRequests({String? status}) async {
+    try {
+      final res = await _dio.get('/dem-pro/order-requests',
+          queryParameters: status != null ? {'status': status} : null);
+      return (res.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger les demandes.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> confirmOrderRequest(String id, String orderId) async {
+    try {
+      final res = await _dio.post('/dem-pro/order-requests/$id/confirm', data: {'orderId': orderId});
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de confirmer la demande.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> rejectOrderRequest(String id) async {
+    try {
+      await _dio.post('/dem-pro/order-requests/$id/reject');
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de rejeter la demande.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> getMyFinances(String period) async {
     try {
       final res = await _dio.get('/dem-pro/me/finances', queryParameters: {'period': period});
@@ -183,6 +276,18 @@ class DemProRepository {
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible de charger les adresses récentes.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentDestinations() async {
+    try {
+      final res = await _dio.get('/dem-pro/me/recent-destinations');
+      return (res.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger les destinations récentes.',
         e.response?.statusCode,
       );
     }

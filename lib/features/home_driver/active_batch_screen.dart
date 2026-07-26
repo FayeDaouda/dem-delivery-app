@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,13 +7,31 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/error/app_exception.dart';
+import '../../core/services/location_queue_service.dart';
 import '../../core/notifications/notification_service.dart';
+import '../../core/services/socket_service.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../core/utils/dem_toast.dart';
+import '../../core/utils/price_format.dart';
+import '../../shared/widgets/call_button.dart';
+import '../../shared/widgets/gradient_dialog.dart';
+import '../../shared/widgets/gradient_sheet.dart';
+import '../../shared/widgets/operator_picker_sheet.dart';
+import '../../shared/widgets/samirpay_payment_sheet.dart';
+import '../../shared/widgets/swipe_to_confirm.dart';
 import '../deliveries/providers/orders_provider.dart';
+import 'navigation/alert_banner.dart';
+import 'navigation/alert_manager.dart';
+import 'navigation/directions_service.dart';
+import 'navigation/driver_marker_icon.dart';
 import 'navigation/map_theme.dart';
 import 'navigation/navigation_service.dart';
+import 'navigation/route_tracker.dart';
+import 'navigation/voice_nav_service.dart';
 
 const _dakarBatch = LatLng(14.6937, -17.4441);
 
@@ -38,12 +55,34 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   Position? _driverPosition;
   bool _autoFollow = true;
   DateTime? _lastLocationEmit;
+  late final _locationQueue = LocationQueueService(ref.read(ordersRepositoryProvider));
 
   // ── Batch state ───────────────────────────────────────────────────────────
   late List<Map<String, dynamic>> _stops;
   bool _isPickedUp = false;
   int _currentStopIndex = 0;
   bool _loading = false;
+  // Incrémenté à l'échec d'une action — force la réinitialisation visuelle
+  // du curseur "glisser pour confirmer" (sinon il resterait verrouillé).
+  int _swipeTick = 0;
+  StreamSubscription<Map<String, dynamic>>? _cancelledSub;
+
+  // ── Route ─────────────────────────────────────────────────────────────────
+  List<LatLng> _routePoints = [];
+  List<LatLng> _displayRoute = [];
+  int _lastTrimIdx = 0;
+  bool _loadingRoute = true;
+  bool _isRerouting = false;
+  DateTime? _lastReroute;
+
+  // ── Alertes ───────────────────────────────────────────────────────────────
+  var _alertManager = AlertManager();
+  String? _currentAlert;
+  AlertPriority? _alertPriority;
+  Timer? _alertTimer;
+
+  // ── Guidage vocal ──────────────────────────────────────────────────────────
+  bool _voiceNavEnabled = true;
 
   @override
   void initState() {
@@ -53,40 +92,81 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     _stops = List.from(orders)
       ..sort((a, b) => ((a['sequenceIndex'] as num?) ?? 0)
           .compareTo((b['sequenceIndex'] as num?) ?? 0));
-    _buildDriverIcon().then((icon) {
+    buildDriverMarkerIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
     });
     _loadMapStyle();
-    _startGPS();
+    _startNavigation();
+    _listenForCancellations();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _locationSub?.cancel();
+    _cancelledSub?.cancel();
+    _alertTimer?.cancel();
     _mapController?.dispose();
+    VoiceNavService.instance.dispose();
     super.dispose();
   }
 
-  static Future<BitmapDescriptor> _buildDriverIcon() async {
-    const double size = 96;
-    const double cx = size / 2;
-    const double cy = size / 2;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _driverPosition != null) {
+      _loadRoute();
+    }
+  }
 
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.drawCircle(const Offset(cx, cy), 40,
-        Paint()..color = const Color(0x4033BCD4));
-    final path = Path()
-      ..moveTo(cx, cy - 18)
-      ..lineTo(cx + 14, cy + 10)
-      ..lineTo(cx - 14, cy + 10)
-      ..close();
-    canvas.drawPath(path, Paint()..color = const Color(0xFF33BCD4));
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(size.toInt(), size.toInt());
-    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: 48, height: 48);
+  /// Un client peut annuler une commande alors que le livreur est déjà en
+  /// tournée vers d'autres arrêts — sans ça, il continue de naviguer vers un
+  /// arrêt annulé sans jamais être prévenu (contrairement à la course simple).
+  void _listenForCancellations() {
+    _cancelledSub = SocketService.instance.onOrderCancelled.listen((data) {
+      if (!mounted) return;
+      final cancelledId = data['orderId'] as String?;
+      final index = _stops.indexWhere((s) => s['id'] == cancelledId);
+      if (index == -1) return;
+      final reason = data['reason'] as String? ?? 'Un arrêt de cette tournée a été annulé.';
+
+      if (_isPickedUp && index == _currentStopIndex) {
+        showGradientInfoDialog(
+          context,
+          title: 'Arrêt annulé',
+          message: reason,
+          icon: Icons.cancel_outlined,
+          actionLabel: index < _stops.length - 1 ? 'Arrêt suivant' : 'Terminer la tournée',
+          onAction: () => _removeCancelledStop(index),
+        );
+      } else {
+        showDemToast(context, 'Un arrêt de la tournée a été annulé et retiré.');
+        _removeCancelledStop(index);
+      }
+    });
+  }
+
+  void _removeCancelledStop(int index) {
+    setState(() {
+      _stops.removeAt(index);
+      if (index < _currentStopIndex) _currentStopIndex--;
+    });
+    if (_stops.isEmpty || (_isPickedUp && _currentStopIndex >= _stops.length)) {
+      NotificationService.cancelNotification(9998);
+      if (_stops.isEmpty) {
+        if (mounted) context.go('/driver/home');
+      } else {
+        _showCompletionDialog();
+      }
+      return;
+    }
+    if (_isPickedUp) {
+      setState(() {
+        _autoFollow = true;
+        _alertManager = AlertManager();
+      });
+      _fitToTarget();
+      _loadRoute();
+    }
   }
 
   Future<void> _loadMapStyle() async {
@@ -95,18 +175,110 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     if (mounted) setState(() => _mapStyle = style);
   }
 
-  Future<void> _startGPS() async {
+  Future<void> _startNavigation() async {
+    await VoiceNavService.instance.init();
+    if (mounted) setState(() => _voiceNavEnabled = VoiceNavService.instance.enabled);
+    VoiceNavService.instance.onPhaseChanged(isPickedUp: _isPickedUp);
+
     final fresh = await NavigationService.requestAndGetPosition();
     if (!mounted) return;
     if (fresh != null) {
       setState(() => _driverPosition = fresh);
       _centerOn(fresh);
+    } else {
+      NavigationService.promptOpenSettingsIfPermanentlyDenied(context);
     }
-    _locationSub = NavigationService.positionStream.listen((pos) {
+
+    await _loadRoute();
+
+    _locationSub = NavigationService.positionStream.listen(_onPosition);
+  }
+
+  Future<void> _loadRoute() async {
+    final origin = _driverPosition != null
+        ? LatLng(_driverPosition!.latitude, _driverPosition!.longitude)
+        : _targetLatLng;
+    final destination = _targetLatLng;
+
+    try {
+      final result = await DirectionsService.getRoute(
+        origin: origin,
+        destination: destination,
+        apiKey: AppConfig.mapsApiKey,
+      );
       if (!mounted) return;
-      setState(() => _driverPosition = pos);
-      if (_autoFollow) _centerOn(pos);
-      _maybeEmitLocation(pos);
+      setState(() {
+        _routePoints = result.points;
+        _displayRoute = result.points;
+        _lastTrimIdx = 0;
+      });
+      if (result.steps.isNotEmpty) {
+        VoiceNavService.instance.updateSteps(result.steps);
+      }
+    } catch (_) {
+      // Best-effort : la ligne droite (marqueurs seuls) reste affichée.
+    } finally {
+      if (mounted) setState(() { _loadingRoute = false; _isRerouting = false; });
+    }
+  }
+
+  // Recale la position GPS sur le tracé (projection sur segment, pas juste
+  // sur les sommets) — voir RouteTracker. Réutilisé à la fois pour
+  // raccourcir le tracé affiché et pour détecter une déviation.
+  RouteProjection? _matchRoute(LatLng driverLatLng) {
+    if (_routePoints.isEmpty) return null;
+    return RouteTracker.closestMatch(_routePoints, driverLatLng, _lastTrimIdx);
+  }
+
+  void _trimDisplayRoute(RouteProjection match) {
+    if (match.segmentIndex < _lastTrimIdx) return;
+    _lastTrimIdx = match.segmentIndex;
+    if (mounted) {
+      setState(() => _displayRoute = RouteTracker.remainingRoute(_routePoints, match));
+    }
+  }
+
+  void _onPosition(Position position) {
+    if (!mounted) return;
+    setState(() => _driverPosition = position);
+    if (_autoFollow) _centerOn(position);
+    _maybeEmitLocation(position);
+    final driverLatLng = LatLng(position.latitude, position.longitude);
+    final routeMatch = _matchRoute(driverLatLng);
+    if (routeMatch != null) _trimDisplayRoute(routeMatch);
+    VoiceNavService.instance.onPositionUpdate(position);
+
+    // Alertes de proximité
+    final dist = NavigationService.distanceTo(position, _targetLatLng);
+    final alert = _alertManager.check(dist, isPickupPhase: !_isPickedUp);
+    if (alert != null) {
+      _showAlert(alert.message, alert.priority);
+      VoiceNavService.instance.speakDirect(alert.message);
+    }
+
+    // Recalcul si déviation > 60m depuis la route — limité à 1/15s.
+    // Réutilise la distance perpendiculaire déjà calculée par _matchRoute.
+    if (_routePoints.isNotEmpty && !_loadingRoute && routeMatch != null) {
+      final now = DateTime.now();
+      if (_lastReroute == null || now.difference(_lastReroute!).inSeconds >= 15) {
+        if (routeMatch.distanceMeters > 60) {
+          _lastReroute = now;
+          _lastTrimIdx = 0;
+          setState(() => _isRerouting = true);
+          _loadRoute();
+        }
+      }
+    }
+  }
+
+  void _showAlert(String message, AlertPriority priority) {
+    _alertTimer?.cancel();
+    setState(() {
+      _currentAlert = message;
+      _alertPriority = priority;
+    });
+    _alertTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _currentAlert = null);
     });
   }
 
@@ -115,9 +287,7 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     if (_lastLocationEmit == null ||
         now.difference(_lastLocationEmit!).inSeconds >= 10) {
       _lastLocationEmit = now;
-      ref.read(ordersRepositoryProvider).updateDriverLocation(
-        pos.latitude, pos.longitude,
-      ).catchError((_) {});
+      _locationQueue.emit(pos.latitude, pos.longitude);
     }
   }
 
@@ -130,6 +300,27 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
         ),
       ),
     );
+  }
+
+  double? get _distanceToTarget => _driverPosition == null
+      ? null
+      : NavigationService.distanceTo(_driverPosition!, _targetLatLng);
+
+  // Distance sous laquelle la confirmation "récupéré"/"livré" est permise —
+  // évite les clics accidentels loin du point qui font perdre l'itinéraire
+  // (retours livreurs : swipe déclenché par erreur en poche, sans être arrivé).
+  static const double _confirmRadiusMeters = 500;
+
+  bool get _canConfirmAction =>
+      _distanceToTarget != null && _distanceToTarget! <= _confirmRadiusMeters;
+
+  // 0..1 : progression visuelle de l'anneau autour du cadenas tant que hors
+  // zone — 0 à 2x le rayon de confirmation, 1 pile au seuil des 500 m.
+  double get _lockProgress {
+    final d = _distanceToTarget;
+    if (d == null) return 0;
+    const farRef = _confirmRadiusMeters * 2;
+    return (1 - (d / farRef)).clamp(0.0, 1.0);
   }
 
   LatLng get _targetLatLng {
@@ -154,6 +345,7 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
         icon: _driverIcon ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         flat: true,
+        rotation: _driverPosition!.heading,
         anchor: const Offset(0.5, 0.5),
         zIndexInt: 2,
       ));
@@ -167,6 +359,23 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
       zIndexInt: 1,
     ));
     return markers;
+  }
+
+  Set<Polyline> get _polylines {
+    if (_displayRoute.isEmpty) return {};
+    return {
+      Polyline(
+        polylineId: const PolylineId('route'),
+        points: _displayRoute,
+        color: _isRerouting
+            ? MapTheme.routeColor.withValues(alpha: 0.4)
+            : MapTheme.routeColor,
+        width: 6,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        jointType: JointType.round,
+      ),
+    };
   }
 
   void _fitToTarget() {
@@ -209,10 +418,16 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
       setState(() {
         _isPickedUp = true;
         _currentStopIndex = 0;
+        _alertManager = AlertManager();
       });
+      VoiceNavService.instance.onPhaseChanged(isPickedUp: true);
       _fitToTarget();
+      _loadRoute();
     } catch (e) {
-      if (mounted) showDemToast(context, friendlyError(e), isError: true);
+      if (mounted) {
+        setState(() => _swipeTick++);
+        showDemToast(context, friendlyError(e), isError: true);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -236,14 +451,20 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
         setState(() {
           _currentStopIndex++;
           _autoFollow = true;
+          _alertManager = AlertManager();
         });
+        VoiceNavService.instance.speakDirect('Livraison confirmée. Direction l\'arrêt suivant.');
         _fitToTarget();
+        _loadRoute();
       } else {
         NotificationService.cancelNotification(9998);
         if (mounted) _showCompletionDialog();
       }
     } catch (e) {
-      if (mounted) showDemToast(context, friendlyError(e), isError: true);
+      if (mounted) {
+        setState(() => _swipeTick++);
+        showDemToast(context, friendlyError(e), isError: true);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -255,72 +476,91 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
       context: context,
       barrierDismissible: false,
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: const Color(0xFF0C1628),
-          title: const Row(children: [
-            Icon(Icons.check_circle, color: Color(0xFF00E08C), size: 28),
-            SizedBox(width: 10),
-            Text(
-              'Tournée terminée !',
-              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: AppColors.gradientDialog,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 8)),
+              ],
             ),
-          ]),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(
-              'Tous les ${_stops.length} arrêts ont été livrés avec succès.',
-              style: const TextStyle(color: Color(0xFF6B8BAA), fontSize: 14, height: 1.5),
-            ),
-            const SizedBox(height: 20),
-            const Text('Notez le client', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(5, (i) {
-                final star = i + 1;
-                return GestureDetector(
-                  onTap: () => setDialogState(() => selectedRating = star),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(
-                      star <= selectedRating ? Icons.star : Icons.star_border,
-                      color: star <= selectedRating ? const Color(0xFFFFD700) : const Color(0xFF6B8BAA),
-                      size: 32,
-                    ),
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.check_circle, color: Colors.white, size: 28),
+                  SizedBox(width: 10),
+                  Text(
+                    'Tournée terminée !',
+                    style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
                   ),
-                );
-              }),
+                ]),
+                const SizedBox(height: 16),
+                Text(
+                  'Tous les ${_stops.length} arrêts ont été livrés avec succès.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+                ),
+                const SizedBox(height: 20),
+                const Text('Notez le client', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final star = i + 1;
+                    return GestureDetector(
+                      onTap: () => setDialogState(() => selectedRating = star),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(
+                          star <= selectedRating ? Icons.star : Icons.star_border,
+                          color: star <= selectedRating ? AppColors.ratingGold : Colors.white38,
+                          size: 32,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final batchId = widget.batch['id'] as String?;
+                      final clientId = widget.batch['clientId'] as String?;
+                      if (batchId != null && clientId != null && selectedRating > 0) {
+                        try {
+                          final firstOrderId = _stops.isNotEmpty ? _stops.first['id'] as String? : null;
+                          if (firstOrderId != null) {
+                            await ref.read(ordersRepositoryProvider).rateDriver(
+                              orderId: firstOrderId,
+                              driverId: clientId,
+                              score: selectedRating,
+                            );
+                          }
+                        } catch (_) {}
+                      }
+                      if (!mounted) return;
+                      Navigator.of(context).pop();
+                      context.go('/driver/home');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primaryDark,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Terminer', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
             ),
-          ]),
-          actions: [
-            ElevatedButton(
-              onPressed: () async {
-                final batchId = widget.batch['id'] as String?;
-                final clientId = widget.batch['clientId'] as String?;
-                if (batchId != null && clientId != null && selectedRating > 0) {
-                  try {
-                    final firstOrderId = _stops.isNotEmpty ? _stops.first['id'] as String? : null;
-                    if (firstOrderId != null) {
-                      await ref.read(ordersRepositoryProvider).rateDriver(
-                        orderId: firstOrderId,
-                        driverId: clientId,
-                        score: selectedRating,
-                      );
-                    }
-                  } catch (_) {}
-                }
-                if (!mounted) return;
-                Navigator.of(context).pop();
-                context.go('/driver/home');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00AECB),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text("Terminer"),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -355,9 +595,51 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
       widget.batch['clientName'] as String?
       ?? (widget.batch['client'] as Map?)?['name'] as String?;
 
+  // Affiche le QR SamirPay pour l'arrêt en cours — même logique que sur
+  // l'écran de course simple (active_order_screen.dart), adaptée à l'arrêt
+  // actuellement servi plutôt qu'à une commande unique.
+  Future<void> _openPaymentQr() async {
+    if (_currentStopIndex >= _stops.length) return;
+    final stop = _stops[_currentStopIndex];
+    final orderId = stop['id'] as String?;
+    if (orderId == null) return;
+    final estimatedAmount = clientChargeFor(stop);
+
+    final operatorName = await chooseOperator(context, title: 'Le client paie avec');
+    if (operatorName == null || !mounted) return;
+
+    await SamirpayPaymentSheet.show(
+      context,
+      amount: estimatedAmount,
+      title: 'Paiement de l\'arrêt ${_currentStopIndex + 1}',
+      initPayment: () => ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
+      confirmationStream: SocketService.instance.onOrderPaymentConfirmed
+          .where((event) => event['orderId'] == orderId),
+      onSuccess: () => showDemToast(context, 'Paiement confirmé !'),
+      displayOnly: true,
+    );
+  }
+
+  Future<void> _confirmExit() async {
+    final router = GoRouter.of(context);
+    final confirmed = await showGradientConfirmDialog(
+      context,
+      title: 'Quitter la tournée ?',
+      message: 'La tournée est toujours en cours.\nVous pourrez y revenir depuis l\'accueil.',
+      cancelLabel: 'Rester',
+      confirmLabel: 'Quitter',
+    );
+    if (confirmed == true) router.go('/driver/home');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmExit();
+      },
+      child: Scaffold(
       body: Stack(children: [
         // ── Carte ─────────────────────────────────────────────────────────
         SizedBox.expand(
@@ -370,6 +652,7 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
             },
             style: _mapStyle,
             markers: _markers,
+            polylines: _polylines,
             onCameraMove: (_) {
               if (_autoFollow) setState(() => _autoFollow = false);
             },
@@ -379,6 +662,49 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
             compassEnabled: false,
             mapToolbarEnabled: false,
             trafficEnabled: false,
+          ),
+        ),
+
+        // ── Bannière d'alerte (glisse depuis le haut) ──────────────────────
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+          top: _currentAlert != null ? 0 : -120,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            child: _currentAlert != null
+                ? AlertBanner(
+                    message: _currentAlert!,
+                    priority: _alertPriority ?? AlertPriority.low,
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ),
+
+        // ── Bouton guidage vocal ────────────────────────────────────────────
+        Positioned(
+          right: 16,
+          bottom: 230,
+          child: GestureDetector(
+            onTap: () async {
+              await VoiceNavService.instance.toggle();
+              if (mounted) setState(() => _voiceNavEnabled = VoiceNavService.instance.enabled);
+            },
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _voiceNavEnabled ? AppColors.primary : Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
+              ),
+              child: Icon(
+                _voiceNavEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                color: _voiceNavEnabled ? Colors.white : Colors.grey,
+                size: 22,
+              ),
+            ),
           ),
         ),
 
@@ -402,7 +728,7 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                   ],
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.route, color: Color(0xFF00AECB), size: 16),
+                  const Icon(Icons.route, color: AppColors.driverAccent, size: 16),
                   const SizedBox(width: 8),
                   Text(
                     _isPickedUp
@@ -416,8 +742,29 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                 ]),
               ),
               const Spacer(),
+              // Paiement en ligne de l'arrêt en cours — pertinent seulement
+              // une fois le colis récupéré (chaque arrêt a alors son propre
+              // montant/destinataire ; avant récupération, il n'y a qu'un
+              // point de départ partagé par toute la tournée).
+              if (_isPickedUp && _currentStopIndex < _stops.length) ...[
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _openPaymentQr,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
+                    ),
+                    child: const Icon(Icons.qr_code_2_rounded, color: AppColors.primary, size: 20),
+                  ),
+                ),
+              ],
               // Recenter button when camera drifted
-              if (!_autoFollow)
+              if (!_autoFollow) ...[
+                const SizedBox(width: 10),
                 GestureDetector(
                   onTap: () {
                     setState(() => _autoFollow = true);
@@ -436,9 +783,10 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                       ],
                     ),
                     child: const Icon(Icons.my_location,
-                        color: Color(0xFF00AECB), size: 22),
+                        color: AppColors.driverAccent, size: 22),
                   ),
                 ),
+              ],
             ]),
           ),
         ),
@@ -462,9 +810,9 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(4),
                     color: done
-                        ? const Color(0xFF00E08C)
+                        ? AppColors.driverAccentDone
                         : current
-                            ? const Color(0xFF00AECB)
+                            ? AppColors.driverAccent
                             : Colors.white.withValues(alpha: 0.35),
                   ),
                 );
@@ -480,56 +828,23 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
           child: _buildBottomSheet(),
         ),
       ]),
+      ),
     );
   }
 
   Widget _buildBottomSheet() {
-    const radius = BorderRadius.vertical(top: Radius.circular(28));
-    return ClipRRect(
-      borderRadius: radius,
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-              stops: [0.0, 0.5, 1.0],
-            ),
-            border: Border.all(
-                color: Colors.white.withValues(alpha: 0.15), width: 0.8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 32,
-                offset: const Offset(0, -4),
-              )
-            ],
-          ),
-          padding: EdgeInsets.fromLTRB(
-              20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Drag handle
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              if (!_isPickedUp)
-                ..._buildPickupContent()
-              else
-                ..._buildDeliveryContent(),
-            ],
-          ),
-        ),
+    return GradientSheet(
+      padding: EdgeInsets.fromLTRB(
+          20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SheetDragHandle(),
+          if (!_isPickedUp)
+            ..._buildPickupContent()
+          else
+            ..._buildDeliveryContent(),
+        ],
       ),
     );
   }
@@ -544,11 +859,8 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Récupérer les colis',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
+                Text('Récupérer les colis',
+                    style: ClientText.subtitle.copyWith(color: Colors.white)),
                 const SizedBox(height: 2),
                 Text(
                   '${_stops.length} arrêt${_stops.length > 1 ? 's' : ''} à livrer',
@@ -559,7 +871,7 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
         _MapBtn(onTap: _openMaps),
         if (_clientPhone != null && _clientPhone!.isNotEmpty) ...[
           const SizedBox(width: 8),
-          _MapBtn(onTap: _callClient, icon: Icons.phone_outlined),
+          CallButton(onTap: _callClient, size: 44),
         ],
       ]),
       const SizedBox(height: 14),
@@ -584,23 +896,36 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                 const Icon(Icons.person_outline, color: Colors.white70, size: 16),
                 const SizedBox(width: 8),
                 if (_clientName != null) ...[
-                  Text(_clientName!, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(_clientName!, style: ClientText.body.copyWith(color: Colors.white)),
                   const SizedBox(width: 8),
                 ],
-                Text(_clientPhone!, style: const TextStyle(color: Color(0xFF00AECB), fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(_clientPhone!, style: ClientText.body.copyWith(color: AppColors.driverAccent)),
                 const Spacer(),
-                const Icon(Icons.phone_outlined, color: Color(0xFF00AECB), size: 16),
+                const Icon(Icons.phone_outlined, color: AppColors.driverAccent, size: 16),
               ]),
             ),
           ),
         ),
       const SizedBox(height: 14),
-      _ActionButton(
-        onTap: _loading ? null : _confirmPickup,
+      SwipeToConfirm(
+        key: ValueKey('pickup-$_swipeTick'),
+        label: 'Glissez : colis récupérés',
+        lockedLabel: _distanceToTarget != null
+            ? 'Trop loin (${NavigationService.formatDistance(_distanceToTarget!)})'
+            : 'Localisation requise',
+        enabled: _canConfirmAction,
+        lockProgress: _lockProgress,
+        onLockedTap: () => showDemToast(
+          context,
+          'Rapprochez-vous à moins de ${_confirmRadiusMeters.round()} m du point de collecte pour confirmer.',
+          isError: true,
+        ),
+        onConfirmed: _confirmPickup,
         loading: _loading,
-        label: 'Colis récupérés',
-        color: Colors.white,
-        textColor: const Color(0xFF0671BA),
+        trackColor: Colors.white,
+        thumbColor: AppColors.primaryMid,
+        iconColor: Colors.white,
+        labelColor: AppColors.primaryMid,
       ),
     ];
   }
@@ -621,16 +946,16 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: const Color(0xFF00AECB).withValues(alpha: 0.18),
+            color: AppColors.driverAccent.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-                color: const Color(0xFF00AECB).withValues(alpha: 0.4)),
+                color: AppColors.driverAccent.withValues(alpha: 0.4)),
           ),
           child: Center(
             child: Text(
               '${_currentStopIndex + 1}',
               style: const TextStyle(
-                  color: Color(0xFF00AECB),
+                  color: AppColors.driverAccent,
                   fontSize: 16,
                   fontWeight: FontWeight.w900),
             ),
@@ -643,28 +968,19 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
               children: [
                 Text(
                   'Arrêt ${_currentStopIndex + 1} sur ${_stops.length}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
+                  style: ClientText.subtitle.copyWith(color: Colors.white),
                 ),
                 if (price > 0)
                   Text(
                     '$price FCFA',
-                    style: const TextStyle(
-                        color: Color(0xFF00AECB),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600),
+                    style: ClientText.label.copyWith(color: AppColors.driverAccent),
                   ),
               ]),
         ),
         _MapBtn(onTap: _openMaps),
         if (receiverPhone != null && receiverPhone.isNotEmpty) ...[
           const SizedBox(width: 8),
-          _MapBtn(
-            onTap: _callReceiver,
-            icon: Icons.phone_outlined,
-          ),
+          CallButton(onTap: _callReceiver, size: 44),
         ],
       ]),
       const SizedBox(height: 14),
@@ -690,24 +1006,36 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                 const Icon(Icons.person_outline, color: Colors.white70, size: 16),
                 const SizedBox(width: 8),
                 if (receiverName != null && receiverName.isNotEmpty) ...[
-                  Text(receiverName, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(receiverName, style: ClientText.body.copyWith(color: Colors.white)),
                   const SizedBox(width: 8),
                 ],
-                Text(receiverPhone, style: const TextStyle(color: Color(0xFF00AECB), fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(receiverPhone, style: ClientText.body.copyWith(color: AppColors.driverAccent)),
                 const Spacer(),
-                const Icon(Icons.phone_outlined, color: Color(0xFF00AECB), size: 16),
+                const Icon(Icons.phone_outlined, color: AppColors.driverAccent, size: 16),
               ]),
             ),
           ),
         ),
       const SizedBox(height: 14),
-      _ActionButton(
-        onTap: _loading ? null : _confirmDelivery,
+      SwipeToConfirm(
+        key: ValueKey('stop-$_currentStopIndex-$_swipeTick'),
+        label: isLastStop ? 'Glissez : dernière livraison' : 'Glissez : livré, arrêt suivant',
+        lockedLabel: _distanceToTarget != null
+            ? 'Trop loin (${NavigationService.formatDistance(_distanceToTarget!)})'
+            : 'Localisation requise',
+        enabled: _canConfirmAction,
+        lockProgress: _lockProgress,
+        onLockedTap: () => showDemToast(
+          context,
+          'Rapprochez-vous à moins de ${_confirmRadiusMeters.round()} m du point de livraison pour confirmer.',
+          isError: true,
+        ),
+        onConfirmed: _confirmDelivery,
         loading: _loading,
-        label: isLastStop ? 'Dernière livraison ✓' : 'Livré — Arrêt suivant →',
-        color: isLastStop ? const Color(0xFF00E08C) : Colors.white,
-        textColor:
-            isLastStop ? Colors.white : const Color(0xFF0671BA),
+        trackColor: isLastStop ? AppColors.driverAccentDone : Colors.white,
+        thumbColor: isLastStop ? Colors.white : AppColors.primaryMid,
+        iconColor: isLastStop ? AppColors.driverAccentDone : Colors.white,
+        labelColor: isLastStop ? Colors.white : AppColors.primaryMid,
       ),
     ];
   }
@@ -717,8 +1045,7 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
 
 class _MapBtn extends StatelessWidget {
   final VoidCallback onTap;
-  final IconData icon;
-  const _MapBtn({required this.onTap, this.icon = Icons.navigation_outlined});
+  const _MapBtn({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -732,7 +1059,7 @@ class _MapBtn extends StatelessWidget {
           border:
               Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.8),
         ),
-        child: Icon(icon, color: Colors.white, size: 20),
+        child: const Icon(Icons.navigation_outlined, color: Colors.white, size: 20),
       ),
     );
   }
@@ -775,11 +1102,7 @@ class _AddressCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(label,
-                        style: const TextStyle(
-                            color: Colors.black45,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3)),
+                        style: ClientText.micro.copyWith(color: Colors.black45)),
                     Text(address,
                         style: const TextStyle(
                             color: Colors.black87,
@@ -814,49 +1137,3 @@ class _AddressCard extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  final VoidCallback? onTap;
-  final bool loading;
-  final String label;
-  final Color color;
-  final Color textColor;
-  const _ActionButton({
-    required this.onTap,
-    required this.loading,
-    required this.label,
-    required this.color,
-    required this.textColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: Material(
-        color: onTap == null ? color.withValues(alpha: 0.5) : color,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Center(
-            child: loading
-                ? SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: textColor),
-                  )
-                : Text(
-                    label,
-                    style: TextStyle(
-                        color: textColor,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}

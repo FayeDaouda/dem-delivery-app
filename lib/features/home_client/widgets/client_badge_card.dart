@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 
 // ── Config visuelle par tier — icônes Flutter au lieu d'emojis ───────────────
 const _tiers = {
@@ -141,7 +142,7 @@ class _NextSection extends StatelessWidget {
 
       // En-tête "Prochain niveau"
       Row(children: [
-        Text('Prochain niveau', style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.65), fontWeight: FontWeight.w600)),
+        Text('Prochain niveau', style: ClientText.caption.copyWith(color: color.withValues(alpha: 0.65))),
         const Spacer(),
         Icon(nextIcon, size: 14, color: nextColor),
         const SizedBox(width: 5),
@@ -188,7 +189,7 @@ class _NextSection extends StatelessWidget {
             Icon(Icons.track_changes_rounded, size: 16, color: nextColor),
             const SizedBox(width: 8),
             Expanded(child: Text(motivMsg,
-              style: TextStyle(fontSize: 12, color: nextColor, fontWeight: FontWeight.w700),
+              style: ClientText.labelStrong.copyWith(color: nextColor),
             )),
           ]),
         ),
@@ -214,16 +215,16 @@ class _ProgressBar extends StatelessWidget {
       Row(children: [
         Icon(icon, size: 13, color: done ? Colors.green.shade600 : color.withValues(alpha: 0.75)),
         const SizedBox(width: 5),
-        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: done ? Colors.green.shade600 : color.withValues(alpha: 0.80))),
+        Text(label, style: ClientText.label.copyWith(color: done ? Colors.green.shade600 : color.withValues(alpha: 0.80))),
         const Spacer(),
         if (done)
           Row(children: [
             Icon(Icons.check_circle, size: 14, color: Colors.green.shade600),
             const SizedBox(width: 4),
-            Text('Complété !', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.green.shade600)),
+            Text('Complété !', style: ClientText.labelStrong.copyWith(color: Colors.green.shade600)),
           ])
         else
-          Text('$current / $needed', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+          Text('$current / $needed', style: ClientText.labelStrong.copyWith(color: color)),
       ]),
       const SizedBox(height: 6),
       ClipRRect(
@@ -252,9 +253,9 @@ class _RatingLine extends StatelessWidget {
       Icon(ok ? Icons.star_rounded : Icons.star_outline_rounded,
         size: 14, color: ok ? Colors.amber.shade600 : color.withValues(alpha: 0.70)),
       const SizedBox(width: 5),
-      Text('Note moyenne', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.80))),
+      Text('Note moyenne', style: ClientText.label.copyWith(color: color.withValues(alpha: 0.80))),
       const Spacer(),
-      Text('$current', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: ok ? Colors.amber.shade600 : color)),
+      Text('$current', style: ClientText.labelStrong.copyWith(color: ok ? Colors.amber.shade600 : color)),
       Text(' / $needed', style: TextStyle(fontSize: 12, color: color.withValues(alpha: 0.60))),
       const SizedBox(width: 3),
       Icon(Icons.star_rounded, size: 12, color: ok ? Colors.amber.shade600 : color.withValues(alpha: 0.60)),
@@ -273,13 +274,13 @@ class _ProfileLine extends StatelessWidget {
     Icon(complete ? Icons.check_circle_outline : Icons.person_outline,
       size: 14, color: complete ? Colors.green.shade600 : color.withValues(alpha: 0.70)),
     const SizedBox(width: 5),
-    Text('Profil complet', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.80))),
+    Text('Profil complet', style: ClientText.label.copyWith(color: color.withValues(alpha: 0.80))),
     const Spacer(),
     if (complete) ...[
       Icon(Icons.check_rounded, size: 13, color: Colors.green.shade600),
       const SizedBox(width: 3),
-      Text('Oui', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.green.shade600)),
+      Text('Oui', style: ClientText.labelStrong.copyWith(color: Colors.green.shade600)),
     ] else
-      Text('Non (nom + email)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+      Text('Non (nom + email)', style: ClientText.labelStrong.copyWith(color: color)),
   ]);
 }

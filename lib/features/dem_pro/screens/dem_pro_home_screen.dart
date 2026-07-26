@@ -2,16 +2,19 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/storage/auth_storage.dart';
-import '../../deliveries/data/orders_repository.dart';
 import '../../profile/data/profile_repository.dart';
 import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
+import '../utils/dem_pro_format.dart';
 import '../widgets/dem_pro_nav_bar.dart';
 import '../../../core/utils/location_gate.dart';
+import '../../../shared/widgets/swipe_to_confirm.dart';
 
 const _sectorLabels = {
   'commerce':     'Commerce',
@@ -26,16 +29,6 @@ const _volumeLabels = {
   'medium': '5 à 8 livraisons / semaine',
   'high':   '9 ou plus / semaine',
 };
-
-String _fcfa(num value) {
-  final s = value.round().toString();
-  final buf = StringBuffer();
-  for (int i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-    buf.write(s[i]);
-  }
-  return '$buf FCFA';
-}
 
 const _dayNames   = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const _monthNames = ['janvier','février','mars','avril','mai','juin','juillet',
@@ -150,21 +143,21 @@ class _T {
   final bool dark;
   const _T(this.dark);
 
-  Color get scaffoldBg => dark ? DemProColors.bg    : const Color(0xFFF8FAFC);
+  Color get scaffoldBg => dark ? DemProColors.bg    : DemProColors.lightBg;
   Color get cardBg     => dark ? DemProColors.bg2   : Colors.white;
-  Color get cardBg2    => dark ? DemProColors.bg3   : const Color(0xFFF1F5F9);
-  Color get cardBg3    => dark ? DemProColors.bg4   : const Color(0xFFE8EFF6);
-  Color get border     => dark ? DemProColors.bg3   : const Color(0xFFE2E8F0);
-  Color get text       => dark ? DemProColors.text  : const Color(0xFF0F172A);
-  Color get muted      => dark ? DemProColors.muted : const Color(0xFF64748B);
+  Color get cardBg2    => dark ? DemProColors.bg3   : DemProColors.lightCardBg2;
+  Color get cardBg3    => dark ? DemProColors.bg4   : DemProColors.lightCardBg3;
+  Color get border     => dark ? DemProColors.bg3   : DemProColors.lightBorder;
+  Color get text       => dark ? DemProColors.text  : DemProColors.lightText;
+  Color get muted      => dark ? DemProColors.muted : DemProColors.lightMuted;
 
   List<Color> get statGradient => dark
       ? [DemProColors.bg3, DemProColors.bg4]
-      : [const Color(0xFFEFF6FF), const Color(0xFFDCEFFB)];
+      : DemProColors.lightGradientBlue;
 
   List<Color> get headerCardGradient => dark
       ? [DemProColors.bg3, DemProColors.bg4]
-      : [Colors.white, const Color(0xFFEFF6FF)];
+      : DemProColors.lightGradientHeader;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -329,9 +322,6 @@ class _AccueilTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final businessName = (user?['proBusinessName'] as String?)?.trim();
-    final rawName      = (user?['name'] as String? ?? '').trim();
-    final firstName    = rawName.isNotEmpty ? rawName.split(RegExp(r'\s+')).first : '';
-    final greeting     = firstName.isNotEmpty ? 'Bonjour $firstName 👋' : 'Bonjour 👋';
 
     final delivered  = (stats?['deliveriesToday']?['completed']  as num?)?.toInt() ?? 0;
     final inProgress = (stats?['deliveriesToday']?['inProgress'] as num?)?.toInt() ?? 0;
@@ -364,80 +354,73 @@ class _AccueilTab extends StatelessWidget {
     final dateStr  = '${_dayNames[now.weekday - 1]} ${now.day} ${_monthNames[now.month - 1]}';
 
     return SafeArea(
-      child: RefreshIndicator(
-        color: DemProColors.accent,
-        backgroundColor: t.cardBg,
-        onRefresh: onRefresh,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      child: Column(
+        children: [
 
-              // ── Header ──────────────────────────────────────────────────
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Tableau de bord',
-                          style: TextStyle(color: t.muted, fontSize: 12),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          greeting,
-                          style: const TextStyle(
-                            color: DemProColors.accent,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            _ProAvatar(
-                              avatarUrl: user?['avatar'] as String?,
-                              businessName: businessName,
-                              size: 40,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
-                                style: TextStyle(
-                                  color: t.text,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+          // ── Header — fixe, ne défile pas avec le contenu ─────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const _ProBadge(),
-                      if (activeOrders.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _ActiveOrderIcon(
-                          count: activeOrders.length,
-                          onTap: () => _goToActiveOrder(context, activeOrders.first),
-                        ),
-                      ],
+                      Text(
+                        'Tableau de bord',
+                        style: DemProText.caption.copyWith(color: t.muted),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          _ProAvatar(
+                            avatarUrl: user?['avatar'] as String?,
+                            businessName: businessName,
+                            size: 40,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
+                              style: DemProText.headline.copyWith(color: t.text, fontSize: 22),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 20),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const _ProBadge(),
+                    if (activeOrders.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      _ActiveOrderIcon(
+                        count: activeOrders.length,
+                        onTap: () => _goToActiveOrder(context, activeOrders.first),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: RefreshIndicator(
+              color: DemProColors.accent,
+              backgroundColor: t.cardBg,
+              onRefresh: onRefresh,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
 
               // ── Carte résumé ─────────────────────────────────────────────
               if (loading)
@@ -467,11 +450,7 @@ class _AccueilTab extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           'Livraisons — $dateStr',
-                          style: TextStyle(
-                            color: t.muted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: DemProText.caption.copyWith(color: t.muted),
                         ),
                       ]),
                       const SizedBox(height: 14),
@@ -512,16 +491,12 @@ class _AccueilTab extends StatelessWidget {
                               children: [
                                 Text(
                                   'Ventes aujourd\'hui',
-                                  style: TextStyle(color: t.muted, fontSize: 10),
+                                  style: DemProText.micro.copyWith(color: t.muted),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  _fcfa(salesToday),
-                                  style: TextStyle(
-                                    color: DemProColors.success,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                                  DemProFormat.fcfa(salesToday),
+                                  style: DemProText.subtitle.copyWith(color: DemProColors.success, fontWeight: FontWeight.w800),
                                 ),
                               ],
                             ),
@@ -540,16 +515,12 @@ class _AccueilTab extends StatelessWidget {
                               children: [
                                 Text(
                                   'Ventes ce mois',
-                                  style: TextStyle(color: t.muted, fontSize: 10),
+                                  style: DemProText.micro.copyWith(color: t.muted),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  _fcfa(salesMonth),
-                                  style: TextStyle(
-                                    color: DemProColors.success,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                                  DemProFormat.fcfa(salesMonth),
+                                  style: DemProText.subtitle.copyWith(color: DemProColors.success, fontWeight: FontWeight.w800),
                                 ),
                               ],
                             ),
@@ -580,7 +551,7 @@ class _AccueilTab extends StatelessWidget {
                 Expanded(
                   child: _ActionButton(
                     label: 'Programmer',
-                    icon: Icons.schedule,
+                    icon: Icons.schedule_outlined,
                     filled: false,
                     onTap: () async {
                       if (!await ensureLocationEnabled(context)) return;
@@ -618,9 +589,12 @@ class _AccueilTab extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _OrderMiniCard(order: o, t: t, onTap: () => _navigateToOrder(context, o)),
                 )),
-            ],
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -647,7 +621,38 @@ class _CompteTab extends StatefulWidget {
 }
 
 class _CompteTabState extends State<_CompteTab> {
+  final _repo = DemProRepository(ApiClient.dio);
+
   bool _uploading = false;
+  bool _logoutLoading   = false;
+  bool _deleteLoading   = false;
+  int  _logoutSwipeTick = 0;
+  int  _deleteSwipeTick = 0;
+  int  _pendingRequestCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPendingRequestCount();
+  }
+
+  Future<void> _loadPendingRequestCount() async {
+    try {
+      final requests = await _repo.getOrderRequests(status: 'PENDING');
+      if (mounted) setState(() => _pendingRequestCount = requests.length);
+    } catch (_) {}
+  }
+
+  void _shareOrderLink() {
+    final id = widget.user?['id'] as String?;
+    if (id == null) return;
+    final businessName = (widget.user?['proBusinessName'] as String?)?.trim();
+    final link = 'https://www.dem.sn/commander/$id';
+    final label = businessName?.isNotEmpty == true ? businessName! : 'ma boutique';
+    SharePlus.instance.share(ShareParams(
+      text: 'Commandez chez $label et faites-vous livrer par DEM : $link',
+    ));
+  }
 
   Future<void> _pickAndUploadAvatar() async {
     final picker = ImagePicker();
@@ -674,39 +679,137 @@ class _CompteTabState extends State<_CompteTab> {
     }
   }
 
-  Future<void> _confirmDeleteAccount(BuildContext ctx) async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _confirmLogout(BuildContext ctx) async {
+    final t = widget.t;
+    await showModalBottomSheet<void>(
       context: ctx,
-      builder: (_) => AlertDialog(
-        backgroundColor: widget.t.cardBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Supprimer mon compte ?', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
-        content: Text(
-          'Cette action est irréversible. Toutes vos données, livraisons et adresses seront définitivement supprimées.',
-          style: TextStyle(color: widget.t.muted, fontSize: 13),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Annuler', style: TextStyle(color: widget.t.muted))),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer', style: TextStyle(color: DemProColors.danger, fontWeight: FontWeight.w700)),
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: t.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(sheetCtx).viewPadding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: t.border, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: DemProColors.accent.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.logout_rounded, color: DemProColors.accent, size: 26),
+              ),
+              const SizedBox(height: 14),
+              Text('Se déconnecter ?',
+                  style: DemProText.title.copyWith(color: t.text, fontSize: 16)),
+              const SizedBox(height: 6),
+              Text(
+                'Vous devrez vous reconnecter avec votre numéro de téléphone pour retrouver votre espace DEM Pro.',
+                textAlign: TextAlign.center,
+                style: DemProText.body.copyWith(color: t.muted, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SwipeToConfirm(
+                key: ValueKey('dem-pro-logout-$_logoutSwipeTick'),
+                label: 'Glissez pour se déconnecter',
+                loading: _logoutLoading,
+                trackColor: DemProColors.accent,
+                thumbColor: Colors.white,
+                iconColor: DemProColors.accent,
+                labelColor: Colors.white,
+                onConfirmed: () {
+                  setSheetState(() => _logoutLoading = true);
+                  widget.onLogout();
+                  if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _logoutLoading ? null : () => Navigator.pop(sheetCtx),
+                child: Text('Annuler', style: DemProText.body.copyWith(color: t.muted)),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
-    if (confirmed != true) return;
-    try {
-      await ApiClient.dio.delete('/users/me');
-      await AuthStorage.clear();
-      appStartupNotifier.markLoggedOut();
-      if (mounted) context.go('/phone');
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Échec de la suppression. Réessayez.')),
-        );
-      }
-    }
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext ctx) async {
+    final t = widget.t;
+    await showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: t.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(sheetCtx).viewPadding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: t.border, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: DemProColors.danger.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_forever_outlined, color: DemProColors.danger, size: 28),
+              ),
+              const SizedBox(height: 14),
+              Text('Supprimer mon compte ?',
+                  style: DemProText.title.copyWith(color: t.text, fontSize: 16)),
+              const SizedBox(height: 6),
+              Text(
+                'Cette action est irréversible. Toutes vos données, livraisons et adresses seront définitivement supprimées.',
+                textAlign: TextAlign.center,
+                style: DemProText.body.copyWith(color: t.muted, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SwipeToConfirm(
+                key: ValueKey('dem-pro-delete-$_deleteSwipeTick'),
+                label: 'Glissez pour supprimer',
+                loading: _deleteLoading,
+                trackColor: DemProColors.danger,
+                thumbColor: Colors.white,
+                iconColor: DemProColors.danger,
+                labelColor: Colors.white,
+                onConfirmed: () async {
+                  setSheetState(() => _deleteLoading = true);
+                  try {
+                    await ApiClient.dio.delete('/users/me');
+                    await AuthStorage.clear();
+                    appStartupNotifier.markLoggedOut();
+                    if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                    if (mounted) context.go('/phone');
+                  } catch (_) {
+                    setSheetState(() {
+                      _deleteLoading = false;
+                      _deleteSwipeTick++;
+                    });
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Échec de la suppression. Réessayez.')),
+                      );
+                    }
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _deleteLoading ? null : () => Navigator.pop(sheetCtx),
+                child: Text('Annuler', style: DemProText.body.copyWith(color: t.muted)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showSectorPicker(String? current) async {
@@ -715,14 +818,14 @@ class _CompteTabState extends State<_CompteTab> {
       builder: (_) => SimpleDialog(
         backgroundColor: widget.t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Domaine d\'activité', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        title: Text('Domaine d\'activité', style: DemProText.title.copyWith(color: widget.t.text)),
         children: _sectorLabels.entries.map((e) => SimpleDialogOption(
           onPressed: () => Navigator.pop(context, e.key),
           child: Row(children: [
             Icon(e.key == current ? Icons.radio_button_checked : Icons.radio_button_off,
               color: e.key == current ? DemProColors.accent : widget.t.muted, size: 20),
             const SizedBox(width: 12),
-            Text(e.value, style: TextStyle(color: widget.t.text, fontSize: 14)),
+            Text(e.value, style: DemProText.body.copyWith(color: widget.t.text, fontSize: 14)),
           ]),
         )).toList(),
       ),
@@ -742,14 +845,14 @@ class _CompteTabState extends State<_CompteTab> {
       builder: (_) => SimpleDialog(
         backgroundColor: widget.t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Volume hebdomadaire', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        title: Text('Volume hebdomadaire', style: DemProText.title.copyWith(color: widget.t.text)),
         children: _volumeLabels.entries.map((e) => SimpleDialogOption(
           onPressed: () => Navigator.pop(context, e.key),
           child: Row(children: [
             Icon(e.key == current ? Icons.radio_button_checked : Icons.radio_button_off,
               color: e.key == current ? DemProColors.accent : widget.t.muted, size: 20),
             const SizedBox(width: 12),
-            Text(e.value, style: TextStyle(color: widget.t.text, fontSize: 14)),
+            Text(e.value, style: DemProText.body.copyWith(color: widget.t.text, fontSize: 14)),
           ]),
         )).toList(),
       ),
@@ -770,33 +873,33 @@ class _CompteTabState extends State<_CompteTab> {
       builder: (_) => AlertDialog(
         backgroundColor: widget.t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Changer de numéro', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        title: Text('Changer de numéro', style: DemProText.title.copyWith(color: widget.t.text)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Numéro actuel : $currentPhone', style: TextStyle(color: widget.t.muted, fontSize: 13)),
+          Text('Numéro actuel : $currentPhone', style: DemProText.body.copyWith(color: widget.t.muted)),
           const SizedBox(height: 12),
           TextField(
             controller: ctrl,
             autofocus: true,
             keyboardType: TextInputType.phone,
-            style: TextStyle(color: widget.t.text),
+            style: DemProText.body.copyWith(color: widget.t.text),
             decoration: InputDecoration(
               hintText: '77 000 00 00',
               prefixText: '+221 ',
-              prefixStyle: TextStyle(color: widget.t.muted),
-              hintStyle: TextStyle(color: widget.t.muted),
+              prefixStyle: DemProText.body.copyWith(color: widget.t.muted),
+              hintStyle: DemProText.body.copyWith(color: widget.t.muted),
               filled: true,
               fillColor: widget.t.cardBg2,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             ),
           ),
           const SizedBox(height: 8),
-          Text('La demande sera validée par l\'équipe DEM.', style: TextStyle(color: widget.t.muted, fontSize: 11)),
+          Text('La demande sera validée par l\'équipe DEM.', style: DemProText.caption.copyWith(color: widget.t.muted)),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Annuler', style: TextStyle(color: widget.t.muted))),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Annuler', style: DemProText.body.copyWith(color: widget.t.muted))),
           TextButton(
             onPressed: () => Navigator.pop(context, ctrl.text.trim()),
-            child: const Text('Envoyer', style: TextStyle(color: DemProColors.accent, fontWeight: FontWeight.w700)),
+            child: Text('Envoyer', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
           ),
         ],
       ),
@@ -825,24 +928,24 @@ class _CompteTabState extends State<_CompteTab> {
       builder: (_) => AlertDialog(
         backgroundColor: widget.t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Modifier $label', style: TextStyle(color: widget.t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        title: Text('Modifier $label', style: DemProText.title.copyWith(color: widget.t.text)),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: TextStyle(color: widget.t.text),
+          style: DemProText.body.copyWith(color: widget.t.text),
           decoration: InputDecoration(
             hintText: label,
-            hintStyle: TextStyle(color: widget.t.muted),
+            hintStyle: DemProText.body.copyWith(color: widget.t.muted),
             filled: true,
             fillColor: widget.t.cardBg2,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Annuler', style: TextStyle(color: widget.t.muted))),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Annuler', style: DemProText.body.copyWith(color: widget.t.muted))),
           TextButton(
             onPressed: () => Navigator.pop(context, ctrl.text.trim()),
-            child: const Text('Enregistrer', style: TextStyle(color: DemProColors.accent, fontWeight: FontWeight.w700)),
+            child: Text('Enregistrer', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
           ),
         ],
       ),
@@ -931,7 +1034,7 @@ class _CompteTabState extends State<_CompteTab> {
                         child: Row(children: [
                           Expanded(child: Text(
                             businessName?.isNotEmpty == true ? businessName! : 'Mon entreprise',
-                            style: TextStyle(color: t.text, fontSize: 17, fontWeight: FontWeight.w800),
+                            style: DemProText.title.copyWith(color: t.text, fontSize: 17),
                             maxLines: 1, overflow: TextOverflow.ellipsis,
                           )),
                           Icon(Icons.edit_outlined, color: t.muted, size: 14),
@@ -970,6 +1073,59 @@ class _CompteTabState extends State<_CompteTab> {
             ),
             const SizedBox(height: 24),
 
+            // ── Catalogue ────────────────────────────────────────────────
+            _SectionLabel(label: 'CATALOGUE', t: t),
+            const SizedBox(height: 12),
+            _InfoCard(t: t, children: [
+              _TapRow(
+                icon: Icons.inventory_2_outlined,
+                label: 'Mes produits',
+                subtitle: 'Réutilisez-les à chaque commande',
+                t: t,
+                isLast: true,
+                onTap: () => context.push('/dem-pro/products'),
+              ),
+            ]),
+            const SizedBox(height: 24),
+
+            // ── Lien de commande ───────────────────────────────────────────
+            _SectionLabel(label: 'LIEN DE COMMANDE', t: t),
+            const SizedBox(height: 12),
+            _InfoCard(t: t, children: [
+              _TapRow(
+                icon: Icons.share_outlined,
+                label: 'Partager mon lien de commande',
+                subtitle: 'Vos clients commandent directement, sans compte',
+                t: t,
+                onTap: _shareOrderLink,
+              ),
+              _TapRow(
+                icon: Icons.inbox_outlined,
+                label: 'Demandes reçues',
+                subtitle: _pendingRequestCount > 0
+                    ? '$_pendingRequestCount en attente de confirmation'
+                    : 'Aucune demande en attente',
+                t: t,
+                isLast: true,
+                trailing: _pendingRequestCount > 0
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: DemProColors.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text('$_pendingRequestCount',
+                            style: DemProText.caption.copyWith(color: DemProColors.warning, fontWeight: FontWeight.w800)),
+                      )
+                    : null,
+                onTap: () async {
+                  await context.push('/dem-pro/order-requests');
+                  _loadPendingRequestCount();
+                },
+              ),
+            ]),
+            const SizedBox(height: 24),
+
             // ── Abonnement ───────────────────────────────────────────────
             _SectionLabel(label: 'ABONNEMENT', t: t),
             const SizedBox(height: 12),
@@ -992,9 +1148,9 @@ class _CompteTabState extends State<_CompteTab> {
                 ),
                 const SizedBox(width: 14),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('DEM Pro', style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text('DEM Pro', style: DemProText.subtitle.copyWith(color: t.text)),
                   const SizedBox(height: 2),
-                  Text('Plan gratuit — lancement', style: TextStyle(color: DemProColors.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+                  Text('Plan gratuit — lancement', style: DemProText.caption.copyWith(color: DemProColors.accent)),
                 ])),
               ]),
             ),
@@ -1020,7 +1176,7 @@ class _CompteTabState extends State<_CompteTab> {
                 Expanded(
                   child: Text(
                     widget.darkMode ? 'Mode sombre' : 'Mode clair',
-                    style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w600),
+                    style: DemProText.subtitle.copyWith(color: t.text),
                   ),
                 ),
                 Switch(
@@ -1054,7 +1210,7 @@ class _CompteTabState extends State<_CompteTab> {
             const SizedBox(height: 24),
 
             // ── Déconnexion ───────────────────────────────────────────────
-            _LogoutButton(onTap: widget.onLogout, t: t),
+            _LogoutButton(onTap: () => _confirmLogout(context), t: t),
 
             const SizedBox(height: 12),
 
@@ -1068,16 +1224,16 @@ class _CompteTabState extends State<_CompteTab> {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: DemProColors.danger.withValues(alpha: 0.3)),
                 ),
-                child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.delete_outline, color: DemProColors.danger, size: 18),
-                  SizedBox(width: 8),
-                  Text('Supprimer mon compte', style: TextStyle(color: DemProColors.danger, fontSize: 13, fontWeight: FontWeight.w600)),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.delete_outline, color: DemProColors.danger, size: 18),
+                  const SizedBox(width: 8),
+                  Text('Supprimer mon compte', style: DemProText.bodyStrong.copyWith(color: DemProColors.danger)),
                 ]),
               ),
             ),
 
             const SizedBox(height: 16),
-            Center(child: Text('DEM v1.1.1', style: TextStyle(color: t.muted.withValues(alpha: 0.5), fontSize: 11))),
+            Center(child: Text('DEM v1.1.1', style: DemProText.caption.copyWith(color: t.muted.withValues(alpha: 0.5)))),
           ],
         ),
       ),
@@ -1098,13 +1254,8 @@ class _ProBadge extends StatelessWidget {
       color: DemProColors.accent.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(20),
     ),
-    child: const Text('DEM PRO',
-      style: TextStyle(
-        color: DemProColors.accent,
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 0.5,
-      )),
+    child: Text('DEM PRO',
+      style: DemProText.micro.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
   );
 }
 
@@ -1167,7 +1318,7 @@ class _ActiveOrderIconState extends State<_ActiveOrderIcon>
                 ),
                 child: Center(child: Text(
                   '${widget.count}',
-                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
+                  style: DemProText.micro.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
                 )),
               ),
             ),
@@ -1210,22 +1361,14 @@ class _ProAvatar extends StatelessWidget {
               errorBuilder: (_, __, ___) => Center(
                 child: Text(
                   _initials,
-                  style: TextStyle(
-                    color: DemProColors.accent,
-                    fontWeight: FontWeight.w800,
-                    fontSize: size * 0.38,
-                  ),
+                  style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800, fontSize: size * 0.38),
                 ),
               ),
             )
           : Center(
               child: Text(
                 _initials,
-                style: TextStyle(
-                  color: DemProColors.accent,
-                  fontWeight: FontWeight.w800,
-                  fontSize: size * 0.38,
-                ),
+                style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800, fontSize: size * 0.38),
               ),
             ),
     );
@@ -1249,21 +1392,12 @@ class _BigStatBox extends StatelessWidget {
     child: Column(children: [
       Text(
         value,
-        style: TextStyle(
-          fontSize: 30,
-          fontWeight: FontWeight.w900,
-          color: color,
-          height: 1,
-        ),
+        style: DemProText.hero.copyWith(color: color, height: 1),
       ),
       const SizedBox(height: 4),
       Text(
         label,
-        style: TextStyle(
-          color: t.muted,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
+        style: DemProText.caption.copyWith(color: t.muted),
       ),
     ]),
   );
@@ -1296,11 +1430,7 @@ class _ActionButton extends StatelessWidget {
           Text(
             label,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: filled ? Colors.white : t.text,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
+            style: DemProText.caption.copyWith(color: filled ? Colors.white : t.text, fontWeight: FontWeight.w700),
           ),
         ]),
       ),
@@ -1315,12 +1445,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: TextStyle(
-      color: t.muted,
-      fontSize: 12,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 1,
-    ),
+    style: DemProText.caption.copyWith(color: t.muted, fontWeight: FontWeight.w700, letterSpacing: 1),
   );
 }
 
@@ -1344,7 +1469,7 @@ class _EnCoursEmpty extends StatelessWidget {
       const SizedBox(height: 10),
       Text(
         'Aucune livraison en cours',
-        style: TextStyle(color: t.muted, fontSize: 13),
+        style: DemProText.body.copyWith(color: t.muted),
       ),
       const SizedBox(height: 14),
       GestureDetector(
@@ -1356,17 +1481,13 @@ class _EnCoursEmpty extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: DemProColors.accent.withValues(alpha: 0.30)),
           ),
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
             Text(
               'Passez votre première commande',
-              style: TextStyle(
-                color: DemProColors.accent,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-              ),
+              style: DemProText.caption.copyWith(color: DemProColors.accent),
             ),
-            SizedBox(width: 4),
-            Icon(Icons.arrow_forward, color: DemProColors.accent, size: 14),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_forward, color: DemProColors.accent, size: 14),
           ]),
         ),
       ),
@@ -1393,12 +1514,12 @@ class _HistoriqueEmpty extends StatelessWidget {
       const SizedBox(height: 10),
       Text(
         'Aucune livraison récente',
-        style: TextStyle(color: t.muted, fontSize: 13),
+        style: DemProText.body.copyWith(color: t.muted),
       ),
       const SizedBox(height: 4),
       Text(
         'Votre historique apparaîtra ici',
-        style: TextStyle(color: t.muted.withValues(alpha: 0.55), fontSize: 11),
+        style: DemProText.caption.copyWith(color: t.muted.withValues(alpha: 0.55)),
       ),
     ]),
   );
@@ -1446,15 +1567,15 @@ class _OrderMiniCard extends StatelessWidget {
             children: [
               Text(
                 _shortAddress(dropoff),
-                style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600),
+                style: DemProText.bodyStrong.copyWith(color: t.text),
                 maxLines: 1, overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
               Row(children: [
-                Text(_statusLabel(status), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+                Text(_statusLabel(status), style: DemProText.caption.copyWith(color: color)),
                 if (driverName != null) ...[
-                  Text(' · ', style: TextStyle(color: t.muted, fontSize: 11)),
-                  Text(driverName, style: TextStyle(color: t.muted, fontSize: 11)),
+                  Text(' · ', style: DemProText.caption.copyWith(color: t.muted)),
+                  Text(driverName, style: DemProText.caption.copyWith(color: t.muted)),
                 ],
               ]),
             ],
@@ -1462,8 +1583,8 @@ class _OrderMiniCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (price != null) Text(_fcfa(price), style: TextStyle(color: t.text, fontSize: 12, fontWeight: FontWeight.w700)),
-              if (createdAt.isNotEmpty) Text(createdAt, style: TextStyle(color: t.muted, fontSize: 10)),
+              if (price != null) Text(DemProFormat.fcfa(price), style: DemProText.caption.copyWith(color: t.text, fontWeight: FontWeight.w700)),
+              if (createdAt.isNotEmpty) Text(createdAt, style: DemProText.micro.copyWith(color: t.muted)),
             ],
           ),
           const SizedBox(width: 4),
@@ -1489,27 +1610,6 @@ class _InfoCard extends StatelessWidget {
   );
 }
 
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final bool isLast;
-  final _T t;
-  const _InfoRow({required this.icon, required this.label, required this.value, required this.t, this.isLast = false});
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    decoration: BoxDecoration(
-      border: isLast ? null : Border(bottom: BorderSide(color: t.border)),
-    ),
-    child: Row(children: [
-      Icon(icon, color: DemProColors.accent, size: 18),
-      const SizedBox(width: 12),
-      Expanded(child: Text(label, style: TextStyle(color: t.muted, fontSize: 13))),
-      Text(value, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
-    ]),
-  );
-}
-
 class _EditableInfoRow extends StatelessWidget {
   final IconData icon;
   final String label, value;
@@ -1529,13 +1629,8 @@ class _EditableInfoRow extends StatelessWidget {
       child: Row(children: [
         Icon(icon, color: DemProColors.accent, size: 18),
         const SizedBox(width: 12),
-        Expanded(child: Text(label, style: TextStyle(color: t.muted, fontSize: 13))),
-        Text(value, style: TextStyle(
-          color: isPlaceholder ? DemProColors.accent.withValues(alpha: 0.6) : t.text,
-          fontSize: 13,
-          fontWeight: isPlaceholder ? FontWeight.w500 : FontWeight.w600,
-          fontStyle: isPlaceholder ? FontStyle.italic : FontStyle.normal,
-        )),
+        Expanded(child: Text(label, style: DemProText.body.copyWith(color: t.muted))),
+        Text(value, style: DemProText.body.copyWith(color: isPlaceholder ? DemProColors.accent.withValues(alpha: 0.6) : t.text, fontWeight: isPlaceholder ? FontWeight.w500 : FontWeight.w600, fontStyle: isPlaceholder ? FontStyle.italic : FontStyle.normal)),
         const SizedBox(width: 6),
         Icon(Icons.edit_outlined, color: t.muted, size: 14),
       ]),
@@ -1550,7 +1645,8 @@ class _TapRow extends StatelessWidget {
   final _T t;
   final VoidCallback onTap;
   final bool isLast;
-  const _TapRow({required this.icon, required this.label, this.subtitle, required this.t, required this.onTap, this.isLast = false});
+  final Widget? trailing;
+  const _TapRow({required this.icon, required this.label, this.subtitle, required this.t, required this.onTap, this.isLast = false, this.trailing});
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1563,10 +1659,11 @@ class _TapRow extends StatelessWidget {
         Icon(icon, color: DemProColors.accent, size: 18),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(label, style: DemProText.bodyStrong.copyWith(color: t.text)),
           if (subtitle != null)
-            Text(subtitle!, style: TextStyle(color: t.muted, fontSize: 11)),
+            Text(subtitle!, style: DemProText.caption.copyWith(color: t.muted)),
         ])),
+        if (trailing != null) ...[trailing!, const SizedBox(width: 8)],
         Icon(Icons.chevron_right, color: t.muted, size: 18),
       ]),
     ),
@@ -1591,12 +1688,12 @@ class _LogoutButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: t.border),
         ),
-        child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.logout_outlined, color: DemProColors.danger, size: 18),
-          SizedBox(width: 10),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.logout_outlined, color: DemProColors.danger, size: 18),
+          const SizedBox(width: 10),
           Text(
             'Se déconnecter',
-            style: TextStyle(color: DemProColors.danger, fontSize: 14, fontWeight: FontWeight.w700),
+            style: DemProText.subtitle.copyWith(color: DemProColors.danger),
           ),
         ]),
       ),
@@ -1812,14 +1909,14 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
                         color: DemProColors.accent.withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.route, color: DemProColors.accent, size: 34),
+                      child: const Icon(Icons.route_outlined, color: DemProColors.accent, size: 34),
                     ),
                     const SizedBox(height: 16),
-                    Text('Aucune tournée', style: TextStyle(color: t.text, fontSize: 17, fontWeight: FontWeight.w800)),
+                    Text('Aucune tournée', style: DemProText.title.copyWith(color: t.text, fontSize: 17)),
                     const SizedBox(height: 8),
                     Text(
                       'Créez une tournée pour regrouper plusieurs livraisons avec un seul livreur.',
-                      style: TextStyle(color: t.muted, fontSize: 13, height: 1.5),
+                      style: DemProText.body.copyWith(color: t.muted, height: 1.5),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -1831,11 +1928,11 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
                           color: DemProColors.accent,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.add, color: Colors.white, size: 18),
-                          SizedBox(width: 8),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.add, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
                           Text('Créer une tournée',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                              style: DemProText.button.copyWith(fontSize: 14)),
                         ]),
                       ),
                     ),
@@ -1952,11 +2049,7 @@ class _FilterChip extends StatelessWidget {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(
           label,
-          style: TextStyle(
-            color: active ? Colors.white : t.muted,
-            fontSize: 13,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-          ),
+          style: DemProText.body.copyWith(color: active ? Colors.white : t.muted, fontWeight: active ? FontWeight.w700 : FontWeight.w500),
         ),
         if (count > 0) ...[
           const SizedBox(width: 6),
@@ -1970,11 +2063,7 @@ class _FilterChip extends StatelessWidget {
             ),
             child: Text(
               '$count',
-              style: TextStyle(
-                color: active ? Colors.white : DemProColors.accent,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
+              style: DemProText.caption.copyWith(color: active ? Colors.white : DemProColors.accent, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -2035,11 +2124,7 @@ class _ActiveOrderCard extends StatelessWidget {
                 child: hasDriver
                     ? Text(
                         _driverInitials(driverName),
-                        style: const TextStyle(
-                          color: DemProColors.accent,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                        ),
+                        style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800),
                       )
                     : Icon(Icons.two_wheeler, color: t.muted, size: 18),
               ),
@@ -2051,10 +2136,10 @@ class _ActiveOrderCard extends StatelessWidget {
                 children: [
                   Text(
                     hasDriver ? (driverName ?? 'Livreur') : 'En attente d\'un livreur…',
-                    style: TextStyle(color: t.text, fontSize: 13.5, fontWeight: FontWeight.w700),
+                    style: DemProText.bodyStrong.copyWith(color: t.text),
                   ),
                   if (hasDriver)
-                    Text('Moto · DEM', style: TextStyle(color: t.muted, fontSize: 11)),
+                    Text('Moto · DEM', style: DemProText.caption.copyWith(color: t.muted)),
                 ],
               ),
             ),
@@ -2066,7 +2151,7 @@ class _ActiveOrderCard extends StatelessWidget {
               ),
               child: Text(
                 statusLbl,
-                style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700),
+                style: DemProText.caption.copyWith(color: statusColor, fontWeight: FontWeight.w700),
               ),
             ),
           ]),
@@ -2085,11 +2170,11 @@ class _ActiveOrderCard extends StatelessWidget {
           Row(children: [
             Icon(Icons.payments_outlined, color: t.muted, size: 14),
             const SizedBox(width: 4),
-            Text(_fcfa(price), style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(DemProFormat.fcfa(price), style: DemProText.bodyStrong.copyWith(color: t.text)),
             const SizedBox(width: 14),
             Icon(Icons.schedule_outlined, color: t.muted, size: 14),
             const SizedBox(width: 4),
-            Text(_timeAgo(createdAt), style: TextStyle(color: t.muted, fontSize: 12)),
+            Text(_timeAgo(createdAt), style: DemProText.caption.copyWith(color: t.muted)),
             const Spacer(),
             GestureDetector(
               onTap: () {
@@ -2106,10 +2191,10 @@ class _ActiveOrderCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
                 ),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.map_outlined, color: DemProColors.accent, size: 13),
-                  SizedBox(width: 4),
-                  Text('Suivre', style: TextStyle(color: DemProColors.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.map_outlined, color: DemProColors.accent, size: 13),
+                  const SizedBox(width: 4),
+                  Text('Suivre', style: DemProText.caption.copyWith(color: DemProColors.accent)),
                 ]),
               ),
             ),
@@ -2134,7 +2219,7 @@ class _AddressRow extends StatelessWidget {
     Expanded(
       child: Text(
         label,
-        style: TextStyle(color: t.text, fontSize: 13),
+        style: DemProText.body.copyWith(color: t.text),
         overflow: TextOverflow.ellipsis,
       ),
     ),
@@ -2184,11 +2269,11 @@ class _HistoriqueRow extends StatelessWidget {
               children: [
                 Text(
                   '$pickup → $delivery',
-                  style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600),
+                  style: DemProText.bodyStrong.copyWith(color: t.text),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Text(date, style: TextStyle(color: t.muted, fontSize: 11)),
+                Text(date, style: DemProText.caption.copyWith(color: t.muted)),
               ],
             ),
           ),
@@ -2197,8 +2282,8 @@ class _HistoriqueRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                _fcfa(price),
-                style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700),
+                DemProFormat.fcfa(price),
+                style: DemProText.bodyStrong.copyWith(color: t.text),
               ),
               const SizedBox(height: 3),
               Container(
@@ -2209,7 +2294,7 @@ class _HistoriqueRow extends StatelessWidget {
                 ),
                 child: Text(
                   statusLbl,
-                  style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w700),
+                  style: DemProText.micro.copyWith(color: statusColor),
                 ),
               ),
             ],
@@ -2251,11 +2336,7 @@ class _ViewToggleBtn extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: TextStyle(
-                color: active ? Colors.white : t.muted,
-                fontSize: 13,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              ),
+              style: DemProText.body.copyWith(color: active ? Colors.white : t.muted, fontWeight: active ? FontWeight.w700 : FontWeight.w500),
             ),
           ],
         ),
@@ -2311,20 +2392,20 @@ class _BatchCard extends StatelessWidget {
                   color: DemProColors.accent.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.route, color: DemProColors.accent, size: 20),
+                child: const Icon(Icons.route_outlined, color: DemProColors.accent, size: 20),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(
                     '${orders.length} arrêt${orders.length > 1 ? 's' : ''}',
-                    style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w700),
+                    style: DemProText.subtitle.copyWith(color: t.text),
                   ),
                   Text(
                     driver != null
                         ? 'Livreur : ${driver['name'] as String? ?? 'DEM'}'
                         : 'En recherche de livreur…',
-                    style: TextStyle(color: t.muted, fontSize: 11),
+                    style: DemProText.caption.copyWith(color: t.muted),
                   ),
                 ]),
               ),
@@ -2335,7 +2416,7 @@ class _BatchCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(statusLbl,
-                    style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w700)),
+                    style: DemProText.caption.copyWith(color: statusColor, fontWeight: FontWeight.w700)),
               ),
             ]),
             const SizedBox(height: 12),
@@ -2347,7 +2428,7 @@ class _BatchCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   pickup.split(',').first.trim(),
-                  style: TextStyle(color: t.muted, fontSize: 12),
+                  style: DemProText.caption.copyWith(color: t.muted),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -2369,7 +2450,7 @@ class _BatchCard extends StatelessWidget {
               const SizedBox(height: 5),
               Text(
                 '$delivered / ${orders.length} livrés',
-                style: TextStyle(color: t.muted, fontSize: 11),
+                style: DemProText.caption.copyWith(color: t.muted),
               ),
               const SizedBox(height: 10),
             ],
@@ -2378,11 +2459,11 @@ class _BatchCard extends StatelessWidget {
             Row(children: [
               Icon(Icons.payments_outlined, color: t.muted, size: 13),
               const SizedBox(width: 4),
-              Text(_fcfa(total), style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+              Text(DemProFormat.fcfa(total), style: DemProText.bodyStrong.copyWith(color: t.text)),
               const SizedBox(width: 12),
               Icon(Icons.schedule_outlined, color: t.muted, size: 13),
               const SizedBox(width: 4),
-              Text(_timeAgo(createdAt), style: TextStyle(color: t.muted, fontSize: 11)),
+              Text(_timeAgo(createdAt), style: DemProText.caption.copyWith(color: t.muted)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -2391,10 +2472,10 @@ class _BatchCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
                 ),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.map_outlined, color: DemProColors.accent, size: 13),
-                  SizedBox(width: 4),
-                  Text('Suivi', style: TextStyle(color: DemProColors.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.map_outlined, color: DemProColors.accent, size: 13),
+                  const SizedBox(width: 4),
+                  Text('Suivi', style: DemProText.caption.copyWith(color: DemProColors.accent)),
                 ]),
               ),
             ]),
@@ -2443,15 +2524,15 @@ class _BatchHistoryRow extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
                 '$orders arrêt${orders > 1 ? 's' : ''}',
-                style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600),
+                style: DemProText.bodyStrong.copyWith(color: t.text),
               ),
               const SizedBox(height: 2),
-              Text(_formatDateTime(createdAt), style: TextStyle(color: t.muted, fontSize: 11)),
+              Text(_formatDateTime(createdAt), style: DemProText.caption.copyWith(color: t.muted)),
             ]),
           ),
           const SizedBox(width: 12),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(_fcfa(total), style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(DemProFormat.fcfa(total), style: DemProText.bodyStrong.copyWith(color: t.text)),
             const SizedBox(height: 3),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -2460,7 +2541,7 @@ class _BatchHistoryRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(statusLbl,
-                  style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w700)),
+                  style: DemProText.micro.copyWith(color: statusColor)),
             ),
           ]),
         ]),
@@ -2495,14 +2576,14 @@ class _EmptyOrdersState extends StatelessWidget {
           const SizedBox(height: 20),
           Text(
             globallyEmpty ? 'Aucune livraison encore' : 'Aucune livraison ici',
-            style: TextStyle(color: t.text, fontSize: 17, fontWeight: FontWeight.w800),
+            style: DemProText.title.copyWith(color: t.text, fontSize: 17),
           ),
           const SizedBox(height: 8),
           Text(
             globallyEmpty
                 ? 'Passez votre première commande et suivez-la ici en temps réel'
                 : 'Aucune livraison dans cette catégorie pour le moment.',
-            style: TextStyle(color: t.muted, fontSize: 13, height: 1.5),
+            style: DemProText.body.copyWith(color: t.muted, height: 1.5),
             textAlign: TextAlign.center,
           ),
           if (globallyEmpty) ...[
@@ -2515,12 +2596,12 @@ class _EmptyOrdersState extends StatelessWidget {
                   color: DemProColors.accent,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.add, color: Colors.white, size: 18),
-                  SizedBox(width: 8),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.add, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
                   Text(
                     'Commander maintenant',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                    style: DemProText.button.copyWith(fontSize: 14),
                   ),
                 ]),
               ),
@@ -2615,16 +2696,16 @@ class _AdressesTabState extends State<_AdressesTab> {
       builder: (_) => AlertDialog(
         backgroundColor: t.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Supprimer ?', style: TextStyle(color: t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        title: Text('Supprimer ?', style: DemProText.title.copyWith(color: t.text)),
         content: Text(
           'Voulez-vous supprimer "${addr['label']}" ?',
-          style: TextStyle(color: t.muted, fontSize: 13.5),
+          style: DemProText.body.copyWith(color: t.muted),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Annuler', style: TextStyle(color: t.muted))),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Annuler', style: DemProText.body.copyWith(color: t.muted))),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer', style: TextStyle(color: DemProColors.danger)),
+            child: Text('Supprimer', style: DemProText.body.copyWith(color: DemProColors.danger)),
           ),
         ],
       ),
@@ -2657,8 +2738,8 @@ class _AdressesTabState extends State<_AdressesTab> {
           child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Mes adresses', style: TextStyle(color: t.text, fontSize: 22, fontWeight: FontWeight.w800)),
-                Text('Points de départ favoris', style: TextStyle(color: t.muted, fontSize: 12)),
+                Text('Mes adresses', style: DemProText.headline.copyWith(color: t.text, fontSize: 22)),
+                Text('Points de départ favoris', style: DemProText.caption.copyWith(color: t.muted)),
               ]),
             ),
             IconButton(
@@ -2687,10 +2768,10 @@ class _AdressesTabState extends State<_AdressesTab> {
             ),
             child: TextField(
               controller: _search,
-              style: TextStyle(color: t.text, fontSize: 14),
+              style: DemProText.body.copyWith(color: t.text, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Rechercher une adresse…',
-                hintStyle: TextStyle(color: t.muted, fontSize: 14),
+                hintStyle: DemProText.body.copyWith(color: t.muted, fontSize: 14),
                 prefixIcon: Icon(Icons.search, color: t.muted, size: 20),
                 suffixIcon: _query.isNotEmpty
                     ? IconButton(
@@ -2738,7 +2819,7 @@ class _AdressesTabState extends State<_AdressesTab> {
                           const SizedBox(height: 4),
                           Text(
                             'Adresses utilisées récemment comme point de départ',
-                            style: TextStyle(color: t.muted, fontSize: 12),
+                            style: DemProText.caption.copyWith(color: t.muted),
                           ),
                           const SizedBox(height: 10),
                           ..._recent.map((r) => _RecentPickupRow(
@@ -2760,7 +2841,7 @@ class _AdressesTabState extends State<_AdressesTab> {
   }
 
   Widget _buildSectionHeader(String title, String? count) => Row(children: [
-    Text(title, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+    Text(title, style: DemProText.bodyStrong.copyWith(color: t.text)),
     if (count != null) ...[
       const SizedBox(width: 8),
       Container(
@@ -2769,7 +2850,7 @@ class _AdressesTabState extends State<_AdressesTab> {
           color: DemProColors.accent.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(count, style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700)),
+        child: Text(count, style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
       ),
     ],
   ]);
@@ -2779,9 +2860,9 @@ class _AdressesTabState extends State<_AdressesTab> {
     child: Column(children: [
       Icon(Icons.search_off, color: t.muted, size: 40),
       const SizedBox(height: 12),
-      Text('Aucun résultat pour "$_query"', style: TextStyle(color: t.text, fontSize: 15, fontWeight: FontWeight.w600)),
+      Text('Aucun résultat pour "$_query"', style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15)),
       const SizedBox(height: 6),
-      Text('Essayez avec un autre terme.', style: TextStyle(color: t.muted, fontSize: 13)),
+      Text('Essayez avec un autre terme.', style: DemProText.body.copyWith(color: t.muted)),
     ]),
   );
 
@@ -2798,11 +2879,11 @@ class _AdressesTabState extends State<_AdressesTab> {
         child: const Icon(Icons.place_outlined, color: DemProColors.accent, size: 32),
       ),
       const SizedBox(height: 16),
-      Text('Aucune adresse enregistrée', style: TextStyle(color: t.text, fontSize: 17, fontWeight: FontWeight.w800)),
+      Text('Aucune adresse enregistrée', style: DemProText.title.copyWith(color: t.text, fontSize: 17)),
       const SizedBox(height: 8),
       Text(
         'Ajoutez vos points de départ favoris\n(boutique, entrepôt, bureau…)',
-        style: TextStyle(color: t.muted, fontSize: 13, height: 1.5),
+        style: DemProText.body.copyWith(color: t.muted, height: 1.5),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 24),
@@ -2811,10 +2892,10 @@ class _AdressesTabState extends State<_AdressesTab> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(12)),
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.add, color: Colors.white, size: 18),
-            SizedBox(width: 8),
-            Text('Ajouter une adresse', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.add, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text('Ajouter une adresse', style: DemProText.button.copyWith(fontSize: 14)),
           ]),
         ),
       ),
@@ -2874,7 +2955,7 @@ class _AddressCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Text(label, style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text(label, style: DemProText.subtitle.copyWith(color: t.text)),
                   if (isDefault) ...[
                     const SizedBox(width: 8),
                     Container(
@@ -2883,18 +2964,18 @@ class _AddressCard extends StatelessWidget {
                         color: DemProColors.accent.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text('Par défaut', style: TextStyle(color: DemProColors.accent, fontSize: 10, fontWeight: FontWeight.w700)),
+                      child: Text('Par défaut', style: DemProText.micro.copyWith(color: DemProColors.accent)),
                     ),
                   ],
                 ]),
                 const SizedBox(height: 3),
-                Text(address, style: TextStyle(color: t.muted, fontSize: 12.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(address, style: DemProText.caption.copyWith(color: t.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
                 if (landmark != null && landmark.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Row(children: [
                     Icon(Icons.info_outline, color: t.muted, size: 12),
                     const SizedBox(width: 4),
-                    Expanded(child: Text(landmark, style: TextStyle(color: t.muted, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    Expanded(child: Text(landmark, style: DemProText.caption.copyWith(color: t.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
                   ]),
                 ],
               ])),
@@ -2924,7 +3005,7 @@ class _AddressCard extends StatelessWidget {
   Widget _menuItem(IconData icon, String label, Color color) => Row(children: [
     Icon(icon, color: color, size: 18),
     const SizedBox(width: 10),
-    Text(label, style: TextStyle(color: color, fontSize: 13.5)),
+    Text(label, style: DemProText.body.copyWith(color: color)),
   ]);
 }
 
@@ -2950,7 +3031,7 @@ class _RecentPickupRow extends StatelessWidget {
           decoration: BoxDecoration(color: t.cardBg2, borderRadius: BorderRadius.circular(8)),
           child: Icon(Icons.history, color: t.muted, size: 18),
         ),
-        title: Text(address, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(address, style: DemProText.bodyStrong.copyWith(color: t.text), maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: GestureDetector(
           onTap: onSave,
           child: Container(
@@ -2959,7 +3040,7 @@ class _RecentPickupRow extends StatelessWidget {
               color: DemProColors.accent.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text('Sauvegarder', style: TextStyle(color: DemProColors.accent, fontSize: 11.5, fontWeight: FontWeight.w700)),
+            child: Text('Sauvegarder', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
           ),
         ),
       ),
@@ -3058,12 +3139,12 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
             ),
             Text(
               _isEdit ? 'Modifier l\'adresse' : 'Nouvelle adresse',
-              style: TextStyle(color: t.text, fontSize: 18, fontWeight: FontWeight.w800),
+              style: DemProText.title.copyWith(color: t.text, fontSize: 18),
             ),
             const SizedBox(height: 20),
 
             // ── Sélecteur d'icône ──────────────────────────────────────────
-            Text('Type de lieu', style: TextStyle(color: t.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text('Type de lieu', style: DemProText.caption.copyWith(color: t.muted)),
             const SizedBox(height: 8),
             SizedBox(
               height: 64,
@@ -3088,7 +3169,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                         Icon(e.value.$1, color: selected ? Colors.white : t.muted, size: 20),
                         const SizedBox(height: 3),
-                        Text(e.value.$2, style: TextStyle(color: selected ? Colors.white : t.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+                        Text(e.value.$2, style: DemProText.micro.copyWith(color: selected ? Colors.white : t.muted)),
                       ]),
                     ),
                   );
@@ -3137,8 +3218,8 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                 activeThumbColor: Colors.white,
                 inactiveThumbColor: Colors.white,
                 inactiveTrackColor: t.border,
-                title: Text('Adresse par défaut', style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w600)),
-                subtitle: Text('Pré-sélectionnée lors d\'une nouvelle commande', style: TextStyle(color: t.muted, fontSize: 12)),
+                title: Text('Adresse par défaut', style: DemProText.subtitle.copyWith(color: t.text)),
+                subtitle: Text('Pré-sélectionnée lors d\'une nouvelle commande', style: DemProText.caption.copyWith(color: t.muted)),
                 dense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               ),
@@ -3164,7 +3245,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                           : Text(
                               _isEdit ? 'Enregistrer les modifications' : 'Ajouter l\'adresse',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                              style: DemProText.button,
                             ),
                     ),
                   ),
@@ -3184,7 +3265,7 @@ class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.text, this.t);
   @override
   Widget build(BuildContext context) =>
-      Text(text, style: TextStyle(color: t.muted, fontSize: 12, fontWeight: FontWeight.w600));
+      Text(text, style: DemProText.caption.copyWith(color: t.muted));
 }
 
 class _FormField extends StatelessWidget {
@@ -3198,10 +3279,10 @@ class _FormField extends StatelessWidget {
   Widget build(BuildContext context) => TextFormField(
     controller: controller,
     validator: validator,
-    style: TextStyle(color: t.text, fontSize: 14),
+    style: DemProText.body.copyWith(color: t.text, fontSize: 14),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: t.muted, fontSize: 13),
+      hintStyle: DemProText.body.copyWith(color: t.muted),
       filled: true,
       fillColor: t.cardBg2,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: t.border)),
@@ -3236,7 +3317,6 @@ class _FinancesTab extends StatefulWidget {
 
 class _FinancesTabState extends State<_FinancesTab> {
   final _repo    = DemProRepository(ApiClient.dio);
-  final _ordRepo = OrdersRepository();
 
   String _period = 'this_month';
   _FinanceView _view = _FinanceView.sales;
@@ -3330,7 +3410,7 @@ class _FinancesTabState extends State<_FinancesTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
           child: Row(children: [
-            Expanded(child: Text('Finances', style: TextStyle(color: t.text, fontSize: 22, fontWeight: FontWeight.w800))),
+            Expanded(child: Text('Finances', style: DemProText.headline.copyWith(color: t.text, fontSize: 22))),
           ]),
         ),
 
@@ -3353,11 +3433,7 @@ class _FinancesTabState extends State<_FinancesTab> {
                 child: Text(
                   opt.$2,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: selected ? Colors.white : t.muted,
-                    fontSize: 11.5,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  ),
+                  style: DemProText.caption.copyWith(color: selected ? Colors.white : t.muted, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
                 ),
               ),
             ));
@@ -3418,14 +3494,14 @@ class _FinancesTabState extends State<_FinancesTab> {
   Widget _buildError() => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
     Icon(Icons.wifi_off_rounded, color: t.muted, size: 36),
     const SizedBox(height: 12),
-    Text('Impossible de charger les données', style: TextStyle(color: t.text, fontSize: 15, fontWeight: FontWeight.w600)),
+    Text('Impossible de charger les données', style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15)),
     const SizedBox(height: 16),
     GestureDetector(
       onTap: _load,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(10)),
-        child: const Text('Réessayer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+        child: Text('Réessayer', style: DemProText.button.copyWith(fontSize: 14)),
       ),
     ),
   ]));
@@ -3448,7 +3524,7 @@ class _FinancesTabState extends State<_FinancesTab> {
           gradient: LinearGradient(
             colors: t.dark
                 ? [DemProColors.bg3, DemProColors.bg4]
-                : [const Color(0xFFEFF6FF), const Color(0xFFDCEFFB)],
+                : DemProColors.lightGradientBlue,
             begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
@@ -3465,14 +3541,14 @@ class _FinancesTabState extends State<_FinancesTab> {
               child: const Icon(Icons.trending_up, color: DemProColors.success, size: 16),
             ),
             const SizedBox(width: 8),
-            Text('Ventes', style: TextStyle(color: t.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text('Ventes', style: DemProText.caption.copyWith(color: t.muted)),
           ]),
           const SizedBox(height: 14),
           Text(
-            _fcfa(_totalSales),
-            style: TextStyle(color: t.text, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+            DemProFormat.fcfa(_totalSales),
+            style: DemProText.hero.copyWith(color: t.text),
           ),
-          Text('Chiffre d\'affaires', style: TextStyle(color: t.muted, fontSize: 12)),
+          Text('Chiffre d\'affaires', style: DemProText.caption.copyWith(color: t.muted)),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: _MiniStat(
@@ -3495,7 +3571,7 @@ class _FinancesTabState extends State<_FinancesTab> {
 
       // Historique ventes
       Row(children: [
-        Text('Historique des ventes', style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+        Text('Historique des ventes', style: DemProText.bodyStrong.copyWith(color: t.text)),
         const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -3503,7 +3579,7 @@ class _FinancesTabState extends State<_FinancesTab> {
             color: DemProColors.accent.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Text('${orders.length}', style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700)),
+          child: Text('${orders.length}', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
         ),
       ]),
       const SizedBox(height: 10),
@@ -3532,7 +3608,7 @@ class _FinancesTabState extends State<_FinancesTab> {
           gradient: LinearGradient(
             colors: t.dark
                 ? [DemProColors.bg3, DemProColors.bg4]
-                : [const Color(0xFFEFF6FF), const Color(0xFFDCEFFB)],
+                : DemProColors.lightGradientBlue,
             begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
@@ -3549,14 +3625,14 @@ class _FinancesTabState extends State<_FinancesTab> {
               child: const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 16),
             ),
             const SizedBox(width: 8),
-            Text('Livraisons', style: TextStyle(color: t.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text('Livraisons', style: DemProText.caption.copyWith(color: t.muted)),
           ]),
           const SizedBox(height: 14),
           Text(
-            _fcfa(total.toInt()),
-            style: TextStyle(color: t.text, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+            DemProFormat.fcfa(total.toInt()),
+            style: DemProText.hero.copyWith(color: t.text),
           ),
-          Text('Total dépensé', style: TextStyle(color: t.muted, fontSize: 12)),
+          Text('Total dépensé', style: DemProText.caption.copyWith(color: t.muted)),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: _MiniStat(
@@ -3567,7 +3643,7 @@ class _FinancesTabState extends State<_FinancesTab> {
             )),
             Container(width: 1, height: 40, color: t.border),
             Expanded(child: _MiniStat(
-              value: '${_fcfa(avg.toInt())}',
+              value: '${DemProFormat.fcfa(avg.toInt())}',
               label: 'Coût moyen',
               color: DemProColors.success,
               t: t,
@@ -3585,7 +3661,7 @@ class _FinancesTabState extends State<_FinancesTab> {
 
       // Transactions
       Row(children: [
-        Text('Transactions', style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+        Text('Transactions', style: DemProText.bodyStrong.copyWith(color: t.text)),
         const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -3593,7 +3669,7 @@ class _FinancesTabState extends State<_FinancesTab> {
             color: DemProColors.accent.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Text('${orders.length}', style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700)),
+          child: Text('${orders.length}', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
         ),
       ]),
       const SizedBox(height: 10),
@@ -3617,7 +3693,7 @@ class _FinancesTabState extends State<_FinancesTab> {
         border: Border.all(color: t.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Évolution', style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w700)),
+        Text('Évolution', style: DemProText.bodyStrong.copyWith(color: t.text)),
         const SizedBox(height: 16),
         SizedBox(
           height: 120,
@@ -3636,8 +3712,8 @@ class _FinancesTabState extends State<_FinancesTab> {
                 padding: EdgeInsets.only(right: isLast ? 0 : 6),
                 child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
                   if (count > 0) ...[
-                    Text(_fcfa(amount.toInt()),
-                      style: TextStyle(color: DemProColors.accent, fontSize: 9, fontWeight: FontWeight.w700),
+                    Text(DemProFormat.fcfa(amount.toInt()),
+                      style: DemProText.micro.copyWith(color: DemProColors.accent),
                       textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 3),
                   ] else
@@ -3655,7 +3731,7 @@ class _FinancesTabState extends State<_FinancesTab> {
                   ),
                   const SizedBox(height: 6),
                   Text(label,
-                    style: TextStyle(color: t.muted, fontSize: 8.5, fontWeight: FontWeight.w500),
+                    style: DemProText.micro.copyWith(color: t.muted, fontWeight: FontWeight.w500),
                     textAlign: TextAlign.center, maxLines: 2),
                 ]),
               ));
@@ -3676,7 +3752,7 @@ class _FinancesTabState extends State<_FinancesTab> {
     child: Column(children: [
       Icon(Icons.receipt_long_outlined, color: t.muted, size: 36),
       const SizedBox(height: 10),
-      Text(msg, style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w600)),
+      Text(msg, style: DemProText.subtitle.copyWith(color: t.text)),
     ]),
   );
 }
@@ -3705,11 +3781,7 @@ class _FinanceToggle extends StatelessWidget {
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(icon, size: 14, color: active ? Colors.white : t.muted),
           const SizedBox(width: 6),
-          Text(label, style: TextStyle(
-            color: active ? Colors.white : t.muted,
-            fontSize: 12,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-          )),
+          Text(label, style: DemProText.caption.copyWith(color: active ? Colors.white : t.muted, fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
         ]),
       ),
     ),
@@ -3729,9 +3801,9 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w800)),
+      Text(value, style: DemProText.title.copyWith(color: color)),
       const SizedBox(height: 2),
-      Text(label, style: TextStyle(color: t.muted, fontSize: 11.5)),
+      Text(label, style: DemProText.caption.copyWith(color: t.muted)),
     ]),
   );
 }
@@ -3778,11 +3850,11 @@ class _SaleRow extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(receiver ?? address, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(date, style: TextStyle(color: t.muted, fontSize: 11)),
+            Text(receiver ?? address, style: DemProText.bodyStrong.copyWith(color: t.text), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(date, style: DemProText.caption.copyWith(color: t.muted)),
           ])),
           if (saleTotal > 0)
-            Text('${_fcfa(saleTotal)} F', style: const TextStyle(color: DemProColors.success, fontSize: 14, fontWeight: FontWeight.w800)),
+            Text(DemProFormat.fcfa(saleTotal), style: DemProText.subtitle.copyWith(color: DemProColors.success, fontWeight: FontWeight.w800)),
         ]),
 
         // Articles
@@ -3801,18 +3873,18 @@ class _SaleRow extends StatelessWidget {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(children: [
-                  Text('$name', style: TextStyle(color: t.text, fontSize: 12)),
-                  Text('  × $qty', style: TextStyle(color: t.muted, fontSize: 12)),
+                  Text('$name', style: DemProText.caption.copyWith(color: t.text)),
+                  Text('  × $qty', style: DemProText.caption.copyWith(color: t.muted)),
                   const Spacer(),
                   if (price != null)
-                    Text('${_fcfa(price * qty)} F', style: TextStyle(color: t.text, fontSize: 12, fontWeight: FontWeight.w600)),
+                    Text(DemProFormat.fcfa(price * qty), style: DemProText.caption.copyWith(color: t.text)),
                 ]),
               );
             }).toList()),
           ),
         ] else if (desc.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Text(desc, style: TextStyle(color: t.muted, fontSize: 11.5), maxLines: 2, overflow: TextOverflow.ellipsis),
+          Text(desc, style: DemProText.caption.copyWith(color: t.muted), maxLines: 2, overflow: TextOverflow.ellipsis),
         ],
 
         // Paiement
@@ -3826,7 +3898,7 @@ class _SaleRow extends StatelessWidget {
             const SizedBox(width: 4),
             Text(
               payMode == 'merchant' ? 'Payé par vous' : 'Payé à la livraison',
-              style: TextStyle(color: t.muted, fontSize: 11),
+              style: DemProText.caption.copyWith(color: t.muted),
             ),
           ]),
         ],
@@ -3869,18 +3941,18 @@ class _DeliveryRow extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(address, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(address, style: DemProText.bodyStrong.copyWith(color: t.text), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
           Row(children: [
-            Text(date, style: TextStyle(color: t.muted, fontSize: 11)),
+            Text(date, style: DemProText.caption.copyWith(color: t.muted)),
             if (driverName != null && driverName.isNotEmpty) ...[
-              Text('  ·  ', style: TextStyle(color: t.muted, fontSize: 11)),
-              Expanded(child: Text(driverName, style: TextStyle(color: t.muted, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
+              Text('  ·  ', style: DemProText.caption.copyWith(color: t.muted)),
+              Expanded(child: Text(driverName, style: DemProText.caption.copyWith(color: t.muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
             ],
           ]),
         ])),
         const SizedBox(width: 12),
-        Text('${_fcfa(amount)} F', style: const TextStyle(color: DemProColors.accent, fontSize: 13.5, fontWeight: FontWeight.w800)),
+        Text(DemProFormat.fcfa(amount), style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800)),
       ]),
     );
   }

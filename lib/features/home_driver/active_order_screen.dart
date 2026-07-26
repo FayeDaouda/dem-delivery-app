@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 
 import '../../core/error/app_exception.dart';
 import '../../core/utils/dem_toast.dart';
+import '../../core/utils/price_format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,14 +16,26 @@ import '../../core/config/app_config.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
 import 'navigation/map_theme.dart';
 import '../deliveries/providers/orders_provider.dart';
+import 'navigation/alert_banner.dart';
 import 'navigation/alert_manager.dart';
 import 'navigation/directions_service.dart';
+import 'navigation/driver_marker_icon.dart';
 import 'navigation/navigation_service.dart';
+import 'navigation/route_tracker.dart';
 import 'navigation/voice_nav_service.dart';
 import '../../core/notifications/notification_service.dart';
+import '../../shared/widgets/address_row.dart';
+import '../../shared/widgets/call_button.dart';
+import '../../shared/widgets/gradient_dialog.dart';
+import '../../shared/widgets/operator_picker_sheet.dart';
+import '../../shared/widgets/payment_collection_dialog.dart';
+import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/samirpay_payment_sheet.dart';
+import '../../shared/widgets/swipe_to_confirm.dart';
 import '../../shared/widgets/support_report_sheet.dart';
 
 class ActiveOrderScreen extends ConsumerStatefulWidget {
@@ -105,6 +117,23 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       ? null
       : NavigationService.distanceTo(_driverPosition!, _targetLatLng);
 
+  // Distance sous laquelle la confirmation "récupéré"/"livré" est permise —
+  // évite les clics accidentels loin du point qui font perdre l'itinéraire
+  // (retours livreurs : swipe déclenché par erreur en poche, sans être arrivé).
+  static const double _confirmRadiusMeters = 500;
+
+  bool get _canConfirmAction =>
+      _isDevOrder || (_distanceToTarget != null && _distanceToTarget! <= _confirmRadiusMeters);
+
+  // 0..1 : progression visuelle de l'anneau autour du cadenas tant que hors
+  // zone — 0 à 2x le rayon de confirmation, 1 pile au seuil des 500 m.
+  double get _lockProgress {
+    final d = _distanceToTarget;
+    if (d == null) return 0;
+    const farRef = _confirmRadiusMeters * 2;
+    return (1 - (d / farRef)).clamp(0.0, 1.0);
+  }
+
   BitmapDescriptor? _driverIcon;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -113,7 +142,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _order = widget.order;
-    _buildDriverIcon().then((icon) {
+    buildDriverMarkerIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
     });
     _startNavigation();
@@ -123,94 +152,18 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     _cancelledSub = SocketService.instance.onOrderCancelled.listen((data) {
       if (!mounted || data['orderId'] != orderId) return;
       final reason = data['reason'] as String? ?? 'Cette course a été annulée.';
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(children: [
-            Icon(Icons.cancel_outlined, color: Color(0xFFEF4444), size: 22),
-            SizedBox(width: 8),
-            Text('Course annulée', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          ]),
-          content: Text(reason, style: const TextStyle(fontSize: 14, height: 1.5)),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                ref.read(availableOrdersProvider.notifier).clear();
-                context.go('/driver/home');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0CB8DE),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('Retour à l\'accueil'),
-            ),
-          ],
-        ),
+      showGradientInfoDialog(
+        context,
+        title: 'Course annulée',
+        message: reason,
+        icon: Icons.cancel_outlined,
+        actionLabel: 'Retour à l\'accueil',
+        onAction: () {
+          ref.read(availableOrdersProvider.notifier).clear();
+          context.go('/driver/home');
+        },
       );
     });
-  }
-
-  static Future<BitmapDescriptor> _buildDriverIcon() async {
-    const double size = 128;
-    const double cx = size / 2;
-    const double cy = size / 2;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    // Halo externe
-    canvas.drawCircle(const Offset(cx, cy), 48, Paint()..color = const Color(0x2533BCD4));
-    canvas.drawCircle(const Offset(cx, cy), 36, Paint()..color = const Color(0x4033BCD4));
-
-    // Ombre portée
-    final shadowPaint = Paint()
-      ..color = const Color(0x6000B4C8)
-      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6);
-    final shadowPath = Path()
-      ..moveTo(cx, cy - 22 + 4)
-      ..lineTo(cx + 16, cy + 14 + 4)
-      ..lineTo(cx, cy + 8 + 4)
-      ..lineTo(cx - 16, cy + 14 + 4)
-      ..close();
-    canvas.drawPath(shadowPath, shadowPaint);
-
-    // Cercle de base blanc 3D
-    canvas.drawCircle(const Offset(cx, cy + 4), 20, Paint()..color = const Color(0xFFFFFFFF));
-    canvas.drawCircle(const Offset(cx, cy + 4), 18, Paint()..color = const Color(0xFF1AB8CC));
-
-    // Flèche de navigation avec gradient 3D
-    final arrowPath = Path()
-      ..moveTo(cx, cy - 22)
-      ..lineTo(cx + 15, cy + 12)
-      ..lineTo(cx, cy + 6)
-      ..lineTo(cx - 15, cy + 12)
-      ..close();
-
-    canvas.drawPath(
-      arrowPath,
-      Paint()
-        ..shader = ui.Gradient.linear(
-          const Offset(cx, cy - 22),
-          const Offset(cx, cy + 12),
-          [const Color(0xFF5EEEFF), const Color(0xFF00A8C0)],
-        ),
-    );
-    canvas.drawPath(
-      arrowPath,
-      Paint()
-        ..color = const Color(0xCCFFFFFF)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0,
-    );
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(size.toInt(), size.toInt());
-    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: 56, height: 56);
   }
 
   @override
@@ -240,26 +193,12 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   }
 
   Future<void> _driverCancel() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Annuler cette course ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: const Text(
-          'La course sera re-dispatchée à un autre livreur. Cela affectera votre taux d\'acceptation.',
-          style: TextStyle(fontSize: 13.5, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Continuer la course'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Annuler', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+    final confirmed = await showGradientConfirmDialog(
+      context,
+      title: 'Annuler cette course ?',
+      message: 'La course sera re-dispatchée à un autre livreur. Cela affectera votre taux d\'acceptation.',
+      cancelLabel: 'Continuer la course',
+      confirmLabel: 'Annuler',
     );
     if (confirmed != true || !mounted) return;
     setState(() => _driverCancelling = true);
@@ -337,6 +276,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       if (orderId != null) {
         SocketService.instance.emitDriverLocation(initial.latitude, initial.longitude, orderId);
       }
+    } else if (mounted) {
+      NavigationService.promptOpenSettingsIfPermanentlyDenied(context);
     }
 
     // Route calculée depuis la vraie position du driver
@@ -397,27 +338,21 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     }
   }
 
-  // Coupe la portion de route déjà parcourue (lookup avant seulement)
-  static int _closestPointIdx(List<LatLng> route, LatLng pos, int startIdx) {
-    final end = (startIdx + 60).clamp(0, route.length);
-    int idx = startIdx;
-    double minDist = double.infinity;
-    for (int i = startIdx; i < end; i++) {
-      final dLat = route[i].latitude - pos.latitude;
-      final dLng = route[i].longitude - pos.longitude;
-      final d = dLat * dLat + dLng * dLng;
-      if (d < minDist) { minDist = d; idx = i; }
-    }
-    return idx;
+  // Recale la position GPS sur le tracé (projection sur segment, pas juste
+  // sur les sommets) — voir RouteTracker pour le détail. Réutilisé à la fois
+  // pour raccourcir le tracé affiché et pour détecter une déviation, sur le
+  // même calcul plutôt que deux recherches séparées.
+  RouteProjection? _matchRoute(LatLng driverLatLng) {
+    if (_routePoints.isEmpty) return null;
+    return RouteTracker.closestMatch(_routePoints, driverLatLng, _lastTrimIdx);
   }
 
-  void _trimDisplayRoute() {
-    if (_routePoints.isEmpty || _driverPosition == null) return;
-    final driverLatLng = LatLng(_driverPosition!.latitude, _driverPosition!.longitude);
-    final idx = _closestPointIdx(_routePoints, driverLatLng, _lastTrimIdx);
-    if (idx <= _lastTrimIdx) return; // avance seulement, ne recule pas
-    _lastTrimIdx = idx;
-    if (mounted) setState(() => _displayRoute = _routePoints.sublist(idx));
+  void _trimDisplayRoute(RouteProjection match) {
+    if (match.segmentIndex < _lastTrimIdx) return; // avance seulement, ne recule pas
+    _lastTrimIdx = match.segmentIndex;
+    if (mounted) {
+      setState(() => _displayRoute = RouteTracker.remainingRoute(_routePoints, match));
+    }
   }
 
   // Zoom 18 à l'arrêt → 15 à 120 km/h (décroissance linéaire)
@@ -439,7 +374,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   void _onPosition(Position position) {
     if (!mounted) return;
     setState(() => _driverPosition = position);
-    _trimDisplayRoute();
+    final driverLatLng = LatLng(position.latitude, position.longitude);
+    final routeMatch = _matchRoute(driverLatLng);
+    if (routeMatch != null) _trimDisplayRoute(routeMatch);
     VoiceNavService.instance.onPositionUpdate(position);
 
     // Auto-follow : caméra orientée dans la direction de déplacement
@@ -506,21 +443,13 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     }
 
     // Recalcul si déviation > 60m depuis la route (couvre demi-tour et chemin alternatif)
-    // Limité à 1 recalcul / 15s pour éviter les appels en rafale
-    if (_routePoints.isNotEmpty && !_loadingRoute) {
+    // Limité à 1 recalcul / 15s pour éviter les appels en rafale — réutilise
+    // la distance perpendiculaire déjà calculée par _matchRoute ci-dessus,
+    // fiable même sur un tracé très détaillé (pas de fenêtre bornée).
+    if (_routePoints.isNotEmpty && !_loadingRoute && routeMatch != null) {
       final now2 = DateTime.now();
       if (_lastReroute == null || now2.difference(_lastReroute!).inSeconds >= 15) {
-        final driverLatLng = LatLng(position.latitude, position.longitude);
-        // Chercher uniquement dans la portion de route restante (pas derrière)
-        double minDist = double.infinity;
-        final searchEnd = (_lastTrimIdx + 80).clamp(0, _routePoints.length);
-        for (int i = _lastTrimIdx; i < searchEnd; i++) {
-          final d = Geolocator.distanceBetween(
-              driverLatLng.latitude, driverLatLng.longitude,
-              _routePoints[i].latitude, _routePoints[i].longitude);
-          if (d < minDist) minDist = d;
-        }
-        if (minDist > 60) {
+        if (routeMatch.distanceMeters > 60) {
           _lastReroute = now2;
           _lastTrimIdx = 0; // reset trim pour nouvelle route
           setState(() => _isRerouting = true);
@@ -542,6 +471,29 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
           tilt: 55,
         ),
       ),
+    );
+  }
+
+  // Affiche le QR SamirPay pour que l'expéditeur (à la récupération) ou le
+  // destinataire (à la livraison) scanne et paie directement — alternative
+  // au virement Wave/Orange envoyé au numéro du livreur.
+  Future<void> _openPaymentQr() async {
+    final orderId = _order['id'] as String?;
+    if (orderId == null) return;
+    final estimatedAmount = clientChargeFor(_order);
+
+    final operatorName = await chooseOperator(context, title: 'Le client paie avec');
+    if (operatorName == null || !mounted) return;
+
+    await SamirpayPaymentSheet.show(
+      context,
+      amount: estimatedAmount,
+      title: 'Paiement de la course',
+      initPayment: () => ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
+      confirmationStream: SocketService.instance.onOrderPaymentConfirmed
+          .where((event) => event['orderId'] == orderId),
+      onSuccess: () => showDemToast(context, 'Paiement confirmé !'),
+      displayOnly: true,
     );
   }
 
@@ -578,12 +530,19 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   // ── Actions commande ──────────────────────────────────────────────────────
   bool get _isDevOrder => _order['id']?.toString().startsWith('dev-') ?? false;
 
+  bool _actionLoading = false;
+  // Incrémenté à l'échec d'une action — force la réinitialisation visuelle
+  // du curseur "glisser pour confirmer" (sinon il resterait verrouillé).
+  int _swipeTick = 0;
+
   Future<void> _pickup() async {
+    if (_actionLoading) return;
     if (_isDevOrder) {
       setState(() => _order = {..._order, 'status': 'PICKED_UP'});
       await _loadRoute();
       return;
     }
+    setState(() => _actionLoading = true);
     try {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.pickupOrder(_order['id']);
@@ -592,17 +551,22 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       await _loadRoute();
     } catch (e) {
       if (mounted) {
+        setState(() => _swipeTick++);
         showDemToast(context, friendlyError(e), isError: true);
       }
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
     }
   }
 
   Future<void> _deliver() async {
+    if (_actionLoading) return;
     if (_isDevOrder) {
       setState(() => _order = {..._order, 'status': 'DELIVERED'});
       if (mounted) _showPaymentDialog();
       return;
     }
+    setState(() => _actionLoading = true);
     try {
       final repo = ref.read(ordersRepositoryProvider);
       final updated = await repo.deliverOrder(_order['id']);
@@ -611,167 +575,98 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       if (mounted) _showPaymentDialog();
     } catch (e) {
       if (mounted) {
+        setState(() => _swipeTick++);
         showDemToast(context, friendlyError(e), isError: true);
       }
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
     }
   }
 
-  // ── Dialogue : paiement reçu ? ────────────────────────────────────────────
+  // ── Après livraison : déjà payé (en ligne/DEM Pro merchant) → juste
+  // informer ; sinon demander comment le client règle (cash ou en ligne).
   void _showPaymentDialog() {
-    final price = (_order['price'] as num?)?.toInt() ?? 0;
-    final orderId = _order['id'] as String?;
+    if (_order['paymentStatus'] == 'PAID') {
+      _showAlreadyPaidDialog();
+    } else {
+      _showChoosePaymentModeDialog();
+    }
+  }
 
-    // Déclarés hors du builder pour persister entre les rebuilds du StatefulBuilder
-    bool confirming = false;
-    String? errorMsg;
-
+  void _showAlreadyPaidDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (dialogCtx, setDialog) {
-
-          // Appelé dans StatefulBuilder → setDialog pour rebuilder le dialog
-          void confirm() async {
-            setDialog(() { confirming = true; errorMsg = null; });
-            // Capture avant les await pour éviter l'usage de BuildContext après gap async
-            final nav = Navigator.of(dialogCtx);
-            bool ok = false;
-            for (int i = 0; i < 2; i++) {
-              if (i > 0) await Future.delayed(const Duration(seconds: 2));
-              try {
-                if (!_isDevOrder && orderId != null) {
-                  await ref.read(ordersRepositoryProvider)
-                      .confirmPayment(orderId, 'PAID');
-                }
-                ok = true;
-                break;
-              } catch (_) {}
-            }
-            if (!mounted) return;
-            if (ok) {
-              nav.pop();
-              showDemToast(context, _isRide ? 'Course effectuée — paiement confirmé !' : 'Livraison effectuée — paiement confirmé !');
-              Future.delayed(const Duration(milliseconds: 300), () {
-                if (mounted) context.go(_homeRoute);
-              });
-            } else {
-              setDialog(() {
-                confirming = false;
-                errorMsg = 'Erreur réseau. Réessayez ou contactez le support.';
-              });
-            }
-          }
-
-          return PopScope(
-            canPop: false,
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 64, height: 64,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.payments_outlined, color: Colors.white, size: 32),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Paiement reçu ?',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '$price FCFA',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text('Cash ou Mobile Money', style: TextStyle(fontSize: 13, color: Colors.white70)),
-                    if (errorMsg != null) ...[
-                      const SizedBox(height: 10),
-                      Text(errorMsg!, style: const TextStyle(color: Colors.orangeAccent, fontSize: 12), textAlign: TextAlign.center),
-                    ],
-                    const SizedBox(height: 28),
-                    Row(
-                      children: [
-                        // Problème
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: confirming ? null : () {
-                              Navigator.of(dialogCtx).pop();
-                              _showDisputeDialog();
-                            },
-                            icon: const Icon(Icons.warning_amber_outlined, size: 18),
-                            label: const Text('Problème'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.orange,
-                              side: const BorderSide(color: Colors.orange),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Oui, reçu
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: confirming ? null : confirm,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00C853),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 0,
-                            ),
-                            child: confirming
-                                ? const SizedBox(
-                                    width: 20, height: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2.5,
-                                    ),
-                                  )
-                                : const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.check_circle_outline, size: 18),
-                                      SizedBox(width: 6),
-                                      Text('Oui, reçu', style: TextStyle(fontWeight: FontWeight.w600)),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+      builder: (dialogCtx) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: AppColors.gradientDialog,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 8)),
+            ],
+          ),
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.20), shape: BoxShape.circle),
+                child: const Icon(Icons.check_circle_outline, color: AppColors.success, size: 34),
+              ),
+              const SizedBox(height: 16),
+              Text(_isRide ? 'Course payée' : 'Livraison payée',
+                  style: ClientText.title.copyWith(color: Colors.white)),
+              const SizedBox(height: 6),
+              const Text(
+                'Le paiement a déjà été réglé en ligne — rien à collecter auprès du client.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.white70),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryButton(
+                  label: 'OK',
+                  leadingIcon: Icons.check_circle_outline,
+                  color: AppColors.success,
+                  height: 48,
+                  onTap: () {
+                    Navigator.of(dialogCtx).pop();
+                    showDemToast(context, _isRide ? 'Course effectuée !' : 'Livraison effectuée !');
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      if (mounted) context.go(_homeRoute);
+                    });
+                  },
                 ),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  // ── Dialogue : comment le client règle-t-il ? (cash ou en ligne) ─────────
+  void _showChoosePaymentModeDialog() {
+    final orderId = _order['id'] as String?;
+    if (orderId == null) return;
+    showPaymentCollectionDialog(
+      context, ref,
+      orderId: orderId,
+      price: clientChargeFor(_order),
+      isRide: _isRide,
+      simulate: _isDevOrder,
+      successMessage: _isRide ? 'Course effectuée — paiement confirmé !' : 'Livraison effectuée — paiement confirmé !',
+      onDispute: _showDisputeDialog,
+      onPaid: () {
+        if (mounted) context.go(_homeRoute);
+      },
     );
   }
 
@@ -789,11 +684,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Container(
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-            ),
+            gradient: AppColors.gradientDialog,
             borderRadius: BorderRadius.circular(24),
           ),
           padding: const EdgeInsets.all(24),
@@ -801,10 +692,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Décrire le problème',
-                style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                style: ClientText.subtitle.copyWith(color: Colors.white),
               ),
               const SizedBox(height: 6),
               const Text(
@@ -842,22 +732,16 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
+                    child: PrimaryButton(
+                      label: 'Signaler',
+                      color: AppColors.surge,
+                      height: 44,
+                      onTap: () {
                         final note = noteController.text.trim();
                         if (note.isEmpty) return;
                         Navigator.of(context).pop();
                         _confirmPayment('DISPUTED', note: note);
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
-                      ),
-                      child: const Text('Signaler'),
                     ),
                   ),
                 ],
@@ -943,7 +827,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                 Container(
                   width: 72, height: 72,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF00C853),
+                    color: AppColors.success,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.check, color: Colors.white, size: 40),
@@ -992,7 +876,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                         child: Icon(
                           star <= selectedRating ? Icons.star : Icons.star_border,
                           color: star <= selectedRating
-                              ? const Color(0xFFFFD700)
+                              ? AppColors.ratingGold
                               : Colors.white38,
                           size: 36,
                         ),
@@ -1001,44 +885,31 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                   }),
                 ),
                 const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      // Capturer avant le gap asynchrone
-                      final nav       = Navigator.of(context);
-                      final router    = GoRouter.of(context);
-                      final homeRoute = _homeRoute;
-                      final orderId   = _order['id'] as String?;
-                      // Le driver note le client — ratedId = ID du client
-                      final ratedUserId = (_order['client'] as Map<String, dynamic>?)?['id'] as String?;
+                PrimaryButton(
+                  label: 'Retour à l\'accueil',
+                  color: AppColors.success,
+                  onTap: () async {
+                    // Capturer avant le gap asynchrone
+                    final nav       = Navigator.of(context);
+                    final router    = GoRouter.of(context);
+                    final homeRoute = _homeRoute;
+                    final orderId   = _order['id'] as String?;
+                    // Le driver note le client — ratedId = ID du client
+                    final ratedUserId = (_order['client'] as Map<String, dynamic>?)?['id'] as String?;
 
-                      if (orderId != null && ratedUserId != null && selectedRating > 0) {
-                        try {
-                          await ref.read(ordersRepositoryProvider).rateDriver(
-                            orderId:  orderId,
-                            driverId: ratedUserId, // ratedId envoyé au backend = client
-                            score:    selectedRating,
-                          );
-                        } catch (_) {}
-                      }
-                      if (!mounted) return;
-                      nav.pop();
-                      router.go(homeRoute);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00C853),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'Retour à l\'accueil',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                    if (orderId != null && ratedUserId != null && selectedRating > 0) {
+                      try {
+                        await ref.read(ordersRepositoryProvider).rateDriver(
+                          orderId:  orderId,
+                          driverId: ratedUserId, // ratedId envoyé au backend = client
+                          score:    selectedRating,
+                        );
+                      } catch (_) {}
+                    }
+                    if (!mounted) return;
+                    nav.pop();
+                    router.go(homeRoute);
+                  },
                 ),
               ],
             ),
@@ -1057,9 +928,15 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       (_order['clientPhone'] as String?) ??
       ((_order['client'] as Map<String, dynamic>?)?['phone'] as String?);
 
+  String? get _senderPhone   => _order['senderPhone'] as String?;
   String? get _receiverPhone => _order['receiverPhone'] as String?;
 
-  String? get _activePhone => _isPickedUp ? (_receiverPhone ?? _clientPhone) : _clientPhone;
+  // Avant récupération : appeler l'EXPÉDITEUR saisi sur la commande (peut
+  // différer du numéro du compte client) — pas le compte, sinon un client
+  // qui commande pour quelqu'un d'autre ferait appeler le mauvais numéro.
+  // Repli sur _clientPhone seulement si senderPhone n'a pas été renseigné
+  // (ex: RIDE, où sender/receiver n'existent pas — voir orders.service.js).
+  String? get _activePhone => _isPickedUp ? (_receiverPhone ?? _clientPhone) : (_senderPhone ?? _clientPhone);
 
   Future<void> _callActiveContact() async {
     final phone = _activePhone;
@@ -1183,7 +1060,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
             right: 0,
             child: SafeArea(
               child: _currentAlert != null
-                  ? _AlertBanner(
+                  ? AlertBanner(
                       message: _currentAlert!,
                       priority: _alertPriority ?? AlertPriority.low,
                     )
@@ -1204,29 +1081,12 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                         final router    = GoRouter.of(context);
                         final homeRoute = _homeRoute;
                         if (!_isDelivered) {
-                          final confirmed = await showDialog<bool>(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              backgroundColor: AppColors.card,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                              title: const Text('Quitter la navigation ?',
-                                  style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
-                              content: const Text(
-                                'La course est toujours en cours.\nVous pourrez y revenir depuis l\'accueil.',
-                                style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: const Text('Rester', style: TextStyle(color: AppColors.primary)),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Quitter',
-                                      style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
-                                ),
-                              ],
-                            ),
+                          final confirmed = await showGradientConfirmDialog(
+                            context,
+                            title: 'Quitter la navigation ?',
+                            message: 'La course est toujours en cours.\nVous pourrez y revenir depuis l\'accueil.',
+                            cancelLabel: 'Rester',
+                            confirmLabel: 'Quitter',
                           );
                           if (confirmed != true || !mounted) return;
                         }
@@ -1236,7 +1096,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: isNight ? const Color(0xFF0CB8DE) : Colors.white,
+                          color: isNight ? AppColors.primary : Colors.white,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -1246,7 +1106,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                           ],
                         ),
                         child: Icon(Icons.arrow_back,
-                            color: isNight ? Colors.white : const Color(0xFF0CB8DE),
+                            color: isNight ? Colors.white : AppColors.primary,
                             size: 20),
                       ),
                     ),
@@ -1254,6 +1114,31 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
               ),
             ),
           ),
+
+          // ── Bouton paiement QR (expéditeur à la récupération, destinataire à
+          // la livraison) — toujours visible, y compris pendant une alerte de
+          // proximité (zones d'écran distinctes, aucun chevauchement réel) et
+          // après livraison (le paiement peut être demandé au moment même de
+          // la remise du colis). Le backend refuse déjà toute nouvelle
+          // tentative sur une commande déjà payée (409), donc laisser le
+          // bouton actif ne peut pas provoquer de double paiement.
+          Positioned(
+              right: 16,
+              bottom: 350,
+              child: GestureDetector(
+                onTap: _openPaymentQr,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
+                  ),
+                  child: const Icon(Icons.qr_code_2_rounded, color: AppColors.primary, size: 24),
+                ),
+              ),
+            ),
 
           // ── Bouton guidage vocal ──
           if (!_isDelivered)
@@ -1314,11 +1199,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
             child: Container(
               padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 24),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-                ),
+                gradient: AppColors.gradientDialog,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [
                   BoxShadow(
@@ -1398,11 +1279,12 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                   const SizedBox(height: 12),
 
                   // Adresses
-                  _AddressRow(
+                  AddressRow(
                     icon: Icons.circle,
-                    iconColor: const Color(0xFF00C853),
+                    iconColor: AppColors.success,
                     label: _isRide ? 'Prise en charge' : 'Collecte',
                     address: _order['pickupAddress'] ?? '',
+                    dark: true,
                   ),
                   const Padding(
                     padding: EdgeInsets.only(left: 9),
@@ -1432,12 +1314,25 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                       ],
                     )
                   else
-                    _AddressRow(
+                    AddressRow(
                       icon: Icons.location_on,
-                      iconColor: Colors.red,
+                      iconColor: AppColors.error,
                       label: _isRide ? 'Destination' : 'Livraison',
                       address: _order['deliveryAddress'] ?? '',
+                      dark: true,
                     ),
+
+                  // Commande DEM Pro : le livreur doit savoir qui règle —
+                  // sinon il pourrait redemander du cash sur une commande déjà
+                  // prise en charge par l'entreprise, ou l'inverse. Absent
+                  // (null) pour les commandes hors DEM Pro — pas de badge.
+                  if (_order['paymentMode'] == 'merchant' || _order['paymentMode'] == 'cod') ...[
+                    const SizedBox(height: 10),
+                    _PaymentModeBadge(
+                      mode: _order['paymentMode'] as String,
+                      paid: _order['paymentStatus'] == 'PAID',
+                    ),
+                  ],
 
                   const SizedBox(height: 12),
 
@@ -1476,10 +1371,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                                   size: 13, color: Colors.white.withValues(alpha: 0.70)),
                               const SizedBox(width: 5),
                               Text('Signaler',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.80),
-                                    fontSize: 12, fontWeight: FontWeight.w600,
-                                  )),
+                                  style: ClientText.label.copyWith(color: Colors.white.withValues(alpha: 0.80))),
                             ]),
                           ),
                         ),
@@ -1495,89 +1387,89 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                         child: TextButton(
                           onPressed: _driverCancelling ? null : _driverCancel,
                           style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFFEF4444),
+                            foregroundColor: AppColors.error,
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
-                              side: BorderSide(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                              side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
                             ),
                           ),
                           child: _driverCancelling
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)))
-                              : Text('Annuler la course (${_cancelSecondsLeft}s)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error))
+                              : Text('Annuler la course (${_cancelSecondsLeft}s)', style: ClientText.label),
                         ),
                       ),
                     ),
 
                   const SizedBox(height: 8),
 
-                  // Bouton action principal + cercle appel
-                  if (!_isDelivered)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _isPickedUp ? _deliver : _pickup,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _isPickedUp
-                                  ? AppColors.primary
-                                  : Colors.orange,
-                              foregroundColor: Colors.white,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
-                              elevation: 0,
-                            ),
-                            child: Text(
-                              _isPickedUp
-                              ? (_isRide ? 'Course terminée' : 'Livraison effectuée')
-                              : (_isRide ? 'Passager à bord' : "J'ai récupéré le colis"),
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+                  // Bouton action principal + cercle appel — transition
+                  // fondu/zoom vers le bandeau succès plutôt qu'un cut brutal.
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 320),
+                    switchInCurve: Curves.easeOutBack,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: ScaleTransition(scale: anim, child: child),
                     ),
-
-                        // Cercle appel — visible jusqu'à livraison
-                        if (_activePhone != null) ...[
-                          const SizedBox(width: 10),
-                          GestureDetector(
-                            onTap: _callActiveContact,
-                            child: Container(
-                              width: 54,
-                              height: 54,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF00C853),
-                                shape: BoxShape.circle,
+                    child: _isDelivered
+                        ? Container(
+                            key: const ValueKey('delivered'),
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Center(
+                              child: Text(
+                                _isRide ? 'Course effectuée avec succès !' : 'Commande livrée avec succès !',
+                                style: const TextStyle(
+                                  color: AppColors.success,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              child: const Icon(Icons.phone, color: Colors.white, size: 24),
                             ),
-                          ),
-                        ],
-                      ],
-                    ),
+                          )
+                        : Row(
+                            key: const ValueKey('swipe'),
+                            children: [
+                              Expanded(
+                                child: SwipeToConfirm(
+                                  key: ValueKey('action-$_isPickedUp-$_swipeTick'),
+                                  label: 'Glissez : ${_isPickedUp
+                                      ? (_isRide ? 'course terminée' : 'livraison effectuée')
+                                      : (_isRide ? 'passager à bord' : "colis récupéré")}',
+                                  lockedLabel: _distanceToTarget != null
+                                      ? 'Trop loin (${NavigationService.formatDistance(_distanceToTarget!)})'
+                                      : 'Localisation requise',
+                                  enabled: _canConfirmAction,
+                                  lockProgress: _lockProgress,
+                                  onLockedTap: () => showDemToast(
+                                    context,
+                                    'Rapprochez-vous à moins de ${_confirmRadiusMeters.round()} m du point pour confirmer.',
+                                    isError: true,
+                                  ),
+                                  onConfirmed: _isPickedUp ? _deliver : _pickup,
+                                  loading: _actionLoading,
+                                  trackColor: _isPickedUp ? AppColors.primary : AppColors.surge,
+                                  thumbColor: Colors.white,
+                                  iconColor: _isPickedUp ? AppColors.primary : AppColors.surge,
+                                  labelColor: Colors.white,
+                                ),
+                              ),
 
-                  if (_isDelivered)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        color:
-                            const Color(0xFF00C853).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Center(
-                        child: Text(
-                          _isRide ? 'Course effectuée avec succès !' : 'Commande livrée avec succès !',
-                          style: const TextStyle(
-                            color: Color(0xFF00C853),
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
+                              // Cercle appel — visible jusqu'à livraison
+                              if (_activePhone != null) ...[
+                                const SizedBox(width: 10),
+                                CallButton(onTap: _callActiveContact),
+                              ],
+                            ],
                           ),
-                        ),
-                      ),
-                    ),
+                  ),
                 ],
               ),
             ),
@@ -1590,6 +1482,42 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
 
 // ── Widgets privés ────────────────────────────────────────────────────────────
 
+class _PaymentModeBadge extends StatelessWidget {
+  final String mode; // 'merchant' | 'cod'
+  final bool paid;
+  const _PaymentModeBadge({required this.mode, required this.paid});
+
+  @override
+  Widget build(BuildContext context) {
+    final isMerchant = mode == 'merchant';
+    final color = isMerchant ? AppColors.success : AppColors.surge;
+    final label = isMerchant
+        ? (paid
+            ? 'Payé par l\'entreprise — ne rien demander au destinataire'
+            : 'Pris en charge par l\'entreprise — ne rien demander au destinataire')
+        : 'Paiement à collecter auprès du destinataire';
+    final icon = isMerchant ? Icons.check_circle_outline : Icons.payments_outlined;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(children: [
+        Icon(icon, color: color, size: 15),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(label,
+              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+        ),
+      ]),
+    );
+  }
+}
+
 class _PhaseChip extends StatelessWidget {
   final bool isPickedUp;
   final bool isDelivered;
@@ -1600,10 +1528,10 @@ class _PhaseChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = isDelivered
-        ? (isRide ? 'Course effectuée ✓' : 'Livraison effectuée ✓', const Color(0xFF00C853))
+        ? (isRide ? 'Course effectuée ✓' : 'Livraison effectuée ✓', AppColors.success)
         : isPickedUp
             ? (isRide ? 'En route vers la destination' : 'En route vers la livraison', Colors.white)
-            : (isRide ? 'En route vers le passager' : 'En route pour récupérer le colis', Colors.orange);
+            : (isRide ? 'En route vers le passager' : 'En route pour récupérer le colis', AppColors.surge);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1613,104 +1541,9 @@ class _PhaseChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
+        style: ClientText.label.copyWith(color: color),
       ),
     );
   }
 }
 
-class _AlertBanner extends StatelessWidget {
-  final String message;
-  final AlertPriority priority;
-
-  const _AlertBanner({required this.message, required this.priority});
-
-  Color get _color => switch (priority) {
-        AlertPriority.low => Colors.blue.shade700,
-        AlertPriority.medium => Colors.orange.shade700,
-        AlertPriority.high => const Color(0xFF00C853),
-      };
-
-  IconData get _icon => switch (priority) {
-        AlertPriority.low => Icons.info_outline,
-        AlertPriority.medium => Icons.warning_amber_outlined,
-        AlertPriority.high => Icons.check_circle_outline,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Material(
-        elevation: 6,
-        borderRadius: BorderRadius.circular(14),
-        color: _color,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Icon(_icon, color: Colors.white, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddressRow extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final String address;
-
-  const _AddressRow({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.address,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: iconColor, size: 16),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.white60,
-                      fontWeight: FontWeight.w500)),
-              Text(address,
-                  style: const TextStyle(
-                      fontSize: 13, color: Colors.white),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}

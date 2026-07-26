@@ -45,7 +45,8 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
 
   // Nombre de chiffres réels (sans espaces de format)
   int get _digitCount => _phoneController.text.replaceAll(' ', '').length;
-  bool get _canContinue => _digitCount >= 8;
+  // Les numéros sénégalais font 9 chiffres après le +221 (ex: 77 123 45 67).
+  bool get _canContinue => _digitCount >= 9;
 
   @override
   void initState() {

@@ -13,7 +13,12 @@ import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/client_text.dart';
+import '../../core/utils/dem_toast.dart';
+import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/referral_card.dart';
+import '../../shared/widgets/support_contact_tile.dart';
+import '../../shared/widgets/swipe_to_confirm.dart';
 import '../auth/data/auth_repository.dart';
 import '../home_client/widgets/client_badge_card.dart';
 
@@ -26,10 +31,13 @@ class ClientProfileScreen extends StatefulWidget {
 class _ClientProfileScreenState extends State<ClientProfileScreen> {
   Map<String, dynamic>? _user;
   Map<String, dynamic>? _badgeData;
-  bool _isLoading       = false;
   bool _uploadingAvatar = false;
   bool _headerCollapsed = false;
   bool _savingPhone     = false;
+  bool _logoutLoading   = false;
+  int  _logoutSwipeTick = 0;
+  bool _deleteLoading   = false;
+  int  _deleteSwipeTick = 0;
   final _picker            = ImagePicker();
   final _scrollController  = ScrollController();
 
@@ -80,7 +88,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
-            const Text('Photo de profil', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            const Text('Photo de profil', style: ClientText.button),
             const SizedBox(height: 16),
             Row(children: [
               Expanded(child: _PickOption(icon: Icons.camera_alt_outlined, label: 'Caméra',  color: AppColors.primary,    onTap: () => Navigator.pop(context, ImageSource.camera))),
@@ -104,7 +112,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       final url = res.data['user']?['avatar'] as String?;
       if (url != null && mounted) setState(() => _user?['avatar'] = url);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur lors de l\'envoi de la photo.')));
+      if (mounted) showDemToast(context, 'Erreur lors de l\'envoi de la photo.', isError: true);
     } finally {
       if (mounted) setState(() => _uploadingAvatar = false);
     }
@@ -124,25 +132,16 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 16),
-          const Text('Modifier mon profil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const Text('Modifier mon profil', style: ClientText.subtitle),
           const SizedBox(height: 20),
           _EditField(ctrl: nameCtrl,  label: 'Nom complet', icon: Icons.person_outline, formatters: [NameInputFormatter()]),
           const SizedBox(height: 12),
           _EditField(ctrl: emailCtrl, label: 'Email',       icon: Icons.email_outlined, keyboard: TextInputType.emailAddress),
           const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 0,
-              ),
-              child: const Text('Enregistrer', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-            ),
+          PrimaryButton(
+            label: 'Enregistrer',
+            color: AppColors.primary,
+            onTap: () => Navigator.pop(ctx, true),
           ),
         ]),
       ),
@@ -159,7 +158,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         setState(() => _user = updated);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
     }
   }
 
@@ -176,7 +175,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 16),
-          const Text('Changer de numéro', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const Text('Changer de numéro', style: ClientText.subtitle),
           const SizedBox(height: 6),
           Text('La demande sera validée par notre équipe sous 24–48h.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600), textAlign: TextAlign.center),
@@ -184,8 +183,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           Row(children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
-              decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
-              child: const Text('+221', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              decoration: BoxDecoration(color: AppColors.lightFill, borderRadius: BorderRadius.circular(12)),
+              child: const Text('+221', style: ClientText.bodyStrong),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -193,19 +192,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             ),
           ]),
           const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 0,
-              ),
-              child: const Text('Envoyer la demande', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-            ),
+          PrimaryButton(
+            label: 'Envoyer la demande',
+            color: AppColors.primary,
+            onTap: () => Navigator.pop(ctx, true),
           ),
         ]),
       ),
@@ -214,14 +204,21 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     if (_savingPhone) return;
     setState(() => _savingPhone = true);
     try {
+      // Ne garde que les chiffres, puis retire un préfixe local éventuel
+      // ("221" ou "0") — sans ça, un numéro tapé en format local (ex: "07XX")
+      // finit avec un zéro superflu après le "+221".
+      final digits = ctrl.text.replaceAll(RegExp(r'\D'), '');
+      final local = digits.startsWith('221')
+          ? digits.substring(3)
+          : digits.startsWith('0')
+              ? digits.substring(1)
+              : digits;
       await ApiClient.dio.post('/users/client/phone-change', data: {
-        'newPhone': '+221${ctrl.text.replaceAll(RegExp(r'\s'), '').replaceFirst('+221', '')}',
+        'newPhone': '+221$local',
       });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Demande envoyée. Vous serez contacté sous 24–48h.')),
-      );
+      if (mounted) showDemToast(context, 'Demande envoyée. Vous serez contacté sous 24–48h.');
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
     } finally {
       if (mounted) setState(() => _savingPhone = false);
     }
@@ -235,14 +232,14 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Passer en compte DEM Pro ?',
-            style: TextStyle(color: Color(0xFF1A1A2E), fontWeight: FontWeight.w700)),
+            style: TextStyle(color: AppColors.textDark, fontWeight: FontWeight.w700)),
         content: const Text(
           'Vous allez compléter le profil de votre entreprise. Votre demande sera '
           'ensuite examinée par notre équipe avant activation.',
-          style: TextStyle(color: Color(0xFF7B8CA0)),
+          style: TextStyle(color: AppColors.textMuted),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler', style: TextStyle(color: Color(0xFF7B8CA0)))),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted))),
           TextButton(onPressed: () => Navigator.pop(ctx, true),  child: const Text('Continuer', style: TextStyle(color: AppColors.primary))),
         ],
       ),
@@ -255,7 +252,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       appStartupNotifier.markLoggedIn(userRole: 'DEM_PRO', pro: 'PENDING', proDone: false);
       context.go('/dem-pro/onboarding');
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
     }
   }
 
@@ -276,13 +273,19 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           const SizedBox(height: 16),
           const Icon(Icons.support_agent_outlined, color: Colors.white, size: 40),
           const SizedBox(height: 8),
-          const Text('Support DEM', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+          Text('Support DEM', style: ClientText.title.copyWith(color: Colors.white)),
           const SizedBox(height: 20),
-          _SupportTile(icon: Icons.phone_outlined,      label: 'Appeler le support', sub: '+221 71 006 46 64', onTap: () => _launch('tel:+221710064664')),
+          SupportContactTile(icon: Icons.phone_rounded, color: AppColors.success,
+              label: 'Appeler le support', subtitle: AppConfig.supportPhone,
+              onTap: () => _launch('tel:${AppConfig.supportPhone}')),
           const SizedBox(height: 10),
-          _SupportTile(icon: Icons.email_outlined,      label: 'Envoyer un e-mail',  sub: 'support@dem.sn',   onTap: () => _launch('mailto:support@dem.sn')),
+          SupportContactTile(icon: Icons.email_rounded, color: AppColors.primary,
+              label: 'Envoyer un e-mail', subtitle: AppConfig.supportEmail,
+              onTap: () => _launch('mailto:${AppConfig.supportEmail}')),
           const SizedBox(height: 10),
-          _SupportTile(icon: Icons.chat_bubble_outline, label: 'WhatsApp',           sub: '+221 71 006 46 64', onTap: () => _launch('https://wa.me/221710064664')),
+          SupportContactTile(icon: Icons.chat_rounded, color: const Color(0xFF25D366),
+              label: 'WhatsApp', subtitle: AppConfig.supportPhone,
+              onTap: () => _launch('https://wa.me/${AppConfig.supportWhatsapp}')),
         ]),
       ),
     );
@@ -293,79 +296,170 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     try {
       final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
       if (!ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
-        );
+        showDemToast(context, 'Impossible d\'ouvrir la page', isError: true);
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
-        );
-      }
+      if (mounted) showDemToast(context, 'Impossible d\'ouvrir la page', isError: true);
     }
   }
 
+  // ── Déconnexion / suppression — même habillage que côté livreur (glisser
+  // pour confirmer, en une seule étape, pas un simple dialogue à taper) ──────
   Future<void> _handleLogout() async {
-    await AuthStorage.clear();
-    appStartupNotifier.markLoggedOut();
-    if (mounted) context.go('/phone');
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewPadding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.logout_rounded, color: AppColors.primary, size: 26),
+              ),
+              const SizedBox(height: 14),
+              const Text('Se déconnecter ?',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+              const SizedBox(height: 6),
+              const Text(
+                'Vous devrez vous reconnecter avec votre numéro de téléphone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SwipeToConfirm(
+                key: ValueKey('logout-$_logoutSwipeTick'),
+                label: 'Glissez pour se déconnecter',
+                loading: _logoutLoading,
+                trackColor: AppColors.primary,
+                thumbColor: Colors.white,
+                iconColor: AppColors.primary,
+                labelColor: Colors.white,
+                onConfirmed: () async {
+                  setSheetState(() => _logoutLoading = true);
+                  try {
+                    await AuthStorage.clear();
+                    appStartupNotifier.markLoggedOut();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      context.go('/phone');
+                    }
+                  } catch (e) {
+                    setSheetState(() {
+                      _logoutLoading = false;
+                      _logoutSwipeTick++;
+                    });
+                    if (mounted) showDemToast(context, friendlyError(e), isError: true);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _logoutLoading ? null : () => Navigator.pop(ctx),
+                child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _handleDeleteAccount() async {
-    final confirm = await showDialog<bool>(
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Supprimer mon compte ?',
-            style: TextStyle(color: Color(0xFF1A1A2E), fontWeight: FontWeight.w700)),
-        content: const Text('Cette action est irréversible. Toutes vos données seront effacées.',
-            style: TextStyle(color: Color(0xFF7B8CA0))),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler', style: TextStyle(color: AppColors.primary))),
-          TextButton(onPressed: () => Navigator.pop(ctx, true),  child: const Text('Supprimer', style: TextStyle(color: Color(0xFFEF4444)))),
-        ],
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewPadding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_forever_outlined, color: AppColors.error, size: 28),
+              ),
+              const SizedBox(height: 14),
+              const Text('Supprimer mon compte ?',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+              const SizedBox(height: 6),
+              const Text(
+                'Cette action est irréversible. Toutes vos données seront effacées.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SwipeToConfirm(
+                key: ValueKey('delete-$_deleteSwipeTick'),
+                label: 'Glissez pour supprimer',
+                loading: _deleteLoading,
+                trackColor: AppColors.error,
+                thumbColor: Colors.white,
+                iconColor: AppColors.error,
+                labelColor: Colors.white,
+                onConfirmed: () async {
+                  setSheetState(() => _deleteLoading = true);
+                  try {
+                    await ApiClient.dio.delete('/users/me');
+                    await AuthStorage.clear();
+                    appStartupNotifier.markLoggedOut();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      context.go('/phone');
+                    }
+                  } catch (e) {
+                    setSheetState(() {
+                      _deleteLoading = false;
+                      _deleteSwipeTick++;
+                    });
+                    if (mounted) showDemToast(context, friendlyError(e), isError: true);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _deleteLoading ? null : () => Navigator.pop(ctx),
+                child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+              ),
+            ],
+          ),
+        ),
       ),
     );
-    if (confirm != true) return;
-    if (mounted) setState(() => _isLoading = true);
-    try {
-      await ApiClient.dio.delete('/users/me');
-      await AuthStorage.clear();
-      appStartupNotifier.markLoggedOut();
-      if (mounted) context.go('/phone');
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Échec de la suppression. Réessayez.')),
-        );
-      }
-    }
   }
 
   // ── BUILD ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF4F6FA),
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-      );
-    }
-
     final name     = _user?['name']  as String? ?? 'Client';
     final phone    = _user?['phone'] as String? ?? '';
     final email    = _user?['email'] as String?;
     final avatar   = _user?['avatar'] as String?;
     final initials = name.trim().isNotEmpty
-        ? name.trim().split(' ').take(2).map((w) => w[0].toUpperCase()).join()
+        ? name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0].toUpperCase()).join()
         : '?';
     final phoneStatus = _user?['phoneChangeStatus'] as String?;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: AppColors.lightBg,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -408,7 +502,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                           : const SizedBox.shrink(),
                     ),
                     const Spacer(),
-                    const Text('Mon compte', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                    Text('Mon compte', style: ClientText.subtitle.copyWith(color: Colors.white)),
                     const Spacer(),
                     IconButton(
                       onPressed: _showSupport,
@@ -443,8 +537,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                                       ? const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                                       : avatar != null
                                           ? ClipOval(child: Image.network(avatar, fit: BoxFit.cover, width: 88, height: 88,
-                                              errorBuilder: (_, e, s) => Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)))))
-                                          : Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800))),
+                                              errorBuilder: (_, e, s) => Center(child: Text(initials, style: ClientText.hero.copyWith(color: Colors.white)))))
+                                          : Center(child: Text(initials, style: ClientText.hero.copyWith(color: Colors.white))),
                                 ),
                                 Positioned(
                                   bottom: 0, right: 0,
@@ -528,7 +622,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         ? 'Changement de numéro en cours…'
                         : 'Demander un changement de numéro',
                     onTap: phoneStatus == 'PENDING' ? () {} : _requestPhoneChange,
-                    titleColor: phoneStatus == 'PENDING' ? Colors.grey : const Color(0xFF1A1A2E),
+                    titleColor: phoneStatus == 'PENDING' ? Colors.grey : AppColors.textDark,
                     iconColor:  phoneStatus == 'PENDING' ? Colors.grey : AppColors.primary,
                   ),
                   _MenuItemData(
@@ -572,8 +666,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   _MenuItemData(
                     icon: Icons.delete_outline,
                     title: 'Supprimer mon compte',
-                    titleColor: const Color(0xFFEF4444),
-                    iconColor:  const Color(0xFFEF4444),
+                    titleColor: AppColors.error,
+                    iconColor:  AppColors.error,
                     onTap: _handleDeleteAccount,
                   ),
                 ]),
@@ -603,13 +697,13 @@ class _EditField extends StatelessWidget {
     controller: ctrl,
     keyboardType: keyboard,
     inputFormatters: formatters,
-    style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A2E)),
+    style: const TextStyle(fontSize: 14, color: AppColors.textDark),
     decoration: InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon, size: 18, color: AppColors.primaryMid),
       filled: true,
-      fillColor: const Color(0xFFF1F5F9),
-      labelStyle: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
+      fillColor: AppColors.lightFill,
+      labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -629,38 +723,12 @@ class _PickOption extends StatelessWidget {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, color: color, size: 28),
         const SizedBox(height: 6),
-        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+        Text(label, style: ClientText.label.copyWith(color: color)),
       ]),
     ),
   );
 }
 
-class _SupportTile extends StatelessWidget {
-  final IconData icon; final String label, sub; final VoidCallback onTap;
-  const _SupportTile({required this.icon, required this.label, required this.sub, required this.onTap});
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.white.withValues(alpha: 0.15),
-    borderRadius: BorderRadius.circular(14),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(children: [
-          Icon(icon, color: Colors.white, size: 22),
-          const SizedBox(width: 14),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-            Text(sub,   style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 12)),
-          ]),
-          const Spacer(),
-          Icon(Icons.chevron_right, color: Colors.white.withValues(alpha: 0.50), size: 20),
-        ]),
-      ),
-    ),
-  );
-}
 
 class _SectionLabel extends StatelessWidget {
   final String label;
@@ -668,7 +736,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(left: 4, bottom: 8),
-    child: Text(label, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.8)),
+    child: Text(label, style: ClientText.caption.copyWith(color: AppColors.textMuted, letterSpacing: 0.8)),
   );
 }
 
@@ -680,7 +748,7 @@ class _MenuItemData {
   final Color iconColor;
   const _MenuItemData({
     required this.icon, required this.title, required this.onTap,
-    this.titleColor = const Color(0xFF1A1A2E),
+    this.titleColor = AppColors.textDark,
     this.iconColor  = AppColors.primary,
   });
 }
@@ -693,11 +761,11 @@ class _MenuGroup extends StatelessWidget {
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
-      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+      boxShadow: AppShadows.card,
     ),
     child: Column(children: [
       for (int i = 0; i < items.length; i++) ...[
-        if (i > 0) const Divider(height: 1, indent: 52, color: Color(0xFFEEF0F5)),
+        if (i > 0) const Divider(height: 1, indent: 52, color: AppColors.lightBorder),
         _MenuItem(
           icon: items[i].icon, title: items[i].title, onTap: items[i].onTap,
           titleColor: items[i].titleColor, iconColor: items[i].iconColor,
@@ -713,7 +781,7 @@ class _MenuItem extends StatelessWidget {
   final Color titleColor, iconColor; final bool standalone;
   const _MenuItem({
     required this.icon, required this.title, required this.onTap,
-    this.titleColor = const Color(0xFF1A1A2E),
+    this.titleColor = AppColors.textDark,
     this.iconColor  = AppColors.primary,
     this.standalone = true,
   });
@@ -732,7 +800,7 @@ class _MenuItem extends StatelessWidget {
           ),
           const SizedBox(width: 14),
           Expanded(child: Text(title, style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.w500))),
-          const Icon(Icons.chevron_right, color: Color(0xFFBCC5D0), size: 20),
+          const Icon(Icons.chevron_right, color: AppColors.lightIconMuted, size: 20),
         ]),
       ),
     );
@@ -740,7 +808,7 @@ class _MenuItem extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: AppShadows.card,
       ),
       child: ClipRRect(borderRadius: BorderRadius.circular(16), child: child),
     );

@@ -257,6 +257,7 @@ class NotificationService {
     // ── Orders — driver ─────────────────────────────────────────────────────
     'ORDER_OFFER'               => '/driver/home',     // socket affiche le modal d'offre
     'ORDER_CANCELLED'           => '/driver/home',     // client a annulé avant acceptation
+    'ORDER_ADMIN_ASSIGNED'      => '/driver/home',     // socket order:admin_assigned recharge la course active
     // ── Orders — client / DEM Pro ──────────────────────────────────────────
     'ORDER_ACCEPTED'            => null, // géré dans _handleTap avec role-aware routing
     'ORDER_PICKED_UP'           => null,

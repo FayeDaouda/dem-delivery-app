@@ -7,6 +7,8 @@ import '../../../core/api/api_client.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
+import '../utils/dem_pro_format.dart';
+import '../theme/dem_pro_text.dart';
 
 // ── Helpers statut batch ──────────────────────────────────────────────────────
 
@@ -49,16 +51,6 @@ Color _stopStatusColor(String s) => switch (s) {
 };
 
 bool _stopDone(String s) => s == 'DELIVERED';
-
-String _fmtFcfa(num v) {
-  final s = v.round().toString();
-  final buf = StringBuffer();
-  for (int i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-    buf.write(s[i]);
-  }
-  return '$buf FCFA';
-}
 
 String _fmtDate(String? iso) {
   if (iso == null) return '';
@@ -136,7 +128,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
         ),
         title: Text(
           'Suivi de tournée',
-          style: TextStyle(color: t.text, fontSize: 17, fontWeight: FontWeight.w800),
+          style: DemProText.title.copyWith(color: t.text, fontSize: 17),
         ),
         actions: [
           IconButton(
@@ -169,7 +161,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
         Icon(Icons.error_outline, color: t.muted, size: 44),
         const SizedBox(height: 14),
         Text('Impossible de charger la tournée.',
-            style: TextStyle(color: t.text, fontSize: 15, fontWeight: FontWeight.w600)),
+            style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15)),
         const SizedBox(height: 12),
         GestureDetector(
           onTap: _load,
@@ -179,8 +171,8 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
               color: DemProColors.accent,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Text('Réessayer',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            child: Text('Réessayer',
+                style: DemProText.bodyStrong.copyWith(color: Colors.white)),
           ),
         ),
       ],
@@ -230,11 +222,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                     const SizedBox(width: 8),
                     Text(
                       _batchStatusLabel(status),
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: DemProText.subtitle.copyWith(color: statusColor),
                     ),
                     const Spacer(),
                     if (_loading)
@@ -261,7 +249,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                     const SizedBox(height: 6),
                     Text(
                       '$deliveredCount / ${orders.length} arrêts livrés',
-                      style: TextStyle(color: t.muted, fontSize: 12),
+                      style: DemProText.caption.copyWith(color: t.muted),
                     ),
                   ],
                 ],
@@ -291,11 +279,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                       child: Center(
                         child: Text(
                           _initials(driver['name'] as String?),
-                          style: const TextStyle(
-                            color: DemProColors.accent,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                          ),
+                          style: DemProText.subtitle.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800),
                         ),
                       ),
                     ),
@@ -306,14 +290,10 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                         children: [
                           Text(
                             driver['name'] as String? ?? 'Livreur DEM',
-                            style: TextStyle(
-                              color: t.text,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: DemProText.subtitle.copyWith(color: t.text),
                           ),
                           Text('Moto · DEM',
-                              style: TextStyle(color: t.muted, fontSize: 12)),
+                              style: DemProText.caption.copyWith(color: t.muted)),
                         ],
                       ),
                     ),
@@ -323,11 +303,11 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                         color: DemProColors.success.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.check_circle, color: DemProColors.success, size: 13),
-                        SizedBox(width: 4),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.check_circle, color: DemProColors.success, size: 13),
+                        const SizedBox(width: 4),
                         Text('Assigné',
-                            style: TextStyle(color: DemProColors.success, fontSize: 12, fontWeight: FontWeight.w700)),
+                            style: DemProText.caption.copyWith(color: DemProColors.success, fontWeight: FontWeight.w700)),
                       ]),
                     ),
                   ]),
@@ -379,10 +359,10 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('Recherche en cours…',
-                        style: TextStyle(color: t.text, fontSize: 14, fontWeight: FontWeight.w700)),
+                        style: DemProText.subtitle.copyWith(color: t.text)),
                       const SizedBox(height: 2),
                       Text('Nous cherchons le livreur le plus proche pour votre tournée.',
-                        style: TextStyle(color: t.muted, fontSize: 12)),
+                        style: DemProText.caption.copyWith(color: t.muted)),
                     ]),
                   ),
                 ]),
@@ -405,7 +385,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                 Expanded(
                   child: Text(
                     pickup,
-                    style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w500),
+                    style: DemProText.body.copyWith(color: t.text),
                   ),
                 ),
               ]),
@@ -424,11 +404,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                 ),
                 child: Text(
                   '${orders.length}',
-                  style: const TextStyle(
-                    color: DemProColors.accent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700),
                 ),
               ),
             ]),
@@ -463,25 +439,21 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
               ),
               child: Row(children: [
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Coût total', style: TextStyle(color: t.muted, fontSize: 12)),
+                  Text('Coût total', style: DemProText.caption.copyWith(color: t.muted)),
                   const SizedBox(height: 4),
                   Text(
-                    _fmtFcfa(total),
-                    style: TextStyle(
-                      color: t.text,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    DemProFormat.fcfa(total),
+                    style: DemProText.headline.copyWith(color: t.text, fontSize: 20, fontWeight: FontWeight.w900),
                   ),
                 ]),
                 const Spacer(),
                 if (createdAt != null)
                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Text('Créée le', style: TextStyle(color: t.muted, fontSize: 11)),
+                    Text('Créée le', style: DemProText.caption.copyWith(color: t.muted)),
                     const SizedBox(height: 4),
                     Text(
                       _fmtDate(createdAt),
-                      style: TextStyle(color: t.muted, fontSize: 12),
+                      style: DemProText.caption.copyWith(color: t.muted),
                     ),
                   ]),
               ]),
@@ -493,10 +465,25 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
               SizedBox(
                 width: double.infinity,
                 height: 50,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push('/dem-pro/batch/create', extra: batch),
+                  icon: const Icon(Icons.replay, size: 18),
+                  label: const Text('Recommander cette tournée', style: DemProText.subtitle),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: DemProColors.accent,
+                    side: const BorderSide(color: DemProColors.accent),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
                 child: ElevatedButton.icon(
                   onPressed: () => context.go(appStartupNotifier.homeForRole),
                   icon: const Icon(Icons.home_outlined, size: 20),
-                  label: const Text('Retour au tableau de bord', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  label: const Text('Retour au tableau de bord', style: DemProText.subtitle),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: DemProColors.accent,
                     foregroundColor: Colors.white,
@@ -569,11 +556,7 @@ class _StopRow extends StatelessWidget {
                   ? const Icon(Icons.check, color: DemProColors.success, size: 14)
                   : Text(
                       '${index + 1}',
-                      style: TextStyle(
-                        color: t.muted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: DemProText.caption.copyWith(color: t.muted, fontWeight: FontWeight.w800),
                     ),
             ),
           ),
@@ -584,19 +567,13 @@ class _StopRow extends StatelessWidget {
               children: [
                 Text(
                   address,
-                  style: TextStyle(
-                    color: t.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    decoration: done ? TextDecoration.lineThrough : null,
-                    decorationColor: t.muted,
-                  ),
+                  style: DemProText.bodyStrong.copyWith(color: t.text, decoration: done ? TextDecoration.lineThrough : null, decorationColor: t.muted),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (receiver != null && receiver.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(receiver, style: TextStyle(color: t.muted, fontSize: 11)),
+                  Text(receiver, style: DemProText.caption.copyWith(color: t.muted)),
                 ],
               ],
             ),
@@ -613,22 +590,14 @@ class _StopRow extends StatelessWidget {
                 ),
                 child: Text(
                   stopLabel,
-                  style: TextStyle(
-                    color: stopColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: DemProText.micro.copyWith(color: stopColor),
                 ),
               ),
               if (price > 0) ...[
                 const SizedBox(height: 4),
                 Text(
-                  _fmtFcfa(price),
-                  style: TextStyle(
-                    color: t.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  DemProFormat.fcfa(price),
+                  style: DemProText.caption.copyWith(color: t.muted),
                 ),
               ],
             ],
@@ -649,12 +618,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: TextStyle(
-      color: t.muted,
-      fontSize: 11,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 1,
-    ),
+    style: DemProText.caption.copyWith(color: t.muted, fontWeight: FontWeight.w700, letterSpacing: 1),
   );
 }
 
@@ -677,7 +641,7 @@ class _ContactChip extends StatelessWidget {
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         Icon(icon, color: DemProColors.accent, size: 16),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w600)),
+        Text(label, style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
       ]),
     ),
   );
@@ -689,11 +653,11 @@ class _T {
   final bool dark;
   const _T(this.dark);
 
-  Color get scaffoldBg => dark ? DemProColors.bg    : const Color(0xFFF8FAFC);
+  Color get scaffoldBg => dark ? DemProColors.bg    : DemProColors.lightBg;
   Color get cardBg     => dark ? DemProColors.bg2   : Colors.white;
-  Color get cardBg2    => dark ? DemProColors.bg3   : const Color(0xFFF1F5F9);
-  Color get cardBg3    => dark ? DemProColors.bg4   : const Color(0xFFE8EFF6);
-  Color get border     => dark ? DemProColors.bg3   : const Color(0xFFE2E8F0);
-  Color get text       => dark ? DemProColors.text  : const Color(0xFF0F172A);
-  Color get muted      => dark ? DemProColors.muted : const Color(0xFF64748B);
+  Color get cardBg2    => dark ? DemProColors.bg3   : DemProColors.lightCardBg2;
+  Color get cardBg3    => dark ? DemProColors.bg4   : DemProColors.lightCardBg3;
+  Color get border     => dark ? DemProColors.bg3   : DemProColors.lightBorder;
+  Color get text       => dark ? DemProColors.text  : DemProColors.lightText;
+  Color get muted      => dark ? DemProColors.muted : DemProColors.lightMuted;
 }

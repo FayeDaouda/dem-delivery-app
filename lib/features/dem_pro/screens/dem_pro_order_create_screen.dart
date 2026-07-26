@@ -11,16 +11,33 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/error/app_exception.dart';
+import '../../../core/services/places_autocomplete_service.dart';
+import '../../../core/storage/dem_pro_draft_storage.dart';
 import '../../../core/utils/dem_toast.dart';
+import '../../../core/utils/senegal_phone.dart';
+import '../../../shared/widgets/place_suggestions_list.dart';
 import '../../deliveries/data/orders_repository.dart';
 import '../../home_driver/navigation/directions_service.dart';
 import '../../home_driver/navigation/navigation_service.dart';
 import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
+import '../utils/dem_pro_format.dart';
+import '../theme/dem_pro_text.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _dakar = LatLng(14.6937, -17.4441);
+
+const _placeSuggestionsColors = PlaceSuggestionsColors(
+  background: DemProColors.bg3,
+  border: DemProColors.bg4,
+  divider: DemProColors.bg4,
+  iconBg: DemProColors.bg4,
+  icon: DemProColors.accent,
+  mainText: DemProColors.text,
+  secondaryText: DemProColors.muted,
+  accent: DemProColors.accent,
+);
 
 const _packageTypes = [
   ('documents', 'Documents',   Icons.description_outlined,  'Enveloppes, contrats, factures'),
@@ -52,7 +69,15 @@ class _Article {
 
 class DemProOrderCreateScreen extends StatefulWidget {
   final bool scheduled;
-  const DemProOrderCreateScreen({super.key, this.scheduled = false});
+  final Map<String, dynamic>? reorderFrom;
+  /// Demande soumise par un client final via le lien de commande public
+  /// (dem.sn/commander/:merchantId) — préremplit destinataire/adresse texte,
+  /// mais jamais les coordonnées (le client final n'en fournit pas), donc le
+  /// commerçant doit toujours positionner le point de livraison lui-même
+  /// avant de pouvoir avancer. Une fois la commande créée, la demande est
+  /// marquée confirmée côté serveur (voir `_submit`).
+  final Map<String, dynamic>? fromOrderRequest;
+  const DemProOrderCreateScreen({super.key, this.scheduled = false, this.reorderFrom, this.fromOrderRequest});
   @override
   State<DemProOrderCreateScreen> createState() => _State();
 }
@@ -87,9 +112,18 @@ class _State extends State<DemProOrderCreateScreen> {
   double? _deliveryLat, _deliveryLng;
   String  _deliveryAddress  = '';
   bool    _searchingAddress = false;
+  String? _searchError;
   List<Map<String, dynamic>> _suggestions = [];
   Timer? _searchDebounce;
   final _publicDio = Dio();
+  late final _placesService = PlacesAutocompleteService(_publicDio);
+  String? _sessionToken;
+
+  // ── Destinations récentes ────────────────────────────────────────────────
+  List<Map<String, dynamic>> _recentDestinations = [];
+
+  // ── Brouillon ────────────────────────────────────────────────────────────
+  Timer? _draftSaveDebounce;
 
   // ── Étape 2 — Colis ─────────────────────────────────────────────────────
   String _packageType = 'small';
@@ -113,14 +147,59 @@ class _State extends State<DemProOrderCreateScreen> {
   bool _submitting      = false;
   bool _geocoding       = false;
 
+  // ── Promotion (voir promo.service.js côté serveur) ──────────────────────
+  double? _discountAmount;
+  String? _promoLabel;
+  String? _promoError;
+  bool _checkingPromo = false;
+  final _promoCodeCtrl = TextEditingController();
+
+  // ── Depuis une demande reçue (lien de commande public) ───────────────────
+  String? _fromRequestId;
+
   @override
   void initState() {
     super.initState();
     _loadMapStyle();
     _loadProAddresses();
+    _loadRecentDestinations();
+    if (widget.fromOrderRequest != null) {
+      _applyOrderRequest(widget.fromOrderRequest!);
+    } else if (widget.reorderFrom != null) {
+      _applyReorder(widget.reorderFrom!);
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowDraftPrompt());
+    }
     if (widget.scheduled) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _pickScheduleDate());
     }
+  }
+
+  /// Préremplit destinataire/adresse (texte) + repère/instructions depuis une
+  /// demande reçue via la page publique. Ne fournit jamais de coordonnées —
+  /// le client final n'en donne pas — donc `_deliveryLat/_deliveryLng`
+  /// restent `null` et le commerçant doit positionner le point de livraison
+  /// lui-même (recherche ou carte) avant de pouvoir avancer à l'étape 2.
+  void _applyOrderRequest(Map<String, dynamic> request) {
+    _fromRequestId = request['id'] as String?;
+    _deliveryAddress = request['deliveryAddress'] as String? ?? '';
+    _addressSearchCtrl.text = _deliveryAddress;
+
+    final name  = request['customerName']  as String?;
+    if (name != null && name.isNotEmpty) _recipientNameCtrl.text = name;
+
+    final rawPhone = request['customerPhone'] as String?;
+    if (rawPhone != null && rawPhone.isNotEmpty) {
+      var digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.startsWith('221') && digits.length > 9) digits = digits.substring(digits.length - 9);
+      _recipientPhoneCtrl.text = digits.length > 9 ? digits.substring(digits.length - 9) : digits;
+    }
+
+    final landmark = request['landmark'] as String?;
+    if (landmark != null && landmark.isNotEmpty) _landmarkCtrl.text = landmark;
+
+    final notes = request['notes'] as String?;
+    if (notes != null && notes.isNotEmpty) _instructionsCtrl.text = notes;
   }
 
   @override
@@ -128,13 +207,146 @@ class _State extends State<DemProOrderCreateScreen> {
     _mapCtrl?.dispose();
     _sheetCtrl.dispose();
     _searchDebounce?.cancel();
+    _draftSaveDebounce?.cancel();
     _recipientNameCtrl.dispose();
     _recipientPhoneCtrl.dispose();
     _landmarkCtrl.dispose();
     _addressSearchCtrl.dispose();
     _instructionsCtrl.dispose();
+    _promoCodeCtrl.dispose();
     for (final a in _articles) { a.dispose(); }
     super.dispose();
+  }
+
+  // ── Destinations récentes ────────────────────────────────────────────────
+
+  Future<void> _loadRecentDestinations() async {
+    try {
+      final list = await _proRepo.getRecentDestinations();
+      if (mounted) setState(() => _recentDestinations = list);
+    } catch (_) {}
+  }
+
+  void _applyRecentDestination(Map<String, dynamic> dest) {
+    final lat = (dest['lat'] as num?)?.toDouble();
+    final lng = (dest['lng'] as num?)?.toDouble();
+    final address = dest['address'] as String? ?? '';
+    if (lat == null || lng == null) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _deliveryLat = lat;
+      _deliveryLng = lng;
+      _deliveryAddress = address;
+      _addressSearchCtrl.text = address;
+      final name  = dest['receiverName']  as String?;
+      final phone = dest['receiverPhone'] as String?;
+      if (name != null && name.isNotEmpty) _recipientNameCtrl.text = name;
+      if (phone != null && phone.isNotEmpty) {
+        _recipientPhoneCtrl.text = phone.replaceFirst('+221', '');
+      }
+    });
+    _recenterMap();
+    _scheduleDraftSave();
+  }
+
+  // ── Recommander (reorder) ────────────────────────────────────────────────
+
+  void _applyReorder(Map<String, dynamic> order) {
+    final lat = (order['deliveryLatitude']  as num?)?.toDouble();
+    final lng = (order['deliveryLongitude'] as num?)?.toDouble();
+    _deliveryAddress = order['deliveryAddress'] as String? ?? '';
+    _addressSearchCtrl.text = _deliveryAddress;
+    if (lat != null && lng != null) { _deliveryLat = lat; _deliveryLng = lng; }
+    final name  = order['receiverName']  as String?;
+    final phone = order['receiverPhone'] as String?;
+    if (name  != null && name.isNotEmpty)  _recipientNameCtrl.text  = name;
+    if (phone != null && phone.isNotEmpty) _recipientPhoneCtrl.text = phone.replaceFirst('+221', '');
+
+    final items = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (items.isNotEmpty) {
+      for (final a in _articles) { a.dispose(); }
+      _articles.clear();
+      for (final it in items) {
+        final a = _Article();
+        a.nameCtrl.text  = it['name'] as String? ?? '';
+        a.qtyCtrl.text   = '${it['quantity'] ?? 1}';
+        if (it['price'] != null) a.priceCtrl.text = '${it['price']}';
+        _articles.add(a);
+      }
+    }
+  }
+
+  // ── Brouillon ─────────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _draftSnapshot() => {
+    'deliveryLat': _deliveryLat,
+    'deliveryLng': _deliveryLng,
+    'deliveryAddress': _deliveryAddress,
+    'recipientName': _recipientNameCtrl.text,
+    'recipientPhone': _recipientPhoneCtrl.text,
+    'landmark': _landmarkCtrl.text,
+    'packageType': _packageType,
+    'isFragile': _isFragile,
+    'instructions': _instructionsCtrl.text,
+    'paymentMode': _paymentMode,
+    'articles': _articles
+        .where((a) => a.nameCtrl.text.trim().isNotEmpty)
+        .map((a) => {'name': a.nameCtrl.text, 'qty': a.qtyCtrl.text, 'price': a.priceCtrl.text})
+        .toList(),
+    'savedAt': DateTime.now().toIso8601String(),
+  };
+
+  void _scheduleDraftSave() {
+    _draftSaveDebounce?.cancel();
+    _draftSaveDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (_deliveryLat == null && _recipientPhoneCtrl.text.isEmpty) return;
+      DemProDraftStorage.saveOrderDraft(_draftSnapshot());
+    });
+  }
+
+  void _applyDraft(Map<String, dynamic> draft) {
+    setState(() {
+      _deliveryLat     = (draft['deliveryLat'] as num?)?.toDouble();
+      _deliveryLng     = (draft['deliveryLng'] as num?)?.toDouble();
+      _deliveryAddress = draft['deliveryAddress'] as String? ?? '';
+      _addressSearchCtrl.text  = _deliveryAddress;
+      _recipientNameCtrl.text  = draft['recipientName']  as String? ?? '';
+      _recipientPhoneCtrl.text = draft['recipientPhone'] as String? ?? '';
+      _landmarkCtrl.text       = draft['landmark']       as String? ?? '';
+      _packageType             = draft['packageType']    as String? ?? 'small';
+      _isFragile               = draft['isFragile']      as bool?   ?? false;
+      _instructionsCtrl.text   = draft['instructions']   as String? ?? '';
+      _paymentMode             = draft['paymentMode']    as String? ?? 'merchant';
+      final articles = (draft['articles'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (articles.isNotEmpty) {
+        for (final a in _articles) { a.dispose(); }
+        _articles.clear();
+        for (final it in articles) {
+          final a = _Article();
+          a.nameCtrl.text  = it['name']  as String? ?? '';
+          a.qtyCtrl.text   = it['qty']   as String? ?? '1';
+          a.priceCtrl.text = it['price'] as String? ?? '';
+          _articles.add(a);
+        }
+      }
+    });
+    _recenterMap();
+  }
+
+  Future<void> _maybeShowDraftPrompt() async {
+    final draft = await DemProDraftStorage.getOrderDraft();
+    if (draft == null || !mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (_) => _DraftResumeSheet(
+        savedAt: draft['savedAt'] as String?,
+        onResume: () { Navigator.pop(context); _applyDraft(draft); },
+        onDiscard: () { Navigator.pop(context); DemProDraftStorage.clearOrderDraft(); },
+      ),
+    );
   }
 
   // ── Map style ────────────────────────────────────────────────────────────
@@ -148,13 +360,19 @@ class _State extends State<DemProOrderCreateScreen> {
     CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 15, tilt: 20)),
   );
 
-  void _centerMapVisible(LatLng pos) {
-    final screenH = MediaQuery.of(context).size.height;
+  /// Centre la carte sur [pos] de sorte que le point soit visible dans la
+  /// zone haute (au-dessus du panneau), et non caché derrière.
+  /// Décale la cible caméra vers le SUD d'une distance égale à la moitié de
+  /// la hauteur du panneau (convertie en degrés via la résolution Mercator
+  /// au zoom utilisé) — [pos] apparaît alors plus au nord que le centre de
+  /// l'écran, donc visuellement plus haut, au milieu de la zone visible.
+  void _centerMapVisible(LatLng pos, {double zoom = 15}) {
     final panelH = _panelHeight + MediaQuery.of(context).viewPadding.bottom;
-    final offsetLat = panelH / screenH * 0.006;
-    final adjusted = LatLng(pos.latitude + offsetLat, pos.longitude);
+    final metersPerPixel = 156543.03392 * math.cos(pos.latitude * math.pi / 180) / math.pow(2, zoom);
+    final latShift = (panelH / 2) * metersPerPixel / 111320.0;
+    final adjusted = LatLng(pos.latitude - latShift, pos.longitude);
     _mapCtrl?.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(target: adjusted, zoom: 15, tilt: 20)),
+      CameraUpdate.newCameraPosition(CameraPosition(target: adjusted, zoom: zoom, tilt: 20)),
     );
   }
 
@@ -187,11 +405,9 @@ class _State extends State<DemProOrderCreateScreen> {
     setState(() {
       _selectedProAddr = addr;
       _pickupAddress   = address;
-      if (lat != null && lng != null) {
-        _pickupLat = lat; _pickupLng = lng;
-        _centerMapVisible(LatLng(lat, lng));
-      }
+      if (lat != null && lng != null) { _pickupLat = lat; _pickupLng = lng; }
     });
+    if (lat != null && lng != null) _recenterMap();
     if (lat == null || lng == null) {
       _geocodePickupAddress(address);
     } else if (_step == 2) {
@@ -211,7 +427,7 @@ class _State extends State<DemProOrderCreateScreen> {
         _pickupLat = loc.latitude;
         _pickupLng = loc.longitude;
       });
-      _centerMapVisible(LatLng(loc.latitude, loc.longitude));
+      _recenterMap();
       if (_step == 2) { _fetchEstimate(); _fetchRoute(); }
     } catch (_) {
       _fetchGps();
@@ -231,7 +447,7 @@ class _State extends State<DemProOrderCreateScreen> {
       }
       final ll = LatLng(pos.latitude, pos.longitude);
       _pickupLat = ll.latitude; _pickupLng = ll.longitude;
-      _centerMap(ll);
+      _recenterMap();
       _reverseGeocode(ll, forPickup: true);
     } catch (_) {
       if (mounted) showDemToast(context, 'GPS indisponible', isError: true);
@@ -261,41 +477,36 @@ class _State extends State<DemProOrderCreateScreen> {
     }
     if (mounted) {
       setState(() { _isMapPlacement = false; _geocoding = false; });
-      if (_step == 2) { _fetchEstimate(); _fetchRoute(); }
+      if (_step == 2) {
+        _fetchEstimate();
+        _fetchRoute();
+      } else {
+        _recenterMap();
+      }
+      _scheduleDraftSave();
     }
   }
 
   void _onAddressChanged(String query) {
     _searchDebounce?.cancel();
+    setState(() {}); // reflète immédiatement l'état vide/non-vide du champ (destinations récentes)
     if (query.trim().length < 3) {
       if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
       return;
     }
+    _sessionToken ??= PlacesAutocompleteService.newSessionToken();
     _searchDebounce = Timer(const Duration(milliseconds: 450), () async {
-      setState(() => _searchingAddress = true);
+      setState(() { _searchingAddress = true; _searchError = null; });
       try {
-        final res = await _publicDio.get(
-          'https://maps.googleapis.com/maps/api/place/autocomplete/json',
-          queryParameters: {
-            'input': query,
-            'location': '14.6937,-17.4441',
-            'radius': '60000',
-            'components': 'country:sn',
-            'language': 'fr',
-            'key': AppConfig.mapsApiKey,
-          },
-        );
-        if (mounted && res.statusCode == 200) {
-          final preds = res.data['status'] == 'OK'
-              ? List<Map<String, dynamic>>.from(res.data['predictions'])
-              : <Map<String, dynamic>>[];
-          setState(() { _suggestions = preds; _searchingAddress = false; });
-        }
-      } catch (_) {
-        if (mounted) setState(() => _searchingAddress = false);
+        final preds = await _placesService.autocomplete(query: query, sessionToken: _sessionToken!);
+        if (mounted) setState(() { _suggestions = preds; _searchingAddress = false; });
+      } catch (e) {
+        if (mounted) setState(() { _searchingAddress = false; _searchError = friendlyError(e); });
       }
     });
   }
+
+  void _retryAddressSearch() => _onAddressChanged(_addressSearchCtrl.text);
 
   Future<void> _forwardGeocode(String query) async {
     if (query.trim().length < 3) return;
@@ -312,7 +523,8 @@ class _State extends State<DemProOrderCreateScreen> {
         _deliveryAddress = query.trim();
         _addressSearchCtrl.text = query.trim();
       });
-      _centerMapVisible(LatLng(loc.latitude, loc.longitude));
+      _recenterMap();
+      _scheduleDraftSave();
     } catch (_) {
       if (mounted) showDemToast(context, 'Adresse introuvable', isError: true);
     } finally {
@@ -325,18 +537,11 @@ class _State extends State<DemProOrderCreateScreen> {
     if (placeId == null) return;
     FocusScope.of(context).unfocus();
     setState(() => _suggestions = []);
+    final token = _sessionToken ?? PlacesAutocompleteService.newSessionToken();
     try {
-      final res = await _publicDio.get(
-        'https://maps.googleapis.com/maps/api/place/details/json',
-        queryParameters: {
-          'place_id': placeId,
-          'fields': 'geometry,name,formatted_address',
-          'language': 'fr',
-          'key': AppConfig.mapsApiKey,
-        },
-      );
-      if (res.statusCode == 200 && res.data['status'] == 'OK') {
-        final loc = res.data['result']['geometry']['location'];
+      final result = await _placesService.details(placeId: placeId, sessionToken: token);
+      if (result != null) {
+        final loc = result['geometry']['location'];
         final lat = (loc['lat'] as num).toDouble();
         final lng = (loc['lng'] as num).toDouble();
         final name = (place['structured_formatting']?['main_text'] as String?)
@@ -347,10 +552,13 @@ class _State extends State<DemProOrderCreateScreen> {
           _deliveryAddress = name;
           _addressSearchCtrl.text = name;
         });
-        _centerMapVisible(LatLng(lat, lng));
+        _recenterMap();
+        _scheduleDraftSave();
       }
-    } catch (_) {
-      if (mounted) showDemToast(context, 'Impossible de charger l\'adresse', isError: true);
+    } catch (e) {
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
+    } finally {
+      _sessionToken = null; // fin de session — la prochaine recherche en génère une nouvelle
     }
   }
 
@@ -412,9 +620,52 @@ class _State extends State<DemProOrderCreateScreen> {
       ).timeout(const Duration(seconds: 10));
       debugPrint('[ESTIMATE] result: $est');
       if (mounted) setState(() { _estimate = est; _loadingEstimate = false; });
+      _checkAutoPromo();
     } catch (e) {
       debugPrint('[ESTIMATE] error: $e — using local fallback');
       if (mounted) setState(() { _estimate = _localEstimate(); _loadingEstimate = false; });
+    }
+  }
+
+  // Vérification silencieuse — une campagne auto-appliquée (pas de code)
+  // peut exister pour ce compte DEM Pro ; aucune erreur si non (cas normal).
+  Future<void> _checkAutoPromo() async {
+    final price = (_estimate?['price'] as num?)?.toInt();
+    if (price == null) return;
+    final demFee = (_estimate?['demFee'] as num?)?.toInt() ?? 0;
+    try {
+      final result = await _ordersRepo.getPromoPreview(price: price, demFee: demFee);
+      if (!mounted || result == null) return;
+      setState(() {
+        _discountAmount = (result['discountAmount'] as num?)?.toDouble();
+        _promoLabel     = result['promoCode'] as String?;
+      });
+    } catch (_) {} // jamais bloquant
+  }
+
+  Future<void> _applyPromoCode() async {
+    final code  = _promoCodeCtrl.text.trim();
+    final price = (_estimate?['price'] as num?)?.toInt();
+    if (code.isEmpty || price == null) return;
+    final demFee = (_estimate?['demFee'] as num?)?.toInt() ?? 0;
+    setState(() { _checkingPromo = true; _promoError = null; });
+    try {
+      final result = await _ordersRepo.getPromoPreview(price: price, demFee: demFee, code: code);
+      if (!mounted) return;
+      setState(() {
+        _discountAmount = (result?['discountAmount'] as num?)?.toDouble();
+        _promoLabel     = result?['promoCode'] as String?;
+        _checkingPromo  = false;
+      });
+      showDemToast(context, 'Code promo appliqué !');
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _checkingPromo = false;
+          _promoError = friendlyError(e);
+          _discountAmount = null;
+        });
+      }
     }
   }
 
@@ -433,7 +684,7 @@ class _State extends State<DemProOrderCreateScreen> {
       final parts = <String>[];
       final pkg = _packageTypes.firstWhere((p) => p.$1 == _packageType);
       parts.add(pkg.$2);
-      if (_isFragile) parts.add('⚠️ Fragile');
+      if (_isFragile) parts.add('Fragile');
       if (_instructionsCtrl.text.trim().isNotEmpty) parts.add(_instructionsCtrl.text.trim());
       if (_landmarkCtrl.text.trim().isNotEmpty) parts.add('Repère: ${_landmarkCtrl.text.trim()}');
 
@@ -463,12 +714,30 @@ class _State extends State<DemProOrderCreateScreen> {
         if (_scheduledAt != null) 'scheduledAt': _scheduledAt!.toUtc().toIso8601String(),
         'paymentMode': _paymentMode,
         if (items.isNotEmpty) 'items': items,
+        // Uniquement si saisi manuellement et validé (voir _applyPromoCode) —
+        // une promo auto-appliquée n'a pas besoin d'être renvoyée.
+        if (_promoError == null && _promoCodeCtrl.text.trim().isNotEmpty)
+          'promoCode': _promoCodeCtrl.text.trim(),
       });
 
       if (_selectedProAddr != null) {
         _proRepo.incrementAddressUsage(_selectedProAddr!['id'] as String);
       }
 
+      // Ferme la boucle côté serveur — la commande vient d'être créée avec
+      // succès, donc on ne bloque jamais la navigation si cet appel échoue
+      // (la demande resterait juste visible en "En attente", sans impact
+      // sur la commande elle-même).
+      if (_fromRequestId != null) {
+        final orderId = order['id'] as String?;
+        if (orderId != null) {
+          () async {
+            try { await _proRepo.confirmOrderRequest(_fromRequestId!, orderId); } catch (_) {}
+          }();
+        }
+      }
+
+      DemProDraftStorage.clearOrderDraft();
       if (mounted) context.pushReplacement('/dem-pro/orders/confirmation', extra: order);
     } catch (e) {
       if (mounted) showDemToast(context, friendlyError(e), isError: true);
@@ -480,7 +749,7 @@ class _State extends State<DemProOrderCreateScreen> {
   // ── Validation ───────────────────────────────────────────────────────────
 
   bool get _canAdvance => switch (_step) {
-    0 => _deliveryLat != null && _recipientPhoneCtrl.text.trim().length == 9,
+    0 => _deliveryLat != null && isValidSenegalMobile(_recipientPhoneCtrl.text.trim()),
     1 => true,
     _ => false,
   };
@@ -488,7 +757,7 @@ class _State extends State<DemProOrderCreateScreen> {
   String get _stepError => switch (_step) {
     0 => _deliveryLat == null
         ? 'Définissez la destination sur la carte'
-        : 'Le numéro doit contenir exactement 9 chiffres',
+        : 'Numéro mobile invalide (7X XXX XX XX)',
     _ => '',
   };
 
@@ -551,23 +820,51 @@ class _State extends State<DemProOrderCreateScreen> {
       );
       if (mounted) {
         setState(() => _routePoints = result.points);
-        _fitBounds(origin, dest);
+        _fitBoundsVisible([origin, dest]);
       }
     } catch (_) {}
   }
 
-  void _fitBounds(LatLng a, LatLng b) {
+  /// Ajuste le zoom pour que tous les [points] soient visibles au-dessus du
+  /// panneau du bas — étend artificiellement la borne sud proportionnellement
+  /// à la part d'écran cachée par le panneau, ce qui a pour effet de remonter
+  /// visuellement le cluster de points dans la portion haute de l'écran.
+  void _fitBoundsVisible(List<LatLng> points) {
+    if (points.isEmpty || _mapCtrl == null) return;
+    if (points.length == 1) { _centerMapVisible(points.first); return; }
+
+    var south = points.first.latitude,  north = points.first.latitude;
+    var west  = points.first.longitude, east  = points.first.longitude;
+    for (final p in points.skip(1)) {
+      if (p.latitude  < south) south = p.latitude;
+      if (p.latitude  > north) north = p.latitude;
+      if (p.longitude < west)  west  = p.longitude;
+      if (p.longitude > east)  east  = p.longitude;
+    }
+
+    final screenH  = MediaQuery.of(context).size.height;
+    final panelH   = _panelHeight + MediaQuery.of(context).viewPadding.bottom;
+    final hiddenFrac  = (panelH / screenH).clamp(0.05, 0.85);
+    final visibleFrac = (1 - hiddenFrac).clamp(0.15, 0.95);
+    final latSpan  = (north - south).clamp(0.0015, 1.0);
+    final extraSouth = latSpan * (hiddenFrac / visibleFrac);
+
     final bounds = LatLngBounds(
-      southwest: LatLng(
-        a.latitude < b.latitude ? a.latitude : b.latitude,
-        a.longitude < b.longitude ? a.longitude : b.longitude,
-      ),
-      northeast: LatLng(
-        a.latitude > b.latitude ? a.latitude : b.latitude,
-        a.longitude > b.longitude ? a.longitude : b.longitude,
-      ),
+      southwest: LatLng(south - extraSouth, west),
+      northeast: LatLng(north, east),
     );
-    _mapCtrl?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
+    _mapCtrl?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 56));
+  }
+
+  /// Recadre la carte sur l'ensemble des points actuellement connus
+  /// (départ et/ou destination) — à appeler après tout changement de l'un
+  /// des deux, pour garder les deux visibles dès qu'ils sont définis.
+  void _recenterMap() {
+    final points = <LatLng>[
+      if (_pickupLat != null) LatLng(_pickupLat!, _pickupLng!),
+      if (_deliveryLat != null) LatLng(_deliveryLat!, _deliveryLng!),
+    ];
+    _fitBoundsVisible(points);
   }
 
   double get _panelHeight {
@@ -584,6 +881,7 @@ class _State extends State<DemProOrderCreateScreen> {
       onPopInvokedWithResult: (didPop, _) { if (!didPop) _back(); },
       child: Scaffold(
       backgroundColor: DemProColors.bg,
+      resizeToAvoidBottomInset: false,
       body: Stack(children: [
 
         // Carte
@@ -633,25 +931,40 @@ class _State extends State<DemProOrderCreateScreen> {
             ),
           ),
 
-        // Panel bas — draggable
+        // Panel bas (infos + CTA) — remontent ensemble de façon fluide
+        // au-dessus du clavier (même logique que le sheet "Changer le
+        // départ") et reviennent à leur position normale à la fermeture
+        // du clavier. Le CTA reste hors du panneau rétractable lui-même
+        // pour ne jamais pousser la poignée hors de l'écran quand celui-ci
+        // est réduit au minimum.
         if (!_isMapPlacement)
-          DraggableScrollableSheet(
-            controller: _sheetCtrl,
-            initialChildSize: _sheetMax,
-            minChildSize: _sheetMin,
-            maxChildSize: _sheetMax,
-            snap: true,
-            snapSizes: [_sheetMin, _sheetMax],
-            builder: (context, scrollCtrl) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: DemProColors.bg2,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
+          Positioned.fill(
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: Stack(children: [
+                DraggableScrollableSheet(
+                  controller: _sheetCtrl,
+                  initialChildSize: _sheetMax,
+                  minChildSize: _sheetMin,
+                  maxChildSize: _sheetMax,
+                  snap: true,
+                  snapSizes: [_sheetMin, _sheetMax],
+                  builder: (context, scrollCtrl) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: DemProColors.bg2,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
+                      ),
+                      child: _buildPanel(scrollCtrl),
+                    );
+                  },
                 ),
-                child: _buildPanel(scrollCtrl),
-              );
-            },
+                Positioned(bottom: 0, left: 0, right: 0, child: _buildNavButtons()),
+              ]),
+            ),
           ),
       ]),
     ),
@@ -686,10 +999,10 @@ class _State extends State<DemProOrderCreateScreen> {
           Row(children: [
             Text(
               _isScheduled ? 'Programmer une livraison' : 'Nouvelle livraison',
-              style: const TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w700),
+              style: DemProText.subtitle,
             ),
             const Spacer(),
-            Text(_stepMeta[_step].$3, style: const TextStyle(color: DemProColors.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(_stepMeta[_step].$3, style: DemProText.caption.copyWith(color: DemProColors.accent)),
           ]),
           const SizedBox(height: 6),
           Row(children: List.generate(3, (i) => Expanded(child: Padding(
@@ -718,7 +1031,7 @@ class _State extends State<DemProOrderCreateScreen> {
         const SizedBox(height: 12),
         Text(
           _placingPickup ? 'Positionnez le point de départ' : 'Positionnez la destination',
-          style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600),
+          style: DemProText.bodyStrong,
         ),
         const SizedBox(height: 12),
         SizedBox(width: double.infinity, height: 48,
@@ -730,7 +1043,7 @@ class _State extends State<DemProOrderCreateScreen> {
                 onTap: _geocoding ? null : _confirmPlacement,
                 child: Center(child: _geocoding
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Confirmer la position', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                    : const Text('Confirmer la position', style: DemProText.button),
                 ),
               ),
             ),
@@ -741,46 +1054,52 @@ class _State extends State<DemProOrderCreateScreen> {
 
   // ── Panel principal ───────────────────────────────────────────────────────
 
-  Widget _buildPanel(ScrollController scrollCtrl) => CustomScrollView(
-    controller: scrollCtrl,
-    slivers: [
-      // ── Handle drag ──────────────────────────────────────────────────────
-      SliverToBoxAdapter(child: Center(child: Padding(
-        padding: const EdgeInsets.only(top: 12, bottom: 8),
-        child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
-      ))),
+  // Le CTA (bouton Suivant/Confirmer) n'appartient pas à ce panneau — il
+  // flotte en dehors (voir `build`) pour rester visible même quand le
+  // panneau est réduit à sa taille minimale (poignée + bandeau uniquement).
+  // Un tap dans une zone vide referme le clavier (au lieu d'obliger à
+  // scroller pour retrouver un bouton).
+  Widget _buildPanel(ScrollController scrollCtrl) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => FocusScope.of(context).unfocus(),
+    child: CustomScrollView(
+      controller: scrollCtrl,
+      slivers: [
+        // ── Handle drag ──────────────────────────────────────────────────────
+        SliverToBoxAdapter(child: Center(child: Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 8),
+          child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
+        ))),
 
-      // ── Bandeau départ ────────────────────────────────────────────────────
-      SliverToBoxAdapter(child: _DepartureBanner(
-        label: _selectedProAddr?['label'] as String?,
-        address: _pickupAddress,
-        loading: _loadingGps,
-        onTap: () => _showChangeDeparture(),
-      )),
+        // ── Bandeau départ ────────────────────────────────────────────────────
+        SliverToBoxAdapter(child: _DepartureBanner(
+          label: _selectedProAddr?['label'] as String?,
+          address: _pickupAddress,
+          loading: _loadingGps,
+          onTap: () => _showChangeDeparture(),
+        )),
 
-      // ── Titre étape ───────────────────────────────────────────────────────
-      SliverToBoxAdapter(child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-        child: Row(children: [
-          Icon(_stepMeta[_step].$1, color: DemProColors.accent, size: 18),
-          const SizedBox(width: 8),
-          Text(_stepMeta[_step].$2, style: const TextStyle(color: DemProColors.text, fontSize: 16, fontWeight: FontWeight.w800)),
-        ]),
-      )),
+        // ── Titre étape ───────────────────────────────────────────────────────
+        SliverToBoxAdapter(child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+          child: Row(children: [
+            Icon(_stepMeta[_step].$1, color: DemProColors.accent, size: 18),
+            const SizedBox(width: 8),
+            Text(_stepMeta[_step].$2, style: DemProText.title),
+          ]),
+        )),
 
-      // ── Contenu ───────────────────────────────────────────────────────────
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-        sliver: SliverToBoxAdapter(child: switch (_step) {
-          0 => _buildStep0(),
-          1 => _buildStep1(),
-          _ => _buildStep2(),
-        }),
-      ),
-
-      // ── Boutons ───────────────────────────────────────────────────────────
-      SliverToBoxAdapter(child: _buildNavButtons()),
-    ],
+        // ── Contenu — le padding bas laisse la place au CTA flottant ─────────
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+          sliver: SliverToBoxAdapter(child: switch (_step) {
+            0 => _buildStep0(),
+            1 => _buildStep1(),
+            _ => _buildStep2(),
+          }),
+        ),
+      ],
+    ),
   );
 
   // ── Étape 0 — Destination ─────────────────────────────────────────────────
@@ -792,13 +1111,13 @@ class _State extends State<DemProOrderCreateScreen> {
       Expanded(
         child: TextField(
           controller: _addressSearchCtrl,
-          style: const TextStyle(color: DemProColors.text, fontSize: 13),
+          style: DemProText.body,
           textInputAction: TextInputAction.search,
           onChanged: _onAddressChanged,
           onSubmitted: _forwardGeocode,
           decoration: InputDecoration(
             hintText: 'Saisir une adresse…',
-            hintStyle: const TextStyle(color: DemProColors.muted, fontSize: 12),
+            hintStyle: DemProText.caption,
             prefixIcon: _searchingAddress
                 ? const Padding(
                     padding: EdgeInsets.all(12),
@@ -834,53 +1153,77 @@ class _State extends State<DemProOrderCreateScreen> {
       GestureDetector(
         onTap: () => _enterMapPlacement(forPickup: false),
         child: Container(
-          width: 48, height: 48,
+          width: 56, height: 48,
           decoration: BoxDecoration(
             color: DemProColors.accent.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
           ),
-          child: const Icon(Icons.map_outlined, color: DemProColors.accent, size: 22),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.map_outlined, color: DemProColors.accent, size: 18),
+            const SizedBox(height: 1),
+            Text('Carte', style: DemProText.micro.copyWith(color: DemProColors.accent)),
+          ]),
         ),
       ),
     ]),
 
-    // Suggestions Google Places
-    if (_suggestions.isNotEmpty)
+    // Destinations récentes (avant saisie)
+    if (_addressSearchCtrl.text.isEmpty && _suggestions.isEmpty && _deliveryLat == null && _recentDestinations.isNotEmpty)
       Container(
-        margin: const EdgeInsets.only(top: 4),
-        constraints: const BoxConstraints(maxHeight: 200),
+        margin: const EdgeInsets.only(top: 8),
+        constraints: const BoxConstraints(maxHeight: 220),
         decoration: BoxDecoration(
           color: DemProColors.bg3,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: DemProColors.bg4),
         ),
-        child: ListView.separated(
+        child: ListView(
           padding: EdgeInsets.zero,
           shrinkWrap: true,
-          itemCount: _suggestions.length,
-          separatorBuilder: (_, __) => Divider(height: 1, color: DemProColors.bg4.withValues(alpha: 0.5)),
-          itemBuilder: (_, i) {
-            final p = _suggestions[i];
-            final fmt = p['structured_formatting'] as Map<String, dynamic>?;
-            final main = fmt?['main_text'] as String? ?? p['description'] as String? ?? '';
-            final secondary = fmt?['secondary_text'] as String? ?? '';
-            return InkWell(
-              onTap: () => _selectSuggestion(p),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                child: Row(children: [
-                  const Icon(Icons.place_outlined, color: DemProColors.muted, size: 16),
-                  const SizedBox(width: 10),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(main, style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    if (secondary.isNotEmpty)
-                      Text(secondary, style: const TextStyle(color: DemProColors.muted, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ])),
-                ]),
-              ),
-            );
-          },
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: Row(children: [
+                const Icon(Icons.history, color: DemProColors.muted, size: 14),
+                const SizedBox(width: 6),
+                const Text('Destinations récentes', style: DemProText.micro),
+              ]),
+            ),
+            ..._recentDestinations.map((d) {
+              final address = d['address'] as String? ?? '';
+              final name    = d['receiverName'] as String?;
+              return InkWell(
+                onTap: () => _applyRecentDestination(d),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  child: Row(children: [
+                    const Icon(Icons.place_outlined, color: DemProColors.accent, size: 16),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(address, style: DemProText.bodyStrong, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      if (name != null && name.isNotEmpty)
+                        Text(name, style: DemProText.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ])),
+                  ]),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+
+    // Suggestions Google Places
+    if (_suggestions.isNotEmpty || _searchingAddress || _searchError != null)
+      Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: PlaceSuggestionsList(
+          suggestions: _suggestions,
+          loading: _searchingAddress,
+          error: _searchError,
+          onRetry: _retryAddressSearch,
+          onSelect: _selectSuggestion,
+          colors: _placeSuggestionsColors,
         ),
       ),
     const SizedBox(height: 14),
@@ -890,7 +1233,12 @@ class _State extends State<DemProOrderCreateScreen> {
 
     _FieldLabel('Nom du client (optionnel)'),
     const SizedBox(height: 6),
-    _ProTextField(controller: _recipientNameCtrl, hint: 'Prénom Nom'),
+    _ProTextField(
+      controller: _recipientNameCtrl,
+      hint: 'Prénom Nom',
+      textInputAction: TextInputAction.next,
+      onChanged: (_) => _scheduleDraftSave(),
+    ),
     const SizedBox(height: 14),
 
     _FieldLabel('Téléphone du client *'),
@@ -902,11 +1250,47 @@ class _State extends State<DemProOrderCreateScreen> {
       keyboardType: TextInputType.phone,
       maxLength: 9,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      onChanged: (_) => setState(() {}),
+      textInputAction: TextInputAction.done,
+      onSubmitted: (_) => FocusScope.of(context).unfocus(),
+      onChanged: (_) { setState(() {}); _scheduleDraftSave(); },
+      suffixIcon: _recipientPhoneCtrl.text.isEmpty ? null : Icon(
+        isValidSenegalMobile(_recipientPhoneCtrl.text.trim()) ? Icons.check_circle : Icons.error_outline,
+        color: isValidSenegalMobile(_recipientPhoneCtrl.text.trim()) ? DemProColors.success : DemProColors.danger,
+        size: 18,
+      ),
     ),
   ]);
 
   // ── Étape 1 — Colis ──────────────────────────────────────────────────────
+
+  // ── Catalogue produits ────────────────────────────────────────────────────
+
+  Future<void> _openProductPicker() async {
+    final product = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ProductPickerSheet(repo: _proRepo),
+    );
+    if (product == null) return;
+
+    final name  = product['name'] as String? ?? '';
+    final price = product['defaultPrice'] as num?;
+    setState(() {
+      // Réutilise la dernière ligne si elle est encore vide (cas le plus
+      // fréquent : premier article de la commande) plutôt que d'empiler une
+      // ligne vide au-dessus de celle choisie dans le catalogue.
+      final last = _articles.isNotEmpty ? _articles.last : null;
+      final target = (last != null && last.nameCtrl.text.trim().isEmpty) ? last : _Article();
+      if (!identical(target, last)) _articles.add(target);
+      target.nameCtrl.text = name;
+      target.priceCtrl.text = price != null ? price.toInt().toString() : '';
+    });
+    _scheduleDraftSave();
+
+    final id = product['id'] as String?;
+    if (id != null) _proRepo.incrementProductUsage(id);
+  }
 
   Widget _buildStep1() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
@@ -926,43 +1310,65 @@ class _State extends State<DemProOrderCreateScreen> {
         child: Column(children: [
           Row(children: [
             CircleAvatar(radius: 12, backgroundColor: DemProColors.accent.withValues(alpha: 0.15),
-              child: Text('${i + 1}', style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w800))),
+              child: Text('${i + 1}', style: DemProText.micro.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800))),
             const SizedBox(width: 10),
-            Expanded(child: _ProTextField(controller: a.nameCtrl, hint: 'Nom du produit')),
+            Expanded(child: _ProTextField(controller: a.nameCtrl, hint: 'Nom du produit', onChanged: (_) => _scheduleDraftSave())),
             if (_articles.length > 1) ...[
               const SizedBox(width: 6),
               GestureDetector(
-                onTap: () => setState(() { _articles[i].dispose(); _articles.removeAt(i); }),
+                onTap: () { setState(() { _articles[i].dispose(); _articles.removeAt(i); }); _scheduleDraftSave(); },
                 child: const Icon(Icons.remove_circle_outline, color: DemProColors.danger, size: 20),
               ),
             ],
           ]),
           const SizedBox(height: 8),
           Row(children: [
-            Expanded(child: _ProTextField(controller: a.qtyCtrl, hint: 'Qté', keyboardType: TextInputType.number)),
+            Expanded(child: _ProTextField(controller: a.qtyCtrl, hint: 'Qté', keyboardType: TextInputType.number, onChanged: (_) => _scheduleDraftSave())),
             const SizedBox(width: 10),
-            Expanded(flex: 2, child: _ProTextField(controller: a.priceCtrl, hint: 'Prix (FCFA)', keyboardType: TextInputType.number)),
+            Expanded(flex: 2, child: _ProTextField(controller: a.priceCtrl, hint: 'Prix (FCFA)', keyboardType: TextInputType.number, onChanged: (_) => _scheduleDraftSave())),
           ]),
         ]),
       );
     }),
     if (_articles.length < 10)
-      GestureDetector(
-        onTap: () => setState(() => _articles.add(_Article())),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
+      Row(children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: _openProductPicker,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: DemProColors.accent.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
+              ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.inventory_2_outlined, color: DemProColors.accent, size: 16),
+                const SizedBox(width: 6),
+                Text('Catalogue', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
+              ]),
+            ),
           ),
-          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.add, color: DemProColors.accent, size: 16),
-            SizedBox(width: 6),
-            Text('Ajouter un article', style: TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w600)),
-          ]),
         ),
-      ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: GestureDetector(
+            onTap: () { setState(() => _articles.add(_Article())); _scheduleDraftSave(); },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
+              ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.add, color: DemProColors.accent, size: 16),
+                const SizedBox(width: 6),
+                Text('Ajouter', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
+              ]),
+            ),
+          ),
+        ),
+      ]),
     const SizedBox(height: 16),
     const Divider(color: DemProColors.bg3, height: 1),
     const SizedBox(height: 14),
@@ -973,14 +1379,14 @@ class _State extends State<DemProOrderCreateScreen> {
     ..._packageTypes.map((t) => _PackageTypeRow(
       type: t.$1, label: t.$2, icon: t.$3, subtitle: t.$4,
       selected: _packageType == t.$1,
-      onTap: () => setState(() => _packageType = t.$1),
+      onTap: () { setState(() => _packageType = t.$1); _scheduleDraftSave(); },
     )),
     const SizedBox(height: 14),
     Container(
       decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.bg4)),
       child: SwitchListTile(
         value: _isFragile,
-        onChanged: (v) => setState(() => _isFragile = v),
+        onChanged: (v) { setState(() => _isFragile = v); _scheduleDraftSave(); },
         activeTrackColor: DemProColors.warning,
         activeThumbColor: Colors.white,
         inactiveThumbColor: Colors.white,
@@ -988,9 +1394,9 @@ class _State extends State<DemProOrderCreateScreen> {
         title: const Row(children: [
           Icon(Icons.warning_amber_outlined, color: DemProColors.warning, size: 18),
           SizedBox(width: 8),
-          Text('Fragile', style: TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w600)),
+          Text('Fragile', style: DemProText.subtitle),
         ]),
-        subtitle: const Text('Le livreur sera notifié de faire attention', style: TextStyle(color: DemProColors.muted, fontSize: 11.5)),
+        subtitle: const Text('Le livreur sera notifié de faire attention', style: DemProText.caption),
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       ),
@@ -1004,7 +1410,7 @@ class _State extends State<DemProOrderCreateScreen> {
     const SizedBox(height: 10),
     Row(children: [
       Expanded(child: GestureDetector(
-        onTap: () => setState(() => _paymentMode = 'merchant'),
+        onTap: () { setState(() => _paymentMode = 'merchant'); _scheduleDraftSave(); },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
@@ -1020,22 +1426,20 @@ class _State extends State<DemProOrderCreateScreen> {
               color: _paymentMode == 'merchant' ? DemProColors.accent : DemProColors.muted, size: 22),
             const SizedBox(height: 6),
             Text('Je paie',
-              style: TextStyle(
+              style: DemProText.bodyStrong.copyWith(
                 color: _paymentMode == 'merchant' ? DemProColors.accent : DemProColors.muted,
-                fontSize: 13, fontWeight: FontWeight.w700,
               )),
             const SizedBox(height: 2),
             Text('Paiement en ligne',
-              style: TextStyle(
+              style: DemProText.micro.copyWith(
                 color: _paymentMode == 'merchant' ? DemProColors.accent.withValues(alpha: 0.7) : DemProColors.muted,
-                fontSize: 10,
               )),
           ]),
         ),
       )),
       const SizedBox(width: 10),
       Expanded(child: GestureDetector(
-        onTap: () => setState(() => _paymentMode = 'cod'),
+        onTap: () { setState(() => _paymentMode = 'cod'); _scheduleDraftSave(); },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
@@ -1051,15 +1455,13 @@ class _State extends State<DemProOrderCreateScreen> {
               color: _paymentMode == 'cod' ? DemProColors.accent : DemProColors.muted, size: 22),
             const SizedBox(height: 6),
             Text('Client paie',
-              style: TextStyle(
+              style: DemProText.bodyStrong.copyWith(
                 color: _paymentMode == 'cod' ? DemProColors.accent : DemProColors.muted,
-                fontSize: 13, fontWeight: FontWeight.w700,
               )),
             const SizedBox(height: 2),
             Text('À la livraison',
-              style: TextStyle(
+              style: DemProText.micro.copyWith(
                 color: _paymentMode == 'cod' ? DemProColors.accent.withValues(alpha: 0.7) : DemProColors.muted,
-                fontSize: 10,
               )),
           ]),
         ),
@@ -1072,7 +1474,7 @@ class _State extends State<DemProOrderCreateScreen> {
     // ── Instructions ──────────────────────────────────────────────────────
     _FieldLabel('Instructions pour le livreur (optionnel)'),
     const SizedBox(height: 6),
-    _ProTextField(controller: _instructionsCtrl, hint: 'ex: Appeler à l\'arrivée…', maxLines: 3),
+    _ProTextField(controller: _instructionsCtrl, hint: 'ex: Appeler à l\'arrivée…', maxLines: 3, onChanged: (_) => _scheduleDraftSave()),
 
     // ── Livraison programmée (uniquement si lancé depuis "Programmer") ──
     if (widget.scheduled) ...[
@@ -1094,9 +1496,9 @@ class _State extends State<DemProOrderCreateScreen> {
         title: const Row(children: [
           Icon(Icons.schedule, color: DemProColors.accent, size: 18),
           SizedBox(width: 8),
-          Text('Programmer la livraison', style: TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w600)),
+          Text('Programmer la livraison', style: DemProText.subtitle),
         ]),
-        subtitle: const Text('Choisir une date et heure précise', style: TextStyle(color: DemProColors.muted, fontSize: 11.5)),
+        subtitle: const Text('Choisir une date et heure précise', style: DemProText.caption),
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       ),
@@ -1118,10 +1520,10 @@ class _State extends State<DemProOrderCreateScreen> {
             const SizedBox(width: 10),
             Expanded(child: _scheduledAt != null
                 ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(_fmtDate(_scheduledAt!), style: const TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w700)),
-                    Text(_fmtTime(_scheduledAt!), style: const TextStyle(color: DemProColors.muted, fontSize: 12)),
+                    Text(_fmtDate(_scheduledAt!), style: DemProText.subtitle),
+                    Text(_fmtTime(_scheduledAt!), style: DemProText.caption),
                   ])
-                : const Text('Appuyez pour choisir la date', style: TextStyle(color: DemProColors.warning, fontSize: 13, fontWeight: FontWeight.w600)),
+                : Text('Appuyez pour choisir la date', style: DemProText.bodyStrong.copyWith(color: DemProColors.warning)),
             ),
             Icon(Icons.edit_outlined, color: _scheduledAt != null ? DemProColors.muted : DemProColors.warning, size: 16),
           ]),
@@ -1171,7 +1573,7 @@ class _State extends State<DemProOrderCreateScreen> {
                   if (_recipientNameCtrl.text.trim().isNotEmpty) _recipientNameCtrl.text.trim(),
                   if (_recipientPhoneCtrl.text.trim().isNotEmpty) '+221 ${_recipientPhoneCtrl.text.trim()}',
                 ].join(' · '),
-                style: const TextStyle(color: DemProColors.muted, fontSize: 12),
+                style: DemProText.caption,
               )),
             ]),
           ],
@@ -1187,13 +1589,13 @@ class _State extends State<DemProOrderCreateScreen> {
           Icon(_packageTypes.firstWhere((t) => t.$1 == _packageType).$3, color: DemProColors.accent, size: 18),
           const SizedBox(width: 10),
           Text(_packageTypes.firstWhere((t) => t.$1 == _packageType).$2,
-            style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600)),
+            style: DemProText.bodyStrong),
           if (_isFragile) ...[
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(color: DemProColors.warning.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-              child: const Text('Fragile', style: TextStyle(color: DemProColors.warning, fontSize: 10, fontWeight: FontWeight.w700)),
+              child: Text('Fragile', style: DemProText.micro.copyWith(color: DemProColors.warning)),
             ),
           ],
         ]),
@@ -1210,7 +1612,7 @@ class _State extends State<DemProOrderCreateScreen> {
             const Row(children: [
               Icon(Icons.shopping_bag_outlined, color: DemProColors.accent, size: 16),
               SizedBox(width: 8),
-              Text('Articles', style: TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w700)),
+              Text('Articles', style: DemProText.bodyStrong),
             ]),
             const SizedBox(height: 8),
             ..._articles.where((a) => a.nameCtrl.text.trim().isNotEmpty).map((a) {
@@ -1219,13 +1621,13 @@ class _State extends State<DemProOrderCreateScreen> {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(children: [
-                  const Text('•  ', style: TextStyle(color: DemProColors.muted, fontSize: 12)),
+                  const Text('•  ', style: DemProText.caption),
                   Expanded(child: Text(
                     '${a.nameCtrl.text.trim()} × $qty',
-                    style: const TextStyle(color: DemProColors.text, fontSize: 12),
+                    style: DemProText.caption.copyWith(color: DemProColors.text),
                   )),
                   if (price != null)
-                    Text('$price FCFA', style: const TextStyle(color: DemProColors.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                    Text('$price FCFA', style: DemProText.caption),
                 ]),
               );
             }),
@@ -1242,7 +1644,7 @@ class _State extends State<DemProOrderCreateScreen> {
           const SizedBox(width: 10),
           Text(
             _paymentMode == 'merchant' ? 'Vous payez la livraison' : 'Le client paie à la livraison',
-            style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600),
+            style: DemProText.bodyStrong,
           ),
         ]),
       ),
@@ -1260,9 +1662,9 @@ class _State extends State<DemProOrderCreateScreen> {
             const Icon(Icons.schedule, color: DemProColors.accent, size: 18),
             const SizedBox(width: 10),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Livraison programmée', style: TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700)),
+              Text('Livraison programmée', style: DemProText.micro.copyWith(color: DemProColors.accent)),
               Text('${_fmtDate(_scheduledAt!)} à ${_fmtTime(_scheduledAt!)}',
-                style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600)),
+                style: DemProText.bodyStrong),
             ]),
           ]),
         ),
@@ -1284,12 +1686,24 @@ class _State extends State<DemProOrderCreateScreen> {
             border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
           ),
           child: Column(children: [
-            Text('${_fmtFcfa(total)} FCFA',
-              style: const TextStyle(color: DemProColors.accent, fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+            // Le livreur touche toujours `total` en entier — la réduction ne
+            // change que ce que DEM Pro/le destinataire paie réellement (voir
+            // orders.service.js:confirmPayment côté serveur).
+            if (_discountAmount != null && _discountAmount! > 0) ...[
+              Text(DemProFormat.fcfa(total),
+                  style: DemProText.caption.copyWith(decoration: TextDecoration.lineThrough)),
+              const SizedBox(height: 2),
+              Text(DemProFormat.fcfa((total - _discountAmount!).clamp(0, double.infinity)),
+                  style: DemProText.hero.copyWith(color: DemProColors.success)),
+              const SizedBox(height: 4),
+              Text(_promoLabel != null ? 'Réduction appliquée ($_promoLabel)' : 'Réduction appliquée',
+                  style: DemProText.caption.copyWith(color: DemProColors.success)),
+            ] else
+              Text(DemProFormat.fcfa(total), style: DemProText.hero),
             if (dist != null || dur != null) ...[
               const SizedBox(height: 4),
               Text([if (dist != null) '$dist km', if (dur != null) '~$dur min'].join(' · '),
-                style: const TextStyle(color: DemProColors.muted, fontSize: 12)),
+                style: DemProText.caption),
             ],
           ]),
         )
@@ -1299,13 +1713,59 @@ class _State extends State<DemProOrderCreateScreen> {
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.warning.withValues(alpha: 0.4))),
-            child: const Row(children: [
-              Icon(Icons.refresh, color: DemProColors.warning, size: 16),
-              SizedBox(width: 8),
-              Expanded(child: Text('Impossible de calculer le prix. Appuyez pour réessayer.', style: TextStyle(color: DemProColors.warning, fontSize: 12))),
+            child: Row(children: [
+              const Icon(Icons.refresh, color: DemProColors.warning, size: 16),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Impossible de calculer le prix. Appuyez pour réessayer.', style: DemProText.caption.copyWith(color: DemProColors.warning))),
             ]),
           ),
         ),
+      if (total != null) ...[
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: _promoCodeCtrl,
+              textCapitalization: TextCapitalization.characters,
+              style: DemProText.body,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Code promo (optionnel)',
+                hintStyle: DemProText.caption,
+                filled: true,
+                fillColor: DemProColors.bg3,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _checkingPromo ? null : _applyPromoCode,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              decoration: BoxDecoration(
+                color: (_discountAmount != null && _discountAmount! > 0)
+                    ? DemProColors.success.withValues(alpha: 0.15)
+                    : DemProColors.accent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: _checkingPromo
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: DemProColors.accent))
+                  : Text(
+                      (_discountAmount != null && _discountAmount! > 0) ? 'Appliqué ✓' : 'Appliquer',
+                      style: DemProText.bodyStrong.copyWith(
+                        color: (_discountAmount != null && _discountAmount! > 0) ? DemProColors.success : DemProColors.accent,
+                      ),
+                    ),
+            ),
+          ),
+        ]),
+        if (_promoError != null) ...[
+          const SizedBox(height: 4),
+          Text(_promoError!, style: DemProText.caption.copyWith(color: DemProColors.danger)),
+        ],
+      ],
       const SizedBox(height: 8),
     ]);
   }
@@ -1383,6 +1843,7 @@ class _State extends State<DemProOrderCreateScreen> {
       return;
     }
     setState(() => _scheduledAt = picked);
+    _scheduleDraftSave();
   }
 
   static String _fmtDate(DateTime dt) {
@@ -1407,11 +1868,25 @@ class _State extends State<DemProOrderCreateScreen> {
         proAddresses:  _proAddresses,
         selectedId:    _selectedProAddr?['id'] as String?,
         loadingGps:    _loadingGps,
+        dio:           _publicDio,
         onSelect:      (addr) { Navigator.pop(context); _applyProAddress(addr); },
         onGps:         () { Navigator.pop(context); _fetchGps(); },
         onMap:         () { Navigator.pop(context); _enterMapPlacement(forPickup: true); },
+        onManualAddress: (lat, lng, address) { Navigator.pop(context); _applyManualPickup(lat, lng, address); },
       ),
     );
+  }
+
+  void _applyManualPickup(double lat, double lng, String address) {
+    setState(() {
+      _selectedProAddr = null;
+      _pickupLat = lat;
+      _pickupLng = lng;
+      _pickupAddress = address;
+    });
+    _recenterMap();
+    if (_step == 2) { _fetchEstimate(); _fetchRoute(); }
+    _scheduleDraftSave();
   }
 }
 
@@ -1441,19 +1916,19 @@ class _DepartureBanner extends StatelessWidget {
         const Icon(Icons.location_on, color: DemProColors.accent, size: 18),
         const SizedBox(width: 8),
         Expanded(child: loading
-            ? const Text('Localisation en cours…', style: TextStyle(color: DemProColors.muted, fontSize: 12))
+            ? const Text('Localisation en cours…', style: DemProText.caption)
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 if (label != null)
-                  Text(label!, style: const TextStyle(color: DemProColors.text, fontSize: 12, fontWeight: FontWeight.w700)),
+                  Text(label!, style: DemProText.caption.copyWith(color: DemProColors.text, fontWeight: FontWeight.w700)),
                 Text(
                   address.isNotEmpty ? address : 'Aucun départ sélectionné',
-                  style: const TextStyle(color: DemProColors.muted, fontSize: 11.5),
+                  style: DemProText.caption,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ])),
         const SizedBox(width: 8),
-        const Text('Changer', style: TextStyle(color: DemProColors.accent, fontSize: 11.5, fontWeight: FontWeight.w700)),
+        Text('Changer', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
         const Icon(Icons.chevron_right, color: DemProColors.accent, size: 16),
       ]),
     ),
@@ -1464,19 +1939,27 @@ class _DepartureBanner extends StatelessWidget {
 // Sheet — changer le départ
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ChangeDepartureSheet extends StatelessWidget {
+class _ChangeDepartureSheet extends StatefulWidget {
   final List<Map<String, dynamic>> proAddresses;
   final String? selectedId;
   final bool    loadingGps;
+  final Dio dio;
   final void Function(Map<String, dynamic>) onSelect;
   final VoidCallback onGps;
   final VoidCallback onMap;
+  final void Function(double lat, double lng, String address) onManualAddress;
   const _ChangeDepartureSheet({
     required this.proAddresses, required this.selectedId,
-    required this.loadingGps, required this.onSelect,
-    required this.onGps, required this.onMap,
+    required this.loadingGps, required this.dio,
+    required this.onSelect, required this.onGps, required this.onMap,
+    required this.onManualAddress,
   });
 
+  @override
+  State<_ChangeDepartureSheet> createState() => _ChangeDepartureSheetState();
+}
+
+class _ChangeDepartureSheetState extends State<_ChangeDepartureSheet> {
   static const _iconMap = {
     'store':     Icons.storefront_outlined,
     'warehouse': Icons.warehouse_outlined,
@@ -1485,30 +1968,143 @@ class _ChangeDepartureSheet extends StatelessWidget {
     'other':     Icons.place_outlined,
   };
 
+  final _searchCtrl = TextEditingController();
+  Timer? _debounce;
+  List<Map<String, dynamic>> _suggestions = [];
+  bool _searching = false;
+  String? _searchError;
+  String? _sessionToken;
+  late final _placesService = PlacesAutocompleteService(widget.dio);
+
   @override
-  Widget build(BuildContext context) => Container(
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String query) {
+    _debounce?.cancel();
+    if (query.trim().length < 3) {
+      if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
+      return;
+    }
+    _sessionToken ??= PlacesAutocompleteService.newSessionToken();
+    _debounce = Timer(const Duration(milliseconds: 450), () async {
+      setState(() { _searching = true; _searchError = null; });
+      try {
+        final preds = await _placesService.autocomplete(query: query, sessionToken: _sessionToken!);
+        if (mounted) setState(() { _suggestions = preds; _searching = false; });
+      } catch (e) {
+        if (mounted) setState(() { _searching = false; _searchError = friendlyError(e); });
+      }
+    });
+  }
+
+  void _retrySearch() => _onChanged(_searchCtrl.text);
+
+  Future<void> _selectSuggestion(Map<String, dynamic> place) async {
+    final placeId = place['place_id'] as String?;
+    if (placeId == null) return;
+    final token = _sessionToken ?? PlacesAutocompleteService.newSessionToken();
+    try {
+      final result = await _placesService.details(placeId: placeId, sessionToken: token);
+      if (result != null) {
+        final loc = result['geometry']['location'];
+        final lat = (loc['lat'] as num).toDouble();
+        final lng = (loc['lng'] as num).toDouble();
+        final name = (place['structured_formatting']?['main_text'] as String?)
+            ?? place['description'] as String? ?? '';
+        widget.onManualAddress(lat, lng, name);
+      }
+    } catch (_) {
+    } finally {
+      _sessionToken = null;
+    }
+  }
+
+  Future<void> _submitManual(String query) async {
+    if (query.trim().length < 3) return;
+    setState(() => _searching = true);
+    try {
+      final locations = await geo.locationFromAddress('$query, Dakar, Sénégal')
+          .timeout(const Duration(seconds: 6));
+      if (locations.isEmpty) return;
+      final loc = locations.first;
+      widget.onManualAddress(loc.latitude, loc.longitude, query.trim());
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  @override
+  // Remonte au-dessus du clavier (sinon le champ de recherche se retrouve
+  // caché derrière une fois le focus pris) et devient scrollable pour ne
+  // jamais déborder une fois le clavier ouvert.
+  Widget build(BuildContext context) => AnimatedPadding(
+    duration: const Duration(milliseconds: 120),
+    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+    child: Container(
+    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
     decoration: const BoxDecoration(
       color: DemProColors.bg2,
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewPadding.bottom),
-    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+    child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Center(child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
       )),
-      const Text('Point de départ', style: TextStyle(color: DemProColors.text, fontSize: 16, fontWeight: FontWeight.w800)),
+      const Text('Point de départ', style: DemProText.title),
+      const SizedBox(height: 14),
+
+      // Recherche manuelle avec autocomplete
+      TextField(
+        controller: _searchCtrl,
+        style: DemProText.body,
+        textInputAction: TextInputAction.search,
+        onChanged: _onChanged,
+        onSubmitted: _submitManual,
+        decoration: InputDecoration(
+          hintText: 'Saisir l\'adresse d\'expédition…',
+          hintStyle: DemProText.caption,
+          prefixIcon: _searching
+              ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2)))
+              : const Icon(Icons.search, color: DemProColors.muted, size: 18),
+          filled: true,
+          fillColor: DemProColors.bg3,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
+      if (_suggestions.isNotEmpty || _searching || _searchError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: PlaceSuggestionsList(
+            suggestions: _suggestions,
+            loading: _searching,
+            error: _searchError,
+            onRetry: _retrySearch,
+            onSelect: _selectSuggestion,
+            colors: _placeSuggestionsColors,
+            maxHeight: 180,
+          ),
+        ),
       const SizedBox(height: 14),
 
       // Adresses Pro
-      if (proAddresses.isNotEmpty) ...[
-        const Text('Mes adresses', style: TextStyle(color: DemProColors.muted, fontSize: 11, fontWeight: FontWeight.w600)),
+      if (widget.proAddresses.isNotEmpty) ...[
+        const Text('Mes adresses', style: DemProText.micro),
         const SizedBox(height: 8),
-        ...proAddresses.map((a) {
-          final isSelected = a['id'] == selectedId;
+        ...widget.proAddresses.map((a) {
+          final isSelected = a['id'] == widget.selectedId;
           final icon = _iconMap[a['icon'] as String? ?? 'other'] ?? Icons.place_outlined;
           return GestureDetector(
-            onTap: () => onSelect(a),
+            onTap: () => widget.onSelect(a),
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
@@ -1521,8 +2117,8 @@ class _ChangeDepartureSheet extends StatelessWidget {
                 Icon(icon, color: DemProColors.accent, size: 20),
                 const SizedBox(width: 10),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(a['label'] as String? ?? '', style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w700)),
-                  Text(a['address'] as String? ?? '', style: const TextStyle(color: DemProColors.muted, fontSize: 11.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(a['label'] as String? ?? '', style: DemProText.bodyStrong),
+                  Text(a['address'] as String? ?? '', style: DemProText.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
                 ])),
                 if (isSelected) const Icon(Icons.check_circle, color: DemProColors.accent, size: 18),
               ]),
@@ -1533,11 +2129,11 @@ class _ChangeDepartureSheet extends StatelessWidget {
       ],
 
       // Actions alternatives
-      _SheetAction(icon: Icons.my_location, label: 'Ma position actuelle', loading: loadingGps, onTap: onGps),
+      _SheetAction(icon: Icons.my_location, label: 'Ma position actuelle', loading: widget.loadingGps, onTap: widget.onGps),
       const SizedBox(height: 8),
-      _SheetAction(icon: Icons.map_outlined, label: 'Pointer sur la carte', onTap: onMap),
-    ]),
-  );
+      _SheetAction(icon: Icons.map_outlined, label: 'Pointer sur la carte', onTap: widget.onMap),
+    ])),
+  ));
 }
 
 class _SheetAction extends StatelessWidget {
@@ -1559,8 +2155,71 @@ class _SheetAction extends StatelessWidget {
           : Row(children: [
               Icon(icon, color: DemProColors.muted, size: 18),
               const SizedBox(width: 10),
-              Text(label, style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(label, style: DemProText.bodyStrong),
             ]),
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sheet — reprise de brouillon
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DraftResumeSheet extends StatelessWidget {
+  final String? savedAt;
+  final VoidCallback onResume;
+  final VoidCallback onDiscard;
+  const _DraftResumeSheet({required this.savedAt, required this.onResume, required this.onDiscard});
+
+  String get _label {
+    final dt = savedAt != null ? DateTime.tryParse(savedAt!)?.toLocal() : null;
+    if (dt == null) return 'Vous avez une livraison en cours de saisie.';
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return 'Brouillon enregistré à $h:$m.';
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: DemProColors.bg2,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: DemProColors.bg4),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.description_outlined, color: DemProColors.accent, size: 32),
+        const SizedBox(height: 12),
+        const Text('Reprendre votre brouillon ?', style: DemProText.title),
+        const SizedBox(height: 6),
+        Text(_label, textAlign: TextAlign.center, style: DemProText.caption),
+        const SizedBox(height: 18),
+        Row(children: [
+          Expanded(child: OutlinedButton(
+            onPressed: onDiscard,
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: DemProColors.bg4),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('Nouvelle livraison', style: DemProText.bodyStrong.copyWith(color: DemProColors.muted)),
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: ElevatedButton(
+            onPressed: onResume,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: DemProColors.accent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Reprendre', style: DemProText.button),
+          )),
+        ]),
+      ]),
     ),
   );
 }
@@ -1569,22 +2228,13 @@ class _SheetAction extends StatelessWidget {
 // Helpers internes
 // ─────────────────────────────────────────────────────────────────────────────
 
-String _fmtFcfa(int v) {
-  final s = v.toString();
-  final buf = StringBuffer();
-  for (int i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-    buf.write(s[i]);
-  }
-  return buf.toString();
-}
 
 class _FieldLabel extends StatelessWidget {
   final String text;
   const _FieldLabel(this.text);
   @override
   Widget build(BuildContext context) =>
-      Text(text, style: const TextStyle(color: DemProColors.muted, fontSize: 12, fontWeight: FontWeight.w600));
+      Text(text, style: DemProText.caption);
 }
 
 class _ProTextField extends StatelessWidget {
@@ -1596,7 +2246,10 @@ class _ProTextField extends StatelessWidget {
   final int? maxLength;
   final List<TextInputFormatter>? inputFormatters;
   final void Function(String)? onChanged;
-  const _ProTextField({required this.controller, required this.hint, this.prefix, this.keyboardType, this.maxLines = 1, this.maxLength, this.inputFormatters, this.onChanged});
+  final Widget? suffixIcon;
+  final TextInputAction? textInputAction;
+  final void Function(String)? onSubmitted;
+  const _ProTextField({required this.controller, required this.hint, this.prefix, this.keyboardType, this.maxLines = 1, this.maxLength, this.inputFormatters, this.onChanged, this.suffixIcon, this.textInputAction, this.onSubmitted});
 
   @override
   Widget build(BuildContext context) => TextField(
@@ -1606,12 +2259,15 @@ class _ProTextField extends StatelessWidget {
     maxLength: maxLength,
     inputFormatters: inputFormatters,
     onChanged: onChanged,
-    style: const TextStyle(color: DemProColors.text, fontSize: 14),
+    textInputAction: textInputAction,
+    onSubmitted: onSubmitted,
+    style: DemProText.body.copyWith(fontSize: 14),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: DemProColors.muted, fontSize: 13),
+      hintStyle: DemProText.caption,
       prefixText: prefix,
-      prefixStyle: const TextStyle(color: DemProColors.muted, fontSize: 14),
+      prefixStyle: DemProText.caption.copyWith(fontSize: 14),
+      suffixIcon: suffixIcon,
       counterText: '',
       filled: true,
       fillColor: DemProColors.bg3,
@@ -1647,8 +2303,8 @@ class _PackageTypeRow extends StatelessWidget {
               child: Icon(icon, color: selected ? DemProColors.accent : DemProColors.muted, size: 20)),
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: TextStyle(color: selected ? DemProColors.accent : DemProColors.text, fontSize: 14, fontWeight: FontWeight.w700)),
-              Text(subtitle, style: const TextStyle(color: DemProColors.muted, fontSize: 12)),
+              Text(label, style: DemProText.subtitle.copyWith(color: selected ? DemProColors.accent : DemProColors.text)),
+              Text(subtitle, style: DemProText.caption),
             ])),
             if (selected) const Icon(Icons.check_circle, color: DemProColors.accent, size: 20),
           ]),
@@ -1668,7 +2324,7 @@ class _RouteRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(children: [
     Icon(icon, color: color, size: 22),
     const SizedBox(width: 10),
-    Expanded(child: Text(label, style: const TextStyle(color: DemProColors.text, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis)),
+    Expanded(child: Text(label, style: DemProText.body, maxLines: 2, overflow: TextOverflow.ellipsis)),
   ]);
 }
 
@@ -1685,19 +2341,163 @@ class _NavBtn extends StatelessWidget {
     return SizedBox(height: 50,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: outline ? Colors.transparent : (disabled ? DemProColors.bg3 : DemProColors.accent),
+          color: outline ? DemProColors.bg2 : (disabled ? DemProColors.bg3 : DemProColors.accent),
           borderRadius: BorderRadius.circular(14),
           border: outline ? Border.all(color: DemProColors.bg4) : null,
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 4))],
         ),
         child: Material(color: Colors.transparent,
           child: InkWell(borderRadius: BorderRadius.circular(14), onTap: onTap,
             child: Center(child: loading
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : Text(label, style: TextStyle(color: outline ? DemProColors.muted : (disabled ? DemProColors.muted : Colors.white), fontWeight: FontWeight.w700, fontSize: 15)),
+                : Text(label, style: DemProText.button.copyWith(color: outline ? DemProColors.muted : (disabled ? DemProColors.muted : Colors.white))),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sheet — choisir un article depuis le catalogue produits
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ProductPickerSheet extends StatefulWidget {
+  final DemProRepository repo;
+  const _ProductPickerSheet({required this.repo});
+  @override
+  State<_ProductPickerSheet> createState() => _ProductPickerSheetState();
+}
+
+class _ProductPickerSheetState extends State<_ProductPickerSheet> {
+  final _search = TextEditingController();
+  List<Map<String, dynamic>>? _products; // null = chargement en cours
+  bool _loadFailed = false;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _search.addListener(() => setState(() => _query = _search.text.toLowerCase()));
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { _products = null; _loadFailed = false; });
+    try {
+      final products = await widget.repo.getProducts();
+      if (mounted) setState(() => _products = products);
+    } catch (_) {
+      if (mounted) setState(() { _products = []; _loadFailed = true; });
+    }
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    final list = _products ?? [];
+    if (_query.isEmpty) return list;
+    return list.where((p) => (p['name'] as String? ?? '').toLowerCase().contains(_query)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
+    decoration: const BoxDecoration(
+      color: DemProColors.bg2,
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.of(context).viewPadding.bottom),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Center(child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
+      )),
+      Row(children: [
+        Expanded(child: Text('Choisir dans mon catalogue', style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 17))),
+        GestureDetector(
+          onTap: () => context.push('/dem-pro/products'),
+          child: Text('Gérer', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
+        ),
+      ]),
+      const SizedBox(height: 12),
+      if (_products != null && _products!.isNotEmpty)
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.bg4)),
+          child: TextField(
+            controller: _search,
+            style: DemProText.body.copyWith(color: DemProColors.text, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Rechercher…',
+              hintStyle: DemProText.body.copyWith(color: DemProColors.muted, fontSize: 14),
+              prefixIcon: const Icon(Icons.search, color: DemProColors.muted, size: 18),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ),
+        ),
+      Flexible(
+        child: _products == null
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: CircularProgressIndicator(color: DemProColors.accent)),
+              )
+            : _loadFailed
+                ? _buildMessage(Icons.wifi_off_rounded, 'Impossible de charger le catalogue.')
+                : _filtered.isEmpty
+                    ? _buildMessage(
+                        Icons.inventory_2_outlined,
+                        _products!.isEmpty
+                            ? 'Aucun produit enregistré pour l\'instant.\nAjoutez-en un depuis "Gérer".'
+                            : 'Aucun résultat.',
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: _filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final p = _filtered[i];
+                          final price = p['defaultPrice'] as num?;
+                          return GestureDetector(
+                            onTap: () => Navigator.pop(context, p),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12)),
+                              child: Row(children: [
+                                Expanded(
+                                  child: Text(
+                                    p['name'] as String? ?? '',
+                                    style: DemProText.bodyStrong.copyWith(color: DemProColors.text),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (price != null) ...[
+                                  const SizedBox(width: 8),
+                                  Text(DemProFormat.fcfa(price), style: DemProText.caption.copyWith(color: DemProColors.success)),
+                                ],
+                                const SizedBox(width: 8),
+                                const Icon(Icons.chevron_right, color: DemProColors.muted, size: 18),
+                              ]),
+                            ),
+                          );
+                        },
+                      ),
+      ),
+    ]),
+  );
+
+  Widget _buildMessage(IconData icon, String msg) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 32),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, color: DemProColors.muted, size: 32),
+      const SizedBox(height: 10),
+      Text(msg, style: DemProText.body.copyWith(color: DemProColors.muted), textAlign: TextAlign.center),
+    ]),
+  );
 }

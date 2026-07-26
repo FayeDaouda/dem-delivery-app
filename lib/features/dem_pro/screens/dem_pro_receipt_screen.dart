@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
+import '../utils/dem_pro_format.dart';
 
 class DemProReceiptScreen extends StatelessWidget {
   final Map<String, dynamic> order;
@@ -10,16 +12,6 @@ class DemProReceiptScreen extends StatelessWidget {
 
   String _short(String? addr) =>
       (addr == null || addr.isEmpty) ? '—' : addr.split(',').first.trim();
-
-  String _fcfa(num value) {
-    final s = value.round().toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-      buf.write(s[i]);
-    }
-    return '$buf FCFA';
-  }
 
   String _fmtDate(String? iso) {
     final dt = iso != null ? DateTime.tryParse(iso)?.toLocal() : null;
@@ -70,7 +62,7 @@ class DemProReceiptScreen extends StatelessWidget {
           icon: Icon(Icons.arrow_back, color: t.text),
           onPressed: () => context.pop(),
         ),
-        title: Text('Reçu #$orderId', style: TextStyle(color: t.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        title: Text('Reçu #$orderId', style: DemProText.title.copyWith(color: t.text)),
         actions: [
           IconButton(
             icon: const Icon(Icons.share_outlined, color: DemProColors.accent),
@@ -100,25 +92,22 @@ class DemProReceiptScreen extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 isDelivered ? 'Livraison effectuée' : 'Commande annulée',
-                style: TextStyle(
-                  color: isDelivered ? DemProColors.success : DemProColors.danger,
-                  fontSize: 16, fontWeight: FontWeight.w700,
-                ),
+                style: DemProText.title.copyWith(color: isDelivered ? DemProColors.success : DemProColors.danger),
               ),
               const SizedBox(height: 4),
-              Text(_fmtDate(deliveredAt ?? createdAt), style: TextStyle(color: t.muted, fontSize: 12)),
+              Text(_fmtDate(deliveredAt ?? createdAt), style: DemProText.caption.copyWith(color: t.muted)),
             ]),
           ),
           const SizedBox(height: 20),
 
           // ── Trajet ─────────────────────────────────────────────────────
           _Card(t: t, children: [
-            _CardHeader(icon: Icons.route, label: 'TRAJET', t: t),
+            _CardHeader(icon: Icons.route_outlined, label: 'TRAJET', t: t),
             const SizedBox(height: 12),
             Row(children: [
               const Icon(Icons.radio_button_on, color: DemProColors.success, size: 12),
               const SizedBox(width: 10),
-              Expanded(child: Text(pickup, style: TextStyle(color: t.text, fontSize: 13))),
+              Expanded(child: Text(pickup, style: DemProText.body.copyWith(color: t.text))),
             ]),
             Padding(
               padding: const EdgeInsets.only(left: 5, top: 2, bottom: 2),
@@ -127,7 +116,7 @@ class DemProReceiptScreen extends StatelessWidget {
             Row(children: [
               const Icon(Icons.location_on, color: DemProColors.danger, size: 12),
               const SizedBox(width: 10),
-              Expanded(child: Text(delivery, style: TextStyle(color: t.text, fontSize: 13))),
+              Expanded(child: Text(delivery, style: DemProText.body.copyWith(color: t.text))),
             ]),
             if (receiverName != null || receiverPhone != null) ...[
               const SizedBox(height: 10),
@@ -138,7 +127,7 @@ class DemProReceiptScreen extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   [if (receiverName != null) receiverName, if (receiverPhone != null) receiverPhone].join(' · '),
-                  style: TextStyle(color: t.muted, fontSize: 12),
+                  style: DemProText.caption.copyWith(color: t.muted),
                 ),
               ]),
             ],
@@ -152,7 +141,7 @@ class DemProReceiptScreen extends StatelessWidget {
               child: _Card(t: t, children: [
                 _CardHeader(icon: Icons.inventory_2_outlined, label: 'COLIS', t: t),
                 const SizedBox(height: 8),
-                Text(description, style: TextStyle(color: t.text, fontSize: 13)),
+                Text(description, style: DemProText.body.copyWith(color: t.text)),
               ]),
             ),
 
@@ -170,10 +159,10 @@ class DemProReceiptScreen extends StatelessWidget {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(children: [
-                      Text('•  ', style: TextStyle(color: t.muted, fontSize: 12)),
-                      Expanded(child: Text('$name × $qty', style: TextStyle(color: t.text, fontSize: 13))),
+                      Text('•  ', style: DemProText.caption.copyWith(color: t.muted)),
+                      Expanded(child: Text('$name × $qty', style: DemProText.body.copyWith(color: t.text))),
                       if (itemPrice != null)
-                        Text(_fcfa(itemPrice * qty), style: TextStyle(color: t.text, fontSize: 12, fontWeight: FontWeight.w600)),
+                        Text(DemProFormat.fcfa(itemPrice * qty), style: DemProText.caption.copyWith(color: t.text)),
                     ]),
                   );
                 }),
@@ -182,11 +171,11 @@ class DemProReceiptScreen extends StatelessWidget {
                   Divider(color: t.border, height: 1),
                   const SizedBox(height: 6),
                   Row(children: [
-                    Text('Total articles', style: TextStyle(color: t.muted, fontSize: 12)),
+                    Text('Total articles', style: DemProText.caption.copyWith(color: t.muted)),
                     const Spacer(),
                     Text(
-                      _fcfa(items.fold<int>(0, (sum, i) => sum + ((i['price'] as num?)?.toInt() ?? 0) * ((i['quantity'] as num?)?.toInt() ?? 1))),
-                      style: const TextStyle(color: DemProColors.success, fontSize: 13, fontWeight: FontWeight.w700),
+                      DemProFormat.fcfa(items.fold<int>(0, (sum, i) => sum + ((i['price'] as num?)?.toInt() ?? 0) * ((i['quantity'] as num?)?.toInt() ?? 1))),
+                      style: DemProText.bodyStrong.copyWith(color: DemProColors.success),
                     ),
                   ]),
                 ],
@@ -204,13 +193,13 @@ class DemProReceiptScreen extends StatelessWidget {
                   CircleAvatar(
                     radius: 18,
                     backgroundColor: DemProColors.accent.withValues(alpha: 0.12),
-                    child: Text(driverName[0].toUpperCase(), style: const TextStyle(color: DemProColors.accent, fontWeight: FontWeight.w800)),
+                    child: Text(driverName[0].toUpperCase(), style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(driverName, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text(driverName, style: DemProText.bodyStrong.copyWith(color: t.text)),
                     if (vehiclePlate != null)
-                      Text(vehiclePlate, style: TextStyle(color: t.muted, fontSize: 11)),
+                      Text(vehiclePlate, style: DemProText.caption.copyWith(color: t.muted)),
                   ])),
                 ]),
               ]),
@@ -218,17 +207,17 @@ class DemProReceiptScreen extends StatelessWidget {
 
           // ── Détail prix ────────────────────────────────────────────────
           _Card(t: t, children: [
-            _CardHeader(icon: Icons.receipt_long, label: 'FACTURATION', t: t),
+            _CardHeader(icon: Icons.receipt_long_outlined, label: 'FACTURATION', t: t),
             const SizedBox(height: 12),
-            _PriceRow(label: 'Course', value: _fcfa(price), t: t),
-            if (demFee > 0) _PriceRow(label: 'Frais DEM', value: _fcfa(demFee), t: t),
+            _PriceRow(label: 'Course', value: DemProFormat.fcfa(price), t: t),
+            if (demFee > 0) _PriceRow(label: 'Frais DEM', value: DemProFormat.fcfa(demFee), t: t),
             const SizedBox(height: 8),
             Divider(color: t.border, height: 1),
             const SizedBox(height: 8),
             Row(children: [
-              Text('Total', style: TextStyle(color: t.text, fontSize: 15, fontWeight: FontWeight.w800)),
+              Text('Total', style: DemProText.title.copyWith(color: t.text, fontSize: 15)),
               const Spacer(),
-              Text(_fcfa(total), style: const TextStyle(color: DemProColors.accent, fontSize: 18, fontWeight: FontWeight.w900)),
+              Text(DemProFormat.fcfa(total), style: DemProText.headline.copyWith(color: DemProColors.accent, fontSize: 18)),
             ]),
           ]),
           const SizedBox(height: 12),
@@ -246,6 +235,23 @@ class DemProReceiptScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 24),
 
+          // ── Recommander cette commande ──────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: () => context.push('/dem-pro/orders/create', extra: order),
+              icon: const Icon(Icons.replay, size: 18),
+              label: const Text('Recommander cette commande', style: DemProText.subtitle),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: DemProColors.accent,
+                side: const BorderSide(color: DemProColors.accent),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
           // ── Nouvelle livraison ─────────────────────────────────────
           SizedBox(
             width: double.infinity,
@@ -253,7 +259,7 @@ class DemProReceiptScreen extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () => context.push('/dem-pro/orders/create'),
               icon: const Icon(Icons.add, size: 20),
-              label: const Text('Nouvelle livraison', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              label: const Text('Nouvelle livraison', style: DemProText.subtitle),
               style: ElevatedButton.styleFrom(
                 backgroundColor: DemProColors.accent,
                 foregroundColor: Colors.white,
@@ -269,7 +275,7 @@ class DemProReceiptScreen extends StatelessWidget {
 
   void _shareReceipt(String orderId, String pickup, String delivery, num total) {
     SharePlus.instance.share(ShareParams(
-      text: 'Reçu DEM #$orderId\n$pickup → $delivery\nTotal : ${_fcfa(total)}\n\nMerci d\'utiliser DEM !',
+      text: 'Reçu DEM #$orderId\n$pickup → $delivery\nTotal : ${DemProFormat.fcfa(total)}\n\nMerci d\'utiliser DEM !',
     ));
   }
 }
@@ -279,11 +285,11 @@ class DemProReceiptScreen extends StatelessWidget {
 class _T {
   final bool dark;
   const _T(this.dark);
-  Color get bg     => dark ? DemProColors.bg    : const Color(0xFFF8FAFC);
+  Color get bg     => dark ? DemProColors.bg    : DemProColors.lightBg;
   Color get cardBg => dark ? DemProColors.bg2   : Colors.white;
-  Color get border => dark ? DemProColors.bg3   : const Color(0xFFE2E8F0);
-  Color get text   => dark ? DemProColors.text  : const Color(0xFF0F172A);
-  Color get muted  => dark ? DemProColors.muted : const Color(0xFF64748B);
+  Color get border => dark ? DemProColors.bg3   : DemProColors.lightBorder;
+  Color get text   => dark ? DemProColors.text  : DemProColors.lightText;
+  Color get muted  => dark ? DemProColors.muted : DemProColors.lightMuted;
 }
 
 // ── Widgets ──────────────────────────────────────────────────────────────────
@@ -314,7 +320,7 @@ class _CardHeader extends StatelessWidget {
   Widget build(BuildContext context) => Row(children: [
     Icon(icon, color: DemProColors.accent, size: 16),
     const SizedBox(width: 8),
-    Text(label, style: TextStyle(color: t.muted, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
+    Text(label, style: DemProText.caption.copyWith(color: t.muted, fontWeight: FontWeight.w700, letterSpacing: 1)),
   ]);
 }
 
@@ -326,9 +332,9 @@ class _PriceRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
-      Text(label, style: TextStyle(color: t.muted, fontSize: 13)),
+      Text(label, style: DemProText.body.copyWith(color: t.muted)),
       const Spacer(),
-      Text(value, style: TextStyle(color: t.text, fontSize: 13, fontWeight: FontWeight.w600)),
+      Text(value, style: DemProText.bodyStrong.copyWith(color: t.text)),
     ]),
   );
 }
@@ -341,9 +347,9 @@ class _DetailRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
-      Text(label, style: TextStyle(color: t.muted, fontSize: 12)),
+      Text(label, style: DemProText.caption.copyWith(color: t.muted)),
       const Spacer(),
-      Flexible(child: Text(value, style: TextStyle(color: t.text, fontSize: 12, fontWeight: FontWeight.w600), textAlign: TextAlign.end)),
+      Flexible(child: Text(value, style: DemProText.caption.copyWith(color: t.text), textAlign: TextAlign.end)),
     ]),
   );
 }

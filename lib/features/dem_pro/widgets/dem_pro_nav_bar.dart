@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
 
 class _NavItem {
   final IconData outline;
@@ -30,7 +31,7 @@ class DemProNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg      = darkMode ? DemProColors.bg2      : Colors.white;
-    final border  = darkMode ? DemProColors.bg3      : const Color(0xFFE2E8F0);
+    final border  = darkMode ? DemProColors.bg3      : DemProColors.lightBorder;
     final inactive = darkMode ? const Color(0xFF8EABC5) : const Color(0xFF94A3B8);
 
     return Container(
@@ -60,8 +61,7 @@ class DemProNavBar extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         item.label,
-                        style: TextStyle(
-                          fontSize: 11,
+                        style: DemProText.caption.copyWith(
                           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                           color: selected ? DemProColors.accent : inactive,
                         ),

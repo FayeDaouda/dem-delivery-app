@@ -11,6 +11,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../features/profile/data/profile_repository.dart';
 import '../data/chef_de_flotte_repository.dart';
 import '../../../core/utils/dem_layout.dart';
+import '../../../core/utils/dem_toast.dart';
+import '../../../shared/widgets/swipe_to_confirm.dart';
 
 class ChefDeFlotteProfileScreen extends StatefulWidget {
   const ChefDeFlotteProfileScreen({super.key});
@@ -28,6 +30,10 @@ class _State extends State<ChefDeFlotteProfileScreen> {
   List<Map<String, dynamic>>  _drivers = [];
   bool _loading         = true;
   bool _uploadingAvatar = false;
+  bool _logoutLoading   = false;
+  int  _logoutSwipeTick = 0;
+  bool _deleteLoading   = false;
+  int  _deleteSwipeTick = 0;
   final Set<String> _expandedDrivers = {};
 
   @override
@@ -149,46 +155,148 @@ class _State extends State<ChefDeFlotteProfileScreen> {
 
   // ── Dialogs ────────────────────────────────────────────────────────────────
 
+  // ── Déconnexion / suppression — même habillage que côté livreur/DEM Pro
+  // (glisser pour confirmer, en une seule étape) ───────────────────────────
   Future<void> _logout() async {
-    final ok = await _confirm(title: 'Déconnexion', message: 'Vous allez être déconnecté.', actionLabel: 'Déconnexion', danger: false);
-    if (ok != true) return;
-    await AuthStorage.clear();
-    appStartupNotifier.markLoggedOut();
-    if (mounted) { context.go('/phone'); }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewPadding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: AppColors.primaryMid.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.logout_rounded, color: AppColors.primaryMid, size: 26),
+              ),
+              const SizedBox(height: 14),
+              const Text('Se déconnecter ?',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0F2942))),
+              const SizedBox(height: 6),
+              const Text(
+                'Vous devrez vous reconnecter avec votre numéro de téléphone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SwipeToConfirm(
+                key: ValueKey('am-logout-$_logoutSwipeTick'),
+                label: 'Glissez pour se déconnecter',
+                loading: _logoutLoading,
+                trackColor: AppColors.primaryMid,
+                thumbColor: Colors.white,
+                iconColor: AppColors.primaryMid,
+                labelColor: Colors.white,
+                onConfirmed: () async {
+                  setSheetState(() => _logoutLoading = true);
+                  try {
+                    await AuthStorage.clear();
+                    appStartupNotifier.markLoggedOut();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      context.go('/phone');
+                    }
+                  } catch (e) {
+                    setSheetState(() {
+                      _logoutLoading = false;
+                      _logoutSwipeTick++;
+                    });
+                    if (mounted) showDemToast(context, friendlyError(e), isError: true);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _logoutLoading ? null : () => Navigator.pop(ctx),
+                child: const Text('Annuler', style: TextStyle(color: Color(0xFF6B7280))),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteAccount() async {
-    final ok = await _confirm(title: 'Supprimer le compte', message: 'Cette action est irréversible. Toutes vos données seront supprimées.', actionLabel: 'Supprimer', danger: true);
-    if (ok != true) return;
-    try {
-      await ApiClient.dio.delete('/users/me');
-      await AuthStorage.clear();
-      appStartupNotifier.markLoggedOut();
-    if (mounted) { context.go('/phone'); }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red));
-      }
-    }
-  }
-
-  Future<bool?> _confirm({required String title, required String message, required String actionLabel, required bool danger}) =>
-    showDialog<bool>(
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Color(0xFF0F2942))),
-        content: Text(message, style: const TextStyle(color: Color(0xFF6B7280), height: 1.5)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler', style: TextStyle(color: AppColors.primaryMid))),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(actionLabel, style: TextStyle(color: danger ? Colors.red : AppColors.primaryMid, fontWeight: FontWeight.w700)),
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewPadding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_forever_outlined, color: Colors.red, size: 28),
+              ),
+              const SizedBox(height: 14),
+              const Text('Supprimer mon compte ?',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0F2942))),
+              const SizedBox(height: 6),
+              const Text(
+                'Cette action est irréversible. Toutes vos données seront supprimées.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SwipeToConfirm(
+                key: ValueKey('am-delete-$_deleteSwipeTick'),
+                label: 'Glissez pour supprimer',
+                loading: _deleteLoading,
+                trackColor: Colors.red,
+                thumbColor: Colors.white,
+                iconColor: Colors.red,
+                labelColor: Colors.white,
+                onConfirmed: () async {
+                  setSheetState(() => _deleteLoading = true);
+                  try {
+                    await ApiClient.dio.delete('/users/me');
+                    await AuthStorage.clear();
+                    appStartupNotifier.markLoggedOut();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      context.go('/phone');
+                    }
+                  } catch (e) {
+                    setSheetState(() {
+                      _deleteLoading = false;
+                      _deleteSwipeTick++;
+                    });
+                    if (mounted) showDemToast(context, friendlyError(e), isError: true);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _deleteLoading ? null : () => Navigator.pop(ctx),
+                child: const Text('Annuler', style: TextStyle(color: Color(0xFF6B7280))),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
+  }
 
   // ── Build ──────────────────────────────────────────────────────────────────
 

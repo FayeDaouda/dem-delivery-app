@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -8,16 +9,31 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/api/api_client.dart';
-import '../../../core/config/app_config.dart';
 import '../../../core/error/app_exception.dart';
+import '../../../core/services/places_autocomplete_service.dart';
+import '../../../core/storage/dem_pro_draft_storage.dart';
 import '../../../core/utils/dem_toast.dart';
+import '../../../core/utils/senegal_phone.dart';
+import '../../../shared/widgets/place_suggestions_list.dart';
 import '../../home_driver/navigation/navigation_service.dart';
 import '../data/dem_pro_repository.dart';
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _dakar = LatLng(14.6937, -17.4441);
+
+const _placeSuggestionsColors = PlaceSuggestionsColors(
+  background: DemProColors.bg3,
+  border: DemProColors.bg4,
+  divider: DemProColors.bg4,
+  iconBg: DemProColors.bg4,
+  icon: DemProColors.accent,
+  mainText: DemProColors.text,
+  secondaryText: DemProColors.muted,
+  accent: DemProColors.accent,
+);
 
 const _pkgTypes = [
   ('documents', 'Documents',   Icons.description_outlined),
@@ -43,7 +59,8 @@ class _Stop {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class DemProBatchCreateScreen extends StatefulWidget {
-  const DemProBatchCreateScreen({super.key});
+  final Map<String, dynamic>? reorderFrom;
+  const DemProBatchCreateScreen({super.key, this.reorderFrom});
   @override
   State<DemProBatchCreateScreen> createState() => _State();
 }
@@ -70,6 +87,12 @@ class _State extends State<DemProBatchCreateScreen> {
   // ── Arrêts ───────────────────────────────────────────────────────────────
   final List<_Stop> _stops = [_Stop(), _Stop()];
 
+  // ── Destinations récentes (partagées entre les arrêts) ───────────────────
+  List<Map<String, dynamic>> _recentDestinations = [];
+
+  // ── Brouillon ────────────────────────────────────────────────────────────
+  Timer? _draftSaveDebounce;
+
   // ── Programmation ────────────────────────────────────────────────────────
   bool      _isScheduled = false;
   DateTime? _scheduledAt;
@@ -85,13 +108,110 @@ class _State extends State<DemProBatchCreateScreen> {
     super.initState();
     _loadMapStyle();
     _loadProAddresses();
+    _loadRecentDestinations();
+    if (widget.reorderFrom != null) {
+      _applyReorder(widget.reorderFrom!);
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowDraftPrompt());
+    }
   }
 
   @override
   void dispose() {
     _mapCtrl?.dispose();
     _notesCtrl.dispose();
+    _draftSaveDebounce?.cancel();
     super.dispose();
+  }
+
+  // ── Destinations récentes ────────────────────────────────────────────────
+
+  Future<void> _loadRecentDestinations() async {
+    try {
+      final list = await _proRepo.getRecentDestinations();
+      if (mounted) setState(() => _recentDestinations = list);
+    } catch (_) {}
+  }
+
+  // ── Recommander (reorder) ────────────────────────────────────────────────
+
+  void _applyReorder(Map<String, dynamic> batch) {
+    final orders = (batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (orders.isEmpty) return;
+    orders.sort((a, b) => ((a['sequenceIndex'] as num?) ?? 0).compareTo((b['sequenceIndex'] as num?) ?? 0));
+    _stops
+      ..clear()
+      ..addAll(orders.map((o) {
+        final s = _Stop();
+        s.lat = (o['deliveryLatitude']  as num?)?.toDouble();
+        s.lng = (o['deliveryLongitude'] as num?)?.toDouble();
+        s.address = o['deliveryAddress'] as String? ?? '';
+        s.name    = o['receiverName']    as String? ?? '';
+        s.phone   = (o['receiverPhone'] as String? ?? '').replaceFirst('+221', '');
+        return s;
+      }));
+  }
+
+  // ── Brouillon ─────────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _draftSnapshot() => {
+    'stops': _stops.map((s) => {
+      'lat': s.lat, 'lng': s.lng, 'address': s.address,
+      'phone': s.phone, 'name': s.name, 'landmark': s.landmark,
+      'pkg': s.pkg, 'fragile': s.fragile,
+    }).toList(),
+    'notes': _notesCtrl.text,
+    'scheduledAt': _scheduledAt?.toIso8601String(),
+    'savedAt': DateTime.now().toIso8601String(),
+  };
+
+  void _scheduleDraftSave() {
+    _draftSaveDebounce?.cancel();
+    _draftSaveDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (_stops.every((s) => !s.hasLocation)) return;
+      DemProDraftStorage.saveBatchDraft(_draftSnapshot());
+    });
+  }
+
+  void _applyDraft(Map<String, dynamic> draft) {
+    final stops = (draft['stops'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    setState(() {
+      _notesCtrl.text = draft['notes'] as String? ?? '';
+      final scheduledAt = draft['scheduledAt'] as String?;
+      if (scheduledAt != null) { _isScheduled = true; _scheduledAt = DateTime.tryParse(scheduledAt); }
+      if (stops.isNotEmpty) {
+        _stops
+          ..clear()
+          ..addAll(stops.map((it) {
+            final s = _Stop();
+            s.lat      = (it['lat'] as num?)?.toDouble();
+            s.lng      = (it['lng'] as num?)?.toDouble();
+            s.address  = it['address']  as String? ?? '';
+            s.phone    = it['phone']    as String? ?? '';
+            s.name     = it['name']     as String? ?? '';
+            s.landmark = it['landmark'] as String? ?? '';
+            s.pkg      = it['pkg']      as String? ?? 'small';
+            s.fragile  = it['fragile']  as bool?   ?? false;
+            return s;
+          }));
+      }
+    });
+  }
+
+  Future<void> _maybeShowDraftPrompt() async {
+    final draft = await DemProDraftStorage.getBatchDraft();
+    if (draft == null || !mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (_) => _BatchDraftResumeSheet(
+        savedAt: draft['savedAt'] as String?,
+        onResume: () { Navigator.pop(context); _applyDraft(draft); },
+        onDiscard: () { Navigator.pop(context); DemProDraftStorage.clearBatchDraft(); },
+      ),
+    );
   }
 
   // ── Map ───────────────────────────────────────────────────────────────────
@@ -104,6 +224,66 @@ class _State extends State<DemProBatchCreateScreen> {
   void _centerMap(LatLng pos) => _mapCtrl?.animateCamera(
     CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 14, tilt: 20)),
   );
+
+  /// Hauteur actuelle du panneau du bas (voir l'`AnimatedContainer` du `build`).
+  double get _panelHeight {
+    final h = MediaQuery.of(context).size.height;
+    return _placingMap ? 130 : h * _sheetMax;
+  }
+
+  /// Centre la carte sur [pos] de sorte que le point soit visible dans la
+  /// zone haute (au-dessus du panneau), et non caché derrière — décale la
+  /// cible caméra vers le sud d'une distance égale à la moitié de la hauteur
+  /// du panneau (convertie en degrés via la résolution Mercator au zoom
+  /// utilisé), ce qui fait apparaître [pos] au milieu de la zone visible.
+  void _centerMapVisible(LatLng pos, {double zoom = 15}) {
+    final panelH = _panelHeight + MediaQuery.of(context).viewPadding.bottom;
+    final metersPerPixel = 156543.03392 * math.cos(pos.latitude * math.pi / 180) / math.pow(2, zoom);
+    final latShift = (panelH / 2) * metersPerPixel / 111320.0;
+    final adjusted = LatLng(pos.latitude - latShift, pos.longitude);
+    _mapCtrl?.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(target: adjusted, zoom: zoom, tilt: 20)),
+    );
+  }
+
+  /// Ajuste le zoom pour que tous les [points] (départ + arrêts) soient
+  /// visibles au-dessus du panneau du bas — même technique que sur l'écran
+  /// de commande simple (extension artificielle de la borne sud).
+  void _fitBoundsVisible(List<LatLng> points) {
+    if (points.isEmpty || _mapCtrl == null) return;
+    if (points.length == 1) { _centerMapVisible(points.first); return; }
+
+    var south = points.first.latitude,  north = points.first.latitude;
+    var west  = points.first.longitude, east  = points.first.longitude;
+    for (final p in points.skip(1)) {
+      if (p.latitude  < south) south = p.latitude;
+      if (p.latitude  > north) north = p.latitude;
+      if (p.longitude < west)  west  = p.longitude;
+      if (p.longitude > east)  east  = p.longitude;
+    }
+
+    final screenH = MediaQuery.of(context).size.height;
+    final panelH  = _panelHeight + MediaQuery.of(context).viewPadding.bottom;
+    final hiddenFrac  = (panelH / screenH).clamp(0.05, 0.85);
+    final visibleFrac = (1 - hiddenFrac).clamp(0.15, 0.95);
+    final latSpan  = (north - south).clamp(0.0015, 1.0);
+    final extraSouth = latSpan * (hiddenFrac / visibleFrac);
+
+    final bounds = LatLngBounds(
+      southwest: LatLng(south - extraSouth, west),
+      northeast: LatLng(north, east),
+    );
+    _mapCtrl?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 56));
+  }
+
+  /// Recadre la carte sur l'ensemble des points définis (départ + arrêts).
+  void _recenterMap() {
+    final points = <LatLng>[
+      if (_pickupLat != null) LatLng(_pickupLat!, _pickupLng!),
+      for (final s in _stops) if (s.hasLocation) LatLng(s.lat!, s.lng!),
+    ];
+    _fitBoundsVisible(points);
+  }
 
   // ── Adresses Pro ─────────────────────────────────────────────────────────
 
@@ -125,11 +305,10 @@ class _State extends State<DemProBatchCreateScreen> {
     setState(() {
       _selectedAddr   = addr;
       _pickupAddress  = addr['address'] as String? ?? '';
-      if (lat != null && lng != null) {
-        _pickupLat = lat; _pickupLng = lng;
-        _centerMap(LatLng(lat, lng));
-      }
+      if (lat != null && lng != null) { _pickupLat = lat; _pickupLng = lng; }
     });
+    if (lat != null && lng != null) _recenterMap();
+    _scheduleDraftSave();
   }
 
   Future<void> _fetchGps() async {
@@ -142,8 +321,9 @@ class _State extends State<DemProBatchCreateScreen> {
         return;
       }
       _pickupLat = pos.latitude; _pickupLng = pos.longitude;
-      _centerMap(LatLng(pos.latitude, pos.longitude));
+      _recenterMap();
       await _reverseGeocode(LatLng(pos.latitude, pos.longitude), stopIndex: -1);
+      _scheduleDraftSave();
     } catch (_) {
       if (mounted) showDemToast(context, 'GPS indisponible', isError: true);
     } finally {
@@ -174,7 +354,11 @@ class _State extends State<DemProBatchCreateScreen> {
       _stops[_placingIndex].lng = pos.longitude;
       await _reverseGeocode(pos, stopIndex: _placingIndex);
     }
-    if (mounted) setState(() { _placingMap = false; _geocoding = false; });
+    if (mounted) {
+      setState(() { _placingMap = false; _geocoding = false; });
+      _recenterMap();
+      _scheduleDraftSave();
+    }
   }
 
   Future<void> _reverseGeocode(LatLng pos, {required int stopIndex}) async {
@@ -197,21 +381,15 @@ class _State extends State<DemProBatchCreateScreen> {
 
   // ── Sélection d'une suggestion Google Places pour un arrêt ───────────────
 
-  Future<void> _selectStopSuggestion(int index, Map<String, dynamic> place) async {
+  late final _placesService = PlacesAutocompleteService(_publicDio);
+
+  Future<void> _selectStopSuggestion(int index, Map<String, dynamic> place, String sessionToken) async {
     final placeId = place['place_id'] as String?;
     if (placeId == null) return;
     try {
-      final res = await _publicDio.get(
-        'https://maps.googleapis.com/maps/api/place/details/json',
-        queryParameters: {
-          'place_id': placeId,
-          'fields': 'geometry,name,formatted_address',
-          'language': 'fr',
-          'key': AppConfig.mapsApiKey,
-        },
-      );
-      if (res.statusCode == 200 && res.data['status'] == 'OK') {
-        final loc = res.data['result']['geometry']['location'];
+      final result = await _placesService.details(placeId: placeId, sessionToken: sessionToken);
+      if (result != null) {
+        final loc = result['geometry']['location'];
         final lat = (loc['lat'] as num).toDouble();
         final lng = (loc['lng'] as num).toDouble();
         final name = (place['structured_formatting']?['main_text'] as String?)
@@ -221,11 +399,31 @@ class _State extends State<DemProBatchCreateScreen> {
           _stops[index].lng = lng;
           _stops[index].address = name;
         });
-        _centerMap(LatLng(lat, lng));
+        _recenterMap();
+        _scheduleDraftSave();
       }
     } catch (_) {
       if (mounted) showDemToast(context, 'Impossible de charger l\'adresse', isError: true);
     }
+  }
+
+  // ── Destination récente appliquée à un arrêt ──────────────────────────────
+
+  void _applyRecentDestinationToStop(int index, Map<String, dynamic> dest) {
+    final lat = (dest['lat'] as num?)?.toDouble();
+    final lng = (dest['lng'] as num?)?.toDouble();
+    if (lat == null || lng == null) return;
+    setState(() {
+      _stops[index].lat = lat;
+      _stops[index].lng = lng;
+      _stops[index].address = dest['address'] as String? ?? '';
+      final name  = dest['receiverName']  as String?;
+      final phone = dest['receiverPhone'] as String?;
+      if (name  != null && name.isNotEmpty)  _stops[index].name  = name;
+      if (phone != null && phone.isNotEmpty) _stops[index].phone = phone.replaceFirst('+221', '');
+    });
+    _recenterMap();
+    _scheduleDraftSave();
   }
 
   // ── Programmation ─────────────────────────────────────────────────────────
@@ -267,13 +465,14 @@ class _State extends State<DemProBatchCreateScreen> {
       return;
     }
     setState(() => _scheduledAt = picked);
+    _scheduleDraftSave();
   }
 
   // ── Validation & submit ───────────────────────────────────────────────────
 
   bool get _canSubmit =>
       _pickupLat != null &&
-      _stops.every((s) => s.hasLocation && s.phone.trim().length >= 8);
+      _stops.every((s) => s.hasLocation && isValidSenegalMobile(s.phone.trim()));
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
@@ -281,7 +480,7 @@ class _State extends State<DemProBatchCreateScreen> {
       showDemToast(context,
           _pickupLat == null
               ? 'Définissez le point de départ'
-              : 'Chaque arrêt doit avoir une localisation et un numéro de téléphone',
+              : 'Chaque arrêt doit avoir une localisation et un numéro mobile valide (7X XXX XX XX)',
           isError: true);
       return;
     }
@@ -296,7 +495,7 @@ class _State extends State<DemProBatchCreateScreen> {
         final parts = <String>[];
         final pkg = _pkgTypes.firstWhere((p) => p.$1 == s.pkg);
         parts.add(pkg.$2);
-        if (s.fragile) parts.add('⚠️ Fragile');
+        if (s.fragile) parts.add('Fragile');
         return {
           'deliveryAddress':   s.address.isNotEmpty ? s.address : '${s.lat!.toStringAsFixed(4)}, ${s.lng!.toStringAsFixed(4)}',
           'deliveryLatitude':  s.lat,
@@ -317,6 +516,7 @@ class _State extends State<DemProBatchCreateScreen> {
         'stops': stops,
       });
 
+      DemProDraftStorage.clearBatchDraft();
       if (mounted) {
         showDemToast(context, _scheduledAt != null ? 'Tournée programmée !' : 'Tournée lancée !');
         context.pushReplacement('/dem-pro/batch/confirmation', extra: batch);
@@ -365,6 +565,7 @@ class _State extends State<DemProBatchCreateScreen> {
       },
       child: Scaffold(
       backgroundColor: DemProColors.bg,
+      resizeToAvoidBottomInset: false,
       body: Stack(children: [
 
         // Carte
@@ -399,25 +600,59 @@ class _State extends State<DemProBatchCreateScreen> {
           Positioned(top: 0, left: 0, right: 0,
             child: SafeArea(child: _buildHeader())),
 
-        // Panel bas
-        Positioned(bottom: 0, left: 0, right: 0,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-            height: _placingMap
-                ? 130 + MediaQuery.of(context).viewPadding.bottom
-                : MediaQuery.of(context).size.height * 0.62 + MediaQuery.of(context).viewPadding.bottom,
-            decoration: BoxDecoration(
-              color: DemProColors.bg2,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
+        // Panel bas — placement (fixe, petit)
+        if (_placingMap)
+          Positioned(bottom: 0, left: 0, right: 0,
+            child: Container(
+              height: 130 + MediaQuery.of(context).viewPadding.bottom,
+              decoration: BoxDecoration(
+                color: DemProColors.bg2,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
+              ),
+              child: _buildPlacementPanel(),
             ),
-            child: _placingMap ? _buildPlacementPanel() : _buildPanel(),
-          )),
+          ),
+
+        // Panel bas (infos + CTA) — remontent ensemble de façon fluide
+        // au-dessus du clavier (même logique que le sheet "Changer le
+        // départ") et reviennent à leur position normale à la fermeture
+        // du clavier. Le CTA reste hors du panneau rétractable lui-même
+        // pour ne jamais pousser la poignée hors de l'écran quand celui-ci
+        // est réduit au minimum.
+        if (!_placingMap)
+          Positioned.fill(
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: Stack(children: [
+                DraggableScrollableSheet(
+                  initialChildSize: _sheetMax,
+                  minChildSize: _sheetMin,
+                  maxChildSize: _sheetMax,
+                  snap: true,
+                  snapSizes: [_sheetMin, _sheetMax],
+                  builder: (context, scrollCtrl) => Container(
+                    decoration: BoxDecoration(
+                      color: DemProColors.bg2,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
+                    ),
+                    child: _buildPanel(scrollCtrl),
+                  ),
+                ),
+                Positioned(bottom: 0, left: 0, right: 0, child: _buildLaunchButton()),
+              ]),
+            ),
+          ),
       ]),
     ),
     );
   }
+
+  double get _sheetMin => 0.12;
+  double get _sheetMax => 0.62;
 
   // ── Header ────────────────────────────────────────────────────────────────
 
@@ -437,14 +672,14 @@ class _State extends State<DemProBatchCreateScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(color: DemProColors.bg2.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(14)),
         child: Row(children: [
-          const Icon(Icons.route, color: DemProColors.accent, size: 18),
+          const Icon(Icons.route_outlined, color: DemProColors.accent, size: 18),
           const SizedBox(width: 8),
-          const Text('Nouvelle tournée', style: TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w700)),
+          const Text('Nouvelle tournée', style: DemProText.subtitle),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(color: DemProColors.accent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-            child: Text('${_stops.length} arrêts', style: const TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700)),
+            child: Text('${_stops.length} arrêts', style: DemProText.micro.copyWith(color: DemProColors.accent)),
           ),
         ]),
       )),
@@ -461,7 +696,7 @@ class _State extends State<DemProBatchCreateScreen> {
         const SizedBox(height: 12),
         Text(
           _placingIndex == -1 ? 'Positionnez le point de départ' : 'Arrêt ${_placingIndex + 1} — Positionnez la destination',
-          style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600),
+          style: DemProText.bodyStrong,
         ),
         const SizedBox(height: 12),
         SizedBox(width: double.infinity, height: 48,
@@ -473,7 +708,7 @@ class _State extends State<DemProBatchCreateScreen> {
                 onTap: _geocoding ? null : _confirmPlacement,
                 child: Center(child: _geocoding
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Confirmer la position', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                    : const Text('Confirmer la position', style: DemProText.button),
                 ),
               ),
             ),
@@ -484,35 +719,47 @@ class _State extends State<DemProBatchCreateScreen> {
 
   // ── Panel principal ───────────────────────────────────────────────────────
 
-  Widget _buildPanel() => Column(children: [
-    Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 8),
-      child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
-    ),
-
-    // Bandeau départ
-    _DepartureBannerBatch(
-      label:   _selectedAddr?['label'] as String?,
-      address: _pickupAddress,
-      loading: _loadingGps,
-      onTap:   () => _showChangeDeparture(),
-    ),
-
-    const SizedBox(height: 8),
-
-    // Liste arrêts
-    Expanded(child: ListView(
+  // Le CTA (bouton Lancer) n'appartient pas à ce panneau — il flotte en
+  // dehors (voir `build` / `_buildLaunchButton`) pour rester visible même
+  // quand le panneau est réduit à sa taille minimale. La poignée et le
+  // bandeau de départ font partie de la même liste scrollable que le reste
+  // (nécessaire pour que le glissé de redimensionnement fonctionne partout,
+  // pas seulement sur la liste des arrêts). Un tap dans une zone vide
+  // referme le clavier.
+  Widget _buildPanel(ScrollController scrollCtrl) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: () => FocusScope.of(context).unfocus(),
+    child: ListView(
+      controller: scrollCtrl,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
       children: [
+        Center(child: Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 8),
+          child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
+        )),
+
+        // Bandeau départ
+        _DepartureBannerBatch(
+          label:   _selectedAddr?['label'] as String?,
+          address: _pickupAddress,
+          loading: _loadingGps,
+          onTap:   () => _showChangeDeparture(),
+        ),
+
+        const SizedBox(height: 8),
+
         ...List.generate(_stops.length, (i) => _StopCard(
           index:       i,
           stop:        _stops[i],
           canRemove:   _stops.length > 2,
           onMapTap:    () => _enterMapPlacement(i),
           onRemove:    () => setState(() => _stops.removeAt(i)),
-          onChanged:   () => setState(() {}),
+          onChanged:   () { setState(() {}); _scheduleDraftSave(); },
+          onLocationChanged: _recenterMap,
           publicDio:   _publicDio,
           onSuggestionSelected: _selectStopSuggestion,
+          recentDestinations: _recentDestinations,
+          onApplyRecent: _applyRecentDestinationToStop,
         )),
 
         if (_stops.length < 5)
@@ -521,7 +768,7 @@ class _State extends State<DemProBatchCreateScreen> {
             child: OutlinedButton.icon(
               onPressed: () => setState(() => _stops.add(_Stop())),
               icon: const Icon(Icons.add, color: DemProColors.accent, size: 18),
-              label: const Text('Ajouter un arrêt', style: TextStyle(color: DemProColors.accent, fontSize: 13, fontWeight: FontWeight.w600)),
+              label: Text('Ajouter un arrêt', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: DemProColors.accent),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -532,15 +779,16 @@ class _State extends State<DemProBatchCreateScreen> {
 
         // Notes globales
         const SizedBox(height: 4),
-        const Text('Instructions pour le livreur (optionnel)', style: TextStyle(color: DemProColors.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+        const Text('Instructions pour le livreur (optionnel)', style: DemProText.caption),
         const SizedBox(height: 6),
         TextField(
           controller: _notesCtrl,
           maxLines: 2,
-          style: const TextStyle(color: DemProColors.text, fontSize: 13),
+          onChanged: (_) => _scheduleDraftSave(),
+          style: DemProText.body,
           decoration: InputDecoration(
             hintText: 'ex: Sonner à chaque arrêt, ne pas laisser en gardiennage…',
-            hintStyle: const TextStyle(color: DemProColors.muted, fontSize: 12),
+            hintStyle: DemProText.caption,
             filled: true, fillColor: DemProColors.bg3,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
@@ -566,9 +814,9 @@ class _State extends State<DemProBatchCreateScreen> {
             title: const Row(children: [
               Icon(Icons.schedule, color: DemProColors.accent, size: 18),
               SizedBox(width: 8),
-              Text('Programmer la tournée', style: TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w600)),
+              Text('Programmer la tournée', style: DemProText.subtitle),
             ]),
-            subtitle: const Text('Choisir une date et heure', style: TextStyle(color: DemProColors.muted, fontSize: 11.5)),
+            subtitle: const Text('Choisir une date et heure', style: DemProText.caption),
             dense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
           ),
@@ -588,8 +836,8 @@ class _State extends State<DemProBatchCreateScreen> {
                 const Icon(Icons.calendar_today, color: DemProColors.accent, size: 16),
                 const SizedBox(width: 10),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(_fmtDate(_scheduledAt!), style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w700)),
-                  Text(_fmtTime(_scheduledAt!), style: const TextStyle(color: DemProColors.muted, fontSize: 12)),
+                  Text(_fmtDate(_scheduledAt!), style: DemProText.bodyStrong),
+                  Text(_fmtTime(_scheduledAt!), style: DemProText.caption),
                 ]),
                 const Spacer(),
                 const Icon(Icons.edit_outlined, color: DemProColors.muted, size: 14),
@@ -598,37 +846,35 @@ class _State extends State<DemProBatchCreateScreen> {
           ),
         ],
       ],
-    )),
+    ),
+  );
 
-    // Bouton lancer
-    SafeArea(top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-        child: SizedBox(height: 52, width: double.infinity,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: _canSubmit ? DemProColors.accent : DemProColors.bg3,
+  Widget _buildLaunchButton() => SafeArea(top: false,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+      child: SizedBox(height: 52, width: double.infinity,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _canSubmit ? DemProColors.accent : DemProColors.bg3,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 4))],
+          ),
+          child: Material(color: Colors.transparent,
+            child: InkWell(
               borderRadius: BorderRadius.circular(14),
-            ),
-            child: Material(color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: (_canSubmit && !_submitting) ? _submit : null,
-                child: Center(child: _submitting
-                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text(
-                        _isScheduled ? 'Programmer la tournée' : 'Lancer la tournée (${_stops.length} arrêts)',
-                        style: TextStyle(
-                          color: _canSubmit ? Colors.white : DemProColors.muted,
-                          fontWeight: FontWeight.w700, fontSize: 15,
-                        ),
-                      ),
-                ),
+              onTap: (_canSubmit && !_submitting) ? _submit : null,
+              child: Center(child: _submitting
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : Text(
+                      _isScheduled ? 'Programmer la tournée' : 'Lancer la tournée (${_stops.length} arrêts)',
+                      style: DemProText.button.copyWith(color: _canSubmit ? Colors.white : DemProColors.muted),
+                    ),
               ),
             ),
-          )),
-      )),
-  ]);
+          ),
+        )),
+    ),
+  );
 
   // ── Sheet changer départ ──────────────────────────────────────────────────
 
@@ -641,11 +887,24 @@ class _State extends State<DemProBatchCreateScreen> {
         proAddresses: _proAddresses,
         selectedId:   _selectedAddr?['id'] as String?,
         loadingGps:   _loadingGps,
+        dio: _publicDio,
         onSelect: (addr) { Navigator.pop(context); _applyProAddress(addr); },
         onGps:    () { Navigator.pop(context); _fetchGps(); },
         onMap:    () { Navigator.pop(context); _enterMapPlacement(-1); },
+        onManualAddress: (lat, lng, address) { Navigator.pop(context); _applyManualPickup(lat, lng, address); },
       ),
     );
+  }
+
+  void _applyManualPickup(double lat, double lng, String address) {
+    setState(() {
+      _selectedAddr  = null;
+      _pickupLat     = lat;
+      _pickupLng     = lng;
+      _pickupAddress = address;
+    });
+    _recenterMap();
+    _scheduleDraftSave();
   }
 
   static String _fmtDate(DateTime dt) {
@@ -665,11 +924,20 @@ class _StopCard extends StatefulWidget {
   final _Stop stop;
   final bool  canRemove;
   final VoidCallback onMapTap;
-  final VoidCallback onRemove;
   final VoidCallback onChanged;
+  final VoidCallback onRemove;
+  final VoidCallback onLocationChanged;
   final Dio publicDio;
-  final void Function(int index, Map<String, dynamic> place) onSuggestionSelected;
-  const _StopCard({required this.index, required this.stop, required this.canRemove, required this.onMapTap, required this.onRemove, required this.onChanged, required this.publicDio, required this.onSuggestionSelected});
+  final void Function(int index, Map<String, dynamic> place, String sessionToken) onSuggestionSelected;
+  final List<Map<String, dynamic>> recentDestinations;
+  final void Function(int index, Map<String, dynamic> dest) onApplyRecent;
+  const _StopCard({
+    required this.index, required this.stop, required this.canRemove,
+    required this.onMapTap, required this.onRemove, required this.onChanged,
+    required this.onLocationChanged,
+    required this.publicDio, required this.onSuggestionSelected,
+    required this.recentDestinations, required this.onApplyRecent,
+  });
   @override
   State<_StopCard> createState() => _StopCardState();
 }
@@ -678,16 +946,31 @@ class _StopCardState extends State<_StopCard> {
   late final TextEditingController _phoneCtrl    = TextEditingController(text: widget.stop.phone);
   late final TextEditingController _nameCtrl     = TextEditingController(text: widget.stop.name);
   late final TextEditingController _landmarkCtrl = TextEditingController(text: widget.stop.landmark);
-  final _addrCtrl = TextEditingController();
+  late final TextEditingController _addrCtrl     = TextEditingController(text: widget.stop.address);
   List<Map<String, dynamic>> _suggestions = [];
   Timer? _debounce;
   bool _searching = false;
+  String? _searchError;
+  String? _sessionToken;
+  late final _placesService = PlacesAutocompleteService(widget.publicDio);
 
   @override
   void dispose() {
     _debounce?.cancel();
     _phoneCtrl.dispose(); _nameCtrl.dispose(); _landmarkCtrl.dispose(); _addrCtrl.dispose();
     super.dispose();
+  }
+
+  // Resynchronise les champs si le stop a été modifié depuis l'extérieur
+  // (destination récente, pointage carte, brouillon restauré, recommander).
+  @override
+  void didUpdateWidget(covariant _StopCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final s = widget.stop;
+    if (_addrCtrl.text != s.address)         _addrCtrl.text     = s.address;
+    if (_nameCtrl.text != s.name)             _nameCtrl.text     = s.name;
+    if (_phoneCtrl.text != s.phone)           _phoneCtrl.text    = s.phone;
+    if (_landmarkCtrl.text != s.landmark)     _landmarkCtrl.text = s.landmark;
   }
 
   Future<void> _forwardGeocode(String query) async {
@@ -705,41 +988,37 @@ class _StopCardState extends State<_StopCard> {
       s.address = query.trim();
       _addrCtrl.text = query.trim();
       widget.onChanged();
+      widget.onLocationChanged();
     } catch (_) {}
     if (mounted) setState(() => _searching = false);
   }
 
+  void _applyRecent(Map<String, dynamic> dest) {
+    FocusScope.of(context).unfocus();
+    setState(() { _suggestions = []; _addrCtrl.text = dest['address'] as String? ?? ''; });
+    widget.onApplyRecent(widget.index, dest);
+  }
+
   void _onAddrChanged(String query) {
     _debounce?.cancel();
+    setState(() {}); // reflète immédiatement l'état vide/non-vide (destinations récentes)
     if (query.trim().length < 3) {
       if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
       return;
     }
+    _sessionToken ??= PlacesAutocompleteService.newSessionToken();
     _debounce = Timer(const Duration(milliseconds: 450), () async {
-      setState(() => _searching = true);
+      setState(() { _searching = true; _searchError = null; });
       try {
-        final res = await widget.publicDio.get(
-          'https://maps.googleapis.com/maps/api/place/autocomplete/json',
-          queryParameters: {
-            'input': query,
-            'location': '14.6937,-17.4441',
-            'radius': '60000',
-            'components': 'country:sn',
-            'language': 'fr',
-            'key': AppConfig.mapsApiKey,
-          },
-        );
-        if (mounted && res.statusCode == 200) {
-          final preds = res.data['status'] == 'OK'
-              ? List<Map<String, dynamic>>.from(res.data['predictions'])
-              : <Map<String, dynamic>>[];
-          setState(() { _suggestions = preds; _searching = false; });
-        }
-      } catch (_) {
-        if (mounted) setState(() => _searching = false);
+        final preds = await _placesService.autocomplete(query: query, sessionToken: _sessionToken!);
+        if (mounted) setState(() { _suggestions = preds; _searching = false; });
+      } catch (e) {
+        if (mounted) setState(() { _searching = false; _searchError = friendlyError(e); });
       }
     });
   }
+
+  void _retrySearch() => _onAddrChanged(_addrCtrl.text);
 
   @override
   Widget build(BuildContext context) {
@@ -758,10 +1037,10 @@ class _StopCardState extends State<_StopCard> {
           padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
           child: Row(children: [
             CircleAvatar(radius: 13, backgroundColor: DemProColors.accent.withValues(alpha: 0.15),
-              child: Text('${widget.index + 1}', style: const TextStyle(color: DemProColors.accent, fontSize: 12, fontWeight: FontWeight.w800)),
+              child: Text('${widget.index + 1}', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800)),
             ),
             const SizedBox(width: 10),
-            Expanded(child: Text('Arrêt ${widget.index + 1}', style: const TextStyle(color: DemProColors.text, fontSize: 14, fontWeight: FontWeight.w700))),
+            Expanded(child: Text('Arrêt ${widget.index + 1}', style: DemProText.subtitle)),
             if (widget.canRemove)
               IconButton(
                 onPressed: widget.onRemove,
@@ -778,12 +1057,12 @@ class _StopCardState extends State<_StopCard> {
             Expanded(
               child: TextField(
                 controller: _addrCtrl,
-                style: const TextStyle(color: DemProColors.text, fontSize: 12),
+                style: DemProText.caption.copyWith(color: DemProColors.text),
                 onChanged: _onAddrChanged,
                 onSubmitted: (q) => _forwardGeocode(q),
                 decoration: InputDecoration(
                   hintText: 'Saisir une adresse…',
-                  hintStyle: const TextStyle(color: DemProColors.muted, fontSize: 11),
+                  hintStyle: DemProText.caption,
                   prefixIcon: _searching
                       ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2)))
                       : Icon(
@@ -815,20 +1094,23 @@ class _StopCardState extends State<_StopCard> {
             GestureDetector(
               onTap: widget.onMapTap,
               child: Container(
-                width: 38, height: 38,
+                width: 46, height: 38,
                 decoration: BoxDecoration(
                   color: DemProColors.accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
                 ),
-                child: const Icon(Icons.map_outlined, color: DemProColors.accent, size: 18),
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.map_outlined, color: DemProColors.accent, size: 15),
+                  Text('Carte', style: DemProText.micro.copyWith(color: DemProColors.accent)),
+                ]),
               ),
             ),
           ]),
         ),
 
-        // Suggestions
-        if (_suggestions.isNotEmpty)
+        // Destinations récentes (avant saisie)
+        if (_addrCtrl.text.isEmpty && _suggestions.isEmpty && !s.hasLocation && widget.recentDestinations.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
             child: Container(
@@ -836,40 +1118,57 @@ class _StopCardState extends State<_StopCard> {
               decoration: BoxDecoration(
                 color: DemProColors.bg4,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: DemProColors.accent.withValues(alpha: 0.2)),
+                border: Border.all(color: DemProColors.bg3),
               ),
-              child: ListView.separated(
+              child: ListView(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
-                itemCount: _suggestions.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: DemProColors.bg3.withValues(alpha: 0.5)),
-                itemBuilder: (_, i) {
-                  final p = _suggestions[i];
-                  final fmt = p['structured_formatting'] as Map<String, dynamic>?;
-                  final main = fmt?['main_text'] as String? ?? p['description'] as String? ?? '';
-                  final secondary = fmt?['secondary_text'] as String? ?? '';
-                  return InkWell(
-                    onTap: () {
-                      _addrCtrl.text = main;
-                      setState(() => _suggestions = []);
-                      FocusScope.of(context).unfocus();
-                      widget.onSuggestionSelected(widget.index, p);
-                    },
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                    child: Row(children: [
+                      const Icon(Icons.history, color: DemProColors.muted, size: 12),
+                      const SizedBox(width: 6),
+                      Text('Récentes', style: DemProText.micro),
+                    ]),
+                  ),
+                  ...widget.recentDestinations.map((d) => InkWell(
+                    onTap: () => _applyRecent(d),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                       child: Row(children: [
-                        const Icon(Icons.place_outlined, color: DemProColors.muted, size: 14),
+                        const Icon(Icons.place_outlined, color: DemProColors.accent, size: 13),
                         const SizedBox(width: 8),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(main, style: const TextStyle(color: DemProColors.text, fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          if (secondary.isNotEmpty)
-                            Text(secondary, style: const TextStyle(color: DemProColors.muted, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ])),
+                        Expanded(child: Text(d['address'] as String? ?? '', style: DemProText.caption.copyWith(color: DemProColors.text), maxLines: 1, overflow: TextOverflow.ellipsis)),
                       ]),
                     ),
-                  );
-                },
+                  )),
+                ],
               ),
+            ),
+          ),
+
+        // Suggestions
+        if (_suggestions.isNotEmpty || _searching || _searchError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: PlaceSuggestionsList(
+              suggestions: _suggestions,
+              loading: _searching,
+              error: _searchError,
+              onRetry: _retrySearch,
+              maxHeight: 150,
+              colors: _placeSuggestionsColors,
+              onSelect: (p) {
+                final fmt = p['structured_formatting'] as Map<String, dynamic>?;
+                final main = fmt?['main_text'] as String? ?? p['description'] as String? ?? '';
+                _addrCtrl.text = main;
+                setState(() => _suggestions = []);
+                FocusScope.of(context).unfocus();
+                final token = _sessionToken ?? PlacesAutocompleteService.newSessionToken();
+                widget.onSuggestionSelected(widget.index, p, token);
+                _sessionToken = null;
+              },
             ),
           ),
         const SizedBox(height: 8),
@@ -879,7 +1178,13 @@ class _StopCardState extends State<_StopCard> {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: _MiniField(ctrl: _phoneCtrl, hint: 'Tél destinataire *', prefix: '+221',
             keyboardType: TextInputType.phone,
-            onChanged: (v) { s.phone = v; widget.onChanged(); }),
+            textInputAction: TextInputAction.next,
+            onChanged: (v) { s.phone = v; widget.onChanged(); },
+            suffixIcon: _phoneCtrl.text.isEmpty ? null : Icon(
+              isValidSenegalMobile(_phoneCtrl.text.trim()) ? Icons.check_circle : Icons.error_outline,
+              color: isValidSenegalMobile(_phoneCtrl.text.trim()) ? DemProColors.success : DemProColors.danger,
+              size: 16,
+            )),
         ),
         const SizedBox(height: 6),
 
@@ -887,6 +1192,7 @@ class _StopCardState extends State<_StopCard> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: _MiniField(ctrl: _nameCtrl, hint: 'Nom destinataire (optionnel)',
+            textInputAction: TextInputAction.next,
             onChanged: (v) { s.name = v; widget.onChanged(); }),
         ),
         const SizedBox(height: 6),
@@ -895,6 +1201,8 @@ class _StopCardState extends State<_StopCard> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: _MiniField(ctrl: _landmarkCtrl, hint: 'Repère (optionnel)',
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => FocusScope.of(context).unfocus(),
             onChanged: (v) { s.landmark = v; widget.onChanged(); }),
         ),
         const SizedBox(height: 8),
@@ -918,7 +1226,7 @@ class _StopCardState extends State<_StopCard> {
                   child: Column(children: [
                     Icon(t.$3, color: sel ? DemProColors.accent : DemProColors.muted, size: 16),
                     const SizedBox(height: 3),
-                    Text(t.$2.split(' ').first, style: TextStyle(color: sel ? DemProColors.accent : DemProColors.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+                    Text(t.$2.split(' ').first, style: DemProText.micro.copyWith(color: sel ? DemProColors.accent : DemProColors.muted)),
                   ]),
                 ),
               ),
@@ -938,7 +1246,7 @@ class _StopCardState extends State<_StopCard> {
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             const SizedBox(width: 4),
-            const Text('Fragile', style: TextStyle(color: DemProColors.muted, fontSize: 12)),
+            const Text('Fragile', style: DemProText.caption),
           ]),
         ),
       ]),
@@ -952,19 +1260,25 @@ class _MiniField extends StatelessWidget {
   final String? prefix;
   final TextInputType? keyboardType;
   final void Function(String)? onChanged;
-  const _MiniField({required this.ctrl, required this.hint, this.prefix, this.keyboardType, this.onChanged});
+  final Widget? suffixIcon;
+  final TextInputAction? textInputAction;
+  final void Function(String)? onSubmitted;
+  const _MiniField({required this.ctrl, required this.hint, this.prefix, this.keyboardType, this.onChanged, this.suffixIcon, this.textInputAction, this.onSubmitted});
 
   @override
   Widget build(BuildContext context) => TextField(
     controller: ctrl,
     keyboardType: keyboardType,
     onChanged: onChanged,
-    style: const TextStyle(color: DemProColors.text, fontSize: 13),
+    textInputAction: textInputAction,
+    onSubmitted: onSubmitted,
+    style: DemProText.body,
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: DemProColors.muted, fontSize: 12),
+      hintStyle: DemProText.caption,
       prefixText: prefix,
-      prefixStyle: const TextStyle(color: DemProColors.muted, fontSize: 13),
+      prefixStyle: DemProText.caption.copyWith(fontSize: 13),
+      suffixIcon: suffixIcon,
       filled: true, fillColor: DemProColors.bg4,
       isDense: true,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: DemProColors.bg4)),
@@ -996,14 +1310,14 @@ class _DepartureBannerBatch extends StatelessWidget {
         const Icon(Icons.location_on, color: DemProColors.accent, size: 16),
         const SizedBox(width: 8),
         Expanded(child: loading
-            ? const Text('Localisation…', style: TextStyle(color: DemProColors.muted, fontSize: 12))
+            ? const Text('Localisation…', style: DemProText.caption)
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (label != null) Text(label!, style: const TextStyle(color: DemProColors.text, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                if (label != null) Text(label!, style: DemProText.caption.copyWith(color: DemProColors.text, fontWeight: FontWeight.w700)),
                 Text(address != null && address!.isNotEmpty ? address! : 'Aucun départ',
-                  style: const TextStyle(color: DemProColors.muted, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  style: DemProText.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
               ])),
         const SizedBox(width: 8),
-        const Text('Changer', style: TextStyle(color: DemProColors.accent, fontSize: 11, fontWeight: FontWeight.w700)),
+        Text('Changer', style: DemProText.micro.copyWith(color: DemProColors.accent)),
         const Icon(Icons.chevron_right, color: DemProColors.accent, size: 14),
       ]),
     ),
@@ -1014,35 +1328,158 @@ class _DepartureBannerBatch extends StatelessWidget {
 // Sheet changement de départ (réutilise la même logique)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _BatchDepartureSheet extends StatelessWidget {
+class _BatchDepartureSheet extends StatefulWidget {
   final List<Map<String, dynamic>> proAddresses;
   final String? selectedId;
   final bool    loadingGps;
+  final Dio dio;
   final void Function(Map<String, dynamic>) onSelect;
   final VoidCallback onGps, onMap;
-  const _BatchDepartureSheet({required this.proAddresses, required this.selectedId, required this.loadingGps, required this.onSelect, required this.onGps, required this.onMap});
-
-  static const _iconMap = {'store': Icons.storefront_outlined, 'warehouse': Icons.warehouse_outlined, 'office': Icons.business_outlined, 'home': Icons.home_outlined, 'other': Icons.place_outlined};
+  final void Function(double lat, double lng, String address) onManualAddress;
+  const _BatchDepartureSheet({
+    required this.proAddresses, required this.selectedId, required this.loadingGps,
+    required this.dio, required this.onSelect, required this.onGps, required this.onMap,
+    required this.onManualAddress,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
+  State<_BatchDepartureSheet> createState() => _BatchDepartureSheetState();
+}
+
+class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
+  static const _iconMap = {'store': Icons.storefront_outlined, 'warehouse': Icons.warehouse_outlined, 'office': Icons.business_outlined, 'home': Icons.home_outlined, 'other': Icons.place_outlined};
+
+  final _searchCtrl = TextEditingController();
+  Timer? _debounce;
+  List<Map<String, dynamic>> _suggestions = [];
+  bool _searching = false;
+  String? _searchError;
+  String? _sessionToken;
+  late final _placesService = PlacesAutocompleteService(widget.dio);
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String query) {
+    _debounce?.cancel();
+    if (query.trim().length < 3) {
+      if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
+      return;
+    }
+    _sessionToken ??= PlacesAutocompleteService.newSessionToken();
+    _debounce = Timer(const Duration(milliseconds: 450), () async {
+      setState(() { _searching = true; _searchError = null; });
+      try {
+        final preds = await _placesService.autocomplete(query: query, sessionToken: _sessionToken!);
+        if (mounted) setState(() { _suggestions = preds; _searching = false; });
+      } catch (e) {
+        if (mounted) setState(() { _searching = false; _searchError = friendlyError(e); });
+      }
+    });
+  }
+
+  void _retrySearch() => _onChanged(_searchCtrl.text);
+
+  Future<void> _selectSuggestion(Map<String, dynamic> place) async {
+    final placeId = place['place_id'] as String?;
+    if (placeId == null) return;
+    final token = _sessionToken ?? PlacesAutocompleteService.newSessionToken();
+    try {
+      final result = await _placesService.details(placeId: placeId, sessionToken: token);
+      if (result != null) {
+        final loc = result['geometry']['location'];
+        final lat = (loc['lat'] as num).toDouble();
+        final lng = (loc['lng'] as num).toDouble();
+        final name = (place['structured_formatting']?['main_text'] as String?)
+            ?? place['description'] as String? ?? '';
+        widget.onManualAddress(lat, lng, name);
+      }
+    } catch (_) {
+    } finally {
+      _sessionToken = null;
+    }
+  }
+
+  Future<void> _submitManual(String query) async {
+    if (query.trim().length < 3) return;
+    setState(() => _searching = true);
+    try {
+      final locations = await geo.locationFromAddress('$query, Dakar, Sénégal')
+          .timeout(const Duration(seconds: 6));
+      if (locations.isEmpty) return;
+      final loc = locations.first;
+      widget.onManualAddress(loc.latitude, loc.longitude, query.trim());
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  @override
+  // Remonte au-dessus du clavier (sinon le champ de recherche se retrouve
+  // caché derrière une fois le focus pris) et devient scrollable pour ne
+  // jamais déborder une fois le clavier ouvert.
+  Widget build(BuildContext context) => AnimatedPadding(
+    duration: const Duration(milliseconds: 120),
+    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+    child: Container(
+    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
     decoration: const BoxDecoration(color: DemProColors.bg2, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
     padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewPadding.bottom),
-    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+    child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Center(child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
       )),
-      const Text('Point de départ', style: TextStyle(color: DemProColors.text, fontSize: 16, fontWeight: FontWeight.w800)),
+      const Text('Point de départ', style: DemProText.title),
       const SizedBox(height: 14),
-      if (proAddresses.isNotEmpty) ...[
-        const Text('Mes adresses', style: TextStyle(color: DemProColors.muted, fontSize: 11, fontWeight: FontWeight.w600)),
+
+      TextField(
+        controller: _searchCtrl,
+        style: DemProText.body,
+        textInputAction: TextInputAction.search,
+        onChanged: _onChanged,
+        onSubmitted: _submitManual,
+        decoration: InputDecoration(
+          hintText: 'Saisir l\'adresse d\'expédition…',
+          hintStyle: DemProText.caption,
+          prefixIcon: _searching
+              ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2)))
+              : const Icon(Icons.search, color: DemProColors.muted, size: 18),
+          filled: true, fillColor: DemProColors.bg3,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
+      if (_suggestions.isNotEmpty || _searching || _searchError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: PlaceSuggestionsList(
+            suggestions: _suggestions,
+            loading: _searching,
+            error: _searchError,
+            onRetry: _retrySearch,
+            onSelect: _selectSuggestion,
+            colors: _placeSuggestionsColors,
+            maxHeight: 180,
+          ),
+        ),
+      const SizedBox(height: 14),
+
+      if (widget.proAddresses.isNotEmpty) ...[
+        const Text('Mes adresses', style: DemProText.micro),
         const SizedBox(height: 8),
-        ...proAddresses.map((a) {
-          final sel  = a['id'] == selectedId;
+        ...widget.proAddresses.map((a) {
+          final sel  = a['id'] == widget.selectedId;
           final icon = _iconMap[a['icon'] as String? ?? 'other'] ?? Icons.place_outlined;
           return GestureDetector(
-            onTap: () => onSelect(a),
+            onTap: () => widget.onSelect(a),
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
@@ -1055,8 +1492,8 @@ class _BatchDepartureSheet extends StatelessWidget {
                 Icon(icon, color: DemProColors.accent, size: 20),
                 const SizedBox(width: 10),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(a['label'] as String? ?? '', style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w700)),
-                  Text(a['address'] as String? ?? '', style: const TextStyle(color: DemProColors.muted, fontSize: 11.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(a['label'] as String? ?? '', style: DemProText.bodyStrong),
+                  Text(a['address'] as String? ?? '', style: DemProText.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
                 ])),
                 if (sel) const Icon(Icons.check_circle, color: DemProColors.accent, size: 18),
               ]),
@@ -1065,11 +1502,11 @@ class _BatchDepartureSheet extends StatelessWidget {
         }),
         const SizedBox(height: 8),
       ],
-      _SheetActionBtn(icon: Icons.my_location, label: 'Ma position actuelle', loading: loadingGps, onTap: onGps),
+      _SheetActionBtn(icon: Icons.my_location, label: 'Ma position actuelle', loading: widget.loadingGps, onTap: widget.onGps),
       const SizedBox(height: 8),
-      _SheetActionBtn(icon: Icons.map_outlined, label: 'Pointer sur la carte', onTap: onMap),
-    ]),
-  );
+      _SheetActionBtn(icon: Icons.map_outlined, label: 'Pointer sur la carte', onTap: widget.onMap),
+    ])),
+  ));
 }
 
 class _SheetActionBtn extends StatelessWidget {
@@ -1087,8 +1524,71 @@ class _SheetActionBtn extends StatelessWidget {
           : Row(children: [
               Icon(icon, color: DemProColors.muted, size: 18),
               const SizedBox(width: 10),
-              Text(label, style: const TextStyle(color: DemProColors.text, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(label, style: DemProText.bodyStrong),
             ]),
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sheet — reprise de brouillon (tournée)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BatchDraftResumeSheet extends StatelessWidget {
+  final String? savedAt;
+  final VoidCallback onResume;
+  final VoidCallback onDiscard;
+  const _BatchDraftResumeSheet({required this.savedAt, required this.onResume, required this.onDiscard});
+
+  String get _label {
+    final dt = savedAt != null ? DateTime.tryParse(savedAt!)?.toLocal() : null;
+    if (dt == null) return 'Vous avez une tournée en cours de saisie.';
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return 'Brouillon enregistré à $h:$m.';
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: DemProColors.bg2,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: DemProColors.bg4),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.route_outlined, color: DemProColors.accent, size: 32),
+        const SizedBox(height: 12),
+        const Text('Reprendre votre brouillon ?', style: DemProText.title),
+        const SizedBox(height: 6),
+        Text(_label, textAlign: TextAlign.center, style: DemProText.caption),
+        const SizedBox(height: 18),
+        Row(children: [
+          Expanded(child: OutlinedButton(
+            onPressed: onDiscard,
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: DemProColors.bg4),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('Nouvelle tournée', style: DemProText.bodyStrong.copyWith(color: DemProColors.muted)),
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: ElevatedButton(
+            onPressed: onResume,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: DemProColors.accent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Reprendre', style: DemProText.button),
+          )),
+        ]),
+      ]),
     ),
   );
 }

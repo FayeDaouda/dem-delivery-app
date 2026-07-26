@@ -13,10 +13,17 @@ import '../../../core/l10n/app_strings.dart';
 import '../../../core/services/badge_service.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
+import '../../../core/utils/dem_toast.dart';
+import '../../../core/utils/input_formatters.dart';
+import '../../../shared/widgets/gradient_dialog.dart';
+import '../../../shared/widgets/gradient_sheet.dart';
 import '../../../shared/widgets/referral_card.dart';
+import '../../../shared/widgets/swipe_to_confirm.dart';
 import '../data/profile_repository.dart';
 import 'document_upload_screen.dart';
 import 'driver_order_history_screen.dart';
+import 'driver_wallet_screen.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({super.key});
@@ -32,11 +39,30 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   final _profileRepo    = ProfileRepository();
   final _scrollCtrl     = ScrollController();
 
+  // ── Transition photo grande → petite pendant le scroll ────────────────────
+  // 0 = en haut (grande photo visible, petite invisible) → 1 = replié (petite
+  // photo dans la barre, grande masquée) : évite le chevauchement des deux
+  // photos qu'on avait quand la petite était affichée en permanence.
+  double _headerCollapseT = 0.0;
+  static const _headerFadeDistance = 150.0;
+
+  void _onScroll() {
+    final t = (_scrollCtrl.offset / _headerFadeDistance).clamp(0.0, 1.0);
+    if (t != _headerCollapseT) setState(() => _headerCollapseT = t);
+  }
+
+  // ── Confirmation déconnexion/suppression (glisser pour confirmer) ────────
+  bool _logoutLoading  = false;
+  bool _deleteLoading  = false;
+  int  _logoutSwipeTick = 0;
+  int  _deleteSwipeTick = 0;
+
   @override
   void initState() {
     super.initState();
     _load();
     LocaleService.notifier.addListener(_onLangChange);
+    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
@@ -88,66 +114,144 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Future<void> _logout() async {
-    await AuthStorage.clear();
-    appStartupNotifier.markLoggedOut();
-    if (mounted) context.go('/phone');
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewPadding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.logout_rounded, color: AppColors.primary, size: 26),
+              ),
+              const SizedBox(height: 14),
+              const Text('Se déconnecter ?',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+              const SizedBox(height: 6),
+              const Text(
+                'Vous devrez vous reconnecter avec votre numéro de téléphone pour reprendre vos courses.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SwipeToConfirm(
+                key: ValueKey('logout-$_logoutSwipeTick'),
+                label: 'Glissez pour se déconnecter',
+                loading: _logoutLoading,
+                trackColor: AppColors.primary,
+                thumbColor: Colors.white,
+                iconColor: AppColors.primary,
+                labelColor: Colors.white,
+                onConfirmed: () async {
+                  setSheetState(() => _logoutLoading = true);
+                  try {
+                    await AuthStorage.clear();
+                    appStartupNotifier.markLoggedOut();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      context.go('/phone');
+                    }
+                  } catch (e) {
+                    setSheetState(() {
+                      _logoutLoading = false;
+                      _logoutSwipeTick++;
+                    });
+                    if (mounted) showDemToast(context, friendlyError(e), isError: true);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _logoutLoading ? null : () => Navigator.pop(ctx),
+                child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteAccount() async {
     final s = AppStrings.current;
-    final confirmed = await showDialog<bool>(
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 22),
-            const SizedBox(width: 8),
-            Text(s.deleteAccountTitle,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 16)),
-          ],
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewPadding.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_forever_outlined, color: AppColors.error, size: 28),
+              ),
+              const SizedBox(height: 14),
+              Text(s.deleteAccountTitle,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+              const SizedBox(height: 6),
+              Text(s.deleteAccountWarning,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.4)),
+              const SizedBox(height: 24),
+              SwipeToConfirm(
+                key: ValueKey('delete-$_deleteSwipeTick'),
+                label: 'Glissez pour supprimer',
+                loading: _deleteLoading,
+                trackColor: AppColors.error,
+                thumbColor: Colors.white,
+                iconColor: AppColors.error,
+                labelColor: Colors.white,
+                onConfirmed: () async {
+                  setSheetState(() => _deleteLoading = true);
+                  try {
+                    await ApiClient.dio.delete('/users/me');
+                    await AuthStorage.clear();
+                    appStartupNotifier.markLoggedOut();
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      showDemToast(context, s.deleteAccountSuccess);
+                      context.go('/phone');
+                    }
+                  } catch (e) {
+                    setSheetState(() {
+                      _deleteLoading = false;
+                      _deleteSwipeTick++;
+                    });
+                    if (mounted) showDemToast(context, friendlyError(e), isError: true);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _deleteLoading ? null : () => Navigator.pop(ctx),
+                child: Text(s.cancel, style: const TextStyle(color: AppColors.textMuted)),
+              ),
+            ],
+          ),
         ),
-        content: Text(s.deleteAccountWarning,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(s.cancel,
-                style: const TextStyle(color: AppColors.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(s.deleteAccountConfirm,
-                style: const TextStyle(
-                    color: Color(0xFFEF4444), fontWeight: FontWeight.w700)),
-          ),
-        ],
       ),
     );
-
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await ApiClient.dio.delete('/users/me');
-      await AuthStorage.clear();
-      appStartupNotifier.markLoggedOut();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppStrings.current.deleteAccountSuccess),
-            backgroundColor: AppColors.primary,
-          ),
-        );
-        context.go('/phone');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
-        );
-      }
-    }
   }
 
   bool get _isMoto => _user?['vehicleType'] == 'MOTO';
@@ -165,15 +269,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     try {
       final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
       if (!ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
-        );
+        showDemToast(context, 'Impossible d\'ouvrir la page', isError: true);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible d\'ouvrir la page')),
-        );
+        showDemToast(context, 'Impossible d\'ouvrir la page', isError: true);
       }
     }
   }
@@ -186,8 +286,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       builder: (_) => _GradientSheet(children: [
         const Icon(Icons.support_agent_outlined, color: Colors.white, size: 40),
         const SizedBox(height: 8),
-        const Text('Support DEM',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+        Text('Support DEM',
+            style: ClientText.title.copyWith(color: Colors.white)),
         const SizedBox(height: 20),
         _SupportTile(icon: Icons.phone_outlined,      label: s.callSupport, sub: '+221 71 006 46 64', onTap: () => _launch('tel:+221710064664')),
         const SizedBox(height: 10),
@@ -209,7 +309,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           final cur = LocaleService.current;
           return _GradientSheet(children: [
             Text(s.language,
-                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                style: ClientText.sheetTitle.copyWith(color: Colors.white)),
             const SizedBox(height: 12),
             _LangTile(label: s.french,  code: 'fr', selected: cur == 'fr', onTap: () async { final nav = Navigator.of(ctx); await LocaleService.setLang('fr'); setSt(() {}); nav.pop(); }),
             const SizedBox(height: 8),
@@ -231,7 +331,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     if (status == 'PENDING' && pending != null) {
       _showPhoneChangeInfo(
         icon: Icons.schedule_outlined,
-        iconColor: const Color(0xFFF59E0B),
+        iconColor: AppColors.pending,
         title: 'Demande en cours',
         message: 'Votre demande de changement de numéro est en attente de validation par l\'administrateur.\n\n📞 $pending',
       );
@@ -247,7 +347,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           final daysLeft = 7 - daysSince;
           _showPhoneChangeInfo(
             icon: Icons.lock_clock_outlined,
-            iconColor: const Color(0xFFEF4444),
+            iconColor: AppColors.error,
             title: 'Modification indisponible',
             message: 'Vous avez déjà soumis une demande récemment.\n\nVous pourrez en soumettre une nouvelle dans $daysLeft jour${daysLeft > 1 ? 's' : ''}.',
           );
@@ -266,11 +366,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 28),
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-            ),
+          decoration: BoxDecoration(
+            gradient: AppColors.gradientDialog,
             borderRadius: BorderRadius.all(Radius.circular(20)),
           ),
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
@@ -279,7 +376,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(s.editPhone,
-                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                  style: ClientText.sheetTitle.copyWith(color: Colors.white)),
               const SizedBox(height: 16),
               // Bandeau info admin
               Container(
@@ -349,19 +446,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         await _load();
                         if (mounted) {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Demande envoyée — en attente de validation admin'),
-                              backgroundColor: Color(0xFF22C55E),
-                            ),
-                          );
+                          showDemToast(context, 'Demande envoyée — en attente de validation admin');
                         }
                       } catch (e) {
                         setDialogState(() => saving = false);
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
-                          );
+                          showDemToast(context, friendlyError(e), isError: true);
                         }
                       }
                     },
@@ -371,10 +461,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     ),
                     child: saving
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF04317C)))
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryDark))
                         : Text(s.save,
                             style: const TextStyle(
-                                color: Color(0xFF04317C), fontWeight: FontWeight.w700)),
+                                color: AppColors.primaryDark, fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
@@ -396,11 +486,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 28),
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-            ),
+          decoration: BoxDecoration(
+            gradient: AppColors.gradientDialog,
             borderRadius: BorderRadius.all(Radius.circular(20)),
           ),
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
@@ -408,12 +495,13 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Plaque d\'immatriculation',
-                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+              Text('Plaque d\'immatriculation',
+                  style: ClientText.sheetTitle.copyWith(color: Colors.white)),
               const SizedBox(height: 16),
               TextField(
                 controller: ctrl,
                 textCapitalization: TextCapitalization.characters,
+                inputFormatters: [PlateInputFormatter()],
                 style: const TextStyle(color: Colors.white, letterSpacing: 2, fontWeight: FontWeight.w600),
                 decoration: InputDecoration(
                   hintText: 'Ex : DK 1234 AB',
@@ -446,7 +534,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   const SizedBox(width: 4),
                   TextButton(
                     onPressed: saving ? null : () async {
-                      final plate = ctrl.text.trim().toUpperCase();
+                      final plate = ctrl.text.trim().toUpperCase().replaceAll(' ', '');
                       if (plate.isEmpty) return;
                       setDialogState(() => saving = true);
                       try {
@@ -454,19 +542,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         await _load();
                         if (mounted) {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Plaque mise à jour'),
-                              backgroundColor: Color(0xFF22C55E),
-                            ),
-                          );
+                          showDemToast(context, 'Plaque mise à jour');
                         }
                       } catch (e) {
                         setDialogState(() => saving = false);
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.redAccent),
-                          );
+                          showDemToast(context, friendlyError(e), isError: true);
                         }
                       }
                     },
@@ -476,9 +557,131 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     ),
                     child: saving
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF04317C)))
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryDark))
                         : Text(AppStrings.current.save,
-                            style: const TextStyle(color: Color(0xFF04317C), fontWeight: FontWeight.w700)),
+                            style: const TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ));
+      },
+    );
+  }
+
+  void _showEditEmergencyContact() {
+    final nameCtrl  = TextEditingController(text: _user?['emergencyContactName'] as String? ?? '');
+    final phoneCtrl = TextEditingController(text: _user?['emergencyContactPhone'] as String? ?? '');
+    showDialog(
+      context: context,
+      builder: (_) {
+        bool saving = false;
+        return StatefulBuilder(builder: (ctx, setDialogState) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: AppColors.gradientDialog,
+            borderRadius: BorderRadius.all(Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Contact d\'urgence',
+                  style: ClientText.sheetTitle.copyWith(color: Colors.white)),
+              const SizedBox(height: 6),
+              Text('Prévenu en cas d\'alerte SOS pendant une course.',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12.5)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameCtrl,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  hintText: 'Nom (ex : Maman, Awa...)',
+                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  hintText: 'Ex : +221771234567',
+                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45)),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: saving ? null : () => Navigator.pop(context),
+                    child: Text(AppStrings.current.cancel,
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.65))),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    onPressed: saving ? null : () async {
+                      setDialogState(() => saving = true);
+                      try {
+                        await ApiClient.dio.patch('/users/me/profile', data: {
+                          'emergencyContactName':  nameCtrl.text.trim(),
+                          'emergencyContactPhone': phoneCtrl.text.trim(),
+                        });
+                        await _load();
+                        if (mounted) {
+                          Navigator.pop(context);
+                          showDemToast(context, 'Contact d\'urgence mis à jour');
+                        }
+                      } catch (e) {
+                        setDialogState(() => saving = false);
+                        if (mounted) {
+                          showDemToast(context, friendlyError(e), isError: true);
+                        }
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    ),
+                    child: saving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryDark))
+                        : Text(AppStrings.current.save,
+                            style: const TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
@@ -496,26 +699,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     required String title,
     required String message,
   }) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(icon, color: iconColor, size: 20),
-            const SizedBox(width: 8),
-            Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-          ],
-        ),
-        content: Text(message, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+    showGradientInfoDialog(
+      context,
+      title: title,
+      message: message,
+      icon: icon,
+      iconColor: iconColor,
+      actionLabel: 'OK',
+      onAction: () {},
     );
   }
 
@@ -533,25 +724,25 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     final Color  statusColor;
     switch (driverStatus) {
       case 'VERIFIED':
-        statusLabel = 'Vérifié ✓';         statusColor = const Color(0xFF22C55E);
+        statusLabel = 'Vérifié ✓';         statusColor = AppColors.successLight;
       case 'UNDER_REVIEW':
-        statusLabel = 'En cours de vérification'; statusColor = const Color(0xFFF59E0B);
+        statusLabel = 'En cours de vérification'; statusColor = AppColors.pending;
       case 'PENDING_DOCUMENTS':
-        statusLabel = 'Documents requis ⏰'; statusColor = const Color(0xFFFF9800);
+        statusLabel = 'Documents requis ⏰'; statusColor = AppColors.surge;
       case 'SUSPENDED':
-        statusLabel = 'Compte suspendu';    statusColor = const Color(0xFFEF4444);
+        statusLabel = 'Compte suspendu';    statusColor = AppColors.error;
       case 'INCOMPLETE':
-        statusLabel = 'Profil incomplet';   statusColor = const Color(0xFF7B8CA0);
+        statusLabel = 'Profil incomplet';   statusColor = AppColors.textMuted;
       default:
         // Ancien driver sans driverStatus → on se base sur isVerified
         statusLabel = isVerified ? 'Vérifié ✓' : 'Profil incomplet';
-        statusColor = isVerified ? const Color(0xFF22C55E) : const Color(0xFF7B8CA0);
+        statusColor = isVerified ? AppColors.successLight : AppColors.textMuted;
     }
     final pending  = _user?['pendingPhone'] as String?;
     final phoneChangeStatus = _user?['phoneChangeStatus'] as String?;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: AppColors.lightBg,
       body: CustomScrollView(
         controller: _scrollCtrl,
         slivers: [
@@ -569,13 +760,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               if (_photoPath != null && File(_photoPath!).existsSync())
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: Container(
-                    width: 28, height: 28,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
+                  // Apparaît seulement une fois la grande photo repliée —
+                  // sinon les deux photos se chevauchent en haut de l'écran.
+                  child: Opacity(
+                    opacity: _headerCollapseT,
+                    child: Transform.scale(
+                      scale: 0.6 + 0.4 * _headerCollapseT,
+                      child: Container(
+                        width: 28, height: 28,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover)),
+                      ),
                     ),
-                    child: ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover)),
                   ),
                 ),
               Text(s.myProfile, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
@@ -593,32 +792,41 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     padding: const EdgeInsets.only(top: 56),
                     child: Column(children: [
                       const SizedBox(height: 4),
-                      GestureDetector(
-                        onTap: _pickProfilePhoto,
-                        child: Stack(children: [
-                          Container(
-                            width: 88, height: 88,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2.5),
-                            ),
-                            child: _photoPath != null && File(_photoPath!).existsSync()
-                                ? ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover))
-                                : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined, color: Colors.white, size: 40),
-                          ),
-                          Positioned(
-                            right: 0, bottom: 0,
-                            child: Container(
-                              width: 28, height: 28,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary, shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
+                      // Se rétrécit et s'estompe pendant le scroll, en même
+                      // temps que la petite photo de la barre apparaît — évite
+                      // que les deux se chevauchent en haut de l'écran.
+                      Opacity(
+                        opacity: 1 - _headerCollapseT,
+                        child: Transform.scale(
+                          scale: 1 - (_headerCollapseT * 0.35),
+                          child: GestureDetector(
+                            onTap: _pickProfilePhoto,
+                            child: Stack(children: [
+                              Container(
+                                width: 88, height: 88,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2.5),
+                                ),
+                                child: _photoPath != null && File(_photoPath!).existsSync()
+                                    ? ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover))
+                                    : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined, color: Colors.white, size: 40),
                               ),
-                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                            ),
+                              Positioned(
+                                right: 0, bottom: 0,
+                                child: Container(
+                                  width: 28, height: 28,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary, shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                  ),
+                                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                                ),
+                              ),
+                            ]),
                           ),
-                        ]),
+                        ),
                       ),
                       const SizedBox(height: 10),
                       Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
@@ -654,7 +862,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
                   // Parrainage
                   Text('PARRAINAGE',
-                      style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 11,
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 11,
                           fontWeight: FontWeight.w700, letterSpacing: 1.2)),
                   const SizedBox(height: 8),
                   ReferralCard(referralCode: _user?['referralCode'] as String?),
@@ -673,6 +881,17 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     _divider(),
                     _InfoRow(icon: Icons.verified_outlined, label: s.statusLabel,
                         value: statusLabel, valueColor: statusColor),
+                    _divider(),
+                    _EditableInfoRow(
+                      icon: Icons.emergency_outlined,
+                      label: 'Contact d\'urgence',
+                      value: (_user?['emergencyContactPhone'] as String?)?.isNotEmpty == true
+                          ? (_user?['emergencyContactName'] as String?)?.isNotEmpty == true
+                              ? _user!['emergencyContactName'] as String
+                              : _user!['emergencyContactPhone'] as String
+                          : 'Non configuré',
+                      onTap: _showEditEmergencyContact,
+                    ),
                     // Mes Documents — ligne unique avec barre de progression
                     _divider(),
                     _DocsProgressRow(
@@ -687,12 +906,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         child: Row(
                           children: [
-                            const Icon(Icons.schedule_outlined, color: Color(0xFFF59E0B), size: 18),
+                            const Icon(Icons.schedule_outlined, color: AppColors.pending, size: 18),
                             const SizedBox(width: 10),
                             Expanded(child: Text(s.phonePending,
-                                style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 13))),
+                                style: const TextStyle(color: AppColors.pending, fontSize: 13))),
                             Text(pending, style: const TextStyle(
-                                color: Color(0xFFF59E0B), fontSize: 12, fontWeight: FontWeight.w600)),
+                                color: AppColors.pending, fontSize: 12, fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ),
@@ -702,6 +921,13 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
                   // Activité
                   _Section(title: s.activity, children: [
+                    _ActionRow(
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'Portefeuille',
+                        trailing: '${((_user?['balance'] as num?)?.toInt() ?? 0)} FCFA',
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverWalletScreen()))
+                            .then((_) => _load())),
+                    _divider(),
                     _ActionRow(icon: Icons.history, label: s.historyTitle,
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverOrderHistoryScreen()))),
                   ]),
@@ -728,10 +954,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   // Compte
                   _Section(title: 'Gestion du compte', children: [
                     _ActionRow(icon: Icons.logout, label: s.logout,
-                        color: Colors.redAccent, onTap: _logout),
+                        color: AppColors.error, onTap: _logout),
                     _divider(),
                     _ActionRow(icon: Icons.delete_outline, label: s.deleteAccount,
-                        color: const Color(0xFFEF4444), onTap: _deleteAccount),
+                        color: AppColors.error, onTap: _deleteAccount),
                   ]),
                   const SizedBox(height: 12),
               ]),
@@ -760,7 +986,7 @@ class _Section extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(title.toUpperCase(),
-          style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 11,
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 11,
               fontWeight: FontWeight.w700, letterSpacing: 1.2)),
       const SizedBox(height: 8),
       Container(
@@ -788,10 +1014,10 @@ class _InfoRow extends StatelessWidget {
     child: Row(children: [
       Icon(icon, color: AppColors.primary, size: 20),
       const SizedBox(width: 14),
-      Text(label, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 14)),
+      Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
       const Spacer(),
       Text(value, style: TextStyle(
-          color: valueColor ?? const Color(0xFF1A1A2E), fontSize: 14, fontWeight: FontWeight.w600)),
+          color: valueColor ?? AppColors.textDark, fontSize: 14, fontWeight: FontWeight.w600)),
     ]),
   );
 }
@@ -812,9 +1038,15 @@ class _EditableInfoRow extends StatelessWidget {
       child: Row(children: [
         Icon(icon, color: AppColors.primary, size: 20),
         const SizedBox(width: 14),
-        Text(label, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 14)),
-        const Spacer(),
-        Text(value, style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 14, fontWeight: FontWeight.w600)),
+        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(value,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.textDark, fontSize: 14, fontWeight: FontWeight.w600)),
+        ),
         const SizedBox(width: 8),
         const Icon(Icons.edit_outlined, color: AppColors.primary, size: 15),
       ]),
@@ -847,12 +1079,12 @@ class _DocsProgressRow extends StatelessWidget {
               children: [
                 Row(children: [
                   const Text('Mes Documents',
-                      style: TextStyle(color: Color(0xFF1A1A2E), fontSize: 14)),
+                      style: TextStyle(color: AppColors.textDark, fontSize: 14)),
                   const Spacer(),
                   Text('$uploaded/$total',
                       style: TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w700,
-                        color: allDone ? const Color(0xFF22C55E) : const Color(0xFFF59E0B),
+                        color: allDone ? AppColors.successLight : AppColors.pending,
                       )),
                 ]),
                 const SizedBox(height: 6),
@@ -863,7 +1095,7 @@ class _DocsProgressRow extends StatelessWidget {
                     minHeight: 4,
                     backgroundColor: const Color(0xFFE5E7EB),
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      allDone ? const Color(0xFF22C55E) : AppColors.primary,
+                      allDone ? AppColors.successLight : AppColors.primary,
                     ),
                   ),
                 ),
@@ -871,7 +1103,7 @@ class _DocsProgressRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Icon(Icons.arrow_forward_ios, color: Color(0xFF7B8CA0), size: 12),
+          const Icon(Icons.arrow_forward_ios, color: AppColors.textMuted, size: 12),
         ]),
       ),
     );
@@ -888,7 +1120,7 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? const Color(0xFF1A1A2E);
+    final c = color ?? AppColors.textDark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -899,7 +1131,7 @@ class _ActionRow extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(child: Text(label, style: TextStyle(color: c, fontSize: 14, fontWeight: FontWeight.w500))),
           if (trailing != null) ...[
-            Text(trailing!, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13)),
+            Text(trailing!, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
             const SizedBox(width: 6),
           ],
           Icon(Icons.arrow_forward_ios, color: c.withValues(alpha: 0.4), size: 14),
@@ -914,17 +1146,13 @@ class _GradientSheet extends StatelessWidget {
   const _GradientSheet({required this.children});
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft, end: Alignment.bottomRight,
-        colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-      ),
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
+  Widget build(BuildContext context) => GradientSheet(
+    blurred: false,
+    bordered: false,
+    radius: 24,
     padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).viewPadding.bottom + 28),
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      _DragHandle(),
+      const SheetDragHandle(),
       ...children,
     ]),
   );
@@ -936,7 +1164,7 @@ class _SheetTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(text,
-      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700));
+      style: ClientText.sheetTitle.copyWith(color: Colors.white));
 }
 
 class _SheetBtn extends StatelessWidget {
@@ -1029,18 +1257,6 @@ class _SupportTile extends StatelessWidget {
   );
 }
 
-class _DragHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 36, height: 4,
-    margin: const EdgeInsets.only(bottom: 16),
-    decoration: BoxDecoration(
-      color: AppColors.textSecondary.withValues(alpha: 0.35),
-      borderRadius: BorderRadius.circular(2),
-    ),
-  );
-}
-
 // ── Carte badge driver ────────────────────────────────────────────────────────
 class _BadgeCard extends StatelessWidget {
   final Map<String, dynamic> user;
@@ -1055,7 +1271,13 @@ class _BadgeCard extends StatelessWidget {
 
     final badge     = BadgeService.compute(courses: courses, referrals: referrals, rating: rating, remoteConfig: badgesConfig);
     final nextBadge = BadgeService.next(badge.tier);
-    final progress  = BadgeService.progressToCourses(courses: courses, current: badge.tier);
+    final progress  = BadgeService.progressToNext(courses: courses, referrals: referrals, rating: rating, current: badge.tier);
+    final objective = nextBadge != null
+        ? BadgeService.objectiveLabel(
+            BadgeService.closestCriteria(nextBadge, courses: courses, referrals: referrals, rating: rating),
+            courses: courses, referrals: referrals, rating: rating,
+          )
+        : '';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1107,7 +1329,7 @@ class _BadgeCard extends StatelessWidget {
                   icon: Icons.star_rounded,
                   value: rating > 0 ? rating.toStringAsFixed(1) : '—',
                   label: 'note',
-                  iconColor: const Color(0xFFFFD700),
+                  iconColor: AppColors.ratingGold,
                 ),
               ],
             ),
@@ -1124,7 +1346,7 @@ class _BadgeCard extends StatelessWidget {
                     children: [
                       Text('$courses courses',
                           style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-                      Text('Objectif : ${nextBadge.coursesRequired} courses',
+                      Text('Objectif : $objective',
                           style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 10)),
                     ],
                   ),
@@ -1157,128 +1379,6 @@ class _BadgeCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-// ── Carte forfait journalier (S4 — pas encore intégrée dans le profil) ────────
-// ignore: unused_element
-class _ForfaitCard extends StatelessWidget {
-  final Map<String, dynamic> status;
-  const _ForfaitCard({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final active       = status['active'] as bool? ?? false;
-    final amount       = (status['amount'] as num?)?.toInt() ?? 480;
-    final totalOwed    = (status['totalOwed'] as num?)?.toInt() ?? 0;
-    final todayCharged = status['todayCharged'] as bool? ?? false;
-
-    // Si forfait inactif → petite bannière info discrète
-    if (!active) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
-        ),
-        child: Row(children: [
-          const Icon(Icons.info_outline, color: AppColors.primary, size: 18),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'Forfait journalier non encore activé (S4)',
-              style: TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
-            ),
-          ),
-        ]),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
-      ),
-      child: Column(children: [
-        // En-tête
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: const BoxDecoration(
-            gradient: AppColors.gradientSplash,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          child: Row(children: [
-            const Icon(Icons.receipt_long_outlined, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            const Text('Forfait journalier',
-                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.20),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text('$amount FCFA/jour',
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-            ),
-          ]),
-        ),
-        // Corps
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            // Total dû
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('TOTAL DÛ',
-                    style: TextStyle(color: Color(0xFF7B8CA0), fontSize: 10,
-                        fontWeight: FontWeight.w700, letterSpacing: 0.8)),
-                const SizedBox(height: 4),
-                Text('$totalOwed FCFA',
-                    style: TextStyle(
-                      color: totalOwed > 0 ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
-                      fontSize: 20, fontWeight: FontWeight.w800,
-                    )),
-              ]),
-            ),
-            // Statut aujourd'hui
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: (todayCharged ? const Color(0xFFEF4444) : const Color(0xFF22C55E))
-                    .withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: (todayCharged ? const Color(0xFFEF4444) : const Color(0xFF22C55E))
-                      .withValues(alpha: 0.30),
-                ),
-              ),
-              child: Column(children: [
-                Icon(
-                  todayCharged ? Icons.check_circle_outline : Icons.radio_button_unchecked,
-                  size: 16,
-                  color: todayCharged ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  todayCharged ? 'Débité' : 'Non débité',
-                  style: TextStyle(
-                    color: todayCharged ? const Color(0xFFEF4444) : const Color(0xFF22C55E),
-                    fontSize: 10, fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text("Aujourd'hui",
-                    style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 9)),
-              ]),
-            ),
-          ]),
-        ),
-      ]),
     );
   }
 }

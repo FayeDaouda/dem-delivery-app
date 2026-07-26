@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
+import '../../../shared/widgets/primary_button.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../../core/utils/dem_layout.dart';
 
@@ -48,10 +50,7 @@ class _State extends State<DriverSuspendedScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-          ),
+          gradient: AppColors.gradientDialog,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 20),
@@ -74,7 +73,7 @@ class _State extends State<DriverSuspendedScreen> {
                 textAlign: TextAlign.center),
             const SizedBox(height: 24),
             _contactTile(
-              icon: Icons.phone_rounded, color: const Color(0xFF22C55E),
+              icon: Icons.phone_rounded, color: AppColors.successLight,
               label: 'Appeler le support', sub: phone,
               onTap: () async {
                 final uri = Uri.parse('tel:$phone');
@@ -119,7 +118,7 @@ class _State extends State<DriverSuspendedScreen> {
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(label, style: ClientText.bodyStrong.copyWith(color: Colors.white)),
           const SizedBox(height: 2),
           Text(sub, style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 12)),
         ])),
@@ -230,19 +229,25 @@ class _State extends State<DriverSuspendedScreen> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
+                            color: AppColors.lightFill,
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             const Text('Besoin d\'aide ?',
-                                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                                style: ClientText.bodyStrong),
                             const SizedBox(height: 4),
                             const Text('Contactez le support DEM pour accélérer la réactivation de votre compte.',
                                 style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.4)),
                             const SizedBox(height: 12),
-                            _GradientButton(
+                            PrimaryButton(
                               label: 'Contacter le support',
-                              icon: Icons.support_agent_outlined,
+                              leadingIcon: Icons.support_agent_outlined,
+                              gradient: const LinearGradient(
+                                colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
+                                begin: Alignment.centerLeft, end: Alignment.centerRight,
+                              ),
+                              foregroundColor: Colors.white,
+                              height: 48,
                               onTap: _contactSupport,
                             ),
                           ]),
@@ -312,35 +317,5 @@ class _InfoCard extends StatelessWidget {
         Text(body, style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.black87)),
       ])),
     ]),
-  );
-}
-
-class _GradientButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _GradientButton({required this.label, required this.icon, required this.onTap});
-  @override
-  Widget build(BuildContext context) => Container(
-    height: 48,
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
-        begin: Alignment.centerLeft, end: Alignment.centerRight,
-      ),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-        ]),
-      ),
-    ),
   );
 }

@@ -7,6 +7,7 @@ class GradientButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
   final VoidCallback? onDisabledTap;
+  final double height;
 
   const GradientButton({
     super.key,
@@ -15,6 +16,7 @@ class GradientButton extends StatelessWidget {
     this.loading = false,
     this.enabled = true,
     this.onDisabledTap,
+    this.height = 54,
   });
 
   @override
@@ -25,7 +27,7 @@ class GradientButton extends StatelessWidget {
       onTap: active ? onTap : (onDisabledTap ?? () {}),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        height: 54,
+        height: height,
         decoration: BoxDecoration(
           color: !active ? Colors.white.withValues(alpha: 0.4) : Colors.white,
           borderRadius: BorderRadius.circular(14),

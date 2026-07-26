@@ -46,6 +46,8 @@ import '../../features/dem_pro/screens/dem_pro_batch_tracking_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_confirmation_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_tracking_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_receipt_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_products_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_order_requests_screen.dart';
 import '../../features/guest_tracking/guest_tracking_screen.dart';
 
 final routeObserver = RouteObserver<ModalRoute<void>>();
@@ -185,12 +187,26 @@ final appRouter = GoRouter(
       path: '/dem-pro/orders/create',
       builder: (context, state) {
         final scheduled = state.uri.queryParameters['scheduled'] == 'true';
-        return DemProOrderCreateScreen(scheduled: scheduled);
+        final extra = state.extra;
+        Map<String, dynamic>? reorderFrom;
+        Map<String, dynamic>? fromOrderRequest;
+        if (extra is Map<String, dynamic>) {
+          if (extra.containsKey('fromOrderRequest')) {
+            fromOrderRequest = extra['fromOrderRequest'] as Map<String, dynamic>?;
+          } else {
+            reorderFrom = extra;
+          }
+        }
+        return DemProOrderCreateScreen(
+          scheduled: scheduled,
+          reorderFrom: reorderFrom,
+          fromOrderRequest: fromOrderRequest,
+        );
       },
     ),
     GoRoute(
       path: '/dem-pro/batch/create',
-      builder: (context, state) => const DemProBatchCreateScreen(),
+      builder: (context, state) => DemProBatchCreateScreen(reorderFrom: state.extra as Map<String, dynamic>?),
     ),
     GoRoute(
       path: '/dem-pro/batch/confirmation',
@@ -230,6 +246,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/dem-pro/orders/receipt',
       builder: (context, state) => DemProReceiptScreen(order: state.extra as Map<String, dynamic>),
+    ),
+    GoRoute(
+      path: '/dem-pro/products',
+      builder: (context, state) => const DemProProductsScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/order-requests',
+      builder: (context, state) => const DemProOrderRequestsScreen(),
     ),
     GoRoute(
       path: '/orders/confirmation',

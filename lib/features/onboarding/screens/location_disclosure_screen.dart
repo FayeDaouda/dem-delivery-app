@@ -89,7 +89,7 @@ class _LocationDisclosureScreenState extends State<LocationDisclosureScreen> {
                     ),
                     child: Icon(
                       Icons.location_on_rounded,
-                      color: const Color(0xFF40F0C0),
+                      color: AppColors.accentMint,
                       size: isTablet ? 65.0 : 52.0,
                     ),
                   ),
@@ -131,14 +131,14 @@ class _LocationDisclosureScreenState extends State<LocationDisclosureScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF40F0C0).withValues(alpha: 0.20),
+                              color: AppColors.accentMint.withValues(alpha: 0.20),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFF40F0C0).withValues(alpha: 0.40)),
+                              border: Border.all(color: AppColors.accentMint.withValues(alpha: 0.40)),
                             ),
                             child: const Text(
                               'OBLIGATOIRE',
                               style: TextStyle(
-                                color: Color(0xFF40F0C0),
+                                color: AppColors.accentMint,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1.2,
@@ -172,7 +172,7 @@ class _LocationDisclosureScreenState extends State<LocationDisclosureScreen> {
                     onPressed: _loading ? null : _continue,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF04317C),
+                      foregroundColor: AppColors.primaryDark,
                       disabledBackgroundColor: Colors.white.withValues(alpha: 0.7),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -185,7 +185,7 @@ class _LocationDisclosureScreenState extends State<LocationDisclosureScreen> {
                             height: 22,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              color: Color(0xFF04317C),
+                              color: AppColors.primaryDark,
                             ),
                           )
                         : const Text(

@@ -7,7 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
+import '../../core/error/app_exception.dart';
+import '../../core/utils/price_format.dart';
+import '../../shared/widgets/payment_operator_badge.dart';
+import '../../shared/widgets/samirpay_payment_sheet.dart';
 import '../home_driver/navigation/directions_service.dart';
 
 const _accent = Color(0xFF00AECB);
@@ -30,8 +35,13 @@ class GuestTrackingScreen extends StatefulWidget {
 }
 
 class _GuestTrackingScreenState extends State<GuestTrackingScreen> {
+  // Instance Dio indépendante d'ApiClient (délibéré) : l'intercepteur
+  // d'ApiClient déconnecte l'utilisateur sur 401 — un invité qui suit une
+  // commande sans être connecté (ou connecté sur un autre compte) ne doit
+  // jamais déclencher cette logique. L'URL de base reste partagée pour
+  // éviter que les deux dérivent l'une de l'autre.
   final _dio = Dio(BaseOptions(
-    baseUrl: 'https://api.dem.sn',
+    baseUrl: apiBaseUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),
   ));
@@ -48,6 +58,12 @@ class _GuestTrackingScreenState extends State<GuestTrackingScreen> {
   String? _error;
   DateTime? _lastUpdate;
 
+  // Pas de socket possible pour un invité anonyme (pas de JWT) — le
+  // SamirpayPaymentSheet a besoin d'un Stream de confirmation, alimenté ici
+  // par le polling REST déjà en place (_fetchOrder, toutes les 10s) plutôt
+  // que par un événement temps réel.
+  final _paymentConfirmedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +76,7 @@ class _GuestTrackingScreenState extends State<GuestTrackingScreen> {
   void dispose() {
     _pollTimer?.cancel();
     _mapCtrl?.dispose();
+    _paymentConfirmedCtrl.close();
     super.dispose();
   }
 
@@ -83,6 +100,7 @@ class _GuestTrackingScreenState extends State<GuestTrackingScreen> {
       setState(() {
         _order = data;
         _loading = false;
+        _error = null; // efface une éventuelle erreur transitoire d'un poll précédent
         _expired = data['isExpired'] == true;
         _lastUpdate = DateTime.now();
         if (lat != null && lng != null && lat != 0 && lng != 0) {
@@ -96,6 +114,9 @@ class _GuestTrackingScreenState extends State<GuestTrackingScreen> {
 
       if (isFirst) _fetchRoute();
       if (_expired) _pollTimer?.cancel();
+      if (data['paymentStatus'] == 'PAID') {
+        _paymentConfirmedCtrl.add({'orderId': widget.orderId});
+      }
     } on DioException catch (e) {
       if (!mounted) return;
       if (e.response?.statusCode == 404) {
@@ -127,6 +148,66 @@ class _GuestTrackingScreenState extends State<GuestTrackingScreen> {
         _fitBounds(LatLng(pLat, pLng), LatLng(dLat, dLng));
       }
     } catch (_) {}
+  }
+
+  // Le destinataire (ou expéditeur) sans compte règle la course directement
+  // depuis ce lien — pas de riverpod ici (écran hors auth), on réutilise
+  // simplement le _dio dédié de cet écran. Boutons Wave/Orange actifs : la
+  // personne qui a ouvert CE lien sur CE téléphone est censée être la
+  // payeuse (contrairement au QR affiché par le livreur à un tiers).
+  // SamirPay exige de choisir Wave OU Orange Money avant l'appel — un seul
+  // moyen de paiement est renvoyé par appel (jamais les deux), donc on
+  // demande le choix ici plutôt qu'après (voir samirpay.service.js).
+  Future<String?> _chooseOperator() {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _bg2,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Payer avec', style: TextStyle(color: _textColor, fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              _OperatorTile(operatorName: 'ORANGE_MONEY', onTap: () => Navigator.of(ctx).pop('ORANGE_MONEY')),
+              const SizedBox(height: 10),
+              _OperatorTile(operatorName: 'WAVE', onTap: () => Navigator.of(ctx).pop('WAVE')),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _payOnline() async {
+    final operatorName = await _chooseOperator();
+    if (operatorName == null || !mounted) return;
+
+    final amount = clientChargeFor(_order ?? const {});
+
+    await SamirpayPaymentSheet.show(
+      context,
+      amount: amount,
+      title: 'Paiement de la course',
+      initPayment: () async {
+        try {
+          final res = await _dio.post('/orders/guest/${widget.orderId}/pay', data: {'operatorName': operatorName});
+          return res.data as Map<String, dynamic>;
+        } on DioException catch (e) {
+          throw AppException(
+            e.response?.data?['message'] ?? 'Impossible de lancer le paiement en ligne.',
+            e.response?.statusCode,
+          );
+        }
+      },
+      confirmationStream: _paymentConfirmedCtrl.stream,
+      onSuccess: () {
+        if (mounted) setState(() => _order = {...?_order, 'paymentStatus': 'PAID'});
+      },
+    );
   }
 
   void _fitBounds(LatLng a, LatLng b) {
@@ -236,6 +317,7 @@ class _GuestTrackingScreenState extends State<GuestTrackingScreen> {
     }
 
     final o = _order!;
+    final paymentStatus = o['paymentStatus'] as String? ?? 'PENDING';
     final pLat = (o['pickupLatitude'] as num?)?.toDouble() ?? 14.6928;
     final pLng = (o['pickupLongitude'] as num?)?.toDouble() ?? -17.4467;
     final dLat = (o['deliveryLatitude'] as num?)?.toDouble() ?? 14.6928;
@@ -434,8 +516,18 @@ class _GuestTrackingScreenState extends State<GuestTrackingScreen> {
                   decoration: BoxDecoration(color: _muted.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
                   child: const Text('Ce suivi n\'est plus actif', textAlign: TextAlign.center, style: TextStyle(color: _muted, fontSize: 12)),
                 )
-              else
+              else ...[
+                if (paymentStatus != 'PAID') ...[
+                  _CTA(
+                    label: 'Payer en ligne',
+                    icon: Icons.qr_code_2_rounded,
+                    color: _success,
+                    onTap: _payOnline,
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 _CTA(label: 'Télécharger DEM', onTap: _openStore),
+              ],
             ]),
           ),
         ),
@@ -492,7 +584,14 @@ class _StepperRow extends StatelessWidget {
 class _CTA extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
-  const _CTA({required this.label, required this.onTap});
+  final IconData icon;
+  final Color color;
+  const _CTA({
+    required this.label,
+    required this.onTap,
+    this.icon = Icons.download_outlined,
+    this.color = _accent,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -501,15 +600,44 @@ class _CTA extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: _accent.withValues(alpha: 0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _accent.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.download_outlined, color: _accent, size: 16),
+        Icon(icon, color: color, size: 16),
         const SizedBox(width: 8),
-        Text(label, style: const TextStyle(color: _accent, fontSize: 13, fontWeight: FontWeight.w700)),
+        Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w700)),
       ]),
     ),
   );
+}
+
+class _OperatorTile extends StatelessWidget {
+  final String operatorName;
+  final VoidCallback onTap;
+  const _OperatorTile({required this.operatorName, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = PaymentOperatorBadge.colorFor(operatorName);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(children: [
+          PaymentOperatorBadge(operatorName: operatorName, size: 30),
+          const SizedBox(width: 12),
+          Text(PaymentOperatorBadge.labelFor(operatorName),
+              style: const TextStyle(color: _textColor, fontSize: 14, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
+  }
 }

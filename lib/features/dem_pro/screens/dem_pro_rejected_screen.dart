@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/storage/auth_storage.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../../../core/widgets/network_error_widget.dart';
 import '../../profile/data/profile_repository.dart';
 import '../theme/dem_pro_colors.dart';
+import '../theme/dem_pro_text.dart';
+import '../widgets/dem_pro_button.dart';
+import '../widgets/dem_pro_support_tile.dart';
 
 class DemProRejectedScreen extends StatefulWidget {
   const DemProRejectedScreen({super.key});
@@ -47,6 +49,7 @@ class _State extends State<DemProRejectedScreen> {
   void _showSupport(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: DemProColors.bg2,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -58,22 +61,22 @@ class _State extends State<DemProRejectedScreen> {
             children: [
               const Icon(Icons.support_agent_outlined, color: DemProColors.accent, size: 36),
               const SizedBox(height: 10),
-              const Text('Support DEM', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              Text('Support DEM', style: DemProText.title.copyWith(fontSize: 17)),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Besoin de précisions sur le refus de votre demande ?',
-                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                style: DemProText.body.copyWith(color: DemProColors.muted),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
-              _SupportOption(
+              DemProSupportTile(
                 icon: Icons.phone_outlined,
                 label: 'Appeler le support',
                 sub: '+221 71 006 46 64',
                 onTap: () { Navigator.pop(context); launchUrl(Uri.parse('tel:+221710064664')); },
               ),
               const SizedBox(height: 10),
-              _SupportOption(
+              DemProSupportTile(
                 icon: Icons.chat_bubble_outline,
                 label: 'WhatsApp',
                 sub: '+221 71 006 46 64',
@@ -86,7 +89,7 @@ class _State extends State<DemProRejectedScreen> {
                 },
               ),
               const SizedBox(height: 10),
-              _SupportOption(
+              DemProSupportTile(
                 icon: Icons.email_outlined,
                 label: 'Envoyer un e-mail',
                 sub: 'support@dem.sn',
@@ -103,20 +106,21 @@ class _State extends State<DemProRejectedScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: DemProColors.bg2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Se déconnecter ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-        content: const Text(
+        title: const Text('Se déconnecter ?', style: DemProText.title),
+        content: Text(
           'Vous pourrez vous reconnecter avec le même numéro.',
-          style: TextStyle(fontSize: 13.5, color: Color(0xFF6B7280)),
+          style: DemProText.body.copyWith(color: DemProColors.muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler', style: TextStyle(color: Color(0xFF6B7280))),
+            child: Text('Annuler', style: DemProText.body.copyWith(color: DemProColors.muted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Déconnexion', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+            child: Text('Déconnexion', style: DemProText.body.copyWith(color: DemProColors.danger, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -130,7 +134,7 @@ class _State extends State<DemProRejectedScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DemProColors.bg,
       body: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
@@ -153,9 +157,9 @@ class _State extends State<DemProRejectedScreen> {
                               child: Image.asset('assets/DEM.png', width: 56, height: 56, fit: BoxFit.cover),
                             ),
                             const SizedBox(height: 6),
-                            const Text(
+                            Text(
                               'delivery express mobility',
-                              style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF), letterSpacing: 0.5),
+                              style: DemProText.micro.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w400, letterSpacing: 0.5),
                             ),
                             const SizedBox(height: 24),
 
@@ -164,10 +168,10 @@ class _State extends State<DemProRejectedScreen> {
                               return Container(
                                 width: t ? 110.0 : 84.0, height: t ? 110.0 : 84.0,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFF5C5C).withValues(alpha: 0.12),
+                                  color: DemProColors.danger.withValues(alpha: 0.12),
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(Icons.cancel_outlined, color: const Color(0xFFFF5C5C), size: t ? 52.0 : 42.0),
+                                child: Icon(Icons.cancel_outlined, color: DemProColors.danger, size: t ? 52.0 : 42.0),
                               );
                             }),
                             const SizedBox(height: 24),
@@ -177,7 +181,7 @@ class _State extends State<DemProRejectedScreen> {
                               return Text(
                                 'Demande non retenue',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: t ? 26.0 : 22.0, fontWeight: FontWeight.w800, color: const Color(0xFF0F2942)),
+                                style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: t ? 26.0 : 22.0),
                               );
                             }),
                             const SizedBox(height: 10),
@@ -186,7 +190,7 @@ class _State extends State<DemProRejectedScreen> {
                                   ? 'Le profil "$_businessName" n\'a pas été validé par notre équipe.'
                                   : 'Votre profil DEM Pro n\'a pas été validé par notre équipe.',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280), height: 1.5),
+                              style: DemProText.subtitle.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w400, height: 1.5),
                             ),
                             const SizedBox(height: 24),
 
@@ -195,19 +199,19 @@ class _State extends State<DemProRejectedScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: Colors.red.shade50,
+                                color: DemProColors.danger.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.red.shade200),
+                                border: Border.all(color: DemProColors.danger.withValues(alpha: 0.25)),
                               ),
                               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Icon(Icons.info_outline, color: Colors.red.shade600, size: 20),
+                                const Icon(Icons.info_outline, color: DemProColors.danger, size: 20),
                                 const SizedBox(width: 10),
                                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                   Text('Motif du refus',
-                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Colors.red.shade700)),
+                                    style: DemProText.subtitle.copyWith(color: DemProColors.danger, fontWeight: FontWeight.w800)),
                                   const SizedBox(height: 4),
                                   Text(_rejectionReason ?? 'Non précisé',
-                                    style: TextStyle(fontSize: 13, color: Colors.red.shade600, height: 1.4)),
+                                    style: DemProText.body.copyWith(color: DemProColors.danger, height: 1.4)),
                                 ])),
                               ]),
                             ),
@@ -225,17 +229,17 @@ class _State extends State<DemProRejectedScreen> {
                               child: Row(children: [
                                 Icon(Icons.edit_outlined, color: DemProColors.accent, size: 18),
                                 const SizedBox(width: 10),
-                                const Expanded(
+                                Expanded(
                                   child: Text(
                                     'Corrigez les informations de votre profil entreprise et resoumettez votre demande.',
-                                    style: TextStyle(fontSize: 12, color: Color(0xFF0F2942)),
+                                    style: DemProText.caption.copyWith(color: DemProColors.text, fontWeight: FontWeight.w400),
                                   ),
                                 ),
                               ]),
                             ),
                             const SizedBox(height: 28),
 
-                            _GradientButton(
+                            DemProButton(
                               label: 'Modifier ma demande',
                               icon: Icons.edit_outlined,
                               onTap: () => context.go('/dem-pro/onboarding'),
@@ -248,8 +252,8 @@ class _State extends State<DemProRejectedScreen> {
                               icon: const Icon(Icons.help_outline, size: 15),
                               label: const Text('Besoin d\'aide ? Contacter le support'),
                               style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF9CA3AF),
-                                textStyle: const TextStyle(fontSize: 12.5),
+                                foregroundColor: DemProColors.muted,
+                                textStyle: DemProText.caption.copyWith(fontWeight: FontWeight.w400),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -260,8 +264,8 @@ class _State extends State<DemProRejectedScreen> {
                               icon: const Icon(Icons.logout, size: 15),
                               label: const Text('Se déconnecter'),
                               style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFFEF4444),
-                                textStyle: const TextStyle(fontSize: 12.5),
+                                foregroundColor: DemProColors.danger,
+                                textStyle: DemProText.caption.copyWith(fontWeight: FontWeight.w400),
                               ),
                             ),
                           ],
@@ -274,73 +278,3 @@ class _State extends State<DemProRejectedScreen> {
   }
 }
 
-// ── Bouton ────────────────────────────────────────────────────────────────────
-class _GradientButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _GradientButton({required this.label, required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    height: DemLayout.isTablet(context) ? 56.0 : 52.0,
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-      ),
-      borderRadius: BorderRadius.circular(14),
-      boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))],
-    ),
-    child: Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Center(
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-          ]),
-        ),
-      ),
-    ),
-  );
-}
-
-// ── Tile support ─────────────────────────────────────────────────────────────
-class _SupportOption extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String sub;
-  final VoidCallback onTap;
-  const _SupportOption({required this.icon, required this.label, required this.sub, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: const Color(0xFFF8FAFC),
-    borderRadius: BorderRadius.circular(12),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(children: [
-          Icon(icon, color: DemProColors.accent, size: 20),
-          const SizedBox(width: 12),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Color(0xFF1F2937))),
-              Text(sub, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
-            ],
-          )),
-          const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFFD1D5DB)),
-        ]),
-      ),
-    ),
-  );
-}

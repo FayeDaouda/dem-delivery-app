@@ -17,6 +17,8 @@ import '../../../core/theme/map_theme_provider.dart';
 import '../../deliveries/providers/orders_provider.dart';
 import '../../home_driver/navigation/map_theme.dart';
 import '../theme/dem_pro_colors.dart';
+import '../utils/dem_pro_format.dart';
+import '../theme/dem_pro_text.dart';
 
 class DemProOrderConfirmationScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> order;
@@ -216,23 +218,23 @@ class _DemProOrderConfirmationScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0C1628),
+        backgroundColor: DemProColors.bg2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Annuler la livraison ?',
-            style: TextStyle(color: Color(0xFFE8F4F8), fontWeight: FontWeight.w700)),
-        content: const Text(
+        title: Text('Annuler la livraison ?',
+            style: DemProText.bodyStrong.copyWith(color: DemProColors.text)),
+        content: Text(
           'La commande sera annulée et aucun montant ne sera débité.',
-          style: TextStyle(color: Color(0xFF6B8BAA)),
+          style: DemProText.body.copyWith(color: DemProColors.muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Continuer d\'attendre',
-                style: TextStyle(color: Color(0xFF00AECB))),
+            child: Text('Continuer d\'attendre',
+                style: DemProText.body.copyWith(color: DemProColors.accent)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Annuler', style: TextStyle(color: Color(0xFFFF5C5C))),
+            child: Text('Annuler', style: DemProText.body.copyWith(color: DemProColors.danger)),
           ),
         ],
       ),
@@ -362,7 +364,7 @@ class _DemProOrderConfirmationScreenState
                   const Icon(Icons.timer_outlined, color: DemProColors.accent, size: 13),
                   const SizedBox(width: 5),
                   Text(_waitLabel,
-                      style: const TextStyle(color: DemProColors.accent, fontSize: 12, fontWeight: FontWeight.w700)),
+                      style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
                 ]),
               ),
             ]),
@@ -404,18 +406,14 @@ class _DemProOrderConfirmationScreenState
       ),
       const SizedBox(height: 16),
 
-      const Text(
+      Text(
         'Recherche d\'un livreur…',
-        style: TextStyle(
-          color: Color(0xFFE8F4F8),
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
+        style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 18),
       ),
       const SizedBox(height: 6),
-      const Text(
+      Text(
         'Nous cherchons le livreur le plus proche',
-        style: TextStyle(color: Color(0xFF6B8BAA), fontSize: 13),
+        style: DemProText.body.copyWith(color: DemProColors.muted),
       ),
       const SizedBox(height: 20),
 
@@ -425,12 +423,11 @@ class _DemProOrderConfirmationScreenState
 
       // ── Prix ───────────────────────────────────────────────────────────
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.payments_outlined, color: Color(0xFF6B8BAA), size: 14),
+        const Icon(Icons.payments_outlined, color: DemProColors.muted, size: 14),
         const SizedBox(width: 6),
         Text(
-          '${_fmtFcfa(price.toInt())} FCFA',
-          style: const TextStyle(
-              color: Color(0xFFE8F4F8), fontWeight: FontWeight.w700, fontSize: 14),
+          DemProFormat.fcfa(price.toInt()),
+          style: DemProText.subtitle.copyWith(color: DemProColors.text),
         ),
       ]),
       const SizedBox(height: 20),
@@ -441,20 +438,20 @@ class _DemProOrderConfirmationScreenState
         child: TextButton(
           onPressed: _cancelling ? null : _cancel,
           style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFFFF5C5C),
+            foregroundColor: DemProColors.danger,
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0x44FF5C5C)),
+              side: BorderSide(color: DemProColors.danger.withValues(alpha: 0.27)),
             ),
           ),
           child: _cancelling
               ? const SizedBox(
                   width: 18, height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Color(0xFFFF5C5C)))
-              : const Text('Annuler la commande',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+                      strokeWidth: 2, color: DemProColors.danger))
+              : Text('Annuler la commande',
+                  style: DemProText.body.copyWith(fontWeight: FontWeight.w600)),
         ),
       ),
     ]);
@@ -462,17 +459,16 @@ class _DemProOrderConfirmationScreenState
 
   Widget _buildTimedOut() {
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.hourglass_empty_rounded, color: Color(0xFFFFB830), size: 48),
+      const Icon(Icons.hourglass_empty_rounded, color: DemProColors.warning, size: 48),
       const SizedBox(height: 12),
-      const Text(
+      Text(
         'Aucun livreur disponible',
-        style: TextStyle(
-            color: Color(0xFFE8F4F8), fontSize: 17, fontWeight: FontWeight.w700),
+        style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 17),
       ),
       const SizedBox(height: 6),
-      const Text(
+      Text(
         'La demande reste active. Continuer d\'attendre ou annuler.',
-        style: TextStyle(color: Color(0xFF6B8BAA), fontSize: 13),
+        style: DemProText.body.copyWith(color: DemProColors.muted),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 20),
@@ -481,12 +477,12 @@ class _DemProOrderConfirmationScreenState
           child: OutlinedButton(
             onPressed: _cancel,
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFFF5C5C),
-              side: const BorderSide(color: Color(0x44FF5C5C)),
+              foregroundColor: DemProColors.danger,
+              side: BorderSide(color: DemProColors.danger.withValues(alpha: 0.27)),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Annuler', style: TextStyle(fontWeight: FontWeight.w600)),
+            child: Text('Annuler', style: DemProText.body.copyWith(fontWeight: FontWeight.w600)),
           ),
         ),
         const SizedBox(width: 12),
@@ -499,7 +495,7 @@ class _DemProOrderConfirmationScreenState
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Continuer', style: TextStyle(fontWeight: FontWeight.w600)),
+            child: Text('Continuer', style: DemProText.body.copyWith(fontWeight: FontWeight.w600)),
           ),
         ),
       ]),
@@ -520,11 +516,11 @@ class _MapBtn extends StatelessWidget {
     child: Container(
       width: 40, height: 40,
       decoration: BoxDecoration(
-        color: const Color(0xFF0C1628).withValues(alpha: 0.9),
+        color: DemProColors.bg2.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Icon(icon, color: const Color(0xFFE8F4F8), size: 20),
+      child: Icon(icon, color: DemProColors.text, size: 20),
     ),
   );
 }
@@ -538,16 +534,16 @@ class _RouteRow extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
-      color: const Color(0xFF111E35),
+      color: DemProColors.bg3,
       borderRadius: BorderRadius.circular(12),
     ),
     child: Column(children: [
       Row(children: [
-        const Icon(Icons.radio_button_on, color: Color(0xFF00E08C), size: 13),
+        const Icon(Icons.radio_button_on, color: DemProColors.success, size: 13),
         const SizedBox(width: 10),
         Expanded(
           child: Text(pickup,
-              style: const TextStyle(color: Color(0xFFE8F4F8), fontSize: 13),
+              style: DemProText.body.copyWith(color: DemProColors.text),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ]),
@@ -555,15 +551,15 @@ class _RouteRow extends StatelessWidget {
         padding: const EdgeInsets.only(left: 6, top: 3, bottom: 3),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Container(width: 1.5, height: 10, color: const Color(0xFF1E3050)),
+          child: Container(width: 1.5, height: 10, color: DemProColors.divider),
         ),
       ),
       Row(children: [
-        const Icon(Icons.location_on, color: Color(0xFFFF5C5C), size: 13),
+        const Icon(Icons.location_on, color: DemProColors.danger, size: 13),
         const SizedBox(width: 10),
         Expanded(
           child: Text(delivery,
-              style: const TextStyle(color: Color(0xFFE8F4F8), fontSize: 13),
+              style: DemProText.body.copyWith(color: DemProColors.text),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ]),
@@ -588,7 +584,7 @@ class _RadarPainter extends CustomPainter {
       canvas.drawCircle(
         center, r,
         Paint()
-          ..color = const Color(0xFF00AECB).withValues(alpha: alpha)
+          ..color = DemProColors.accent.withValues(alpha: alpha)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.5,
       );
@@ -596,7 +592,7 @@ class _RadarPainter extends CustomPainter {
 
     canvas.drawCircle(
       center, 14,
-      Paint()..color = const Color(0xFF00AECB).withValues(alpha: 0.2),
+      Paint()..color = DemProColors.accent.withValues(alpha: 0.2),
     );
     canvas.drawCircle(
       center, 14,
@@ -612,12 +608,3 @@ class _RadarPainter extends CustomPainter {
   bool shouldRepaint(_RadarPainter old) => old.progress != progress;
 }
 
-String _fmtFcfa(int v) {
-  final s = v.toString();
-  final buf = StringBuffer();
-  for (int i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-    buf.write(s[i]);
-  }
-  return buf.toString();
-}

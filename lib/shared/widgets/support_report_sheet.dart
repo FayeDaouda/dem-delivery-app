@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/error/app_exception.dart';
 import '../../features/deliveries/data/orders_repository.dart';
+import 'support_contact_tile.dart';
 
 // ── Types de problèmes ────────────────────────────────────────────────────────
 class _Problem {
@@ -196,8 +198,8 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
   // ── Écran succès ──────────────────────────────────────────────────────────
   Widget _buildSuccess() {
     final support = _result!['support'] as Map?;
-    final phone   = support?['phone']    as String? ?? '+221710064664';
-    final wa      = support?['whatsapp'] as String? ?? '221710064664';
+    final phone   = support?['phone']    as String? ?? AppConfig.supportPhone;
+    final wa      = support?['whatsapp'] as String? ?? AppConfig.supportWhatsapp;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -229,19 +231,19 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
               style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
         ),
         const SizedBox(height: 10),
-        _ContactButton(
+        SupportContactTile(
           icon: Icons.phone_rounded,
           color: const Color(0xFF22C55E),
           label: 'Appeler le support',
-          sub: phone,
+          subtitle: phone,
           onTap: () => _openPhone(phone),
         ),
         const SizedBox(height: 10),
-        _ContactButton(
+        SupportContactTile(
           icon: Icons.chat_rounded,
           color: const Color(0xFF25D366),
           label: 'WhatsApp support',
-          sub: 'Message pré-rempli',
+          subtitle: 'Message pré-rempli',
           onTap: () => _openWhatsApp(wa),
         ),
         const SizedBox(height: 20),
@@ -367,47 +369,3 @@ class _Handle extends StatelessWidget {
   );
 }
 
-class _ContactButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String sub;
-  final VoidCallback onTap;
-
-  const _ContactButton({
-    required this.icon, required this.color, required this.label,
-    required this.sub,  required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(children: [
-        Container(
-          width: 38, height: 38,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.18), shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 19),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label,
-              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text(sub,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 12)),
-        ])),
-        Icon(Icons.arrow_forward_ios, color: color.withValues(alpha: 0.60), size: 14),
-      ]),
-    ),
-  );
-}

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/gradient_button.dart';
 
 class ClientOnboardingScreen extends ConsumerStatefulWidget {
   const ClientOnboardingScreen({super.key});
@@ -173,30 +174,11 @@ class _ClientOnboardingScreenState extends ConsumerState<ClientOnboardingScreen>
                   ),
                 ),
                 const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
+                GradientButton(
+                  label: 'Continuer',
                   height: btnHeight,
-                  child: ElevatedButton(
-                    onPressed: _loading ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      elevation: 0,
-                    ),
-                    child: _loading
-                        ? const SizedBox(
-                            width: 22, height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
-                          )
-                        : const Text('Continuer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Vous devrez télécharger les pièces justificatives de ces informations plus tard.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 12),
+                  loading: _loading,
+                  onTap: _submit,
                 ),
               ],
             ),

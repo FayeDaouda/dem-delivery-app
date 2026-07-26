@@ -58,9 +58,21 @@ class ProfileNotifier extends Notifier<ProfileState> {
     try {
       final user = await _repo.getMe();
       state = state.copyWith(user: user, isLoading: false);
-      // Mise en ligne automatique à la connexion
+      // Mise en ligne automatique à la connexion — seulement si le livreur a
+      // une passe valide (si le blocage dispatch est actif). Appel direct au
+      // repo (pas toggleAvailability() de ce notifier) pour pouvoir avaler le
+      // 402 sans le faire remonter en state.error : ce n'est pas une vraie
+      // erreur technique, juste "reste hors ligne, pas de passe" — le
+      // bandeau d'accueil (_NormalSheet) explique déjà pourquoi.
       if (goOnlineIfOffline && !(user['isAvailable'] as bool? ?? false)) {
-        await toggleAvailability();
+        try {
+          final isAvailable = await _repo.toggleAvailability();
+          final updatedUser = Map<String, dynamic>.from(user)..['isAvailable'] = isAvailable;
+          await AuthStorage.saveUser(updatedUser);
+          state = state.copyWith(user: updatedUser);
+        } on AppException catch (e) {
+          if (e.statusCode != 402) rethrow;
+        }
       }
     } catch (e) {
       state = state.copyWith(isLoading: false, error: friendlyError(e));

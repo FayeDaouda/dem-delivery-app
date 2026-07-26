@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/utils/dem_toast.dart';
+import '../../core/utils/price_format.dart';
 import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,9 +15,19 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/map/route_marker_icons.dart';
+import '../../core/services/location_reveal_controller.dart';
+import '../../core/services/places_autocomplete_service.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
+import '../../shared/widgets/address_row.dart';
+import '../../shared/widgets/map_theme_toggle_button.dart';
+import '../../shared/widgets/place_suggestions_list.dart';
+import '../../shared/widgets/pressable.dart';
+import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/screen_pulse_ring.dart';
 import '../client_profile/data/favorite_addresses_repository.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
@@ -24,9 +35,20 @@ import '../home_driver/navigation/navigation_service.dart';
 
 // ─── Heights par step ────────────────────────────────────────────────────────
 // Les hauteurs tablette sont plus généreuses pour exploiter l'écran iPad.
-const _kPanelHeightsPhone  = [180.0, 290.0, 350.0, 250.0];
-const _kPanelHeightsTablet = [220.0, 340.0, 420.0, 300.0];
+const _kPanelHeightsPhone  = [215.0, 290.0, 350.0, 250.0];
+const _kPanelHeightsTablet = [255.0, 340.0, 420.0, 300.0];
 const _kMinPanelContent = 66.0; // button (52) + bottom padding (12) + 2px margin
+
+const _placeSuggestionsColors = PlaceSuggestionsColors(
+  background: Color(0xFF1A2540),
+  border: Colors.white24,
+  divider: AppColors.primary,
+  iconBg: AppColors.primary,
+  icon: Colors.white,
+  mainText: Colors.white,
+  secondaryText: AppColors.primary,
+  accent: AppColors.primary,
+);
 
 class OrderCreateScreen extends ConsumerStatefulWidget {
   final String orderType;
@@ -36,7 +58,7 @@ class OrderCreateScreen extends ConsumerStatefulWidget {
   ConsumerState<OrderCreateScreen> createState() => _OrderCreateScreenState();
 }
 
-class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
+class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with TickerProviderStateMixin {
   final _repo = OrdersRepository();
 
   // ── Constants ────────────────────────────────────────────────────────────
@@ -76,13 +98,27 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   // ── Autocomplete ─────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _suggestions = [];
   bool _isSearching = false;
+  String? _searchError;
+  String? _sessionToken;
   Timer? _searchDebounce;
 
   // ── Pricing ──────────────────────────────────────────────────────────────
   double _surgeMultiplier = 1.0;
   double? _estimatedPrice; // prix course (= ce que le livreur gagne)
   double _demFee = 0.0;    // frais DEM prélevés en sus au client
-  bool _freeCourseEligible = false;
+
+  // ── Promotion (voir promo.service.js côté serveur) ──────────────────────
+  // discountAmount/promoLabel peuvent venir soit d'une campagne auto-appliquée
+  // (silencieuse, pas de code — promoLabel = nom de la campagne, à afficher
+  // uniquement) soit d'un code saisi manuellement (promoLabel = le vrai code,
+  // renvoyé à la création — voir _submit). Le calcul final est de toute façon
+  // toujours refait côté serveur, jamais fait confiance à ce preview.
+  double? _discountAmount;
+  String? _promoLabel;
+  String? _promoError;
+  bool _checkingPromo = false;
+  final _promoCodeCtrl = TextEditingController();
+
   bool _loadingSurge  = false;
   bool _priceTimedOut = false;
   bool _loadingGps    = false;
@@ -97,10 +133,40 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     connectTimeout: const Duration(seconds: 8),
     receiveTimeout: const Duration(seconds: 8),
   ));
+  late final _placesService = PlacesAutocompleteService(_publicDio);
 
   // ── Adresses favorites ───────────────────────────────────────────────────
   final _favRepo = FavoriteAddressesRepository();
   List<Map<String, dynamic>> _favorites = [];
+
+  // ── Marqueurs départ/destination custom (remplacent la goutte Google) ────
+  BitmapDescriptor? _pickupIcon;
+  BitmapDescriptor? _deliveryIcon;
+
+  // ── Animation d'apparition du point de départ (GPS détecté à l'entrée) ───
+  // Chute + rebond du marqueur jusqu'à sa position — contrôleur partagé avec
+  // l'écran d'accueil (voir LocationRevealController).
+  late final _pickupReveal = LocationRevealController(vsync: this, onUpdate: () => setState(() {}));
+
+  // Anneau qui pulse en continu autour du point de départ, tant que l'écran
+  // est affiché — même principe que le marqueur "ma position" de l'écran
+  // d'accueil livreur (pas un one-shot qui s'arrête).
+  ScreenCoordinate? _pickupScreenPos;
+  LatLng? _pickupScreenPosSource;
+
+  Future<void> _updatePickupScreenPos(LatLng target) async {
+    if (_mapController == null) return;
+    final coord = await _mapController!.getScreenCoordinate(target);
+    if (mounted) setState(() => _pickupScreenPos = coord);
+  }
+
+  // Appelé depuis build() — ne recalcule que si le point suivi a changé,
+  // pour éviter de spammer getScreenCoordinate() à chaque frame.
+  void _maybeUpdatePickupScreenPos(LatLng current) {
+    if (_pickupScreenPosSource == current) return;
+    _pickupScreenPosSource = current;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updatePickupScreenPos(current));
+  }
 
   @override
   void initState() {
@@ -109,8 +175,16 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     _loadMapStyle();
     _fetchGpsInit();
     _loadUser();
-    _checkFreeCourse();
     _loadFavorites();
+    _loadMarkerIcons();
+  }
+
+  Future<void> _loadMarkerIcons() async {
+    final results = await Future.wait([
+      RouteMarkerIcons.pickup(AppColors.success),
+      RouteMarkerIcons.delivery(AppColors.error),
+    ]);
+    if (mounted) setState(() { _pickupIcon = results[0]; _deliveryIcon = results[1]; });
   }
 
   Future<void> _loadFavorites() async {
@@ -141,8 +215,46 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     if (mounted) setState(() => _currentUser = user);
   }
 
-  Future<void> _checkFreeCourse() async {
-    // Promo gérée par l'admin — plus de vérification automatique
+  // Vérification silencieuse — une campagne auto-appliquée (pas de code)
+  // peut exister pour ce client ; aucune erreur affichée si non (cas normal).
+  Future<void> _checkAutoPromo() async {
+    if (_estimatedPrice == null) return;
+    try {
+      final result = await _repo.getPromoPreview(
+        price: _estimatedPrice!.toInt(), demFee: _demFee.toInt(),
+      );
+      if (!mounted || result == null) return;
+      setState(() {
+        _discountAmount = (result['discountAmount'] as num?)?.toDouble();
+        _promoLabel     = result['promoCode'] as String?;
+      });
+    } catch (_) {} // jamais bloquant pour la création de commande
+  }
+
+  Future<void> _applyPromoCode() async {
+    final code = _promoCodeCtrl.text.trim();
+    if (code.isEmpty || _estimatedPrice == null) return;
+    setState(() { _checkingPromo = true; _promoError = null; });
+    try {
+      final result = await _repo.getPromoPreview(
+        price: _estimatedPrice!.toInt(), demFee: _demFee.toInt(), code: code,
+      );
+      if (!mounted) return;
+      setState(() {
+        _discountAmount = (result?['discountAmount'] as num?)?.toDouble();
+        _promoLabel     = result?['promoCode'] as String?;
+        _checkingPromo  = false;
+      });
+      showDemToast(context, 'Code promo appliqué !');
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _checkingPromo = false;
+          _promoError = friendlyError(e);
+          _discountAmount = null;
+        });
+      }
+    }
   }
 
   void _fillMe(TextEditingController nameCtrl, TextEditingController phoneCtrl) {
@@ -155,6 +267,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   @override
   void dispose() {
     _pageCtrl.dispose();
+    _pickupReveal.dispose();
     _searchDebounce?.cancel();
     _surgeDebounce?.cancel();
     _priceTimeoutTimer?.cancel();
@@ -167,6 +280,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     _receiverNameCtrl.dispose();
     _receiverPhoneCtrl.dispose();
     _descriptionCtrl.dispose();
+    _promoCodeCtrl.dispose();
     _mapController?.dispose();
     super.dispose();
   }
@@ -194,6 +308,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         _centerMap(ll);
         _pickupLat = ll.latitude;
         _pickupLng = ll.longitude;
+        _pickupReveal.reveal();
         _reverseGeocode(ll, forPickup: true);
       }
     } catch (_) {
@@ -209,24 +324,36 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
   }
 
   // ── Reverse geocoding ────────────────────────────────────────────────────
+  // Google Geocoding en premier (couvre bien mieux Dakar que le géocodeur
+  // natif) puis le géocodeur natif iOS/Android en secours — jamais de
+  // coordonnées brutes affichées au client, illisibles et peu rassurantes
+  // (retours utilisateurs : adresse affichée sous forme de "numéros").
   Future<void> _reverseGeocode(LatLng pos, {required bool forPickup}) async {
-    try {
-      final marks = await geo.placemarkFromCoordinates(pos.latitude, pos.longitude)
-          .timeout(const Duration(seconds: 5));
-      if (marks.isNotEmpty && mounted) {
-        final p = marks.first;
-        final street = p.street ?? p.name ?? '';
-        final local  = p.subLocality ?? p.locality ?? '';
-        final addr   = street.isNotEmpty ? '$street, $local' : local;
-        setState(() {
-          if (forPickup) {
-            _pickupCtrl.text = addr.isNotEmpty ? addr : '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
-          } else {
-            _deliveryCtrl.text = addr.isNotEmpty ? addr : '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
-          }
-        });
+    String? addr = await _placesService.reverseGeocode(pos.latitude, pos.longitude);
+
+    if (addr == null || addr.isEmpty) {
+      try {
+        final marks = await geo.placemarkFromCoordinates(pos.latitude, pos.longitude)
+            .timeout(const Duration(seconds: 5));
+        if (marks.isNotEmpty) {
+          final p = marks.first;
+          final street = p.street ?? p.name ?? '';
+          final local  = p.subLocality ?? p.locality ?? '';
+          final built  = street.isNotEmpty ? '$street, $local' : local;
+          if (built.isNotEmpty) addr = built;
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    final label = (addr != null && addr.isNotEmpty) ? addr : 'Position sélectionnée';
+    setState(() {
+      if (forPickup) {
+        _pickupCtrl.text = label;
+      } else {
+        _deliveryCtrl.text = label;
       }
-    } catch (_) {}
+    });
   }
 
   // ── Confirm map placement ─────────────────────────────────────────────────
@@ -253,56 +380,40 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
       if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
       return;
     }
+    _sessionToken ??= PlacesAutocompleteService.newSessionToken();
     _searchDebounce = Timer(const Duration(milliseconds: 450), () async {
-      setState(() => _isSearching = true);
+      setState(() { _isSearching = true; _searchError = null; });
       try {
-        final res = await _publicDio.get(
-          'https://maps.googleapis.com/maps/api/place/autocomplete/json',
-          queryParameters: {
-            'input': query,
-            'location': '14.6937,-17.4441',
-            'radius': '60000',
-            'components': 'country:sn',
-            'language': 'fr',
-            'key': AppConfig.mapsApiKey,
-          },
-        );
-        if (mounted && res.statusCode == 200) {
-          final status = res.data['status'] as String?;
-          final preds = status == 'OK'
-              ? List<Map<String, dynamic>>.from(res.data['predictions'])
-              : <Map<String, dynamic>>[];
-          setState(() { _suggestions = preds; _isSearching = false; });
-        }
-      } catch (_) {
-        if (mounted) setState(() => _isSearching = false);
+        final preds = await _placesService.autocomplete(query: query, sessionToken: _sessionToken!);
+        if (mounted) setState(() { _suggestions = preds; _isSearching = false; });
+      } catch (e) {
+        if (mounted) setState(() { _isSearching = false; _searchError = friendlyError(e); });
       }
     });
+  }
+
+  void _retryAddressSearch() {
+    final query = _isSelectingPickup ? _pickupCtrl.text : _deliveryCtrl.text;
+    _onAddressChanged(query, forPickup: _isSelectingPickup);
   }
 
   Future<void> _selectSuggestion(Map<String, dynamic> place) async {
     final placeId = place['place_id'] as String?;
     if (placeId == null) return;
+    final wasSelectingPickup = _isSelectingPickup;
     FocusScope.of(context).unfocus();
     setState(() => _suggestions = []);
+    final token = _sessionToken ?? PlacesAutocompleteService.newSessionToken();
     try {
-      final res = await _publicDio.get(
-        'https://maps.googleapis.com/maps/api/place/details/json',
-        queryParameters: {
-          'place_id': placeId,
-          'fields': 'geometry,name,formatted_address',
-          'language': 'fr',
-          'key': AppConfig.mapsApiKey,
-        },
-      );
-      if (res.statusCode == 200 && res.data['status'] == 'OK') {
-        final loc = res.data['result']['geometry']['location'];
+      final result = await _placesService.details(placeId: placeId, sessionToken: token);
+      if (result != null) {
+        final loc = result['geometry']['location'];
         final lat = (loc['lat'] as num).toDouble();
         final lng = (loc['lng'] as num).toDouble();
         final name = (place['structured_formatting']?['main_text'] as String?)
             ?? place['description'] as String? ?? '';
         setState(() {
-          if (_isSelectingPickup) {
+          if (wasSelectingPickup) {
             _pickupLat = lat; _pickupLng = lng; _pickupCtrl.text = name;
           } else {
             _deliveryLat = lat; _deliveryLng = lng; _deliveryCtrl.text = name;
@@ -310,8 +421,20 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         });
         _centerMap(LatLng(lat, lng));
         _updateEstimate();
+
+        // Départ confirmé et destination encore vide -> avance directement
+        // le focus, plutôt que de forcer l'utilisateur à retaper sur le champ.
+        if (wasSelectingPickup && _deliveryCtrl.text.isEmpty) {
+          setState(() => _isSelectingPickup = false);
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) _deliveryFocus.requestFocus();
+          });
+        }
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _sessionToken = null;
+    }
   }
 
   // ── Pricing ──────────────────────────────────────────────────────────────
@@ -446,6 +569,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
           _loadingSurge    = false;
           _priceTimedOut   = false;
         });
+        _checkAutoPromo();
       } else if (mounted) {
         setState(() { _loadingSurge = false; _priceTimedOut = true; });
       }
@@ -628,15 +752,21 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
         if (_receiverPhoneCtrl.text.trim().isNotEmpty)'receiverPhone':'+221${_receiverPhoneCtrl.text.trim()}',
         if (widget.orderType == 'DELIVERY')
           'description': _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
+        // `price`/`demFee` envoyés à titre indicatif seulement — le serveur
+        // recalcule toujours tout lui-même, jamais fait confiance à un prix
+        // client (voir orders.service.js:createOrder).
         if (_estimatedPrice != null) 'price': _estimatedPrice,
         if (_demFee > 0) 'demFee': _demFee,
-        if (_freeCourseEligible) 'freeCourse': true,
+        // Uniquement si saisi manuellement et validé (voir _applyPromoCode) —
+        // une promo auto-appliquée n'a pas besoin d'être renvoyée, le serveur
+        // la retrouve tout seul (voir promo.service.js:resolveOrderPromo).
+        if (_promoError == null && _promoCodeCtrl.text.trim().isNotEmpty)
+          'promoCode': _promoCodeCtrl.text.trim(),
       });
 
       if (_estimatedPrice != null) order['price'] = _estimatedPrice;
       if (_demFee > 0) order['demFee'] = _demFee;
-      if (_freeCourseEligible) order['freeCourse'] = true;
-      
+
       if (mounted) context.pushReplacement('/orders/confirmation', extra: order);
     } catch (e) {
       if (mounted) {
@@ -664,18 +794,38 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
     Set<Polyline> polylines = {};
     Set<Marker> markers    = {};
     if (_pickupLat != null && _deliveryLat != null) {
+      final routePts = _routePoints.isNotEmpty
+          ? _routePoints
+          : [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)];
+      // Halo translucide sous le tracé plein — plus visible sur un fond de
+      // carte clair et allégé que la ligne fine d'origine.
+      polylines.add(Polyline(
+        polylineId: const PolylineId('route-glow'),
+        points: routePts,
+        color: AppColors.primary.withValues(alpha: 0.25),
+        width: 10,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        jointType: JointType.round,
+      ));
       polylines.add(Polyline(
         polylineId: const PolylineId('route'),
-        points: _routePoints.isNotEmpty ? _routePoints : [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)],
-        color: AppColors.primary, width: 4,
+        points: routePts,
+        color: AppColors.primary,
+        width: 5,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        jointType: JointType.round,
       ));
     }
     if (_pickupLat != null && (!_isSelectingPickup || !_isMapPlacementMode)) {
+      _maybeUpdatePickupScreenPos(LatLng(_pickupLat!, _pickupLng!));
       final pickupLabel = _pickupCtrl.text.isNotEmpty ? _pickupCtrl.text : 'Point de départ';
       markers.add(Marker(
         markerId: const MarkerId('pickup'),
-        position: LatLng(_pickupLat!, _pickupLng!),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        position: _pickupReveal.markerPosition(LatLng(_pickupLat!, _pickupLng!)),
+        icon: _pickupIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        anchor: _pickupIcon != null ? const Offset(0.5, 0.5) : const Offset(0.5, 1.0),
         infoWindow: InfoWindow(
           title: 'Départ',
           snippet: pickupLabel.length > 60 ? '${pickupLabel.substring(0, 57)}…' : pickupLabel,
@@ -695,7 +845,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
       markers.add(Marker(
         markerId: const MarkerId('delivery'),
         position: LatLng(_deliveryLat!, _deliveryLng!),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        icon: _deliveryIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        anchor: _deliveryIcon != null ? RouteMarkerIcons.pinAnchor : const Offset(0.5, 1.0),
         infoWindow: InfoWindow(
           title: 'Destination',
           snippet: deliveryLabel.length > 60 ? '${deliveryLabel.substring(0, 57)}…' : deliveryLabel,
@@ -724,7 +875,13 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
             onTap: (_) => FocusScope.of(context).unfocus(),
             onCameraMoveStarted: () => setState(() => _isMapMoving = true),
             onCameraMove: (p) => _currentCameraPos = p.target,
-            onCameraIdle: () => setState(() => _isMapMoving = false),
+            onCameraIdle: () {
+              setState(() => _isMapMoving = false);
+              // Recale l'anneau après un pan/zoom manuel (le point suivi n'a
+              // pas changé donc _maybeUpdatePickupScreenPos ne se redéclenche
+              // pas tout seul dans ce cas).
+              if (_pickupLat != null) _updatePickupScreenPos(LatLng(_pickupLat!, _pickupLng!));
+            },
             polylines: polylines,
             markers: markers,
             myLocationEnabled: false,
@@ -735,6 +892,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
             buildingsEnabled: true,
           ),
         ),
+
+        // ── Anneau continu autour du point de départ ────────────────────────
+        if (_pickupLat != null && (!_isSelectingPickup || !_isMapPlacementMode))
+          ScreenPulseRing(position: _pickupScreenPos, color: AppColors.success, size: 66),
 
         // ── CENTER PIN (placement mode only) ───────────────────────────────
         if (_isMapPlacementMode)
@@ -759,21 +920,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              GestureDetector(
-                onTap: _toggleMapTheme,
-                child: Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface, shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
-                  ),
-                  child: Icon(
-                    ref.watch(mapNightProvider) ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                    color: ref.watch(mapNightProvider) ? const Color(0xFFFFB300) : AppColors.primary,
-                    size: 20,
-                  ),
-                ),
-              ),
+              MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
               _FloatingBtn(
                 icon: _loadingGps ? null : Icons.my_location,
                 loading: _loadingGps,
@@ -854,6 +1001,12 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                           children: [
                             _Step0Panel(
                               routeComplete: _routeComplete,
+                              estimatedPrice: _estimatedPrice,
+                              demFee: _demFee,
+                              surgeMultiplier: _surgeMultiplier,
+                              loadingSurge: _loadingSurge,
+                              timedOut: _priceTimedOut,
+                              onRetry: _retryEstimate,
                               onNext: () => _goStep(1),
                             ),
                             _Step1Panel(
@@ -899,7 +1052,12 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                               deliveryLabel: _deliveryCtrl.text.isNotEmpty ? _deliveryCtrl.text : 'Destination',
                               estimatedPrice: _estimatedPrice,
                               demFee: _demFee,
-                              freeCourse: _freeCourseEligible,
+                              discountAmount: _discountAmount,
+                              promoLabel: _promoLabel,
+                              promoCodeCtrl: _promoCodeCtrl,
+                              promoError: _promoError,
+                              checkingPromo: _checkingPromo,
+                              onApplyPromo: _applyPromoCode,
                               surgeMultiplier: _surgeMultiplier,
                               loadingSurge: _loadingSurge,
                               timedOut: _priceTimedOut,
@@ -959,16 +1117,25 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                     hint: 'Point de départ...',
                     dotColor: AppColors.success,
                     active: _isSelectingPickup && !_isMapPlacementMode,
+                    confirmed: _pickupLat != null,
                     onTap: () {
-                      if (_pickupCtrl.text.isNotEmpty && _deliveryCtrl.text.isEmpty) {
-                        setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; });
-                        _deliveryFocus.requestFocus();
-                      } else {
-                        setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; });
-                        _pickupFocus.requestFocus();
-                      }
+                      // Toujours focus son propre champ — un tap sur départ
+                      // doit permettre de le corriger, pas sauter ailleurs.
+                      setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; });
+                      _pickupFocus.requestFocus();
                     },
                     onChanged: (v) => _onAddressChanged(v, forPickup: true),
+                    onClear: () {
+                      setState(() {
+                        _pickupCtrl.clear();
+                        _pickupLat = null; _pickupLng = null;
+                        _estimatedPrice = null;
+                        _suggestions = [];
+                        _isSelectingPickup = true;
+                        _isMapPlacementMode = false;
+                      });
+                      _pickupFocus.requestFocus();
+                    },
                     onMapTap: () {
                       FocusScope.of(context).unfocus();
                       setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; });
@@ -981,19 +1148,24 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                     child: Row(children: [
-                      Container(width: 2, height: 16, color: AppColors.textSecondary.withValues(alpha: 0.3)),
+                      // Aligné avec le centre des points colorés des champs
+                      // d'adresse.
+                      const SizedBox(width: 7),
+                      Container(width: 2, height: 20, color: AppColors.textSecondary.withValues(alpha: 0.3)),
                       const Spacer(),
-                      // ── Swap départ ↔ arrivée ──────────────────────────
-                      GestureDetector(
+                      // ── Swap départ ↔ arrivée — nettement à droite ──────
+                      Pressable(
                         onTap: _swapAddresses,
                         child: Container(
-                          padding: const EdgeInsets.all(6),
+                          width: 30,
+                          height: 30,
                           decoration: BoxDecoration(
                             color: AppColors.card,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.30)),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.40)),
+                            boxShadow: AppShadows.floating,
                           ),
-                          child: const Icon(Icons.swap_vert, color: AppColors.primary, size: 16),
+                          child: const Icon(Icons.swap_vert, color: AppColors.primary, size: 17),
                         ),
                       ),
                     ]),
@@ -1004,16 +1176,25 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                     hint: 'Destination...',
                     dotColor: AppColors.error,
                     active: !_isSelectingPickup && !_isMapPlacementMode,
+                    confirmed: _deliveryLat != null,
                     onTap: () {
-                      if (_deliveryCtrl.text.isNotEmpty && _pickupCtrl.text.isEmpty) {
-                        setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; });
-                        _pickupFocus.requestFocus();
-                      } else {
-                        setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; });
-                        _deliveryFocus.requestFocus();
-                      }
+                      // Toujours focus son propre champ — même correctif que
+                      // pour le champ départ, cf. commentaire ci-dessus.
+                      setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; });
+                      _deliveryFocus.requestFocus();
                     },
                     onChanged: (v) => _onAddressChanged(v, forPickup: false),
+                    onClear: () {
+                      setState(() {
+                        _deliveryCtrl.clear();
+                        _deliveryLat = null; _deliveryLng = null;
+                        _estimatedPrice = null;
+                        _suggestions = [];
+                        _isSelectingPickup = false;
+                        _isMapPlacementMode = false;
+                      });
+                      _deliveryFocus.requestFocus();
+                    },
                     onMapTap: () {
                       FocusScope.of(context).unfocus();
                       setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
@@ -1035,28 +1216,22 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                         separatorBuilder: (_, _) => const SizedBox(width: 6),
                         itemBuilder: (_, i) {
                           final fav = _favorites[i];
-                          return GestureDetector(
+                          return Pressable(
                             onTap: () => _applyFavorite(fav),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFF0CB8DE), Color(0xFF0671BA)],
+                                  colors: [AppColors.primary, AppColors.primaryMid],
                                 ),
                                 borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF0CB8DE).withValues(alpha: 0.35),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                                boxShadow: AppShadows.tinted(AppColors.primary, alpha: 0.35, blur: 6),
                               ),
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
                                 Text(fav['icon'] as String? ?? '📍', style: const TextStyle(fontSize: 13)),
                                 const SizedBox(width: 5),
                                 Text(fav['label'] as String? ?? '',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                                    style: ClientText.label.copyWith(color: Colors.white)),
                               ]),
                             ),
                           );
@@ -1066,12 +1241,20 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> {
                   ],
 
                   // Autocomplete dropdown
-                  if (_isSearching || _suggestions.isNotEmpty) ...[
+                  if (_isSearching || _suggestions.isNotEmpty || _searchError != null) ...[
                     const SizedBox(height: 6),
-                    _AutocompleteDropdown(
+                    PlaceSuggestionsList(
                       suggestions: _suggestions,
                       loading: _isSearching,
+                      error: _searchError,
+                      onRetry: _retryAddressSearch,
                       onSelect: _selectSuggestion,
+                      colors: _placeSuggestionsColors,
+                      maxHeight: (MediaQuery.of(context).size.height
+                              - MediaQuery.of(context).viewInsets.bottom
+                              - MediaQuery.of(context).padding.top
+                              - 160)
+                          .clamp(100.0, 320.0),
                     ),
                   ],
                 ],
@@ -1137,33 +1320,46 @@ class _AddressField extends StatelessWidget {
   final String hint;
   final Color dotColor;
   final bool active;
+  // Adresse dotée de coordonnées GPS (sélectionnée dans la liste, placée sur
+  // la carte, ou géolocalisée) — par opposition à du texte simplement tapé
+  // sans être choisi, qui a l'air identique mais ne permet pas de calculer
+  // de trajet ni de prix.
+  final bool confirmed;
   final VoidCallback onTap;
   final ValueChanged<String> onChanged;
   final VoidCallback onMapTap;
   final VoidCallback? onDotLongPress;
+  final VoidCallback? onClear;
   final FocusNode? focusNode;
+
+  static const _unconfirmedColor = Color(0xFFF59E0B);
 
   const _AddressField({
     required this.controller, required this.hint, required this.dotColor,
-    required this.active, required this.onTap, required this.onChanged, required this.onMapTap,
-    this.onDotLongPress, this.focusNode,
+    required this.active, required this.confirmed,
+    required this.onTap, required this.onChanged, required this.onMapTap,
+    this.onDotLongPress, this.onClear, this.focusNode,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasText = controller.text.isNotEmpty;
+    final needsConfirmation = hasText && !confirmed;
+    final accentColor = needsConfirmation ? _unconfirmedColor : dotColor;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: dotColor.withValues(alpha: active ? 0.14 : 0.07),
+          color: accentColor.withValues(alpha: active ? 0.14 : 0.07),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: dotColor.withValues(alpha: active ? 0.85 : 0.45),
+            color: accentColor.withValues(alpha: active ? 0.85 : 0.45),
             width: active ? 1.4 : 1.0,
           ),
           boxShadow: active
-              ? [BoxShadow(color: dotColor.withValues(alpha: 0.22), blurRadius: 20, spreadRadius: 0)]
-              : [BoxShadow(color: dotColor.withValues(alpha: 0.08), blurRadius: 6)],
+              ? [BoxShadow(color: accentColor.withValues(alpha: 0.22), blurRadius: 20, spreadRadius: 0)]
+              : [BoxShadow(color: accentColor.withValues(alpha: 0.08), blurRadius: 6)],
         ),
         child: Row(children: [
           const SizedBox(width: 12),
@@ -1182,10 +1378,10 @@ class _AddressField extends StatelessWidget {
               onChanged: onChanged,
               onTap: onTap,
               textInputAction: TextInputAction.search,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14.5),
               decoration: InputDecoration(
                 hintText: hint,
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 13),
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 14.5),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
@@ -1196,6 +1392,19 @@ class _AddressField extends StatelessWidget {
               ),
             ),
           ),
+          if (needsConfirmation)
+            Padding(
+              padding: const EdgeInsets.only(right: 2),
+              child: Icon(Icons.error_outline, color: _unconfirmedColor, size: 16),
+            ),
+          if (hasText)
+            IconButton(
+              icon: Icon(Icons.close_rounded, color: Colors.white.withValues(alpha: 0.55), size: 18),
+              onPressed: onClear,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              constraints: const BoxConstraints(),
+              visualDensity: VisualDensity.compact,
+            ),
           IconButton(
             icon: Icon(Icons.location_on, color: active ? dotColor : Colors.white.withValues(alpha: 0.80), size: 20),
             onPressed: onMapTap,
@@ -1347,117 +1556,6 @@ class _FloatingPinState extends State<_FloatingPin> with SingleTickerProviderSta
   }
 }
 
-class _AutocompleteDropdown extends StatelessWidget {
-  final List<Map<String, dynamic>> suggestions;
-  final bool loading;
-  final ValueChanged<Map<String, dynamic>> onSelect;
-  const _AutocompleteDropdown({required this.suggestions, required this.loading, required this.onSelect});
-
-  IconData _iconForTypes(List<dynamic> types) {
-    if (types.any((t) => t.toString().contains('transit') || t.toString().contains('bus') || t.toString().contains('station'))) {
-      return Icons.directions_bus_outlined;
-    }
-    if (types.any((t) => t.toString().contains('hospital') || t.toString().contains('health'))) {
-      return Icons.local_hospital_outlined;
-    }
-    if (types.any((t) => t.toString().contains('airport'))) return Icons.flight_outlined;
-    if (types.any((t) => t.toString().contains('school') || t.toString().contains('university'))) {
-      return Icons.school_outlined;
-    }
-    if (types.any((t) => t.toString().contains('park') || t.toString().contains('natural'))) {
-      return Icons.park_outlined;
-    }
-    if (types.any((t) => t.toString().contains('restaurant') || t.toString().contains('food'))) {
-      return Icons.restaurant_outlined;
-    }
-    return Icons.place_outlined;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final keyboardH  = MediaQuery.of(context).viewInsets.bottom;
-    final safeTop    = MediaQuery.of(context).padding.top;
-    final screenH    = MediaQuery.of(context).size.height;
-    final maxH       = (screenH - keyboardH - safeTop - 160).clamp(100.0, 320.0);
-    return Container(
-      constraints: BoxConstraints(maxHeight: maxH),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A2540),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 20)],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: loading
-            ? const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
-            : ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: suggestions.length,
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, color: Colors.white.withValues(alpha: 0.07)),
-                itemBuilder: (_, i) {
-                  final p = suggestions[i];
-                  final fmt = p['structured_formatting'] as Map<String, dynamic>?;
-                  final main = fmt?['main_text'] as String?
-                      ?? p['description'] as String? ?? '';
-                  final secondary = fmt?['secondary_text'] as String? ?? '';
-                  final types = p['types'] as List<dynamic>? ?? [];
-                  final icon = _iconForTypes(types);
-                  return InkWell(
-                    onTap: () => onSelect(p),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 34,
-                            height: 34,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.08),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(icon,
-                                color: Colors.white.withValues(alpha: 0.75), size: 16),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(main,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                if (secondary.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(secondary,
-                                      style: TextStyle(
-                                          color: Colors.white.withValues(alpha: 0.50),
-                                          fontSize: 11),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ),
-    );
-  }
-}
-
 class _FloatingBtn extends StatelessWidget {
   final IconData? icon;
   final bool loading;
@@ -1516,8 +1614,23 @@ class _PlacementConfirmPanel extends StatelessWidget {
 
 class _Step0Panel extends StatelessWidget {
   final bool routeComplete;
+  final double? estimatedPrice;
+  final double demFee;
+  final double surgeMultiplier;
+  final bool loadingSurge;
+  final bool timedOut;
+  final VoidCallback onRetry;
   final VoidCallback onNext;
-  const _Step0Panel({required this.routeComplete, required this.onNext});
+  const _Step0Panel({
+    required this.routeComplete,
+    required this.estimatedPrice,
+    required this.demFee,
+    required this.surgeMultiplier,
+    required this.loadingSurge,
+    required this.timedOut,
+    required this.onRetry,
+    required this.onNext,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1526,31 +1639,271 @@ class _Step0Panel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Astuce',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          RichText(
-            maxLines: 3,
-            text: TextSpan(
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 14, fontWeight: FontWeight.normal, height: 1.4),
-              children: [
-                const TextSpan(text: 'Utiliser les champs de recherche ou le bouton '),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.middle,
-                  child: Icon(Icons.location_on, color: Colors.white.withValues(alpha: 0.70), size: 13),
-                ),
-                const TextSpan(text: ' pour placer un point sur la carte.'),
-              ],
+          // Le conseil "Astuce" cède la place au prix dès qu'il est
+          // disponible — évite d'empiler un texte devenu obsolète (l'action
+          // qu'il décrit est déjà faite) au-dessus de l'info la plus utile.
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 320),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SizeTransition(sizeFactor: anim, alignment: Alignment.topCenter, child: child),
             ),
+            child: routeComplete
+                ? _EstimatePriceCard(
+                    key: const ValueKey('price'),
+                    estimatedPrice: estimatedPrice,
+                    demFee: demFee,
+                    surgeMultiplier: surgeMultiplier,
+                    loadingSurge: loadingSurge,
+                    timedOut: timedOut,
+                    onRetry: onRetry,
+                  )
+                : Column(
+                    key: const ValueKey('tip'),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Astuce',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      RichText(
+                        maxLines: 3,
+                        text: TextSpan(
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 14, fontWeight: FontWeight.normal, height: 1.4),
+                          children: [
+                            const TextSpan(text: 'Utiliser les champs de recherche ou le bouton '),
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.middle,
+                              child: Icon(Icons.location_on, color: Colors.white.withValues(alpha: 0.70), size: 13),
+                            ),
+                            const TextSpan(text: ' pour placer un point sur la carte.'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
           ),
           const Spacer(),
-          _NextButton(
+          PrimaryButton(
             label: 'Suivant — Contacts',
-            icon: Icons.arrow_forward,
+            trailingIcon: Icons.arrow_forward,
             onTap: routeComplete ? onNext : null,
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Carte de prix estimé — réutilisée à l'étape 0 (Trajet) et à l'étape 3
+// (Résumé) pour un affichage cohérent, dès que l'estimation revient.
+class _EstimatePriceCard extends StatelessWidget {
+  final double? estimatedPrice;
+  final double demFee;
+  final double? discountAmount;
+  final String? promoLabel;
+  final double surgeMultiplier;
+  final bool loadingSurge;
+  final bool timedOut;
+  final VoidCallback onRetry;
+
+  const _EstimatePriceCard({
+    super.key,
+    required this.estimatedPrice,
+    required this.demFee,
+    this.discountAmount,
+    this.promoLabel,
+    required this.surgeMultiplier,
+    required this.loadingSurge,
+    required this.timedOut,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: loadingSurge
+          ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
+          : timedOut && estimatedPrice == null
+              // ── État timeout : impossible de calculer le prix ──
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.wifi_off_outlined, color: AppColors.textSecondary, size: 22),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Impossible de calculer le prix',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: onRetry,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.40)),
+                        ),
+                        child: Text('Réessayer',
+                            style: ClientText.body.copyWith(color: AppColors.primary)),
+                      ),
+                    ),
+                  ],
+                )
+              // ── État normal : affichage du prix ──
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Ligne : prix course + surge badge
+                    Row(
+                      children: [
+                        const Text('Course', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        const Spacer(),
+                        if (surgeMultiplier > 1.0) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.surge.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppColors.surge.withValues(alpha: 0.30)),
+                            ),
+                            child: Row(children: [
+                              const Icon(Icons.flash_on, color: AppColors.surge, size: 11),
+                              const SizedBox(width: 2),
+                              Text('×${surgeMultiplier.toStringAsFixed(1)}',
+                                  style: const TextStyle(color: AppColors.surge, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ]),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(
+                          estimatedPrice != null ? formatFcfa(estimatedPrice!) : '—',
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    // Ligne : frais DEM (visible uniquement si > 0)
+                    if (estimatedPrice != null && demFee > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(children: [
+                        const Text('Frais DEM', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        const Spacer(),
+                        Text('+${formatFcfa(demFee)}',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      ]),
+                    ],
+                    // Ligne : réduction promo (le livreur touche toujours le
+                    // prix plein — voir orders.service.js côté serveur)
+                    if (estimatedPrice != null && discountAmount != null && discountAmount! > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(children: [
+                        Text(
+                          promoLabel != null ? 'Réduction ($promoLabel)' : 'Réduction',
+                          style: const TextStyle(color: AppColors.success, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const Spacer(),
+                        Text('-${formatFcfa(discountAmount!)}',
+                            style: const TextStyle(color: AppColors.success, fontSize: 12, fontWeight: FontWeight.w600)),
+                      ]),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 6),
+                        child: Divider(height: 1, color: AppColors.textSecondary),
+                      ),
+                      Row(children: [
+                        const Text('Total à payer',
+                            style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+                        const Spacer(),
+                        Text(
+                          formatFcfa((estimatedPrice! + demFee - discountAmount!).clamp(0, double.infinity)),
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w800),
+                        ),
+                      ]),
+                    ],
+                  ],
+                ),
+    );
+  }
+}
+
+// Champ de saisie d'un code promo — n'affiche jamais le mot "erreur" pour un
+// simple "pas de promo" (silencieux), seulement pour un code invalide.
+class _PromoCodeField extends StatelessWidget {
+  final TextEditingController controller;
+  final String? error;
+  final bool checking;
+  final bool applied;
+  final VoidCallback onApply;
+
+  const _PromoCodeField({
+    required this.controller,
+    this.error,
+    required this.checking,
+    required this.applied,
+    required this.onApply,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              textCapitalization: TextCapitalization.characters,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Code promo (optionnel)',
+                hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.7), fontSize: 13),
+                filled: true,
+                fillColor: AppColors.card,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: checking ? null : onApply,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              decoration: BoxDecoration(
+                color: applied ? AppColors.success.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: (applied ? AppColors.success : AppColors.primary).withValues(alpha: 0.4)),
+              ),
+              child: checking
+                  ? const SizedBox(
+                      width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                    )
+                  : Text(
+                      applied ? 'Appliqué ✓' : 'Appliquer',
+                      style: TextStyle(
+                        color: applied ? AppColors.success : AppColors.primary,
+                        fontSize: 13, fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ),
+        ]),
+        if (error != null) ...[
+          const SizedBox(height: 4),
+          Text(error!, style: const TextStyle(color: AppColors.error, fontSize: 11.5)),
+        ],
+      ],
     );
   }
 }
@@ -1596,9 +1949,9 @@ class _Step1Panel extends StatelessWidget {
             onPhoneComplete: onPhoneComplete,
           ),
           const Spacer(),
-          _NextButton(
+          PrimaryButton(
             label: 'Suivant — Destinataire',
-            icon: Icons.arrow_forward,
+            trailingIcon: Icons.arrow_forward,
             onTap: onNext,
           ),
         ],
@@ -1673,9 +2026,9 @@ class _Step2Panel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _NextButton(
+          PrimaryButton(
             label: 'Suivant — Résumé',
-            icon: Icons.arrow_forward,
+            trailingIcon: Icons.arrow_forward,
             onTap: onNext,
           ),
         ],
@@ -1697,7 +2050,7 @@ class _ContactMini extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Vert vif visible sur fond cyan/bleu foncé
-    final visibleDot = dotColor == AppColors.success ? const Color(0xFF69F0AE) : dotColor;
+    final visibleDot = dotColor == AppColors.success ? AppColors.successBright : dotColor;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1765,8 +2118,7 @@ class _ContactMini extends StatelessWidget {
             ),
             prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
             prefixText: '+221 ',
-            prefixStyle: TextStyle(
-                color: visibleDot, fontWeight: FontWeight.w700, fontSize: 14),
+            prefixStyle: ClientText.bodyStrong.copyWith(color: visibleDot),
             fillColor: Colors.white.withValues(alpha: 0.08), filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
             border: OutlineInputBorder(
@@ -1783,7 +2135,12 @@ class _Step3Panel extends StatelessWidget {
   final String deliveryLabel;
   final double? estimatedPrice;
   final double demFee;
-  final bool freeCourse;
+  final double? discountAmount;
+  final String? promoLabel;
+  final TextEditingController promoCodeCtrl;
+  final String? promoError;
+  final bool checkingPromo;
+  final VoidCallback onApplyPromo;
   final double surgeMultiplier;
   final bool loadingSurge;
   final bool timedOut;
@@ -1797,7 +2154,9 @@ class _Step3Panel extends StatelessWidget {
   const _Step3Panel({
     required this.pickupLabel, required this.deliveryLabel,
     required this.estimatedPrice, required this.demFee,
-    required this.freeCourse,
+    this.discountAmount, this.promoLabel,
+    required this.promoCodeCtrl, this.promoError,
+    required this.checkingPromo, required this.onApplyPromo,
     required this.surgeMultiplier,
     required this.loadingSurge,
     required this.timedOut,
@@ -1823,7 +2182,7 @@ class _Step3Panel extends StatelessWidget {
             GestureDetector(
               onTap: onEditPickup,
               child: Row(children: [
-                Expanded(child: _RouteRow(icon: Icons.circle, color: AppColors.success, text: pickupLabel)),
+                Expanded(child: AddressRow(icon: Icons.circle, iconColor: AppColors.success, address: pickupLabel, dark: true)),
                 if (onEditPickup != null) Icon(Icons.edit_outlined, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 14),
               ]),
             ),
@@ -1834,7 +2193,7 @@ class _Step3Panel extends StatelessWidget {
             GestureDetector(
               onTap: onEditDelivery,
               child: Row(children: [
-                Expanded(child: _RouteRow(icon: Icons.location_on, color: AppColors.error, text: deliveryLabel)),
+                Expanded(child: AddressRow(icon: Icons.location_on, iconColor: AppColors.error, address: deliveryLabel, dark: true)),
                 if (onEditDelivery != null) Icon(Icons.edit_outlined, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 14),
               ]),
             ),
@@ -1843,179 +2202,36 @@ class _Step3Panel extends StatelessWidget {
         const SizedBox(height: 10),
 
         // Price card
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: loadingSurge
-              ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
-              : timedOut && estimatedPrice == null
-                  // ── État timeout : impossible de calculer le prix ──
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.wifi_off_outlined, color: AppColors.textSecondary, size: 22),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Impossible de calculer le prix',
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: onRetry,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.40)),
-                            ),
-                            child: const Text('Réessayer',
-                                style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600)),
-                          ),
-                        ),
-                      ],
-                    )
-                  // ── État normal : affichage du prix ──
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Ligne : prix course + surge badge
-                        Row(
-                          children: [
-                            const Text('Course', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                            const Spacer(),
-                            if (surgeMultiplier > 1.0) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFF9800).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.30)),
-                                ),
-                                child: Row(children: [
-                                  const Icon(Icons.flash_on, color: Color(0xFFFF9800), size: 11),
-                                  const SizedBox(width: 2),
-                                  Text('×${surgeMultiplier.toStringAsFixed(1)}',
-                                      style: const TextStyle(color: Color(0xFFFF9800), fontSize: 10, fontWeight: FontWeight.bold)),
-                                ]),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(
-                              estimatedPrice != null ? '${estimatedPrice!.toInt()} FCFA' : '—',
-                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                        // Ligne : frais DEM (visible uniquement si > 0)
-                        if (estimatedPrice != null && demFee > 0) ...[
-                          const SizedBox(height: 4),
-                          Row(children: [
-                            const Text('Frais DEM', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                            const Spacer(),
-                            Text('+${demFee.toInt()} FCFA',
-                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                          ]),
-                          Divider(color: Colors.white.withValues(alpha: 0.10), height: 14),
-                        ],
-                      ],
-                    ),
+        _EstimatePriceCard(
+          estimatedPrice: estimatedPrice,
+          demFee: demFee,
+          discountAmount: discountAmount,
+          promoLabel: promoLabel,
+          surgeMultiplier: surgeMultiplier,
+          loadingSurge: loadingSurge,
+          timedOut: timedOut,
+          onRetry: onRetry,
         ),
+        if (estimatedPrice != null && !loadingSurge && !timedOut) ...[
+          const SizedBox(height: 8),
+          _PromoCodeField(
+            controller: promoCodeCtrl,
+            error: promoError,
+            checking: checkingPromo,
+            applied: discountAmount != null && discountAmount! > 0,
+            onApply: onApplyPromo,
+          ),
+        ],
         const SizedBox(height: 8),
         ]),
         const Spacer(),
         // Bouton toujours visible en bas
-        _NextButton(
+        PrimaryButton(
           label: 'Trouvez un livreur',
           onTap: (canSubmit && !submitting) ? onSubmit : null,
           loading: submitting,
         ),
       ]),
     );
-  }
-}
-
-// ─── Bouton dégradé cyan (style "Livraison effectuée") ───────────────────────
-class _NextButton extends StatelessWidget {
-  final String label;
-  final IconData? icon;
-  final VoidCallback? onTap;
-  final bool loading;
-
-  const _NextButton({required this.label, this.icon, this.onTap, this.loading = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final active = onTap != null && !loading;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: active ? onTap : () {},
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: double.infinity,
-        height: 52,
-        decoration: BoxDecoration(
-          gradient: active
-              ? const LinearGradient(
-                  colors: [Color(0xFF00D4FF), Color(0xFF0099CC)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : null,
-          color: active ? null : Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: active
-              ? [BoxShadow(color: const Color(0xFF00D4FF).withValues(alpha: 0.30), blurRadius: 28, offset: const Offset(0, 8))]
-              : [],
-        ),
-        child: Center(
-          child: loading
-              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: active ? Colors.black : const Color(0xFF5A6A8A),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                    if (icon != null) ...[
-                      const SizedBox(width: 8),
-                      Icon(icon, color: active ? Colors.black : const Color(0xFF5A6A8A), size: 16),
-                    ],
-                  ],
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RouteRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String text;
-  const _RouteRow({required this.icon, required this.color, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(children: [
-      Icon(icon, color: color, size: 14),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(text,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-            maxLines: 1, overflow: TextOverflow.ellipsis),
-      ),
-    ]);
   }
 }

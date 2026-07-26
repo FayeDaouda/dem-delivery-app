@@ -35,6 +35,7 @@ class ClientOrderNotifier extends StateNotifier<ClientOrderState> {
   StreamSubscription<Map<String, dynamic>>? _unreachableSub;
   StreamSubscription<Map<String, dynamic>>? _searchingSub;
   StreamSubscription<Map<String, dynamic>>? _adminCancelledSub;
+  StreamSubscription<Map<String, dynamic>>? _paymentConfirmedSub;
   String? cancelReason;
   Timer? _pollTimer;
   Timer? _retryLocationTimer;
@@ -157,6 +158,29 @@ class ClientOrderNotifier extends StateNotifier<ClientOrderState> {
       cancelReason = data['reason'] as String?;
       state = state.copyWith(phase: 'CANCELLED');
     });
+
+    // Paiement en ligne SamirPay confirmé (recharge déclenchée par le client
+    // lui-même ou QR affiché par le livreur) — recharge depuis la DB plutôt
+    // que de patcher `paymentStatus` localement, pour rester source-de-vérité
+    // unique avec le reste de l'état (montant, éventuels autres champs mis à
+    // jour côté serveur au même moment).
+    _paymentConfirmedSub = SocketService.instance.onOrderPaymentConfirmed.listen((data) {
+      if (!mounted || data['orderId'] != orderId) return;
+      // Notification systémique même si le client n'est plus sur l'écran de
+      // paiement (parti sur un autre onglet, ou revenu de Wave/OM sans
+      // rouvrir la feuille) — sinon rien ne l'informe explicitement que son
+      // paiement est passé, contrairement aux autres étapes de la course
+      // (voir _notifyStatusChange). Ce provider (family, pas autoDispose)
+      // reste vivant tant que l'app tourne, même après avoir quitté l'écran
+      // de suivi de cette commande.
+      final amount = (data['amount'] as num?)?.toInt();
+      NotificationService.showSystemNotification(
+        title: 'Paiement confirmé',
+        body: amount != null ? 'Votre paiement de $amount FCFA a bien été reçu.' : 'Votre paiement a bien été reçu.',
+      );
+      NotificationService.playAlertSound();
+      _fetchOrder();
+    });
   }
 
   // ── Notification système à chaque étape clé ────────────────────────────────
@@ -225,6 +249,7 @@ class ClientOrderNotifier extends StateNotifier<ClientOrderState> {
     _unreachableSub?.cancel();
     _searchingSub?.cancel();
     _adminCancelledSub?.cancel();
+    _paymentConfirmedSub?.cancel();
     _pollTimer?.cancel();
     _retryLocationTimer?.cancel();
     super.dispose();

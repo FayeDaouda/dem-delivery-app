@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
+import '../../../core/utils/price_format.dart';
+import '../../../shared/widgets/payment_collection_dialog.dart';
+
+const _kPageSize = 30;
 
 
 // ── Filtres statuts ───────────────────────────────────────────────────────────
@@ -32,30 +37,33 @@ const _statusLabel = {
 };
 
 const _statusColor = {
-  'PENDING':    Color(0xFFF59E0B),
-  'ACCEPTED':   Color(0xFF6366F1),
-  'PICKED_UP':  Color(0xFF6366F1),
-  'IN_TRANSIT': Color(0xFF6366F1),
-  'DELIVERED':  Color(0xFF22C55E),
-  'CANCELLED':  Color(0xFFEF4444),
+  'PENDING':    AppColors.pending,
+  'ACCEPTED':   AppColors.accentIndigo,
+  'PICKED_UP':  AppColors.accentIndigo,
+  'IN_TRANSIT': AppColors.accentIndigo,
+  'DELIVERED':  AppColors.successLight,
+  'CANCELLED':  AppColors.error,
 };
 
-// ── Provider ──────────────────────────────────────────────────────────────────
-final _historyProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final res = await ApiClient.dio.get('/orders/my');
+// ── Récupère une page de l'historique. Le backend pagine déjà nativement
+// (/orders/my?page=&limit=, réponse { orders, total, page, totalPages }) —
+// on garde un repli sur l'ancien format liste brute par prudence.
+Future<({List<Map<String, dynamic>> orders, bool hasMore})> _fetchOrdersPage(int page) async {
+  final res = await ApiClient.dio.get('/orders/my', queryParameters: {
+    'page': page,
+    'limit': _kPageSize,
+  });
   final raw = res.data;
-  List<dynamic> list;
-  if (raw is List) {
-    list = raw;
-  } else if (raw is String) {
-    list = jsonDecode(raw) as List;
-  } else if (raw is Map && raw['orders'] != null) {
-    list = raw['orders'] as List;
-  } else {
-    list = [];
+  if (raw is Map) {
+    final list = (raw['orders'] as List?) ?? const [];
+    final currentPage = (raw['page'] as num?)?.toInt();
+    final totalPages  = (raw['totalPages'] as num?)?.toInt();
+    final hasMore = currentPage != null && totalPages != null && currentPage < totalPages;
+    return (orders: List<Map<String, dynamic>>.from(list), hasMore: hasMore);
   }
-  return List<Map<String, dynamic>>.from(list);
-});
+  final list = raw is List ? raw : (raw is String ? jsonDecode(raw) as List : const []);
+  return (orders: List<Map<String, dynamic>>.from(list), hasMore: false);
+}
 
 // ── Écran ─────────────────────────────────────────────────────────────────────
 class DriverOrderHistoryScreen extends ConsumerStatefulWidget {
@@ -67,6 +75,80 @@ class DriverOrderHistoryScreen extends ConsumerStatefulWidget {
 class _State extends ConsumerState<DriverOrderHistoryScreen> {
   String _statusFilter = 'all';
   String _periodFilter = 'all';
+
+  final _scrollController = ScrollController();
+  List<Map<String, dynamic>> _orders = [];
+  int _page = 1;
+  bool _hasMore = true;
+  bool _initialLoading = true;
+  bool _loadingMore = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitial();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadInitial() async {
+    setState(() { _initialLoading = true; _error = null; _page = 1; });
+    try {
+      final result = await _fetchOrdersPage(1);
+      if (!mounted) return;
+      setState(() {
+        _orders = result.orders;
+        _hasMore = result.hasMore;
+        _initialLoading = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() { _initialLoading = false; _error = friendlyError(e); });
+    }
+  }
+
+  // Mise à jour locale après encaissement réussi — évite un rechargement
+  // complet de la liste juste pour faire disparaître le badge "Non payée".
+  void _onOrderPaid(String? orderId) {
+    if (orderId == null || !mounted) return;
+    setState(() {
+      _orders = _orders.map((o) {
+        if (o['id'] != orderId) return o;
+        return {...o, 'paymentStatus': 'PAID'};
+      }).toList();
+    });
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    final nextPage = _page + 1;
+    try {
+      final result = await _fetchOrdersPage(nextPage);
+      if (!mounted) return;
+      setState(() {
+        _orders = [..._orders, ...result.orders];
+        _hasMore = result.hasMore;
+        _page = nextPage;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      // Best-effort — l'utilisateur peut re-scroller pour réessayer.
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
 
   List<Map<String, dynamic>> _applyFilters(List<Map<String, dynamic>> orders) {
     var result = orders;
@@ -106,10 +188,10 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(_historyProvider);
+    final filtered = _applyFilters(_orders);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: AppColors.lightBg,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -129,25 +211,24 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                         ),
                         const Spacer(),
-                        const Text('Historique des courses',
-                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                        Text('Historique des courses',
+                            style: ClientText.subtitle.copyWith(color: Colors.white)),
                         const Spacer(),
                         const SizedBox(width: 48),
                       ],
                     ),
                   ),
-                  async.whenOrNull(
-                    data: (orders) {
-                      final filtered = _applyFilters(orders);
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: Text(
-                          '${filtered.length} course${filtered.length != 1 ? 's' : ''}',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13),
-                        ),
-                      );
-                    },
-                  ) ?? const SizedBox(height: 14),
+                  if (!_initialLoading && _error == null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Text(
+                        '${filtered.length} course${filtered.length != 1 ? 's' : ''}'
+                        '${_hasMore ? '+' : ''}',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13),
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 14),
                 ],
               ),
             ),
@@ -155,7 +236,7 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
 
           // ── Filtres statut ──
           Container(
-            color: const Color(0xFFF4F6FA),
+            color: AppColors.lightBg,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -169,14 +250,14 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                       margin: const EdgeInsets.only(right: 8, bottom: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
-                        color: active ? AppColors.primary : const Color(0xFFEEF0F5),
+                        color: active ? AppColors.primary : AppColors.lightBorder,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: active ? AppColors.primary : Colors.transparent),
                       ),
                       child: Text(
                         f['label']!,
                         style: TextStyle(
-                          color: active ? Colors.white : const Color(0xFF7B8CA0),
+                          color: active ? Colors.white : AppColors.textMuted,
                           fontSize: 13,
                           fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                         ),
@@ -190,7 +271,7 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
 
           // ── Filtres période ──
           Container(
-            color: const Color(0xFFF4F6FA),
+            color: AppColors.lightBg,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -220,13 +301,13 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
                           Icon(
                             Icons.calendar_today_outlined,
                             size: 11,
-                            color: active ? AppColors.primary : const Color(0xFF7B8CA0),
+                            color: active ? AppColors.primary : AppColors.textMuted,
                           ),
                           const SizedBox(width: 5),
                           Text(
                             f['label']!,
                             style: TextStyle(
-                              color: active ? AppColors.primary : const Color(0xFF7B8CA0),
+                              color: active ? AppColors.primary : AppColors.textMuted,
                               fontSize: 12,
                               fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                             ),
@@ -243,55 +324,69 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
           // ── Liste ──
           Expanded(
             child: Container(
-              color: const Color(0xFFF4F6FA),
-              child: async.when(
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                ),
-                error: (e, _) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.wifi_off_outlined, color: Color(0xFF7B8CA0), size: 48),
-                      const SizedBox(height: 12),
-                      Text(friendlyError(e),
-                          style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 13),
-                          textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: () => ref.invalidate(_historyProvider),
-                        child: const Text('Réessayer', style: TextStyle(color: AppColors.primary)),
-                      ),
-                    ],
-                  ),
-                ),
-                data: (orders) {
-                  final filtered = _applyFilters(orders);
-                  if (filtered.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.history,
-                              color: Color(0xFFBCC5D0), size: 64),
-                          const SizedBox(height: 12),
-                          const Text('Aucune course trouvée',
-                              style: TextStyle(color: Color(0xFF7B8CA0), fontSize: 15)),
-                        ],
-                      ),
-                    );
-                  }
-                  return RefreshIndicator(
-                    color: AppColors.primary,
-                    onRefresh: () async => ref.invalidate(_historyProvider),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) => _OrderCard(order: filtered[i]),
-                    ),
-                  );
-                },
-              ),
+              color: AppColors.lightBg,
+              child: _initialLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    )
+                  : _error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.wifi_off_outlined, color: AppColors.textMuted, size: 48),
+                              const SizedBox(height: 12),
+                              Text(_error!,
+                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                                  textAlign: TextAlign.center),
+                              const SizedBox(height: 16),
+                              TextButton(
+                                onPressed: _loadInitial,
+                                child: const Text('Réessayer', style: TextStyle(color: AppColors.primary)),
+                              ),
+                            ],
+                          ),
+                        )
+                      : filtered.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.history,
+                                      color: AppColors.lightIconMuted, size: 64),
+                                  const SizedBox(height: 12),
+                                  const Text('Aucune course trouvée',
+                                      style: TextStyle(color: AppColors.textMuted, fontSize: 15)),
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              color: AppColors.primary,
+                              onRefresh: _loadInitial,
+                              child: ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                                itemCount: filtered.length + (_hasMore ? 1 : 0),
+                                itemBuilder: (_, i) {
+                                  if (i >= filtered.length) {
+                                    return const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 16),
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 22, height: 22,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  final order = filtered[i];
+                                  return _OrderCard(
+                                    order: order,
+                                    onPaid: () => _onOrderPaid(order['id'] as String?),
+                                  );
+                                },
+                              ),
+                            ),
             ),
           ),
         ],
@@ -301,21 +396,28 @@ class _State extends ConsumerState<DriverOrderHistoryScreen> {
 }
 
 // ── Carte course ──────────────────────────────────────────────────────────────
-class _OrderCard extends StatelessWidget {
+class _OrderCard extends ConsumerWidget {
   final Map<String, dynamic> order;
-  const _OrderCard({required this.order});
+  final VoidCallback onPaid;
+  const _OrderCard({required this.order, required this.onPaid});
 
   @override
-  Widget build(BuildContext context) {
-    final id       = (order['id'] as String? ?? '').toUpperCase();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orderId  = order['id'] as String?;
+    final id       = (orderId ?? '').toUpperCase();
     final shortId  = id.length >= 8 ? id.substring(0, 8) : id;
     final price    = (order['price'] as num?)?.toInt() ?? 0;
     final status   = (order['status'] as String? ?? '').toUpperCase();
+    final paymentStatus = (order['paymentStatus'] as String? ?? '').toUpperCase();
+    // Livrée mais jamais réglée (driver parti sans conclure le paiement) —
+    // seul cas où on propose d'encaisser depuis l'historique.
+    final isUnpaid = status == 'DELIVERED' && paymentStatus == 'PENDING' && orderId != null;
+    final isRide   = order['orderType'] == 'RIDE';
     final rawDate  = order['createdAt'] as String?;
     final date     = rawDate != null ? _formatDate(DateTime.tryParse(rawDate)) : '—';
     final pickup   = order['pickupAddress'] as String? ?? '—';
     final delivery = order['deliveryAddress'] as String? ?? '—';
-    final color    = _statusColor[status] ?? const Color(0xFF7B8CA0);
+    final color    = _statusColor[status] ?? AppColors.textMuted;
     final label    = _statusLabel[status] ?? status;
 
     return Container(
@@ -333,13 +435,20 @@ class _OrderCard extends StatelessWidget {
             Row(
               children: [
                 Text('# $shortId',
-                    style: const TextStyle(
-                      color: Color(0xFF1A1A2E),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      fontFamily: 'monospace',
-                    )),
+                    style: ClientText.bodyStrong.copyWith(color: AppColors.textDark, fontFamily: 'monospace')),
                 const Spacer(),
+                if (isUnpaid) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('Non payée',
+                        style: ClientText.caption.copyWith(color: AppColors.error)),
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
@@ -347,26 +456,48 @@ class _OrderCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(label,
-                      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+                      style: ClientText.caption.copyWith(color: color)),
                 ),
               ],
             ),
             const SizedBox(height: 10),
-            _AddrLine(icon: Icons.circle, color: const Color(0xFF22C55E), text: pickup),
+            _AddrLine(icon: Icons.circle, color: AppColors.successLight, text: pickup),
             const SizedBox(height: 4),
             _AddrLine(icon: Icons.location_on, color: AppColors.primary, text: delivery),
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.access_time, color: Color(0xFF7B8CA0), size: 13),
+                const Icon(Icons.access_time, color: AppColors.textMuted, size: 13),
                 const SizedBox(width: 4),
-                Text(date, style: const TextStyle(color: Color(0xFF7B8CA0), fontSize: 12)),
+                Text(date, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                 const Spacer(),
                 Text('$price FCFA',
-                    style: const TextStyle(
-                        color: AppColors.primary, fontSize: 15, fontWeight: FontWeight.w700)),
+                    style: ClientText.button.copyWith(color: AppColors.primary)),
               ],
             ),
+            if (isUnpaid) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => showPaymentCollectionDialog(
+                    context, ref,
+                    orderId: orderId,
+                    price: clientChargeFor(order),
+                    isRide: isRide,
+                    onPaid: onPaid,
+                  ),
+                  icon: const Icon(Icons.payments_outlined, size: 16),
+                  label: const Text('Encaisser'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -397,7 +528,7 @@ class _AddrLine extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(text,
-              style: const TextStyle(color: Color(0xFF1A1A2E), fontSize: 12),
+              style: const TextStyle(color: AppColors.textDark, fontSize: 12),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ],

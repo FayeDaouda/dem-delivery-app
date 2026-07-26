@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 import '../../../core/utils/dem_toast.dart';
 
 
@@ -161,7 +162,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     final allDone  = uploaded == total;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: AppColors.lightBg,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -181,8 +182,8 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                         ),
                         const Spacer(),
-                        const Text('Documents',
-                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                        Text('Documents',
+                            style: ClientText.subtitle.copyWith(color: Colors.white)),
                         const Spacer(),
                         const SizedBox(width: 48),
                       ],
@@ -197,11 +198,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                         Row(
                           children: [
                             Text('$uploaded/$total documents',
-                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                                style: ClientText.label.copyWith(color: Colors.white)),
                             const Spacer(),
                             if (allDone)
-                              const Text('✅ Profil complet',
-                                  style: TextStyle(color: Color(0xFF69F0AE), fontSize: 12, fontWeight: FontWeight.w700)),
+                              Text('✅ Profil complet',
+                                  style: ClientText.labelStrong.copyWith(color: AppColors.successBright)),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -212,7 +213,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                             minHeight: 5,
                             backgroundColor: Colors.white.withValues(alpha: 0.20),
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              allDone ? const Color(0xFF69F0AE) : Colors.white,
+                              allDone ? AppColors.successBright : Colors.white,
                             ),
                           ),
                         ),
@@ -267,10 +268,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                                 Icon(group.icon, color: AppColors.primary, size: 15),
                                 const SizedBox(width: 6),
                                 Text(group.title,
-                                    style: const TextStyle(
-                                      fontSize: 12, fontWeight: FontWeight.w700,
-                                      color: Color(0xFF1A1A2E),
-                                    )),
+                                    style: ClientText.labelStrong.copyWith(color: AppColors.textDark)),
                               ]),
                               const SizedBox(height: 8),
                               // Slots : 1 seul → pleine largeur, 2 → côte à côte
@@ -370,7 +368,7 @@ class _DocCard extends StatelessWidget {
     color: Colors.white,
     borderRadius: BorderRadius.circular(14),
     border: Border.all(
-      color: _isDone ? const Color(0xFF22C55E) : AppColors.primary.withValues(alpha: 0.25),
+      color: _isDone ? AppColors.successLight : AppColors.primary.withValues(alpha: 0.25),
       width: _isDone ? 1.5 : 1,
     ),
     boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2))],
@@ -388,10 +386,10 @@ class _DocCard extends StatelessWidget {
           : file != null
               ? Image.file(file!, fit: BoxFit.cover)
               : Container(
-                  color: _isDone ? const Color(0xFFE8F5E9) : AppColors.primary.withValues(alpha: 0.07),
+                  color: _isDone ? AppColors.successLightBg : AppColors.primary.withValues(alpha: 0.07),
                   child: Icon(
                     _isDone ? Icons.check_circle_outline : doc.icon,
-                    color: _isDone ? const Color(0xFF22C55E) : AppColors.primary,
+                    color: _isDone ? AppColors.successLight : AppColors.primary,
                     size: size * 0.42,
                   ),
                 ),
@@ -403,25 +401,25 @@ class _DocCard extends StatelessWidget {
     children: [
       Text(doc.label,
           style: TextStyle(fontSize: fs, fontWeight: FontWeight.w700,
-              color: _isDone ? const Color(0xFF1B5E20) : const Color(0xFF1A1A2E))),
+              color: _isDone ? const Color(0xFF1B5E20) : AppColors.textDark)),
       const SizedBox(height: 2),
       Text(_isDone ? 'Uploadé ✓' : doc.hint,
           style: TextStyle(fontSize: fs - 2,
-              color: _isDone ? const Color(0xFF22C55E) : const Color(0xFF7B8CA0))),
+              color: _isDone ? AppColors.successLight : AppColors.textMuted)),
     ],
   );
 
   Widget _actionBtn({bool small = false}) => Container(
     padding: EdgeInsets.symmetric(horizontal: small ? 8 : 12, vertical: small ? 4 : 6),
     decoration: BoxDecoration(
-      color: _isDone ? const Color(0xFFE8F5E9) : AppColors.primary.withValues(alpha: 0.10),
+      color: _isDone ? AppColors.successLightBg : AppColors.primary.withValues(alpha: 0.10),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Text(
       _isDone ? 'Modifier' : 'Ajouter',
       style: TextStyle(
         fontSize: small ? 10 : 11, fontWeight: FontWeight.w700,
-        color: _isDone ? const Color(0xFF22C55E) : AppColors.primary,
+        color: _isDone ? AppColors.successLight : AppColors.primary,
       ),
     ),
   );

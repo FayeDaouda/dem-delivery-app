@@ -2,14 +2,16 @@ import 'package:dio/dio.dart';
 import '../storage/auth_storage.dart';
 import '../router/app_startup_notifier.dart';
 
-const _baseUrl = 'https://api.dem.sn';
+// Public — réutilisée par les clients Dio indépendants (ex. suivi invité,
+// non authentifié, qui ne doit pas passer par l'intercepteur ci-dessous).
+const apiBaseUrl = 'https://api.dem.sn';
 
 class ApiClient {
   static final Dio _dio = _buildDio();
 
   static Dio _buildDio() {
     final dio = Dio(BaseOptions(
-      baseUrl: _baseUrl,
+      baseUrl: apiBaseUrl,
       // 12s pour établir la connexion TCP (couvre les réseaux lents du Sénégal)
       connectTimeout: const Duration(seconds: 12),
       // 30s pour recevoir la réponse (uploads documents, calculs backend lourds)

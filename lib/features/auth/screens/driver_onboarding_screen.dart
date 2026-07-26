@@ -2,58 +2,16 @@ import '../../../core/error/app_exception.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../../../core/utils/input_formatters.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/dem_toast.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../../profile/providers/profile_provider.dart';
 
 // ── Formateur plaque sénégalaise : "DK 1234 AB" ───────────────────────────────
 // Accepte les formes : "DK1234AB", "DK 1234 AB", etc.
 // Normalise : 2 lettres · espace · 1-4 chiffres · espace · 1-2 lettres
-class _PlateFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    // On garde uniquement lettres et chiffres, en majuscules
-    final raw = newValue.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    if (raw.isEmpty) return newValue.copyWith(text: '');
-
-    final buf = StringBuffer();
-    int i = 0;
-
-    // 1-2 lettres préfixe (ex: "DK")
-    while (i < raw.length && i < 2 && RegExp(r'[A-Z]').hasMatch(raw[i])) {
-      buf.write(raw[i++]);
-    }
-    // chiffres (max 4)
-    if (i < raw.length) {
-      final digits = StringBuffer();
-      while (i < raw.length && digits.length < 4 && RegExp(r'\d').hasMatch(raw[i])) {
-        digits.write(raw[i++]);
-      }
-      if (digits.isNotEmpty) { buf.write(' '); buf.write(digits); }
-    }
-    // lettres suffixe (max 2)
-    if (i < raw.length) {
-      final suffix = StringBuffer();
-      while (i < raw.length && suffix.length < 2 && RegExp(r'[A-Z]').hasMatch(raw[i])) {
-        suffix.write(raw[i++]);
-      }
-      if (suffix.isNotEmpty) { buf.write(' '); buf.write(suffix); }
-    }
-
-    final formatted = buf.toString();
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-    );
-  }
-}
-
 class DriverOnboardingScreen extends ConsumerStatefulWidget {
   final String vehicleType;
   const DriverOnboardingScreen({super.key, required this.vehicleType});
@@ -106,7 +64,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
       _isMoto ? context.go('/driver/home') : context.go('/driver/thiak/home');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+        showDemToast(context, friendlyError(e), isError: true);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -252,7 +210,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                       ),
                       textCapitalization: TextCapitalization.characters,
                       textInputAction: TextInputAction.next,
-                      inputFormatters: [_PlateFormatter()],
+                      inputFormatters: [PlateInputFormatter()],
                       decoration: InputDecoration(
                         hintText: _isMoto ? 'Plaque d\'immatriculation de votre moto' : 'Plaque d\'immatriculation de votre véhicule',
                         prefixIcon: Icon(
