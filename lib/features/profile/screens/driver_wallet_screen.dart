@@ -37,6 +37,13 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   Map<String, dynamic>? _forfaitStatus;
   String? _vehicleType;
 
+  // ── Promotion sur la passe (voir promo.service.js côté serveur) ─────────
+  double? _forfaitDiscountAmount;
+  String? _forfaitPromoLabel;
+  String? _forfaitPromoError;
+  bool _checkingForfaitPromo = false;
+  final _forfaitPromoCodeCtrl = TextEditingController();
+
   // ── Pagination historique ────────────────────────────────────────────────
   int _page = 1;
   bool _hasMore = true;
@@ -63,6 +70,7 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   @override
   void dispose() {
     _walletSub?.cancel();
+    _forfaitPromoCodeCtrl.dispose();
     super.dispose();
   }
 
@@ -92,8 +100,49 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
         _page                = 1;
         _hasMore             = _transactions.length >= 20;
       });
+      _checkForfaitPromo();
     } catch (e) {
       if (mounted) setState(() { _loading = false; _error = friendlyError(e); });
+    }
+  }
+
+  // Vérification silencieuse — une campagne DRIVER auto-appliquée peut
+  // exister ; aucune erreur affichée si non (cas normal).
+  Future<void> _checkForfaitPromo() async {
+    try {
+      final result = await _walletRepo.getForfaitPromoPreview();
+      if (!mounted || result == null) return;
+      final discount = (result['discountAmount'] as num?)?.toDouble() ?? 0;
+      if (discount <= 0) return;
+      setState(() {
+        _forfaitDiscountAmount = discount;
+        _forfaitPromoLabel     = result['promoCode'] as String?;
+      });
+    } catch (_) {} // jamais bloquant
+  }
+
+  Future<void> _applyForfaitPromoCode() async {
+    final code = _forfaitPromoCodeCtrl.text.trim();
+    if (code.isEmpty) return;
+    setState(() { _checkingForfaitPromo = true; _forfaitPromoError = null; });
+    try {
+      final result = await _walletRepo.getForfaitPromoPreview(code: code);
+      if (!mounted) return;
+      final discount = (result?['discountAmount'] as num?)?.toDouble() ?? 0;
+      setState(() {
+        _forfaitDiscountAmount = discount > 0 ? discount : null;
+        _forfaitPromoLabel     = result?['promoCode'] as String?;
+        _checkingForfaitPromo  = false;
+      });
+      if (discount > 0) showDemToast(context, 'Code promo appliqué !');
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _checkingForfaitPromo = false;
+          _forfaitPromoError = friendlyError(e);
+          _forfaitDiscountAmount = null;
+        });
+      }
     }
   }
 
@@ -130,6 +179,11 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
     return (amount as num?)?.toDouble() ?? 0;
   }
 
+  // Estimation affichée avant confirmation — le montant réel est toujours
+  // recalculé côté serveur (voir forfait.service.js:prepareForfaitPurchase).
+  double get _forfaitAmountAfterDiscount =>
+      (_forfaitAmount - (_forfaitDiscountAmount ?? 0)).clamp(0, double.infinity);
+
   // Paie la passe directement via SamirPay, sans passer par une recharge
   // générale du wallet — le montant exact de la passe est payé et active
   // automatiquement dès confirmation (voir forfait.service.js côté serveur).
@@ -137,12 +191,18 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
     final operatorName = await chooseOperator(context, title: 'Payer ma passe avec');
     if (operatorName == null || !mounted) return;
 
+    // Uniquement si saisi manuellement et validé — une promo auto-appliquée
+    // n'a pas besoin d'être renvoyée, le serveur la retrouve tout seul.
+    final manualCode = _forfaitPromoError == null && _forfaitPromoCodeCtrl.text.trim().isNotEmpty
+        ? _forfaitPromoCodeCtrl.text.trim()
+        : null;
+
     await SamirpayPaymentSheet.show(
       context,
-      amount: _forfaitAmount.toInt(),
+      amount: _forfaitAmountAfterDiscount.toInt(),
       title: 'Paiement de la passe journalière',
       initPayment: () async {
-        final result = await _walletRepo.payForfaitOnline(operatorName);
+        final result = await _walletRepo.payForfaitOnline(operatorName, promoCode: manualCode);
         if (result['alreadyActive'] == true) {
           throw AppException('Votre passe du jour est déjà active.');
         }
@@ -355,7 +415,6 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
     final forfait = _forfaitStatus;
     final active = forfait?['active'] == true;
     final todayCharged = forfait?['todayCharged'] == true;
-    final amount = _forfaitAmount;
 
     if (!active) {
       return _InfoBanner(
@@ -370,12 +429,84 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
     // La passe se paie toujours en direct via Wave/Orange Money — jamais
     // depuis le solde du wallet (plus de recharge générale, voir suppression
     // de _openTopup) : elle s'active automatiquement dès confirmation SamirPay.
-    return _InfoBanner(
-      icon: Icons.confirmation_number_outlined,
-      message: 'Payez votre passe directement via Wave ou Orange Money — elle s\'active automatiquement dès confirmation.',
-      color: AppColors.primary,
-      actionLabel: 'Payer ma passe (${amount.toStringAsFixed(0)} FCFA)',
-      onAction: _payForfaitOnline,
+    final discount = _forfaitDiscountAmount ?? 0;
+    final displayAmount = _forfaitAmountAfterDiscount;
+    final baseMessage = 'Payez votre passe directement via Wave ou Orange Money — elle s\'active automatiquement dès confirmation.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InfoBanner(
+          icon: Icons.confirmation_number_outlined,
+          message: discount > 0
+              ? '$baseMessage\nRéduction : -${discount.toStringAsFixed(0)} FCFA'
+                  '${_forfaitPromoLabel != null ? ' ($_forfaitPromoLabel)' : ''}'
+              : baseMessage,
+          color: discount > 0 ? AppColors.successLight : AppColors.primary,
+          actionLabel: 'Payer ma passe (${displayAmount.toStringAsFixed(0)} FCFA)',
+          onAction: _payForfaitOnline,
+        ),
+        const SizedBox(height: 10),
+        _buildForfaitPromoCodeField(),
+      ],
+    );
+  }
+
+  Widget _buildForfaitPromoCodeField() {
+    final applied = _forfaitDiscountAmount != null && _forfaitDiscountAmount! > 0;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _forfaitPromoCodeCtrl,
+                textCapitalization: TextCapitalization.characters,
+                style: const TextStyle(fontSize: 13, color: AppColors.textDark),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Code promo passe (optionnel)',
+                  hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.8), fontSize: 13),
+                  filled: true,
+                  fillColor: AppColors.lightBg,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _checkingForfaitPromo ? null : _applyForfaitPromoCode,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: (applied ? AppColors.successLight : AppColors.primary).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: _checkingForfaitPromo
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                    : Text(
+                        applied ? 'Appliqué ✓' : 'Appliquer',
+                        style: TextStyle(
+                          color: applied ? AppColors.successLight : AppColors.primary,
+                          fontSize: 13, fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+          ]),
+          if (_forfaitPromoError != null) ...[
+            const SizedBox(height: 4),
+            Text(_forfaitPromoError!, style: const TextStyle(color: AppColors.error, fontSize: 11.5)),
+          ],
+        ],
+      ),
     );
   }
 }

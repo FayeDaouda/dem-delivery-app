@@ -33,10 +33,13 @@ class WalletRepository {
   /// générale au préalable, le montant exact de la passe est payé et la
   /// passe s'active automatiquement dès confirmation (voir
   /// forfait.service.js:activateForfaitFromDirectPayment côté serveur).
-  Future<Map<String, dynamic>> payForfaitOnline(String operatorName) async {
+  /// [promoCode] optionnel — sinon la meilleure promo DRIVER auto-appliquée
+  /// (s'il y en a une) est utilisée automatiquement.
+  Future<Map<String, dynamic>> payForfaitOnline(String operatorName, {String? promoCode}) async {
     try {
       final response = await _dio.post('/users/driver/forfait/pay-online', data: {
         'operatorName': operatorName,
+        if (promoCode != null && promoCode.isNotEmpty) 'promoCode': promoCode,
       });
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
@@ -44,6 +47,26 @@ class WalletRepository {
         e.response?.data?['message'] ?? 'Impossible de lancer le paiement de la passe.',
         e.response?.statusCode,
       );
+    }
+  }
+
+  /// Aperçu du prix de la passe avec réduction éventuelle — sans code, tente
+  /// juste l'auto-application (retourne null si aucune, jamais d'erreur) ;
+  /// avec [code], throw une [AppException] si le code n'est pas valide/éligible.
+  Future<Map<String, dynamic>?> getForfaitPromoPreview({String? code}) async {
+    try {
+      final response = await _dio.get('/users/driver/forfait/promo-preview', queryParameters: {
+        if (code != null && code.isNotEmpty) 'code': code,
+      });
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      if (code != null && code.isNotEmpty) {
+        throw AppException(
+          e.response?.data?['message'] ?? 'Code promo invalide.',
+          e.response?.statusCode,
+        );
+      }
+      return null; // aperçu silencieux (auto-apply) — jamais bloquant
     }
   }
 
