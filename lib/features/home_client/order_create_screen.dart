@@ -814,7 +814,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     final extraH    = bottomSafeArea > 20 ? 24.0 : 0.0;
     final isTablet  = MediaQuery.of(context).size.width > 600;
     final heights   = isTablet ? _kPanelHeightsTablet : _kPanelHeightsPhone;
-    final panelH    = _isMapPlacementMode ? 90.0 : heights[_step] + extraH;
+    // L'étape 3 (Résumé) affiche 2 lignes de plus (Réduction + Total à
+    // payer) dès qu'une promo s'applique — le budget de hauteur fixe de
+    // cette étape ne les prévoyait pas, d'où l'overflow en bas du panneau.
+    final promoExtra = (_step == 3 && (_discountAmount ?? 0) > 0) ? 80.0 : 0.0;
+    final panelH    = _isMapPlacementMode ? 90.0 : heights[_step] + extraH + promoExtra;
 
     // Polyline + inactive markers
     Set<Polyline> polylines = {};
