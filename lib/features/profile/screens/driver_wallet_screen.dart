@@ -42,6 +42,7 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   String? _forfaitPromoLabel;
   String? _forfaitPromoError;
   bool _checkingForfaitPromo = false;
+  bool _activatingFreeForfait = false;
   final _forfaitPromoCodeCtrl = TextEditingController();
 
   // ── Pagination historique ────────────────────────────────────────────────
@@ -188,14 +189,36 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
   // générale du wallet — le montant exact de la passe est payé et active
   // automatiquement dès confirmation (voir forfait.service.js côté serveur).
   Future<void> _payForfaitOnline() async {
-    final operatorName = await chooseOperator(context, title: 'Payer ma passe avec');
-    if (operatorName == null || !mounted) return;
-
     // Uniquement si saisi manuellement et validé — une promo auto-appliquée
     // n'a pas besoin d'être renvoyée, le serveur la retrouve tout seul.
     final manualCode = _forfaitPromoError == null && _forfaitPromoCodeCtrl.text.trim().isNotEmpty
         ? _forfaitPromoCodeCtrl.text.trim()
         : null;
+
+    // Réduction couvrant 100% du prix : rien à payer, donc pas de flux Wave/
+    // Orange Money — SamirPay ne peut pas traiter un encaissement de 0 FCFA.
+    // On active directement et le livreur n'a aucune étape supplémentaire.
+    if (_forfaitAmountAfterDiscount <= 0) {
+      if (_activatingFreeForfait) return;
+      setState(() => _activatingFreeForfait = true);
+      try {
+        final result = await _walletRepo.activateFreeForfait(code: manualCode);
+        if (!mounted) return;
+        showDemToast(
+          context,
+          result['alreadyActive'] == true ? 'Votre passe du jour est déjà active.' : 'Passe activée !',
+        );
+        await _load();
+      } catch (e) {
+        if (mounted) showDemToast(context, friendlyError(e));
+      } finally {
+        if (mounted) setState(() => _activatingFreeForfait = false);
+      }
+      return;
+    }
+
+    final operatorName = await chooseOperator(context, title: 'Payer ma passe avec');
+    if (operatorName == null || !mounted) return;
 
     await SamirpayPaymentSheet.show(
       context,
@@ -305,109 +328,129 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
                           ],
                         ),
                       )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // ── Bloc fixe : solde, actions, passe, en-tête historique ──
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _BalanceCard(
-                                  balance: _balance,
-                                  withdrawableBalance: _withdrawableBalance,
-                                  receivedByOperator: _receivedByOperator,
-                                ),
-                                const SizedBox(height: 12),
-                                _WalletActionButton(
-                                  icon: Icons.arrow_circle_up_outlined,
-                                  label: 'Retirer mes gains',
-                                  onTap: _openCashout,
-                                ),
-                                const SizedBox(height: 16),
-                                _buildForfaitSection(),
-                                const SizedBox(height: 24),
-                                const Text('Historique',
-                                    style: TextStyle(
-                                        color: AppColors.textDark, fontSize: 15, fontWeight: FontWeight.w700)),
-                                if (_transactions.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  _TxFilterBar(
-                                    selected: _filter,
-                                    onChanged: (f) => setState(() => _filter = f),
-                                  ),
-                                ],
-                              ],
+                    : Builder(builder: (context) {
+                        // Quand le clavier s'ouvre (ex. saisie du code promo),
+                        // le bloc fixe seul peut dépasser l'espace restant :
+                        // on le rend alors scrollable et on masque l'historique
+                        // (non pertinent pendant la saisie) plutôt que de
+                        // laisser l'Expanded passer en espace négatif.
+                        final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+                        if (keyboardOpen) {
+                          return SingleChildScrollView(
+                            padding: EdgeInsets.only(
+                              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          // ── Seule cette liste défile — le bloc au-dessus reste fixe ──
-                          Expanded(
-                            child: RefreshIndicator(
-                              color: AppColors.primary,
-                              onRefresh: _load,
-                              child: _transactions.isEmpty
-                                  ? ListView(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                                      children: const [
-                                        SizedBox(height: 24),
-                                        Center(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.receipt_long_outlined, color: AppColors.lightIconMuted, size: 56),
-                                              SizedBox(height: 10),
-                                              Text('Aucune transaction pour le moment',
-                                                  style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : _filteredTransactions.isEmpty
-                                      ? ListView(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                                          children: [
-                                            const SizedBox(height: 24),
-                                            Center(
-                                              child: Text('Aucune transaction dans cette catégorie',
-                                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                                            ),
-                                          ],
-                                        )
-                                      : ListView.builder(
-                                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                                          itemCount: _filteredTransactions.length +
-                                              (_filter == _TxFilter.all && _hasMore ? 1 : 0),
-                                          itemBuilder: (context, index) {
-                                            if (index < _filteredTransactions.length) {
-                                              return _TransactionTile(transaction: _filteredTransactions[index]);
-                                            }
-                                            return Padding(
-                                              padding: const EdgeInsets.only(top: 4),
-                                              child: Center(
-                                                child: TextButton(
-                                                  onPressed: _loadingMore ? null : _loadMore,
-                                                  child: _loadingMore
-                                                      ? const SizedBox(
-                                                          width: 18, height: 18,
-                                                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                                                        )
-                                                      : const Text('Charger plus',
-                                                          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                            ),
-                          ),
-                        ],
-                      ),
+                            child: _buildWalletTopSection(),
+                          );
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildWalletTopSection(),
+                            const SizedBox(height: 10),
+                            // ── Seule cette liste défile — le bloc au-dessus reste fixe ──
+                            Expanded(child: _buildHistoryList()),
+                          ],
+                        );
+                      }),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildWalletTopSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _BalanceCard(
+            balance: _balance,
+            withdrawableBalance: _withdrawableBalance,
+            receivedByOperator: _receivedByOperator,
+          ),
+          const SizedBox(height: 12),
+          _WalletActionButton(
+            icon: Icons.arrow_circle_up_outlined,
+            label: 'Retirer mes gains',
+            onTap: _openCashout,
+          ),
+          const SizedBox(height: 16),
+          _buildForfaitSection(),
+          const SizedBox(height: 24),
+          const Text('Historique',
+              style: TextStyle(color: AppColors.textDark, fontSize: 15, fontWeight: FontWeight.w700)),
+          if (_transactions.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _TxFilterBar(
+              selected: _filter,
+              onChanged: (f) => setState(() => _filter = f),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryList() {
+    return RefreshIndicator(
+      color: AppColors.primary,
+      onRefresh: _load,
+      child: _transactions.isEmpty
+          ? ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: const [
+                SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.receipt_long_outlined, color: AppColors.lightIconMuted, size: 56),
+                      SizedBox(height: 10),
+                      Text('Aucune transaction pour le moment',
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : _filteredTransactions.isEmpty
+              ? ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    const SizedBox(height: 24),
+                    Center(
+                      child: Text('Aucune transaction dans cette catégorie',
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  itemCount: _filteredTransactions.length +
+                      (_filter == _TxFilter.all && _hasMore ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index < _filteredTransactions.length) {
+                      return _TransactionTile(transaction: _filteredTransactions[index]);
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Center(
+                        child: TextButton(
+                          onPressed: _loadingMore ? null : _loadMore,
+                          child: _loadingMore
+                              ? const SizedBox(
+                                  width: 18, height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                )
+                              : const Text('Charger plus',
+                                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 
@@ -442,8 +485,12 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
                   '${_forfaitPromoLabel != null ? ' ($_forfaitPromoLabel)' : ''}'
               : baseMessage,
           color: discount > 0 ? AppColors.successLight : AppColors.primary,
-          actionLabel: 'Payer ma passe (${displayAmount.toStringAsFixed(0)} FCFA)',
-          onAction: _payForfaitOnline,
+          actionLabel: _activatingFreeForfait
+              ? 'Activation...'
+              : displayAmount <= 0
+                  ? 'Activer ma passe (gratuite)'
+                  : 'Payer ma passe (${displayAmount.toStringAsFixed(0)} FCFA)',
+          onAction: _activatingFreeForfait ? null : _payForfaitOnline,
         ),
         const SizedBox(height: 10),
         _buildForfaitPromoCodeField(),

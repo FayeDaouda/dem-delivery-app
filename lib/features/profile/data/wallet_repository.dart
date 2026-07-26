@@ -50,6 +50,25 @@ class WalletRepository {
     }
   }
 
+  /// Active directement la passe du jour sans paiement — réservée au cas où
+  /// une réduction couvre 100% du prix (montant à payer = 0 FCFA) : SamirPay
+  /// ne peut pas traiter un encaissement de 0 FCFA, donc ce cas passe par le
+  /// débit (de 0) du solde retirable côté serveur au lieu du flux Wave/Orange
+  /// Money (voir forfait.service.js:activateForfait).
+  Future<Map<String, dynamic>> activateFreeForfait({String? code}) async {
+    try {
+      final response = await _dio.post('/users/driver/forfait/activate', data: {
+        if (code != null && code.isNotEmpty) 'code': code,
+      });
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'activer la passe.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   /// Aperçu du prix de la passe avec réduction éventuelle — sans code, tente
   /// juste l'auto-application (retourne null si aucune, jamais d'erreur) ;
   /// avec [code], throw une [AppException] si le code n'est pas valide/éligible.
