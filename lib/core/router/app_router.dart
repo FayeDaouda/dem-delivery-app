@@ -16,6 +16,7 @@ import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
 
 import '../../features/client_profile/client_profile_screen.dart';
 import '../../features/client_profile/favorite_addresses_screen.dart';
+import '../../features/client_profile/promo_code_screen.dart';
 import '../../features/home_client/orders_history_screen.dart';
 import '../../features/home_client/order_tracking_screen.dart';
 
@@ -48,6 +49,7 @@ import '../../features/dem_pro/screens/dem_pro_order_tracking_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_receipt_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_products_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_requests_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_promo_code_screen.dart';
 import '../../features/guest_tracking/guest_tracking_screen.dart';
 
 final routeObserver = RouteObserver<ModalRoute<void>>();
@@ -177,6 +179,10 @@ final appRouter = GoRouter(
       builder: (context, state) => const FavoriteAddressesScreen(),
     ),
     GoRoute(
+      path: '/client/promo-code',
+      builder: (context, state) => const PromoCodeScreen(),
+    ),
+    GoRoute(
       path: '/orders/create',
       builder: (context, state) {
         final type = state.uri.queryParameters['type'] ?? 'DELIVERY';
@@ -254,6 +260,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/dem-pro/order-requests',
       builder: (context, state) => const DemProOrderRequestsScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/promo-code',
+      builder: (context, state) => const DemProPromoCodeScreen(),
     ),
     GoRoute(
       path: '/orders/confirmation',

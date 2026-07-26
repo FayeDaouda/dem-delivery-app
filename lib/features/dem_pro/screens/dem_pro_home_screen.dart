@@ -1126,6 +1126,21 @@ class _CompteTabState extends State<_CompteTab> {
             ]),
             const SizedBox(height: 24),
 
+            // ── Promotions ───────────────────────────────────────────────
+            _SectionLabel(label: 'PROMOTIONS', t: t),
+            const SizedBox(height: 12),
+            _InfoCard(t: t, children: [
+              _TapRow(
+                icon: Icons.local_offer_outlined,
+                label: 'Code promo',
+                subtitle: 'Réduction sur votre prochaine commande',
+                t: t,
+                isLast: true,
+                onTap: () => context.push('/dem-pro/promo-code'),
+              ),
+            ]),
+            const SizedBox(height: 24),
+
             // ── Abonnement ───────────────────────────────────────────────
             _SectionLabel(label: 'ABONNEMENT', t: t),
             const SizedBox(height: 12),

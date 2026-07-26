@@ -19,6 +19,7 @@ import '../../core/map/route_marker_icons.dart';
 import '../../core/services/location_reveal_controller.dart';
 import '../../core/services/places_autocomplete_service.dart';
 import '../../core/storage/auth_storage.dart';
+import '../../core/storage/promo_code_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
@@ -215,10 +216,35 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     if (mounted) setState(() => _currentUser = user);
   }
 
-  // Vérification silencieuse — une campagne auto-appliquée (pas de code)
-  // peut exister pour ce client ; aucune erreur affichée si non (cas normal).
+  // Priorité 1 : un code enregistré depuis l'écran dédié "Code promo" (voir
+  // promo_code_screen.dart) — pré-rempli et validé silencieusement.
+  // Priorité 2 (sinon) : campagne auto-appliquée sans code. Dans les deux
+  // cas, aucune erreur affichée si rien ne s'applique (cas normal) — un code
+  // enregistré devenu invalide/expiré est juste discrètement oublié.
   Future<void> _checkAutoPromo() async {
     if (_estimatedPrice == null) return;
+    final savedCode = await PromoCodeStorage.get();
+    if (savedCode != null) {
+      try {
+        final result = await _repo.getPromoPreview(
+          price: _estimatedPrice!.toInt(), demFee: _demFee.toInt(), code: savedCode,
+        );
+        if (!mounted) return;
+        if (result != null) {
+          setState(() {
+            _promoCodeCtrl.text = savedCode;
+            _discountAmount = (result['discountAmount'] as num?)?.toDouble();
+            _promoLabel     = result['promoCode'] as String?;
+          });
+          return;
+        }
+      } catch (_) {
+        // Ne s'applique pas à CETTE commande précise (ex: minimum non
+        // atteint) — pas forcément mort pour autant, on ne l'efface pas ici
+        // (voir promo_code_screen.dart, qui revalide sans contexte de prix
+        // et efface uniquement si le code est vraiment invalide/expiré).
+      }
+    }
     try {
       final result = await _repo.getPromoPreview(
         price: _estimatedPrice!.toInt(), demFee: _demFee.toInt(),

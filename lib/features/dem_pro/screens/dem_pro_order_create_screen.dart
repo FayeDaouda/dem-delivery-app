@@ -13,6 +13,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/services/places_autocomplete_service.dart';
 import '../../../core/storage/dem_pro_draft_storage.dart';
+import '../../../core/storage/promo_code_storage.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../../core/utils/senegal_phone.dart';
 import '../../../shared/widgets/place_suggestions_list.dart';
@@ -627,12 +628,34 @@ class _State extends State<DemProOrderCreateScreen> {
     }
   }
 
-  // Vérification silencieuse — une campagne auto-appliquée (pas de code)
-  // peut exister pour ce compte DEM Pro ; aucune erreur si non (cas normal).
+  // Priorité 1 : un code enregistré depuis l'écran dédié "Code promo" (voir
+  // dem_pro_promo_code_screen.dart) — pré-rempli et validé silencieusement.
+  // Priorité 2 (sinon) : campagne auto-appliquée sans code. Aucune erreur
+  // affichée si rien ne s'applique (cas normal).
   Future<void> _checkAutoPromo() async {
     final price = (_estimate?['price'] as num?)?.toInt();
     if (price == null) return;
     final demFee = (_estimate?['demFee'] as num?)?.toInt() ?? 0;
+
+    final savedCode = await PromoCodeStorage.get();
+    if (savedCode != null) {
+      try {
+        final result = await _ordersRepo.getPromoPreview(price: price, demFee: demFee, code: savedCode);
+        if (!mounted) return;
+        if (result != null) {
+          setState(() {
+            _promoCodeCtrl.text = savedCode;
+            _discountAmount = (result['discountAmount'] as num?)?.toDouble();
+            _promoLabel     = result['promoCode'] as String?;
+          });
+          return;
+        }
+      } catch (_) {
+        // Ne s'applique pas à CETTE commande précise (ex: minimum non
+        // atteint) — on ne l'efface pas ici, voir dem_pro_promo_code_screen.dart.
+      }
+    }
+
     try {
       final result = await _ordersRepo.getPromoPreview(price: price, demFee: demFee);
       if (!mounted || result == null) return;

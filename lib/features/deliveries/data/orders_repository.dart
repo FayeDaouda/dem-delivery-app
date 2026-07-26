@@ -222,6 +222,21 @@ class OrdersRepository {
     }
   }
 
+  /// Validation "à froid" d'un code — sans commande en cours (voir écran
+  /// dédié "Code promo"). Confirme juste que le code existe et est éligible,
+  /// sans calculer de montant précis (aucun prix connu à ce stade).
+  Future<Map<String, dynamic>> validatePromoCode(String code) async {
+    try {
+      final res = await _dio.get('/promo/validate', queryParameters: {'code': code});
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Code promo invalide.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getHeatmap({int hours = 24, String? type}) async {
     try {
       final response = await _dio.get('/orders/heatmap', queryParameters: {

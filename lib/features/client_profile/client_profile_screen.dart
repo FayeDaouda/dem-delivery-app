@@ -601,6 +601,12 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   title: 'Mes commandes',
                   onTap: () => context.push('/orders/my'),
                 ),
+                const SizedBox(height: 10),
+                _MenuItem(
+                  icon: Icons.local_offer_outlined,
+                  title: 'Code promo',
+                  onTap: () => context.push('/client/promo-code'),
+                ),
                 const SizedBox(height: 20),
 
                 // ── 4. Mon profil ────────────────────────────────────────────
