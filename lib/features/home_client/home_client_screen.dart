@@ -1117,7 +1117,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           icon: Icons.inventory_2_outlined,
           label: 'Livraison simple',
           subtitle: 'Envoyez ou recevez un colis',
-          color: const Color(0xFF1A6B7A),
+          color: AppColors.primary,
           onTap: () async {
             if (!await ensureLocationEnabled(context)) return;
             if (!mounted) return;
@@ -1130,8 +1130,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           icon: Icons.route_outlined,
           label: 'Livraison groupée',
           subtitle: '1 collecte, plusieurs destinations',
-          badgeText: '-20%',
-          color: const Color(0xFF0C7A5C),
+          color: AppColors.primary,
           onTap: () async {
             if (!await ensureLocationEnabled(context)) return;
             if (!mounted) return;
@@ -1441,35 +1440,6 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
 // ── Chevron qui "invite" doucement au tap — sans être agressif ─────────────────
 // ── Badge d'icône "respirant" — pulse doucement pour attirer l'œil sans être
 // criard (même principe que l'anneau de proximité du bouton livreur) ──────────
-// Pastille compacte ("-20%") — séparée du sous-titre en texte libre pour ne
-// jamais dépendre de la longueur du texte environnant (source de l'overflow
-// précédent) : une largeur intrinsèque fixe, jamais de retour à la ligne.
-class _DiscountBadge extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _DiscountBadge({required this.text, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.2,
-        ),
-      ),
-    );
-  }
-}
-
 class _BreathingBadge extends StatefulWidget {
   final IconData icon;
   final Color color;
@@ -1525,10 +1495,27 @@ class _BreathingBadgeState extends State<_BreathingBadge>
           ),
         );
       },
-      child: Icon(widget.icon, color: Colors.white, size: 24),
+      // Léger dégradé sur l'icône (façon "duotone") plutôt qu'un aplat blanc
+      // uni — plus riche visuellement sans dépendre d'assets SVG custom.
+      child: ShaderMask(
+        blendMode: BlendMode.srcIn,
+        shaderCallback: (bounds) => const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Color(0xCCFFFFFF)],
+        ).createShader(bounds),
+        child: Icon(widget.icon, color: Colors.white, size: 24),
+      ),
     );
   }
 }
+
+// Ombre large et diffuse plutôt que serrée — c'est ce qui distingue une
+// carte "premium" d'un bloc plat, indépendamment de la couleur ou du texte.
+const _kPremiumCardShadow = [
+  BoxShadow(color: Color(0x40000000), blurRadius: 28, offset: Offset(0, 10)),
+];
+final _kPremiumCardRadius = BorderRadius.circular(18);
 
 // ── Service card ──────────────────────────────────────────────────────────────
 class _ServiceCard extends StatelessWidget {
@@ -1537,7 +1524,6 @@ class _ServiceCard extends StatelessWidget {
   final String? subtitle;
   final Color? color;
   final VoidCallback onTap;
-  final String? badgeText;
 
   const _ServiceCard({
     required this.icon,
@@ -1545,37 +1531,39 @@ class _ServiceCard extends StatelessWidget {
     required this.onTap,
     this.subtitle,
     this.color,
-    this.badgeText,
   });
 
   @override
   Widget build(BuildContext context) {
     if (subtitle != null) {
-      final badgeColor = color ?? AppColors.primary;
-      final highlighted = badgeText != null;
+      final accent = color ?? AppColors.primary;
       return Pressable(
         onTap: onTap,
+        darkenOnPress: true,
+        darkenBorderRadius: _kPremiumCardRadius,
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.l,
+            vertical: AppSpacing.xl,
             horizontal: AppSpacing.xl,
           ),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: highlighted ? 0.12 : 0.10),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: highlighted
-                  ? badgeColor.withValues(alpha: 0.55)
-                  : Colors.white.withValues(alpha: 0.25),
-              width: highlighted ? 1.4 : 1,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.12),
+                Colors.white.withValues(alpha: 0.05),
+              ],
             ),
-            boxShadow: AppShadows.card,
+            borderRadius: _kPremiumCardRadius,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            boxShadow: _kPremiumCardShadow,
           ),
           child: Row(
             children: [
-              _BreathingBadge(icon: icon, color: badgeColor),
-              const SizedBox(width: AppSpacing.m),
+              _BreathingBadge(icon: icon, color: accent),
+              const SizedBox(width: AppSpacing.m + 2),
               // `Expanded` : sans quoi le titre/sous-titre poussent le
               // chevron hors de la carte dès qu'ils dépassent l'espace
               // disponible (texte plus long, police système agrandie...) —
@@ -1584,30 +1572,22 @@ class _ServiceCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            label,
-                            style: ClientText.subtitle.copyWith(
-                              color: Colors.white,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (badgeText != null) ...[
-                          const SizedBox(width: 8),
-                          _DiscountBadge(text: badgeText!, color: badgeColor),
-                        ],
-                      ],
+                    Text(
+                      label,
+                      style: ClientText.subtitle.copyWith(
+                        color: Colors.white,
+                        height: 1.25,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       subtitle!,
                       style: ClientText.body.copyWith(
-                        color: Colors.white.withValues(alpha: 0.65),
+                        color: Colors.white.withValues(alpha: 0.62),
                         fontWeight: FontWeight.w500,
+                        height: 1.3,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1616,7 +1596,7 @@ class _ServiceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              NudgingChevron(color: Colors.white.withValues(alpha: 0.65)),
+              NudgingChevron(color: accent.withValues(alpha: 0.85)),
             ],
           ),
         ),
