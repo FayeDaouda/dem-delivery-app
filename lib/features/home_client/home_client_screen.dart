@@ -1129,7 +1129,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         _ServiceCard(
           icon: Icons.route_outlined,
           label: 'Livraison groupée',
-          subtitle: '1 collecte, plusieurs destinations — -20%',
+          subtitle: '1 collecte, plusieurs destinations',
+          badgeText: '-20%',
           color: const Color(0xFF0C7A5C),
           onTap: () async {
             if (!await ensureLocationEnabled(context)) return;
@@ -1440,6 +1441,35 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
 // ── Chevron qui "invite" doucement au tap — sans être agressif ─────────────────
 // ── Badge d'icône "respirant" — pulse doucement pour attirer l'œil sans être
 // criard (même principe que l'anneau de proximité du bouton livreur) ──────────
+// Pastille compacte ("-20%") — séparée du sous-titre en texte libre pour ne
+// jamais dépendre de la longueur du texte environnant (source de l'overflow
+// précédent) : une largeur intrinsèque fixe, jamais de retour à la ligne.
+class _DiscountBadge extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _DiscountBadge({required this.text, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
 class _BreathingBadge extends StatefulWidget {
   final IconData icon;
   final Color color;
@@ -1507,6 +1537,7 @@ class _ServiceCard extends StatelessWidget {
   final String? subtitle;
   final Color? color;
   final VoidCallback onTap;
+  final String? badgeText;
 
   const _ServiceCard({
     required this.icon,
@@ -1514,12 +1545,14 @@ class _ServiceCard extends StatelessWidget {
     required this.onTap,
     this.subtitle,
     this.color,
+    this.badgeText,
   });
 
   @override
   Widget build(BuildContext context) {
     if (subtitle != null) {
       final badgeColor = color ?? AppColors.primary;
+      final highlighted = badgeText != null;
       return Pressable(
         onTap: onTap,
         child: Container(
@@ -1529,32 +1562,60 @@ class _ServiceCard extends StatelessWidget {
             horizontal: AppSpacing.xl,
           ),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.10),
+            color: Colors.white.withValues(alpha: highlighted ? 0.12 : 0.10),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+            border: Border.all(
+              color: highlighted
+                  ? badgeColor.withValues(alpha: 0.55)
+                  : Colors.white.withValues(alpha: 0.25),
+              width: highlighted ? 1.4 : 1,
+            ),
             boxShadow: AppShadows.card,
           ),
           child: Row(
             children: [
               _BreathingBadge(icon: icon, color: badgeColor),
               const SizedBox(width: AppSpacing.m),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: ClientText.subtitle.copyWith(color: Colors.white),
-                  ),
-                  Text(
-                    subtitle!,
-                    style: ClientText.body.copyWith(
-                      color: Colors.white.withValues(alpha: 0.65),
-                      fontWeight: FontWeight.w500,
+              // `Expanded` : sans quoi le titre/sous-titre poussent le
+              // chevron hors de la carte dès qu'ils dépassent l'espace
+              // disponible (texte plus long, police système agrandie...) —
+              // toujours prévoir la place, jamais supposer un texte court.
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            label,
+                            style: ClientText.subtitle.copyWith(
+                              color: Colors.white,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (badgeText != null) ...[
+                          const SizedBox(width: 8),
+                          _DiscountBadge(text: badgeText!, color: badgeColor),
+                        ],
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: ClientText.body.copyWith(
+                        color: Colors.white.withValues(alpha: 0.65),
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               NudgingChevron(color: Colors.white.withValues(alpha: 0.65)),
             ],
           ),
