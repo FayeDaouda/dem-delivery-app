@@ -14,23 +14,11 @@ class Pressable extends StatefulWidget {
     required this.child,
     this.onTap,
     this.scale = 0.97,
-    this.darkenOnPress = false,
-    this.darkenBorderRadius,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final double scale;
-
-  /// Assombrit légèrement le contenu au toucher, en plus du scale — retour
-  /// tactile plus qualitatif pour les cartes premium (service cards, etc.).
-  /// Désactivé par défaut pour ne rien changer aux usages existants.
-  final bool darkenOnPress;
-
-  /// Doit correspondre au rayon d'arrondi du [child] pour que le voile
-  /// sombre épouse exactement ses coins — sans quoi il déborderait en
-  /// rectangle sur un [child] aux coins arrondis.
-  final BorderRadius? darkenBorderRadius;
 
   @override
   State<Pressable> createState() => _PressableState();
@@ -46,18 +34,6 @@ class _PressableState extends State<Pressable> {
   @override
   Widget build(BuildContext context) {
     final interactive = widget.onTap != null;
-    Widget child = widget.child;
-    if (widget.darkenOnPress) {
-      child = AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        foregroundDecoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: _pressed ? 0.10 : 0),
-          borderRadius: widget.darkenBorderRadius,
-        ),
-        child: child,
-      );
-    }
     return GestureDetector(
       onTap: widget.onTap,
       onTapDown: interactive ? (_) => _setPressed(true) : null,
@@ -67,7 +43,7 @@ class _PressableState extends State<Pressable> {
         scale: _pressed ? widget.scale : 1.0,
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
-        child: child,
+        child: widget.child,
       ),
     );
   }
