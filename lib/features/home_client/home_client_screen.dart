@@ -1117,7 +1117,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           icon: Icons.inventory_2_outlined,
           label: 'Livraison simple',
           subtitle: 'Envoyez ou recevez un colis',
-          color: const Color(0xFF1A6B7A),
           onTap: () async {
             if (!await ensureLocationEnabled(context)) return;
             if (!mounted) return;
@@ -1130,7 +1129,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           icon: Icons.route_outlined,
           label: 'Livraison groupée',
           subtitle: '1 collecte, plusieurs destinations',
-          color: const Color(0xFF0C7A5C),
           onTap: () async {
             if (!await ensureLocationEnabled(context)) return;
             if (!mounted) return;
@@ -1442,8 +1440,7 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
 // criard (même principe que l'anneau de proximité du bouton livreur) ──────────
 class _BreathingBadge extends StatefulWidget {
   final IconData icon;
-  final Color color;
-  const _BreathingBadge({required this.icon, required this.color});
+  const _BreathingBadge({required this.icon});
 
   @override
   State<_BreathingBadge> createState() => _BreathingBadgeState();
@@ -1480,12 +1477,11 @@ class _BreathingBadgeState extends State<_BreathingBadge>
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: widget.color.withValues(alpha: 0.35),
+              color: Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(color: widget.color.withValues(alpha: 0.55)),
               boxShadow: [
                 BoxShadow(
-                  color: widget.color.withValues(alpha: 0.25 + t * 0.35),
+                  color: AppColors.primary.withValues(alpha: 0.25 + t * 0.35),
                   blurRadius: 14,
                   spreadRadius: 1,
                 ),
@@ -1495,7 +1491,7 @@ class _BreathingBadgeState extends State<_BreathingBadge>
           ),
         );
       },
-      child: Icon(widget.icon, color: Colors.white, size: 24),
+      child: Icon(widget.icon, color: AppColors.primary, size: 24),
     );
   }
 }
@@ -1505,7 +1501,6 @@ class _ServiceCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String? subtitle;
-  final Color? color;
   final VoidCallback onTap;
 
   const _ServiceCard({
@@ -1513,13 +1508,11 @@ class _ServiceCard extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.subtitle,
-    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     if (subtitle != null) {
-      final badgeColor = color ?? AppColors.primary;
       // Sigma modéré (14) : donne l'effet verre dépoli sans le coût d'un
       // blur trop large — au-dessus d'une carte Google Maps animée, un flou
       // plus poussé serait sensible sur les Android d'entrée de gamme.
@@ -1545,7 +1538,7 @@ class _ServiceCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  _BreathingBadge(icon: icon, color: badgeColor),
+                  _BreathingBadge(icon: icon),
                   const SizedBox(width: AppSpacing.m),
                   // `Expanded` : sans quoi le titre/sous-titre poussent le
                   // chevron hors de la carte dès qu'ils dépassent l'espace
