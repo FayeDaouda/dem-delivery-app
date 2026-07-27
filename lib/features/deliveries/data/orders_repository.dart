@@ -283,6 +283,84 @@ class OrdersRepository {
     }
   }
 
+  // ── Tournée groupée (1 collecte, 2-3 destinations, -20%) ──────────────────
+  // Même moteur que les tournées DEM Pro côté serveur (voir
+  // dem_pro/batch.service.js), exposé ici sous /orders/batch pour un client
+  // normal — plafond d'arrêts et réduction déjà appliqués côté serveur, cet
+  // écran ne fait qu'afficher ce qui revient.
+
+  /// Aperçu de prix live (sans créer la tournée) pendant que le client ajoute
+  /// ses arrêts — `AppException` si moins de 2 ou plus de 3 arrêts.
+  Future<Map<String, dynamic>> estimateBatch({
+    required double pickupLatitude,
+    required double pickupLongitude,
+    required List<Map<String, dynamic>> stops,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/orders/batch/estimate',
+        data: {
+          'pickupLatitude': pickupLatitude,
+          'pickupLongitude': pickupLongitude,
+          'stops': stops,
+        },
+      );
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de calculer le prix.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> createBatch(Map<String, dynamic> data) async {
+    try {
+      final res = await _dio.post('/orders/batch', data: data);
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de créer la tournée.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMyBatches() async {
+    try {
+      final res = await _dio.get('/orders/batch/mine');
+      return (res.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger les tournées.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> getBatchById(String id) async {
+    try {
+      final res = await _dio.get('/orders/batch/mine/$id');
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Tournée introuvable.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> cancelBatch(String id) async {
+    try {
+      await _dio.delete('/orders/batch/mine/$id');
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'annuler la tournée.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getHeatmap({
     int hours = 24,
     String? type,

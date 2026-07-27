@@ -1115,13 +1115,26 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         const SizedBox(height: AppSpacing.l),
         _ServiceCard(
           icon: Icons.inventory_2_outlined,
-          label: 'Livraison',
-          subtitle: 'Envoyez ou recevez des colis',
+          label: 'Livraison simple',
+          subtitle: 'Envoyez ou recevez un colis',
           color: const Color(0xFF1A6B7A),
           onTap: () async {
             if (!await ensureLocationEnabled(context)) return;
             if (!mounted) return;
             await context.push('/orders/create?type=DELIVERY');
+            _checkPendingOrder();
+          },
+        ),
+        const SizedBox(height: AppSpacing.m),
+        _ServiceCard(
+          icon: Icons.route_outlined,
+          label: 'Livraison groupée',
+          subtitle: '1 collecte, plusieurs destinations — -20%',
+          color: const Color(0xFF0C7A5C),
+          onTap: () async {
+            if (!await ensureLocationEnabled(context)) return;
+            if (!mounted) return;
+            await context.push('/orders/batch/create');
             _checkPendingOrder();
           },
         ),

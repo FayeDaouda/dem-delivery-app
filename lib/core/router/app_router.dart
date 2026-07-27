@@ -10,6 +10,8 @@ import '../../features/auth/screens/driver_onboarding_screen.dart';
 import '../../features/auth/screens/client_onboarding_screen.dart';
 import '../../features/home_client/home_client_screen.dart';
 import '../../features/home_client/order_create_screen.dart';
+import '../../features/home_client/batch_create_screen.dart';
+import '../../features/home_client/batch_tracking_screen.dart';
 import '../../features/home_client/order_confirmation_screen.dart';
 import '../../features/home_driver/home_driver_screen.dart';
 import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
@@ -55,7 +57,13 @@ import '../../features/guest_tracking/guest_tracking_screen.dart';
 final routeObserver = RouteObserver<ModalRoute<void>>();
 
 // ── Ensemble des routes "publiques" (avant auth) ──────────────────────────────
-const _preAuthRoutes = {'/splash', '/onboarding', '/location-disclosure', '/phone', '/otp'};
+const _preAuthRoutes = {
+  '/splash',
+  '/onboarding',
+  '/location-disclosure',
+  '/phone',
+  '/otp',
+};
 
 // ── Ensemble des routes admin (pas de garde onboarding) ───────────────────────
 const _adminRoutes = {'/admin/login', '/admin/home'};
@@ -72,7 +80,7 @@ final appRouter = GoRouter(
   // ─────────────────────────────────────────────────────────────────────────────
   redirect: (context, state) {
     final path = state.matchedLocation;
-    final n    = appStartupNotifier;
+    final n = appStartupNotifier;
 
     // ── 0. Pas encore initialisé → rester sur /splash ───────────────────────
     if (!n.isReady) {
@@ -105,7 +113,9 @@ final appRouter = GoRouter(
     }
 
     // Onboarding + disclosure vus : si encore sur ces pages → /phone
-    if (path == '/splash' || path == '/onboarding' || path == '/location-disclosure') {
+    if (path == '/splash' ||
+        path == '/onboarding' ||
+        path == '/location-disclosure') {
       return '/phone';
     }
 
@@ -116,10 +126,7 @@ final appRouter = GoRouter(
   // ROUTES
   // ─────────────────────────────────────────────────────────────────────────────
   routes: [
-    GoRoute(
-      path: '/splash',
-      builder: (context, state) => const SplashScreen(),
-    ),
+    GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
     GoRoute(
       path: '/onboarding',
       builder: (context, state) => const OnboardingScreen(),
@@ -132,16 +139,12 @@ final appRouter = GoRouter(
     // ── Suivi invité (public, sans auth) ──
     GoRoute(
       path: '/track/:id',
-      builder: (context, state) => GuestTrackingScreen(
-        orderId: state.pathParameters['id']!,
-      ),
+      builder: (context, state) =>
+          GuestTrackingScreen(orderId: state.pathParameters['id']!),
     ),
 
     // ── Auth ──
-    GoRoute(
-      path: '/phone',
-      builder: (context, state) => const PhoneScreen(),
-    ),
+    GoRoute(path: '/phone', builder: (context, state) => const PhoneScreen()),
     GoRoute(
       path: '/otp',
       builder: (context, state) {
@@ -190,6 +193,19 @@ final appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: '/orders/batch/create',
+      builder: (context, state) => const BatchCreateScreen(),
+    ),
+    GoRoute(
+      path: '/orders/batch/mine',
+      builder: (context, state) => const BatchListScreen(),
+    ),
+    GoRoute(
+      path: '/orders/batch/mine/:id',
+      builder: (context, state) =>
+          BatchDetailScreen(batchId: state.pathParameters['id']!),
+    ),
+    GoRoute(
       path: '/dem-pro/orders/create',
       builder: (context, state) {
         final scheduled = state.uri.queryParameters['scheduled'] == 'true';
@@ -198,7 +214,8 @@ final appRouter = GoRouter(
         Map<String, dynamic>? fromOrderRequest;
         if (extra is Map<String, dynamic>) {
           if (extra.containsKey('fromOrderRequest')) {
-            fromOrderRequest = extra['fromOrderRequest'] as Map<String, dynamic>?;
+            fromOrderRequest =
+                extra['fromOrderRequest'] as Map<String, dynamic>?;
           } else {
             reorderFrom = extra;
           }
@@ -212,7 +229,9 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/dem-pro/batch/create',
-      builder: (context, state) => DemProBatchCreateScreen(reorderFrom: state.extra as Map<String, dynamic>?),
+      builder: (context, state) => DemProBatchCreateScreen(
+        reorderFrom: state.extra as Map<String, dynamic>?,
+      ),
     ),
     GoRoute(
       path: '/dem-pro/batch/confirmation',
@@ -224,10 +243,13 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/dem-pro/batch/tracking',
       builder: (context, state) {
-        final args    = state.extra as Map<String, dynamic>;
+        final args = state.extra as Map<String, dynamic>;
         final batchId = args['batchId'] as String;
         final initialBatch = args['initialBatch'] as Map<String, dynamic>?;
-        return DemProBatchTrackingScreen(batchId: batchId, initialBatch: initialBatch);
+        return DemProBatchTrackingScreen(
+          batchId: batchId,
+          initialBatch: initialBatch,
+        );
       },
     ),
     GoRoute(
@@ -242,8 +264,8 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final args = state.extra as Map<String, dynamic>;
         return DemProOrderTrackingScreen(
-          orderId:      args['orderId']      as String,
-          driverId:     args['driverId']     as String,
+          orderId: args['orderId'] as String,
+          driverId: args['driverId'] as String,
           etaPickupMin: args['etaPickupMin'] as int?,
           initialOrder: args['initialOrder'] as Map<String, dynamic>?,
         );
@@ -251,7 +273,8 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/dem-pro/orders/receipt',
-      builder: (context, state) => DemProReceiptScreen(order: state.extra as Map<String, dynamic>),
+      builder: (context, state) =>
+          DemProReceiptScreen(order: state.extra as Map<String, dynamic>),
     ),
     GoRoute(
       path: '/dem-pro/products',
