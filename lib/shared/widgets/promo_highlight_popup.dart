@@ -14,13 +14,13 @@ String _describeHighlight(Map<String, dynamic> promo) {
       : '';
   switch (type) {
     case 'FREE_COURSE':
-      return 'Votre prochaine commande est offerte !$suffix';
+      return 'Félicitations ! DEM vous offre votre prochaine commande, gratuitement.$suffix';
     case 'PERCENT_OFF':
-      return '-${value?.toStringAsFixed(0)}% sur votre prochaine commande.$suffix';
+      return 'Félicitations ! DEM vous offre -${value?.toStringAsFixed(0)}% sur votre prochaine commande.$suffix';
     case 'FIXED_OFF':
-      return '-${value?.toStringAsFixed(0)} FCFA sur votre prochaine commande.$suffix';
+      return 'Félicitations ! DEM vous offre -${value?.toStringAsFixed(0)} FCFA sur votre prochaine commande.$suffix';
     default:
-      return 'Une réduction est disponible sur votre prochaine commande.$suffix';
+      return 'Félicitations ! DEM vous offre une réduction sur votre prochaine commande.$suffix';
   }
 }
 
@@ -290,18 +290,28 @@ class _PromoHighlightDialogState extends State<_PromoHighlightDialog> {
             ),
           ),
 
-          // Fermer sans forcer l'action "Super !"
+          // Fermer sans forcer l'action "Super !" — flotte au-dessus du
+          // carton (fond opaque + ombre) plutôt que d'être posé pile sur son
+          // coin arrondi, où un fond translucide rendrait visible la
+          // jointure entre la zone blanche et le fond derrière la courbe.
           Positioned(
-            top: 34,
-            right: 4,
+            top: 22,
+            right: -4,
             child: GestureDetector(
               onTap: () => Navigator.of(context).pop(),
               child: Container(
-                width: 28,
-                height: 28,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.black.withValues(alpha: 0.06),
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: const Icon(
                   Icons.close_rounded,
