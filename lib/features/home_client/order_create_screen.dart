@@ -36,9 +36,10 @@ import '../home_driver/navigation/navigation_service.dart';
 
 // ─── Heights par step ────────────────────────────────────────────────────────
 // Les hauteurs tablette sont plus généreuses pour exploiter l'écran iPad.
-const _kPanelHeightsPhone  = [215.0, 290.0, 350.0, 250.0];
+const _kPanelHeightsPhone = [215.0, 290.0, 350.0, 250.0];
 const _kPanelHeightsTablet = [255.0, 340.0, 420.0, 300.0];
-const _kMinPanelContent = 66.0; // button (52) + bottom padding (12) + 2px margin
+const _kMinPanelContent =
+    66.0; // button (52) + bottom padding (12) + 2px margin
 
 const _placeSuggestionsColors = PlaceSuggestionsColors(
   background: Color(0xFF1A2540),
@@ -59,7 +60,8 @@ class OrderCreateScreen extends ConsumerStatefulWidget {
   ConsumerState<OrderCreateScreen> createState() => _OrderCreateScreenState();
 }
 
-class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with TickerProviderStateMixin {
+class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
+    with TickerProviderStateMixin {
   final _repo = OrdersRepository();
 
   // ── Constants ────────────────────────────────────────────────────────────
@@ -82,19 +84,19 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   bool _isMapPlacementMode = false;
 
   // ── Addresses ────────────────────────────────────────────────────────────
-  final _pickupCtrl    = TextEditingController();
-  final _deliveryCtrl  = TextEditingController();
-  final _pickupFocus   = FocusNode();
+  final _pickupCtrl = TextEditingController();
+  final _deliveryCtrl = TextEditingController();
+  final _pickupFocus = FocusNode();
   final _deliveryFocus = FocusNode();
   double? _pickupLat, _pickupLng;
   double? _deliveryLat, _deliveryLng;
 
   // ── Contacts ─────────────────────────────────────────────────────────────
-  final _senderNameCtrl    = TextEditingController();
-  final _senderPhoneCtrl   = TextEditingController();
-  final _receiverNameCtrl  = TextEditingController();
+  final _senderNameCtrl = TextEditingController();
+  final _senderPhoneCtrl = TextEditingController();
+  final _receiverNameCtrl = TextEditingController();
   final _receiverPhoneCtrl = TextEditingController();
-  final _descriptionCtrl   = TextEditingController();
+  final _descriptionCtrl = TextEditingController();
 
   // ── Autocomplete ─────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _suggestions = [];
@@ -106,7 +108,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   // ── Pricing ──────────────────────────────────────────────────────────────
   double _surgeMultiplier = 1.0;
   double? _estimatedPrice; // prix course (= ce que le livreur gagne)
-  double _demFee = 0.0;    // frais DEM prélevés en sus au client
+  double _demFee = 0.0; // frais DEM prélevés en sus au client
 
   // ── Promotion (voir promo.service.js côté serveur) ──────────────────────
   // discountAmount/promoLabel peuvent venir soit d'une campagne auto-appliquée
@@ -120,20 +122,22 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   bool _checkingPromo = false;
   final _promoCodeCtrl = TextEditingController();
 
-  bool _loadingSurge  = false;
+  bool _loadingSurge = false;
   bool _priceTimedOut = false;
-  bool _loadingGps    = false;
-  bool _submitting    = false;
+  bool _loadingGps = false;
+  bool _submitting = false;
   Timer? _surgeDebounce;
   Timer? _priceTimeoutTimer;
   List<LatLng> _routePoints = [];
   Map<String, dynamic>? _currentUser;
 
   // ── Dio public (Google Places, OSRM) — sans token JWT ────────────────────
-  late final _publicDio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 8),
-    receiveTimeout: const Duration(seconds: 8),
-  ));
+  late final _publicDio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 8),
+      receiveTimeout: const Duration(seconds: 8),
+    ),
+  );
   late final _placesService = PlacesAutocompleteService(_publicDio);
 
   // ── Adresses favorites ───────────────────────────────────────────────────
@@ -147,7 +151,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   // ── Animation d'apparition du point de départ (GPS détecté à l'entrée) ───
   // Chute + rebond du marqueur jusqu'à sa position — contrôleur partagé avec
   // l'écran d'accueil (voir LocationRevealController).
-  late final _pickupReveal = LocationRevealController(vsync: this, onUpdate: () => setState(() {}));
+  late final _pickupReveal = LocationRevealController(
+    vsync: this,
+    onUpdate: () => setState(() {}),
+  );
 
   // Anneau qui pulse en continu autour du point de départ, tant que l'écran
   // est affiché — même principe que le marqueur "ma position" de l'écran
@@ -166,7 +173,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   void _maybeUpdatePickupScreenPos(LatLng current) {
     if (_pickupScreenPosSource == current) return;
     _pickupScreenPosSource = current;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _updatePickupScreenPos(current));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _updatePickupScreenPos(current),
+    );
   }
 
   @override
@@ -185,7 +194,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
       RouteMarkerIcons.pickup(AppColors.success),
       RouteMarkerIcons.delivery(AppColors.error),
     ]);
-    if (mounted) setState(() { _pickupIcon = results[0]; _deliveryIcon = results[1]; });
+    if (mounted)
+      setState(() {
+        _pickupIcon = results[0];
+        _deliveryIcon = results[1];
+      });
   }
 
   Future<void> _loadFavorites() async {
@@ -201,9 +214,13 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     final addr = fav['address'] as String;
     setState(() {
       if (_isSelectingPickup) {
-        _pickupCtrl.text = addr; _pickupLat = lat; _pickupLng = lng;
+        _pickupCtrl.text = addr;
+        _pickupLat = lat;
+        _pickupLng = lng;
       } else {
-        _deliveryCtrl.text = addr; _deliveryLat = lat; _deliveryLng = lng;
+        _deliveryCtrl.text = addr;
+        _deliveryLat = lat;
+        _deliveryLng = lng;
       }
       _suggestions = [];
     });
@@ -227,14 +244,16 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     if (savedCode != null) {
       try {
         final result = await _repo.getPromoPreview(
-          price: _estimatedPrice!.toInt(), demFee: _demFee.toInt(), code: savedCode,
+          price: _estimatedPrice!.toInt(),
+          demFee: _demFee.toInt(),
+          code: savedCode,
         );
         if (!mounted) return;
         if (result != null) {
           setState(() {
             _promoCodeCtrl.text = savedCode;
             _discountAmount = (result['discountAmount'] as num?)?.toDouble();
-            _promoLabel     = result['promoCode'] as String?;
+            _promoLabel = result['promoCode'] as String?;
           });
           return;
         }
@@ -247,12 +266,13 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     }
     try {
       final result = await _repo.getPromoPreview(
-        price: _estimatedPrice!.toInt(), demFee: _demFee.toInt(),
+        price: _estimatedPrice!.toInt(),
+        demFee: _demFee.toInt(),
       );
       if (!mounted || result == null) return;
       setState(() {
         _discountAmount = (result['discountAmount'] as num?)?.toDouble();
-        _promoLabel     = result['promoCode'] as String?;
+        _promoLabel = result['promoCode'] as String?;
       });
     } catch (_) {} // jamais bloquant pour la création de commande
   }
@@ -260,16 +280,21 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   Future<void> _applyPromoCode() async {
     final code = _promoCodeCtrl.text.trim();
     if (code.isEmpty || _estimatedPrice == null) return;
-    setState(() { _checkingPromo = true; _promoError = null; });
+    setState(() {
+      _checkingPromo = true;
+      _promoError = null;
+    });
     try {
       final result = await _repo.getPromoPreview(
-        price: _estimatedPrice!.toInt(), demFee: _demFee.toInt(), code: code,
+        price: _estimatedPrice!.toInt(),
+        demFee: _demFee.toInt(),
+        code: code,
       );
       if (!mounted) return;
       setState(() {
         _discountAmount = (result?['discountAmount'] as num?)?.toDouble();
-        _promoLabel     = result?['promoCode'] as String?;
-        _checkingPromo  = false;
+        _promoLabel = result?['promoCode'] as String?;
+        _checkingPromo = false;
       });
       showDemToast(context, 'Code promo appliqué !');
     } catch (e) {
@@ -283,7 +308,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     }
   }
 
-  void _fillMe(TextEditingController nameCtrl, TextEditingController phoneCtrl) {
+  void _fillMe(
+    TextEditingController nameCtrl,
+    TextEditingController phoneCtrl,
+  ) {
     if (_currentUser != null) {
       nameCtrl.text = _currentUser!['name'] ?? _currentUser!['firstName'] ?? '';
       phoneCtrl.text = (_currentUser!['phone'] ?? '').replaceFirst('+221', '');
@@ -345,7 +373,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
 
   void _centerMap(LatLng pos) {
     _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 14, tilt: 30)),
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: pos, zoom: 14, tilt: 30),
+      ),
     );
   }
 
@@ -355,24 +385,30 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   // coordonnées brutes affichées au client, illisibles et peu rassurantes
   // (retours utilisateurs : adresse affichée sous forme de "numéros").
   Future<void> _reverseGeocode(LatLng pos, {required bool forPickup}) async {
-    String? addr = await _placesService.reverseGeocode(pos.latitude, pos.longitude);
+    String? addr = await _placesService.reverseGeocode(
+      pos.latitude,
+      pos.longitude,
+    );
 
     if (addr == null || addr.isEmpty) {
       try {
-        final marks = await geo.placemarkFromCoordinates(pos.latitude, pos.longitude)
+        final marks = await geo
+            .placemarkFromCoordinates(pos.latitude, pos.longitude)
             .timeout(const Duration(seconds: 5));
         if (marks.isNotEmpty) {
           final p = marks.first;
           final street = p.street ?? p.name ?? '';
-          final local  = p.subLocality ?? p.locality ?? '';
-          final built  = street.isNotEmpty ? '$street, $local' : local;
+          final local = p.subLocality ?? p.locality ?? '';
+          final built = street.isNotEmpty ? '$street, $local' : local;
           if (built.isNotEmpty) addr = built;
         }
       } catch (_) {}
     }
 
     if (!mounted) return;
-    final label = (addr != null && addr.isNotEmpty) ? addr : 'Position sélectionnée';
+    final label = (addr != null && addr.isNotEmpty)
+        ? addr
+        : 'Position sélectionnée';
     setState(() {
       if (forPickup) {
         _pickupCtrl.text = label;
@@ -408,12 +444,26 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     }
     _sessionToken ??= PlacesAutocompleteService.newSessionToken();
     _searchDebounce = Timer(const Duration(milliseconds: 450), () async {
-      setState(() { _isSearching = true; _searchError = null; });
+      setState(() {
+        _isSearching = true;
+        _searchError = null;
+      });
       try {
-        final preds = await _placesService.autocomplete(query: query, sessionToken: _sessionToken!);
-        if (mounted) setState(() { _suggestions = preds; _isSearching = false; });
+        final preds = await _placesService.autocomplete(
+          query: query,
+          sessionToken: _sessionToken!,
+        );
+        if (mounted)
+          setState(() {
+            _suggestions = preds;
+            _isSearching = false;
+          });
       } catch (e) {
-        if (mounted) setState(() { _isSearching = false; _searchError = friendlyError(e); });
+        if (mounted)
+          setState(() {
+            _isSearching = false;
+            _searchError = friendlyError(e);
+          });
       }
     });
   }
@@ -431,18 +481,27 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     setState(() => _suggestions = []);
     final token = _sessionToken ?? PlacesAutocompleteService.newSessionToken();
     try {
-      final result = await _placesService.details(placeId: placeId, sessionToken: token);
+      final result = await _placesService.details(
+        placeId: placeId,
+        sessionToken: token,
+      );
       if (result != null) {
         final loc = result['geometry']['location'];
         final lat = (loc['lat'] as num).toDouble();
         final lng = (loc['lng'] as num).toDouble();
-        final name = (place['structured_formatting']?['main_text'] as String?)
-            ?? place['description'] as String? ?? '';
+        final name =
+            (place['structured_formatting']?['main_text'] as String?) ??
+            place['description'] as String? ??
+            '';
         setState(() {
           if (wasSelectingPickup) {
-            _pickupLat = lat; _pickupLng = lng; _pickupCtrl.text = name;
+            _pickupLat = lat;
+            _pickupLng = lng;
+            _pickupCtrl.text = name;
           } else {
-            _deliveryLat = lat; _deliveryLng = lng; _deliveryCtrl.text = name;
+            _deliveryLat = lat;
+            _deliveryLng = lng;
+            _deliveryCtrl.text = name;
           }
         });
         _centerMap(LatLng(lat, lng));
@@ -478,14 +537,14 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   void _swapAddresses() {
     setState(() {
       final tmpText = _pickupCtrl.text;
-      final tmpLat  = _pickupLat;
-      final tmpLng  = _pickupLng;
-      _pickupCtrl.text   = _deliveryCtrl.text;
-      _pickupLat         = _deliveryLat;
-      _pickupLng         = _deliveryLng;
+      final tmpLat = _pickupLat;
+      final tmpLng = _pickupLng;
+      _pickupCtrl.text = _deliveryCtrl.text;
+      _pickupLat = _deliveryLat;
+      _pickupLng = _deliveryLng;
       _deliveryCtrl.text = tmpText;
-      _deliveryLat       = tmpLat;
-      _deliveryLng       = tmpLng;
+      _deliveryLat = tmpLat;
+      _deliveryLng = tmpLng;
       _isSelectingPickup = true;
     });
     if (_pickupLat != null || _deliveryLat != null) _updateEstimate();
@@ -499,14 +558,22 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
       return false;
     }
     if (digits.length < 9) {
-      showDemToast(context, 'Numéro $label invalide — 9 chiffres minimum', isError: true);
+      showDemToast(
+        context,
+        'Numéro $label invalide — 9 chiffres minimum',
+        isError: true,
+      );
       return false;
     }
     return true;
   }
 
   Future<Map<String, dynamic>?> _fetchRouteAndDistance(
-      double lat1, double lng1, double lat2, double lng2) async {
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) async {
     // Essaie Google Directions en premier (clé déjà configurée)
     final googleResult = await _fetchGoogleDirections(lat1, lng1, lat2, lng2);
     if (googleResult != null) return googleResult;
@@ -515,7 +582,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   }
 
   Future<Map<String, dynamic>?> _fetchGoogleDirections(
-      double lat1, double lng1, double lat2, double lng2) async {
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) async {
     final key = AppConfig.mapsApiKey;
     if (key.isEmpty) return null;
     try {
@@ -528,8 +599,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
         },
       );
       if (res.statusCode == 200 && res.data['status'] == 'OK') {
-        final route = (res.data['routes'] as List).first as Map<String, dynamic>;
-        final legs  = route['legs'] as List;
+        final route =
+            (res.data['routes'] as List).first as Map<String, dynamic>;
+        final legs = route['legs'] as List;
         double distM = 0;
         for (final leg in legs) {
           distM += ((leg['distance'] as Map)['value'] as num).toDouble();
@@ -542,7 +614,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   }
 
   Future<Map<String, dynamic>?> _fetchOsrmRoute(
-      double lat1, double lng1, double lat2, double lng2) async {
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) async {
     try {
       final res = await _publicDio.get(
         'https://router.project-osrm.org/route/v1/driving/$lng1,$lat1;$lng2,$lat2',
@@ -556,7 +632,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
           final coords = (route['geometry']['coordinates'] as List);
           final points = coords.map((c) {
             final coord = c as List;
-            return LatLng((coord[1] as num).toDouble(), (coord[0] as num).toDouble());
+            return LatLng(
+              (coord[1] as num).toDouble(),
+              (coord[0] as num).toDouble(),
+            );
           }).toList();
           return {'distance': distance, 'points': points};
         }
@@ -567,21 +646,34 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
 
   Future<void> _computeEstimate() async {
     if (_pickupLat == null || _deliveryLat == null) return;
-    setState(() { _loadingSurge = true; _priceTimedOut = false; });
+    setState(() {
+      _loadingSurge = true;
+      _priceTimedOut = false;
+    });
 
     _priceTimeoutTimer?.cancel();
     _priceTimeoutTimer = Timer(const Duration(seconds: 20), () {
       if (mounted && _loadingSurge) {
-        setState(() { _loadingSurge = false; _priceTimedOut = true; });
+        setState(() {
+          _loadingSurge = false;
+          _priceTimedOut = true;
+        });
       }
     });
 
     try {
       // Lance route (visuel) et estimation en parallèle — pas séquentiels
-      final routeFuture    = _fetchRouteAndDistance(_pickupLat!, _pickupLng!, _deliveryLat!, _deliveryLng!);
+      final routeFuture = _fetchRouteAndDistance(
+        _pickupLat!,
+        _pickupLng!,
+        _deliveryLat!,
+        _deliveryLng!,
+      );
       final estimateFuture = _repo.getEstimate(
-        pickupLat: _pickupLat!, pickupLng: _pickupLng!,
-        deliveryLat: _deliveryLat!, deliveryLng: _deliveryLng!,
+        pickupLat: _pickupLat!,
+        pickupLng: _pickupLng!,
+        deliveryLat: _deliveryLat!,
+        deliveryLng: _deliveryLng!,
         orderType: widget.orderType,
       );
 
@@ -589,15 +681,19 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
       final estimate = await estimateFuture;
       if (estimate != null && mounted) {
         setState(() {
-          _surgeMultiplier = (estimate['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
-          _estimatedPrice  = (estimate['price']           as num?)?.toDouble();
-          _demFee          = (estimate['demFee']          as num?)?.toDouble() ?? 0.0;
-          _loadingSurge    = false;
-          _priceTimedOut   = false;
+          _surgeMultiplier =
+              (estimate['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
+          _estimatedPrice = (estimate['price'] as num?)?.toDouble();
+          _demFee = (estimate['demFee'] as num?)?.toDouble() ?? 0.0;
+          _loadingSurge = false;
+          _priceTimedOut = false;
         });
         _checkAutoPromo();
       } else if (mounted) {
-        setState(() { _loadingSurge = false; _priceTimedOut = true; });
+        setState(() {
+          _loadingSurge = false;
+          _priceTimedOut = true;
+        });
       }
 
       // Route visuelle — peut arriver après le prix, c'est OK
@@ -605,10 +701,19 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
       if (routeData != null && mounted) {
         setState(() => _routePoints = routeData['points'] as List<LatLng>);
       } else if (mounted && _pickupLat != null && _deliveryLat != null) {
-        setState(() => _routePoints = [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)]);
+        setState(
+          () => _routePoints = [
+            LatLng(_pickupLat!, _pickupLng!),
+            LatLng(_deliveryLat!, _deliveryLng!),
+          ],
+        );
       }
     } catch (_) {
-      if (mounted) setState(() { _loadingSurge = false; _priceTimedOut = true; });
+      if (mounted)
+        setState(() {
+          _loadingSurge = false;
+          _priceTimedOut = true;
+        });
     } finally {
       _priceTimeoutTimer?.cancel();
     }
@@ -620,25 +725,40 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     int index = 0, lat = 0, lng = 0;
     while (index < encoded.length) {
       int b, shift = 0, res = 0;
-      do { b = encoded.codeUnitAt(index++) - 63; res |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        res |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
       lat += (res & 1) != 0 ? ~(res >> 1) : (res >> 1);
-      shift = 0; res = 0;
-      do { b = encoded.codeUnitAt(index++) - 63; res |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      shift = 0;
+      res = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        res |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
       lng += (res & 1) != 0 ? ~(res >> 1) : (res >> 1);
       result.add(LatLng(lat / 1e5, lng / 1e5));
     }
     return result;
   }
 
-
   // ── Step navigation ───────────────────────────────────────────────────────
   bool get _routeComplete => _pickupLat != null && _deliveryLat != null;
 
   void _goStep(int step) {
     FocusScope.of(context).unfocus();
-    setState(() { _step = step; _panelDragOffset = 0.0; _isDragging = false; });
-    _pageCtrl.animateToPage(step,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    setState(() {
+      _step = step;
+      _panelDragOffset = 0.0;
+      _isDragging = false;
+    });
+    _pageCtrl.animateToPage(
+      step,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
     if (step >= 1 && _pickupLat != null && _deliveryLat != null) {
       _fitBothPoints();
     }
@@ -654,7 +774,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
       max(_pickupLng!, _deliveryLng!),
     );
     _mapController?.animateCamera(
-      CameraUpdate.newLatLngBounds(LatLngBounds(southwest: sw, northeast: ne), 90),
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(southwest: sw, northeast: ne),
+        90,
+      ),
     );
   }
 
@@ -663,8 +786,12 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     required TextEditingController nameCtrl,
     required TextEditingController phoneCtrl,
   }) async {
-    final status = await FlutterContacts.permissions.request(PermissionType.read);
-    final granted = status == PermissionStatus.granted || status == PermissionStatus.limited;
+    final status = await FlutterContacts.permissions.request(
+      PermissionType.read,
+    );
+    final granted =
+        status == PermissionStatus.granted ||
+        status == PermissionStatus.limited;
 
     if (!granted) {
       if (!mounted) return;
@@ -678,9 +805,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
     _showContactPicker(contacts, nameCtrl: nameCtrl, phoneCtrl: phoneCtrl);
   }
 
-  void _showContactPicker(List<Contact> contacts,
-      {required TextEditingController nameCtrl,
-      required TextEditingController phoneCtrl}) {
+  void _showContactPicker(
+    List<Contact> contacts, {
+    required TextEditingController nameCtrl,
+    required TextEditingController phoneCtrl,
+  }) {
     String q = '';
     showModalBottomSheet(
       context: context,
@@ -688,65 +817,121 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
       backgroundColor: Colors.transparent,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setSB) {
-          final filtered = contacts.where((c) =>
-              q.isEmpty || (c.displayName ?? '').toLowerCase().contains(q.toLowerCase())).toList();
+          final filtered = contacts
+              .where(
+                (c) =>
+                    q.isEmpty ||
+                    (c.displayName ?? '').toLowerCase().contains(
+                      q.toLowerCase(),
+                    ),
+              )
+              .toList();
           return DraggableScrollableSheet(
-            initialChildSize: 0.65, maxChildSize: 0.95, minChildSize: 0.4,
+            initialChildSize: 0.65,
+            maxChildSize: 0.95,
+            minChildSize: 0.4,
             builder: (_, sc) => Container(
               decoration: const BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              child: Column(children: [
-                const SizedBox(height: 12),
-                Container(width: 40, height: 4,
-                    decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(2))),
-                const SizedBox(height: 12),
-                const Text('Choisir un contact',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: TextField(
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      hintText: 'Rechercher...',
-                      prefixIcon: const Icon(Icons.search),
-                      fillColor: AppColors.card, filled: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      contentPadding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    onChanged: (v) => setSB(() => q = v),
                   ),
-                ),
-                Divider(color: AppColors.textSecondary.withValues(alpha: 0.2), height: 1),
-                Expanded(
-                  child: ListView.builder(
-                    controller: sc,
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) {
-                      final c = filtered[i];
-                      final phoneObj = c.phones.isNotEmpty ? c.phones.first : null;
-                      if (phoneObj == null) return const SizedBox.shrink();
-                      final cleaned = phoneObj.number.replaceAll(RegExp(r'[\s\-\(\)]'), '').replaceFirst('+221', '');
-                      final name = c.displayName ?? 'Contact';
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                          child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                              style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Choisir un contact',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: TextField(
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Rechercher...',
+                        prefixIcon: const Icon(Icons.search),
+                        fillColor: AppColors.card,
+                        filled: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
                         ),
-                        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                        subtitle: Text(cleaned, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          nameCtrl.text = name;
-                          phoneCtrl.text = cleaned;
-                        },
-                      );
-                    },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (v) => setSB(() => q = v),
+                    ),
                   ),
-                ),
-              ]),
+                  Divider(
+                    color: AppColors.textSecondary.withValues(alpha: 0.2),
+                    height: 1,
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: sc,
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final c = filtered[i];
+                        final phoneObj = c.phones.isNotEmpty
+                            ? c.phones.first
+                            : null;
+                        if (phoneObj == null) return const SizedBox.shrink();
+                        final cleaned = phoneObj.number
+                            .replaceAll(RegExp(r'[\s\-\(\)]'), '')
+                            .replaceFirst('+221', '');
+                        final name = c.displayName ?? 'Contact';
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.primary.withValues(
+                              alpha: 0.12,
+                            ),
+                            child: Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          subtitle: Text(
+                            cleaned,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            nameCtrl.text = name;
+                            phoneCtrl.text = cleaned;
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -757,10 +942,12 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   // ── Submit ────────────────────────────────────────────────────────────────
   Future<void> _submit() async {
     if (_pickupCtrl.text.trim().isEmpty) {
-      _pickupCtrl.text = '${_pickupLat!.toStringAsFixed(4)}, ${_pickupLng!.toStringAsFixed(4)}';
+      _pickupCtrl.text =
+          '${_pickupLat!.toStringAsFixed(4)}, ${_pickupLng!.toStringAsFixed(4)}';
     }
     if (_deliveryCtrl.text.trim().isEmpty) {
-      _deliveryCtrl.text = '${_deliveryLat!.toStringAsFixed(4)}, ${_deliveryLng!.toStringAsFixed(4)}';
+      _deliveryCtrl.text =
+          '${_deliveryLat!.toStringAsFixed(4)}, ${_deliveryLng!.toStringAsFixed(4)}';
     }
     setState(() => _submitting = true);
     try {
@@ -772,12 +959,18 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
         'deliveryAddress': _deliveryCtrl.text.trim(),
         'deliveryLatitude': _deliveryLat,
         'deliveryLongitude': _deliveryLng,
-        if (_senderNameCtrl.text.trim().isNotEmpty)   'senderName':  _senderNameCtrl.text.trim(),
-        if (_senderPhoneCtrl.text.trim().isNotEmpty)  'senderPhone': '+221${_senderPhoneCtrl.text.trim()}',
-        if (_receiverNameCtrl.text.trim().isNotEmpty) 'receiverName': _receiverNameCtrl.text.trim(),
-        if (_receiverPhoneCtrl.text.trim().isNotEmpty)'receiverPhone':'+221${_receiverPhoneCtrl.text.trim()}',
+        if (_senderNameCtrl.text.trim().isNotEmpty)
+          'senderName': _senderNameCtrl.text.trim(),
+        if (_senderPhoneCtrl.text.trim().isNotEmpty)
+          'senderPhone': '+221${_senderPhoneCtrl.text.trim()}',
+        if (_receiverNameCtrl.text.trim().isNotEmpty)
+          'receiverName': _receiverNameCtrl.text.trim(),
+        if (_receiverPhoneCtrl.text.trim().isNotEmpty)
+          'receiverPhone': '+221${_receiverPhoneCtrl.text.trim()}',
         if (widget.orderType == 'DELIVERY')
-          'description': _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
+          'description': _descriptionCtrl.text.trim().isEmpty
+              ? null
+              : _descriptionCtrl.text.trim(),
         // `price`/`demFee` envoyés à titre indicatif seulement — le serveur
         // recalcule toujours tout lui-même, jamais fait confiance à un prix
         // client (voir orders.service.js:createOrder).
@@ -793,7 +986,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
       if (_estimatedPrice != null) order['price'] = _estimatedPrice;
       if (_demFee > 0) order['demFee'] = _demFee;
 
-      if (mounted) context.pushReplacement('/orders/confirmation', extra: order);
+      if (mounted)
+        context.pushReplacement('/orders/confirmation', extra: order);
     } catch (e) {
       if (mounted) {
         showDemToast(context, friendlyError(e), isError: true);
@@ -808,492 +1002,674 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen> with Tick
   // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final keyboardH     = MediaQuery.of(context).viewInsets.bottom;
+    final keyboardH = MediaQuery.of(context).viewInsets.bottom;
     final bottomSafeArea = MediaQuery.of(context).viewPadding.bottom;
     // +24px supplémentaires pour les appareils avec indicateur maison (iPhone X+)
-    final extraH    = bottomSafeArea > 20 ? 24.0 : 0.0;
-    final isTablet  = MediaQuery.of(context).size.width > 600;
-    final heights   = isTablet ? _kPanelHeightsTablet : _kPanelHeightsPhone;
+    final extraH = bottomSafeArea > 20 ? 24.0 : 0.0;
+    final isTablet = MediaQuery.of(context).size.width > 600;
+    final heights = isTablet ? _kPanelHeightsTablet : _kPanelHeightsPhone;
     // L'étape 3 (Résumé) affiche 2 lignes de plus (Réduction + Total à
     // payer) dès qu'une promo s'applique — le budget de hauteur fixe de
     // cette étape ne les prévoyait pas, d'où l'overflow en bas du panneau.
     final promoExtra = (_step == 3 && (_discountAmount ?? 0) > 0) ? 80.0 : 0.0;
-    final panelH    = _isMapPlacementMode ? 90.0 : heights[_step] + extraH + promoExtra;
+    final panelH = _isMapPlacementMode
+        ? 90.0
+        : heights[_step] + extraH + promoExtra;
 
     // Polyline + inactive markers
     Set<Polyline> polylines = {};
-    Set<Marker> markers    = {};
+    Set<Marker> markers = {};
     if (_pickupLat != null && _deliveryLat != null) {
       final routePts = _routePoints.isNotEmpty
           ? _routePoints
-          : [LatLng(_pickupLat!, _pickupLng!), LatLng(_deliveryLat!, _deliveryLng!)];
+          : [
+              LatLng(_pickupLat!, _pickupLng!),
+              LatLng(_deliveryLat!, _deliveryLng!),
+            ];
       // Halo translucide sous le tracé plein — plus visible sur un fond de
       // carte clair et allégé que la ligne fine d'origine.
-      polylines.add(Polyline(
-        polylineId: const PolylineId('route-glow'),
-        points: routePts,
-        color: AppColors.primary.withValues(alpha: 0.25),
-        width: 10,
-        startCap: Cap.roundCap,
-        endCap: Cap.roundCap,
-        jointType: JointType.round,
-      ));
-      polylines.add(Polyline(
-        polylineId: const PolylineId('route'),
-        points: routePts,
-        color: AppColors.primary,
-        width: 5,
-        startCap: Cap.roundCap,
-        endCap: Cap.roundCap,
-        jointType: JointType.round,
-      ));
+      polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route-glow'),
+          points: routePts,
+          color: AppColors.primary.withValues(alpha: 0.25),
+          width: 10,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+          jointType: JointType.round,
+        ),
+      );
+      polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: routePts,
+          color: AppColors.primary,
+          width: 5,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+          jointType: JointType.round,
+        ),
+      );
     }
     if (_pickupLat != null && (!_isSelectingPickup || !_isMapPlacementMode)) {
       _maybeUpdatePickupScreenPos(LatLng(_pickupLat!, _pickupLng!));
-      final pickupLabel = _pickupCtrl.text.isNotEmpty ? _pickupCtrl.text : 'Point de départ';
-      markers.add(Marker(
-        markerId: const MarkerId('pickup'),
-        position: _pickupReveal.markerPosition(LatLng(_pickupLat!, _pickupLng!)),
-        icon: _pickupIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        anchor: _pickupIcon != null ? const Offset(0.5, 0.5) : const Offset(0.5, 1.0),
-        infoWindow: InfoWindow(
-          title: 'Départ',
-          snippet: pickupLabel.length > 60 ? '${pickupLabel.substring(0, 57)}…' : pickupLabel,
+      final pickupLabel = _pickupCtrl.text.isNotEmpty
+          ? _pickupCtrl.text
+          : 'Point de départ';
+      markers.add(
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: _pickupReveal.markerPosition(
+            LatLng(_pickupLat!, _pickupLng!),
+          ),
+          icon:
+              _pickupIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          anchor: _pickupIcon != null
+              ? const Offset(0.5, 0.5)
+              : const Offset(0.5, 1.0),
+          infoWindow: InfoWindow(
+            title: 'Départ',
+            snippet: pickupLabel.length > 60
+                ? '${pickupLabel.substring(0, 57)}…'
+                : pickupLabel,
+          ),
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            setState(() {
+              _isSelectingPickup = true;
+              _isMapPlacementMode = true;
+            });
+            _centerMap(LatLng(_pickupLat!, _pickupLng!));
+          },
         ),
-        onTap: () {
-          FocusScope.of(context).unfocus();
-          setState(() {
-            _isSelectingPickup = true;
-            _isMapPlacementMode = true;
-          });
-          _centerMap(LatLng(_pickupLat!, _pickupLng!));
-        },
-      ));
+      );
     }
     if (_deliveryLat != null && (_isSelectingPickup || !_isMapPlacementMode)) {
-      final deliveryLabel = _deliveryCtrl.text.isNotEmpty ? _deliveryCtrl.text : 'Destination';
-      markers.add(Marker(
-        markerId: const MarkerId('delivery'),
-        position: LatLng(_deliveryLat!, _deliveryLng!),
-        icon: _deliveryIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        anchor: _deliveryIcon != null ? RouteMarkerIcons.pinAnchor : const Offset(0.5, 1.0),
-        infoWindow: InfoWindow(
-          title: 'Destination',
-          snippet: deliveryLabel.length > 60 ? '${deliveryLabel.substring(0, 57)}…' : deliveryLabel,
+      final deliveryLabel = _deliveryCtrl.text.isNotEmpty
+          ? _deliveryCtrl.text
+          : 'Destination';
+      markers.add(
+        Marker(
+          markerId: const MarkerId('delivery'),
+          position: LatLng(_deliveryLat!, _deliveryLng!),
+          icon:
+              _deliveryIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          anchor: _deliveryIcon != null
+              ? RouteMarkerIcons.pinAnchor
+              : const Offset(0.5, 1.0),
+          infoWindow: InfoWindow(
+            title: 'Destination',
+            snippet: deliveryLabel.length > 60
+                ? '${deliveryLabel.substring(0, 57)}…'
+                : deliveryLabel,
+          ),
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            setState(() {
+              _isSelectingPickup = false;
+              _isMapPlacementMode = true;
+            });
+            _centerMap(LatLng(_deliveryLat!, _deliveryLng!));
+          },
         ),
-        onTap: () {
-          FocusScope.of(context).unfocus();
-          setState(() {
-            _isSelectingPickup = false;
-            _isMapPlacementMode = true;
-          });
-          _centerMap(LatLng(_deliveryLat!, _deliveryLng!));
-        },
-      ));
+      );
     }
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      body: Stack(children: [
-
-        // ── MAP ────────────────────────────────────────────────────────────
-        SizedBox.expand(
-          child: GoogleMap(
-            initialCameraPosition: const CameraPosition(target: _dakar, zoom: 14, tilt: 30),
-            onMapCreated: (c) => _mapController = c,
-            style: _mapStyle,
-            onTap: (_) => FocusScope.of(context).unfocus(),
-            onCameraMoveStarted: () => setState(() => _isMapMoving = true),
-            onCameraMove: (p) => _currentCameraPos = p.target,
-            onCameraIdle: () {
-              setState(() => _isMapMoving = false);
-              // Recale l'anneau après un pan/zoom manuel (le point suivi n'a
-              // pas changé donc _maybeUpdatePickupScreenPos ne se redéclenche
-              // pas tout seul dans ce cas).
-              if (_pickupLat != null) _updatePickupScreenPos(LatLng(_pickupLat!, _pickupLng!));
-            },
-            polylines: polylines,
-            markers: markers,
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            compassEnabled: false,
-            mapToolbarEnabled: false,
-            buildingsEnabled: true,
-          ),
-        ),
-
-        // ── Anneau continu autour du point de départ ────────────────────────
-        if (_pickupLat != null && (!_isSelectingPickup || !_isMapPlacementMode))
-          ScreenPulseRing(position: _pickupScreenPos, color: AppColors.success, size: 66),
-
-        // ── CENTER PIN (placement mode only) ───────────────────────────────
-        if (_isMapPlacementMode)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 35),
-              child: AnimatedScale(
-                scale: _isMapMoving ? 1.15 : 1.0,
-                duration: const Duration(milliseconds: 200),
-                child: _FloatingPin(
-                  color: _isSelectingPickup ? AppColors.success : AppColors.error,
-                ),
+      body: Stack(
+        children: [
+          // ── MAP ────────────────────────────────────────────────────────────
+          SizedBox.expand(
+            child: GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                target: _dakar,
+                zoom: 14,
+                tilt: 30,
               ),
+              onMapCreated: (c) => _mapController = c,
+              style: _mapStyle,
+              onTap: (_) => FocusScope.of(context).unfocus(),
+              onCameraMoveStarted: () => setState(() => _isMapMoving = true),
+              onCameraMove: (p) => _currentCameraPos = p.target,
+              onCameraIdle: () {
+                setState(() => _isMapMoving = false);
+                // Recale l'anneau après un pan/zoom manuel (le point suivi n'a
+                // pas changé donc _maybeUpdatePickupScreenPos ne se redéclenche
+                // pas tout seul dans ce cas).
+                if (_pickupLat != null)
+                  _updatePickupScreenPos(LatLng(_pickupLat!, _pickupLng!));
+              },
+              polylines: polylines,
+              markers: markers,
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              compassEnabled: false,
+              mapToolbarEnabled: false,
+              buildingsEnabled: true,
             ),
           ),
 
-        // ── MAP THEME (gauche) + RECENTER (droite) — même niveau ─────────
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: max(_kMinPanelContent + 22.0, panelH - _panelDragOffset) + 60 + keyboardH,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
-              _FloatingBtn(
-                icon: _loadingGps ? null : Icons.my_location,
-                loading: _loadingGps,
-                onTap: _fetchGpsInit,
-              ),
-            ],
-          ),
-        ),
-        // ── BOTTOM PANEL ───────────────────────────────────────────────────
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeInOut,
-            margin: EdgeInsets.only(bottom: keyboardH),
-            decoration: BoxDecoration(
-              gradient: AppColors.gradientSplash,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, -4))],
+          // ── Anneau continu autour du point de départ ────────────────────────
+          if (_pickupLat != null &&
+              (!_isSelectingPickup || !_isMapPlacementMode))
+            ScreenPulseRing(
+              position: _pickupScreenPos,
+              color: AppColors.success,
+              size: 66,
             ),
-            child: SafeArea(
-              top: false,
-              child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Drag handle
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragStart: (_) => setState(() => _isDragging = true),
-                  onVerticalDragUpdate: (d) {
-                    final maxOffset = (panelH - 20) - _kMinPanelContent;
-                    setState(() {
-                      _panelDragOffset = (_panelDragOffset + d.delta.dy).clamp(0.0, max(0.0, maxOffset));
-                    });
-                  },
-                  onVerticalDragEnd: (d) {
-                    final v = d.primaryVelocity ?? 0;
-                    final maxOffset = (panelH - 20) - _kMinPanelContent;
-                    setState(() {
-                      _isDragging = false;
-                      _panelDragOffset = (v > 200 || _panelDragOffset > maxOffset / 2) ? maxOffset : 0.0;
-                    });
-                  },
-                  onTap: () {
-                    final maxOffset = (panelH - 20) - _kMinPanelContent;
-                    setState(() {
-                      _isDragging = false;
-                      _panelDragOffset = _panelDragOffset == 0 ? maxOffset : 0.0;
-                    });
-                  },
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 22,
-                    child: Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(2)))),
+
+          // ── CENTER PIN (placement mode only) ───────────────────────────────
+          if (_isMapPlacementMode)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 35),
+                child: AnimatedScale(
+                  scale: _isMapMoving ? 1.15 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: _FloatingPin(
+                    color: _isSelectingPickup
+                        ? AppColors.success
+                        : AppColors.error,
                   ),
                 ),
+              ),
+            ),
 
-                // Content via PageView (non scrollable)
-                AnimatedContainer(
-                  duration: _isDragging ? Duration.zero : const Duration(milliseconds: 280),
-                  curve: Curves.easeInOut,
-                  height: _isMapPlacementMode ? panelH - 20 : max(_kMinPanelContent, (panelH - 20) - _panelDragOffset),
-                  child: ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.bottomCenter,
-                      maxHeight: panelH - 20,
-                      child: SizedBox(
-                  height: panelH - 20,
-                  child: _isMapPlacementMode
-                      ? _PlacementConfirmPanel(
-                          isPickup: _isSelectingPickup,
-                          onConfirm: _confirmPlacement,
-                        )
-                      : PageView(
-                          controller: _pageCtrl,
-                          physics: const NeverScrollableScrollPhysics(),
-                          onPageChanged: (i) => setState(() => _step = i),
-                          children: [
-                            _Step0Panel(
-                              routeComplete: _routeComplete,
-                              estimatedPrice: _estimatedPrice,
-                              demFee: _demFee,
-                              surgeMultiplier: _surgeMultiplier,
-                              loadingSurge: _loadingSurge,
-                              timedOut: _priceTimedOut,
-                              onRetry: _retryEstimate,
-                              onNext: () => _goStep(1),
-                            ),
-                            _Step1Panel(
-                              orderType: widget.orderType,
-                              nameCtrl: _senderNameCtrl,
-                              phoneCtrl: _senderPhoneCtrl,
-                              onPickContact: () => _pickContact(nameCtrl: _senderNameCtrl, phoneCtrl: _senderPhoneCtrl),
-                              onPickMe: () {
-                                _fillMe(_senderNameCtrl, _senderPhoneCtrl);
-                                if (_senderPhoneCtrl.text.length >= 9) _goStep(2);
-                              },
-                              onPhoneComplete: () => _goStep(2),
-                              onNext: () {
-                                if (!_validatePhone(_senderPhoneCtrl, 'expéditeur')) return;
-                                _goStep(2);
-                              },
-                            ),
-                            _Step2Panel(
-                              orderType: widget.orderType,
-                              nameCtrl: _receiverNameCtrl,
-                              phoneCtrl: _receiverPhoneCtrl,
-                              descriptionCtrl: _descriptionCtrl,
-                              onPickContact: () => _pickContact(nameCtrl: _receiverNameCtrl, phoneCtrl: _receiverPhoneCtrl),
-                              onPickMe: () {
-                                _fillMe(_receiverNameCtrl, _receiverPhoneCtrl);
-                                if (_receiverPhoneCtrl.text.length >= 9) {
-                                  _updateEstimate();
-                                  _goStep(3);
-                                }
-                              },
-                              onPhoneComplete: () {
-                                _updateEstimate();
-                                _goStep(3);
-                              },
-                              onNext: () {
-                                if (!_validatePhone(_receiverPhoneCtrl, 'destinataire')) return;
-                                _updateEstimate();
-                                _goStep(3);
-                              },
-                            ),
-                            _Step3Panel(
-                              pickupLabel: _pickupCtrl.text.isNotEmpty ? _pickupCtrl.text : 'Départ',
-                              deliveryLabel: _deliveryCtrl.text.isNotEmpty ? _deliveryCtrl.text : 'Destination',
-                              estimatedPrice: _estimatedPrice,
-                              demFee: _demFee,
-                              discountAmount: _discountAmount,
-                              promoLabel: _promoLabel,
-                              promoCodeCtrl: _promoCodeCtrl,
-                              promoError: _promoError,
-                              checkingPromo: _checkingPromo,
-                              onApplyPromo: _applyPromoCode,
-                              surgeMultiplier: _surgeMultiplier,
-                              loadingSurge: _loadingSurge,
-                              timedOut: _priceTimedOut,
-                              submitting: _submitting,
-                              canSubmit: _routeComplete && _estimatedPrice != null,
-                              onRetry: _retryEstimate,
-                              onSubmit: _submit,
-                              onEditPickup: () {
-                                setState(() => _isSelectingPickup = true);
-                                _goStep(0);
-                                Future.delayed(const Duration(milliseconds: 300), () => _pickupFocus.requestFocus());
-                              },
-                              onEditDelivery: () {
-                                setState(() => _isSelectingPickup = false);
-                                _goStep(0);
-                                Future.delayed(const Duration(milliseconds: 300), () => _deliveryFocus.requestFocus());
-                              },
-                            ),
-                          ],
-                        ),
-                      ),   // SizedBox
-                    ),     // OverflowBox
-                  ),       // ClipRect
-                ),         // AnimatedContainer
+          // ── MAP THEME (gauche) + RECENTER (droite) — même niveau ─────────
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom:
+                max(_kMinPanelContent + 22.0, panelH - _panelDragOffset) +
+                60 +
+                keyboardH,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
+                _FloatingBtn(
+                  icon: _loadingGps ? null : Icons.my_location,
+                  loading: _loadingGps,
+                  onTap: _fetchGpsInit,
+                ),
               ],
             ),
-            ),
           ),
-        ),
-
-        // ── TOP BAR ────────────────────────────────────────────────────────
-        SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                _TopBar(
-                  title: widget.orderType == 'RIDE' ? 'Transport' : 'Livraison',
-                  step: _step,
-                  onBack: () {
-                    if (_step > 0) {
-                      _goStep(_step - 1);
-                    } else {
-                      Navigator.pop(context);
-                    }
-                  },
+          // ── BOTTOM PANEL ───────────────────────────────────────────────────
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeInOut,
+              margin: EdgeInsets.only(bottom: keyboardH),
+              decoration: BoxDecoration(
+                gradient: AppColors.gradientSplash,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
                 ),
-                const SizedBox(height: 8),
-
-                // Search fields (step 0 only, not in placement mode)
-                if (_step == 0) ...[
-                  _AddressField(
-                    controller: _pickupCtrl,
-                    focusNode: _pickupFocus,
-                    hint: 'Point de départ...',
-                    dotColor: AppColors.success,
-                    active: _isSelectingPickup && !_isMapPlacementMode,
-                    confirmed: _pickupLat != null,
-                    onTap: () {
-                      // Toujours focus son propre champ — un tap sur départ
-                      // doit permettre de le corriger, pas sauter ailleurs.
-                      setState(() { _isSelectingPickup = true; _isMapPlacementMode = false; });
-                      _pickupFocus.requestFocus();
-                    },
-                    onChanged: (v) => _onAddressChanged(v, forPickup: true),
-                    onClear: () {
-                      setState(() {
-                        _pickupCtrl.clear();
-                        _pickupLat = null; _pickupLng = null;
-                        _estimatedPrice = null;
-                        _suggestions = [];
-                        _isSelectingPickup = true;
-                        _isMapPlacementMode = false;
-                      });
-                      _pickupFocus.requestFocus();
-                    },
-                    onMapTap: () {
-                      FocusScope.of(context).unfocus();
-                      setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; });
-                    },
-                    onDotLongPress: () {
-                      FocusScope.of(context).unfocus();
-                      setState(() { _isSelectingPickup = true; _isMapPlacementMode = true; });
-                    },
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                    child: Row(children: [
-                      // Aligné avec le centre des points colorés des champs
-                      // d'adresse.
-                      const SizedBox(width: 7),
-                      Container(width: 2, height: 20, color: AppColors.textSecondary.withValues(alpha: 0.3)),
-                      const Spacer(),
-                      // ── Swap départ ↔ arrivée — nettement à droite ──────
-                      Pressable(
-                        onTap: _swapAddresses,
-                        child: Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.40)),
-                            boxShadow: AppShadows.floating,
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Drag handle
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onVerticalDragStart: (_) =>
+                          setState(() => _isDragging = true),
+                      onVerticalDragUpdate: (d) {
+                        final maxOffset = (panelH - 20) - _kMinPanelContent;
+                        setState(() {
+                          _panelDragOffset = (_panelDragOffset + d.delta.dy)
+                              .clamp(0.0, max(0.0, maxOffset));
+                        });
+                      },
+                      onVerticalDragEnd: (d) {
+                        final v = d.primaryVelocity ?? 0;
+                        final maxOffset = (panelH - 20) - _kMinPanelContent;
+                        setState(() {
+                          _isDragging = false;
+                          _panelDragOffset =
+                              (v > 200 || _panelDragOffset > maxOffset / 2)
+                              ? maxOffset
+                              : 0.0;
+                        });
+                      },
+                      onTap: () {
+                        final maxOffset = (panelH - 20) - _kMinPanelContent;
+                        setState(() {
+                          _isDragging = false;
+                          _panelDragOffset = _panelDragOffset == 0
+                              ? maxOffset
+                              : 0.0;
+                        });
+                      },
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 22,
+                        child: Center(
+                          child: Container(
+                            width: 36,
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                          child: const Icon(Icons.swap_vert, color: AppColors.primary, size: 17),
                         ),
                       ),
-                    ]),
-                  ),
-                  _AddressField(
-                    controller: _deliveryCtrl,
-                    focusNode: _deliveryFocus,
-                    hint: 'Destination...',
-                    dotColor: AppColors.error,
-                    active: !_isSelectingPickup && !_isMapPlacementMode,
-                    confirmed: _deliveryLat != null,
-                    onTap: () {
-                      // Toujours focus son propre champ — même correctif que
-                      // pour le champ départ, cf. commentaire ci-dessus.
-                      setState(() { _isSelectingPickup = false; _isMapPlacementMode = false; });
-                      _deliveryFocus.requestFocus();
-                    },
-                    onChanged: (v) => _onAddressChanged(v, forPickup: false),
-                    onClear: () {
-                      setState(() {
-                        _deliveryCtrl.clear();
-                        _deliveryLat = null; _deliveryLng = null;
-                        _estimatedPrice = null;
-                        _suggestions = [];
-                        _isSelectingPickup = false;
-                        _isMapPlacementMode = false;
-                      });
-                      _deliveryFocus.requestFocus();
-                    },
-                    onMapTap: () {
-                      FocusScope.of(context).unfocus();
-                      setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
-                    },
-                    onDotLongPress: () {
-                      FocusScope.of(context).unfocus();
-                      setState(() { _isSelectingPickup = false; _isMapPlacementMode = true; });
-                    },
-                  ),
+                    ),
 
-                  // ── Chips adresses favorites ──────────────────────────
-                  if (_favorites.isNotEmpty && !_isMapPlacementMode) ...[
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 32,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _favorites.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 6),
-                        itemBuilder: (_, i) {
-                          final fav = _favorites[i];
-                          return Pressable(
-                            onTap: () => _applyFavorite(fav),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [AppColors.primary, AppColors.primaryMid],
-                                ),
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: AppShadows.tinted(AppColors.primary, alpha: 0.35, blur: 6),
-                              ),
-                              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                Text(fav['icon'] as String? ?? '📍', style: const TextStyle(fontSize: 13)),
-                                const SizedBox(width: 5),
-                                Text(fav['label'] as String? ?? '',
-                                    style: ClientText.label.copyWith(color: Colors.white)),
-                              ]),
+                    // Content via PageView (non scrollable)
+                    AnimatedContainer(
+                      duration: _isDragging
+                          ? Duration.zero
+                          : const Duration(milliseconds: 280),
+                      curve: Curves.easeInOut,
+                      height: _isMapPlacementMode
+                          ? panelH - 20
+                          : max(
+                              _kMinPanelContent,
+                              (panelH - 20) - _panelDragOffset,
                             ),
-                          );
-                        },
+                      child: ClipRect(
+                        child: OverflowBox(
+                          alignment: Alignment.bottomCenter,
+                          maxHeight: panelH - 20,
+                          child: SizedBox(
+                            height: panelH - 20,
+                            child: _isMapPlacementMode
+                                ? _PlacementConfirmPanel(
+                                    isPickup: _isSelectingPickup,
+                                    onConfirm: _confirmPlacement,
+                                  )
+                                : PageView(
+                                    controller: _pageCtrl,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    onPageChanged: (i) =>
+                                        setState(() => _step = i),
+                                    children: [
+                                      _Step0Panel(
+                                        routeComplete: _routeComplete,
+                                        estimatedPrice: _estimatedPrice,
+                                        demFee: _demFee,
+                                        surgeMultiplier: _surgeMultiplier,
+                                        loadingSurge: _loadingSurge,
+                                        timedOut: _priceTimedOut,
+                                        onRetry: _retryEstimate,
+                                        onNext: () => _goStep(1),
+                                      ),
+                                      _Step1Panel(
+                                        orderType: widget.orderType,
+                                        nameCtrl: _senderNameCtrl,
+                                        phoneCtrl: _senderPhoneCtrl,
+                                        onPickContact: () => _pickContact(
+                                          nameCtrl: _senderNameCtrl,
+                                          phoneCtrl: _senderPhoneCtrl,
+                                        ),
+                                        onPickMe: () {
+                                          _fillMe(
+                                            _senderNameCtrl,
+                                            _senderPhoneCtrl,
+                                          );
+                                          if (_senderPhoneCtrl.text.length >= 9)
+                                            _goStep(2);
+                                        },
+                                        onPhoneComplete: () => _goStep(2),
+                                        onNext: () {
+                                          if (!_validatePhone(
+                                            _senderPhoneCtrl,
+                                            'expéditeur',
+                                          ))
+                                            return;
+                                          _goStep(2);
+                                        },
+                                      ),
+                                      _Step2Panel(
+                                        orderType: widget.orderType,
+                                        nameCtrl: _receiverNameCtrl,
+                                        phoneCtrl: _receiverPhoneCtrl,
+                                        descriptionCtrl: _descriptionCtrl,
+                                        onPickContact: () => _pickContact(
+                                          nameCtrl: _receiverNameCtrl,
+                                          phoneCtrl: _receiverPhoneCtrl,
+                                        ),
+                                        onPickMe: () {
+                                          _fillMe(
+                                            _receiverNameCtrl,
+                                            _receiverPhoneCtrl,
+                                          );
+                                          if (_receiverPhoneCtrl.text.length >=
+                                              9) {
+                                            _updateEstimate();
+                                            _goStep(3);
+                                          }
+                                        },
+                                        onPhoneComplete: () {
+                                          _updateEstimate();
+                                          _goStep(3);
+                                        },
+                                        onNext: () {
+                                          if (!_validatePhone(
+                                            _receiverPhoneCtrl,
+                                            'destinataire',
+                                          ))
+                                            return;
+                                          _updateEstimate();
+                                          _goStep(3);
+                                        },
+                                      ),
+                                      _Step3Panel(
+                                        pickupLabel: _pickupCtrl.text.isNotEmpty
+                                            ? _pickupCtrl.text
+                                            : 'Départ',
+                                        deliveryLabel:
+                                            _deliveryCtrl.text.isNotEmpty
+                                            ? _deliveryCtrl.text
+                                            : 'Destination',
+                                        estimatedPrice: _estimatedPrice,
+                                        demFee: _demFee,
+                                        discountAmount: _discountAmount,
+                                        promoLabel: _promoLabel,
+                                        promoCodeCtrl: _promoCodeCtrl,
+                                        promoError: _promoError,
+                                        checkingPromo: _checkingPromo,
+                                        onApplyPromo: _applyPromoCode,
+                                        surgeMultiplier: _surgeMultiplier,
+                                        loadingSurge: _loadingSurge,
+                                        timedOut: _priceTimedOut,
+                                        submitting: _submitting,
+                                        canSubmit:
+                                            _routeComplete &&
+                                            _estimatedPrice != null,
+                                        onRetry: _retryEstimate,
+                                        onSubmit: _submit,
+                                        onEditPickup: () {
+                                          setState(
+                                            () => _isSelectingPickup = true,
+                                          );
+                                          _goStep(0);
+                                          Future.delayed(
+                                            const Duration(milliseconds: 300),
+                                            () => _pickupFocus.requestFocus(),
+                                          );
+                                        },
+                                        onEditDelivery: () {
+                                          setState(
+                                            () => _isSelectingPickup = false,
+                                          );
+                                          _goStep(0);
+                                          Future.delayed(
+                                            const Duration(milliseconds: 300),
+                                            () => _deliveryFocus.requestFocus(),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                          ), // SizedBox
+                        ), // OverflowBox
+                      ), // ClipRect
+                    ), // AnimatedContainer
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // ── TOP BAR ────────────────────────────────────────────────────────
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  _TopBar(
+                    title: widget.orderType == 'RIDE'
+                        ? 'Transport'
+                        : 'Livraison',
+                    step: _step,
+                    onBack: () {
+                      if (_step > 0) {
+                        _goStep(_step - 1);
+                      } else {
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Search fields (step 0 only, not in placement mode)
+                  if (_step == 0) ...[
+                    _AddressField(
+                      controller: _pickupCtrl,
+                      focusNode: _pickupFocus,
+                      hint: 'Point de départ...',
+                      dotColor: AppColors.success,
+                      active: _isSelectingPickup && !_isMapPlacementMode,
+                      confirmed: _pickupLat != null,
+                      onTap: () {
+                        // Toujours focus son propre champ — un tap sur départ
+                        // doit permettre de le corriger, pas sauter ailleurs.
+                        setState(() {
+                          _isSelectingPickup = true;
+                          _isMapPlacementMode = false;
+                        });
+                        _pickupFocus.requestFocus();
+                      },
+                      onChanged: (v) => _onAddressChanged(v, forPickup: true),
+                      onClear: () {
+                        setState(() {
+                          _pickupCtrl.clear();
+                          _pickupLat = null;
+                          _pickupLng = null;
+                          _estimatedPrice = null;
+                          _suggestions = [];
+                          _isSelectingPickup = true;
+                          _isMapPlacementMode = false;
+                        });
+                        _pickupFocus.requestFocus();
+                      },
+                      onMapTap: () {
+                        FocusScope.of(context).unfocus();
+                        setState(() {
+                          _isSelectingPickup = true;
+                          _isMapPlacementMode = true;
+                        });
+                      },
+                      onDotLongPress: () {
+                        FocusScope.of(context).unfocus();
+                        setState(() {
+                          _isSelectingPickup = true;
+                          _isMapPlacementMode = true;
+                        });
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 2,
+                      ),
+                      child: Row(
+                        children: [
+                          // Aligné avec le centre des points colorés des champs
+                          // d'adresse.
+                          const SizedBox(width: 7),
+                          Container(
+                            width: 2,
+                            height: 20,
+                            color: AppColors.textSecondary.withValues(
+                              alpha: 0.3,
+                            ),
+                          ),
+                          const Spacer(),
+                          // ── Swap départ ↔ arrivée — nettement à droite ──────
+                          Pressable(
+                            onTap: _swapAddresses,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: AppColors.card,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.40,
+                                  ),
+                                ),
+                                boxShadow: AppShadows.floating,
+                              ),
+                              child: const Icon(
+                                Icons.swap_vert,
+                                color: AppColors.primary,
+                                size: 17,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-
-                  // Autocomplete dropdown
-                  if (_isSearching || _suggestions.isNotEmpty || _searchError != null) ...[
-                    const SizedBox(height: 6),
-                    PlaceSuggestionsList(
-                      suggestions: _suggestions,
-                      loading: _isSearching,
-                      error: _searchError,
-                      onRetry: _retryAddressSearch,
-                      onSelect: _selectSuggestion,
-                      colors: _placeSuggestionsColors,
-                      maxHeight: (MediaQuery.of(context).size.height
-                              - MediaQuery.of(context).viewInsets.bottom
-                              - MediaQuery.of(context).padding.top
-                              - 160)
-                          .clamp(100.0, 320.0),
+                    _AddressField(
+                      controller: _deliveryCtrl,
+                      focusNode: _deliveryFocus,
+                      hint: 'Destination...',
+                      dotColor: AppColors.error,
+                      active: !_isSelectingPickup && !_isMapPlacementMode,
+                      confirmed: _deliveryLat != null,
+                      onTap: () {
+                        // Toujours focus son propre champ — même correctif que
+                        // pour le champ départ, cf. commentaire ci-dessus.
+                        setState(() {
+                          _isSelectingPickup = false;
+                          _isMapPlacementMode = false;
+                        });
+                        _deliveryFocus.requestFocus();
+                      },
+                      onChanged: (v) => _onAddressChanged(v, forPickup: false),
+                      onClear: () {
+                        setState(() {
+                          _deliveryCtrl.clear();
+                          _deliveryLat = null;
+                          _deliveryLng = null;
+                          _estimatedPrice = null;
+                          _suggestions = [];
+                          _isSelectingPickup = false;
+                          _isMapPlacementMode = false;
+                        });
+                        _deliveryFocus.requestFocus();
+                      },
+                      onMapTap: () {
+                        FocusScope.of(context).unfocus();
+                        setState(() {
+                          _isSelectingPickup = false;
+                          _isMapPlacementMode = true;
+                        });
+                      },
+                      onDotLongPress: () {
+                        FocusScope.of(context).unfocus();
+                        setState(() {
+                          _isSelectingPickup = false;
+                          _isMapPlacementMode = true;
+                        });
+                      },
                     ),
+
+                    // ── Chips adresses favorites ──────────────────────────
+                    if (_favorites.isNotEmpty && !_isMapPlacementMode) ...[
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 32,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _favorites.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 6),
+                          itemBuilder: (_, i) {
+                            final fav = _favorites[i];
+                            return Pressable(
+                              onTap: () => _applyFavorite(fav),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      AppColors.primary,
+                                      AppColors.primaryMid,
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: AppShadows.tinted(
+                                    AppColors.primary,
+                                    alpha: 0.35,
+                                    blur: 6,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      fav['icon'] as String? ?? '📍',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      fav['label'] as String? ?? '',
+                                      style: ClientText.label.copyWith(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+
+                    // Autocomplete dropdown
+                    if (_isSearching ||
+                        _suggestions.isNotEmpty ||
+                        _searchError != null) ...[
+                      const SizedBox(height: 6),
+                      PlaceSuggestionsList(
+                        suggestions: _suggestions,
+                        loading: _isSearching,
+                        error: _searchError,
+                        onRetry: _retryAddressSearch,
+                        onSelect: _selectSuggestion,
+                        colors: _placeSuggestionsColors,
+                        maxHeight:
+                            (MediaQuery.of(context).size.height -
+                                    MediaQuery.of(context).viewInsets.bottom -
+                                    MediaQuery.of(context).padding.top -
+                                    160)
+                                .clamp(100.0, 320.0),
+                      ),
+                    ],
                   ],
                 ],
-              ],
+              ),
             ),
           ),
-        ),
-
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -1306,7 +1682,11 @@ class _TopBar extends StatelessWidget {
   final String title;
   final int step;
   final VoidCallback onBack;
-  const _TopBar({required this.title, required this.step, required this.onBack});
+  const _TopBar({
+    required this.title,
+    required this.step,
+    required this.onBack,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1315,32 +1695,58 @@ class _TopBar extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: AppColors.gradientSplash,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 12)],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 12,
+          ),
+        ],
       ),
-      child: Row(children: [
-        GestureDetector(
-          onTap: onBack,
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 14),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: onBack,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.arrow_back_ios_new,
+                color: AppColors.textPrimary,
+                size: 14,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
-        const Spacer(),
-        // Step dots
-        Row(children: List.generate(4, (i) => AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          margin: const EdgeInsets.only(left: 4),
-          width: i == step ? 20 : 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: i == step ? AppColors.primary : AppColors.card,
-            borderRadius: BorderRadius.circular(3),
+          const SizedBox(width: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
           ),
-        ))),
-      ]),
+          const Spacer(),
+          // Step dots
+          Row(
+            children: List.generate(
+              4,
+              (i) => AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                margin: const EdgeInsets.only(left: 4),
+                width: i == step ? 20 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: i == step ? AppColors.primary : AppColors.card,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1365,10 +1771,17 @@ class _AddressField extends StatelessWidget {
   static const _unconfirmedColor = Color(0xFFF59E0B);
 
   const _AddressField({
-    required this.controller, required this.hint, required this.dotColor,
-    required this.active, required this.confirmed,
-    required this.onTap, required this.onChanged, required this.onMapTap,
-    this.onDotLongPress, this.onClear, this.focusNode,
+    required this.controller,
+    required this.hint,
+    required this.dotColor,
+    required this.active,
+    required this.confirmed,
+    required this.onTap,
+    required this.onChanged,
+    required this.onMapTap,
+    this.onDotLongPress,
+    this.onClear,
+    this.focusNode,
   });
 
   @override
@@ -1381,67 +1794,109 @@ class _AddressField extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: accentColor.withValues(alpha: active ? 0.14 : 0.07),
+          // Fond quasi-opaque plutôt qu'un lavis translucide : la lisibilité
+          // ne doit jamais dépendre de ce qu'il y a sous le champ sur la
+          // carte (eau, route, bâti... la couleur y varie trop pour garantir
+          // un bon contraste avec un fond transparent).
+          color: Colors.white.withValues(alpha: 0.80),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: accentColor.withValues(alpha: active ? 0.85 : 0.45),
+            color: accentColor.withValues(alpha: active ? 1.0 : 0.65),
             width: active ? 1.4 : 1.0,
           ),
           boxShadow: active
-              ? [BoxShadow(color: accentColor.withValues(alpha: 0.22), blurRadius: 20, spreadRadius: 0)]
-              : [BoxShadow(color: accentColor.withValues(alpha: 0.08), blurRadius: 6)],
+              ? [
+                  BoxShadow(
+                    color: accentColor.withValues(alpha: 0.22),
+                    blurRadius: 20,
+                    spreadRadius: 0,
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: accentColor.withValues(alpha: 0.08),
+                    blurRadius: 6,
+                  ),
+                ],
         ),
-        child: Row(children: [
-          const SizedBox(width: 12),
-          GestureDetector(
-            onTap: onDotLongPress,
-            onLongPress: onDotLongPress,
-            child: active
-                ? _PulsingDot(color: dotColor)
-                : Container(width: 10, height: 10, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: onChanged,
-              onTap: onTap,
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14.5),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 14.5),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                isDense: true,
-                fillColor: Colors.transparent,
-                filled: true,
+        child: Row(
+          children: [
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: onDotLongPress,
+              onLongPress: onDotLongPress,
+              child: active
+                  ? _PulsingDot(color: dotColor)
+                  : Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: dotColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onChanged: onChanged,
+                onTap: onTap,
+                textInputAction: TextInputAction.search,
+                style: const TextStyle(
+                  color: AppColors.textDark,
+                  fontSize: 14.5,
+                ),
+                decoration: InputDecoration(
+                  hintText: hint,
+                  hintStyle: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 14.5,
+                  ),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  isDense: true,
+                  fillColor: Colors.transparent,
+                  filled: true,
+                ),
               ),
             ),
-          ),
-          if (needsConfirmation)
-            Padding(
-              padding: const EdgeInsets.only(right: 2),
-              child: Icon(Icons.error_outline, color: _unconfirmedColor, size: 16),
-            ),
-          if (hasText)
+            if (needsConfirmation)
+              Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: Icon(
+                  Icons.error_outline,
+                  color: _unconfirmedColor,
+                  size: 16,
+                ),
+              ),
+            if (hasText)
+              IconButton(
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: AppColors.textMuted,
+                  size: 18,
+                ),
+                onPressed: onClear,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                constraints: const BoxConstraints(),
+                visualDensity: VisualDensity.compact,
+              ),
             IconButton(
-              icon: Icon(Icons.close_rounded, color: Colors.white.withValues(alpha: 0.55), size: 18),
-              onPressed: onClear,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
+              icon: Icon(
+                Icons.location_on,
+                color: active ? dotColor : AppColors.textMuted,
+                size: 20,
+              ),
+              onPressed: onMapTap,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               constraints: const BoxConstraints(),
-              visualDensity: VisualDensity.compact,
             ),
-          IconButton(
-            icon: Icon(Icons.location_on, color: active ? dotColor : Colors.white.withValues(alpha: 0.80), size: 20),
-            onPressed: onMapTap,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            constraints: const BoxConstraints(),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -1456,14 +1911,17 @@ class _PulsingDot extends StatefulWidget {
   State<_PulsingDot> createState() => _PulsingDotState();
 }
 
-class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))
-      ..repeat(reverse: true);
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
   }
 
   @override
@@ -1504,18 +1962,22 @@ class _FloatingPin extends StatefulWidget {
   State<_FloatingPin> createState() => _FloatingPinState();
 }
 
-class _FloatingPinState extends State<_FloatingPin> with SingleTickerProviderStateMixin {
+class _FloatingPinState extends State<_FloatingPin>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _floatAnim;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2800))
-      ..repeat(reverse: true);
-    _floatAnim = Tween<double>(begin: 0, end: -6).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat(reverse: true);
+    _floatAnim = Tween<double>(
+      begin: 0,
+      end: -6,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -1574,7 +2036,9 @@ class _FloatingPinState extends State<_FloatingPin> with SingleTickerProviderSta
                 width: 18,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: widget.color.withValues(alpha: 0.25 + 0.15 * _ctrl.value),
+                  color: widget.color.withValues(
+                    alpha: 0.25 + 0.15 * _ctrl.value,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
@@ -1590,20 +2054,37 @@ class _FloatingBtn extends StatelessWidget {
   final IconData? icon;
   final bool loading;
   final VoidCallback onTap;
-  const _FloatingBtn({required this.icon, required this.loading, required this.onTap});
+  const _FloatingBtn({
+    required this.icon,
+    required this.loading,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 44, height: 44,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
-          color: AppColors.surface, shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8)],
+          color: AppColors.surface,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 8,
+            ),
+          ],
         ),
         child: loading
-            ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
+              )
             : Icon(icon, color: AppColors.primary, size: 20),
       ),
     );
@@ -1617,12 +2098,17 @@ class _FloatingBtn extends StatelessWidget {
 class _PlacementConfirmPanel extends StatelessWidget {
   final bool isPickup;
   final VoidCallback onConfirm;
-  const _PlacementConfirmPanel({required this.isPickup, required this.onConfirm});
+  const _PlacementConfirmPanel({
+    required this.isPickup,
+    required this.onConfirm,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = isPickup ? AppColors.success : AppColors.error;
-    final label = isPickup ? 'Valider ce point de départ' : 'Valider cette destination';
+    final label = isPickup
+        ? 'Valider ce point de départ'
+        : 'Valider cette destination';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: SizedBox(
@@ -1678,7 +2164,11 @@ class _Step0Panel extends StatelessWidget {
             switchOutCurve: Curves.easeIn,
             transitionBuilder: (child, anim) => FadeTransition(
               opacity: anim,
-              child: SizeTransition(sizeFactor: anim, alignment: Alignment.topCenter, child: child),
+              child: SizeTransition(
+                sizeFactor: anim,
+                alignment: Alignment.topCenter,
+                child: child,
+              ),
             ),
             child: routeComplete
                 ? _EstimatePriceCard(
@@ -1695,20 +2185,40 @@ class _Step0Panel extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('Astuce',
-                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Astuce',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       RichText(
                         maxLines: 3,
                         text: TextSpan(
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 14, fontWeight: FontWeight.normal, height: 1.4),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.70),
+                            fontSize: 14,
+                            fontWeight: FontWeight.normal,
+                            height: 1.4,
+                          ),
                           children: [
-                            const TextSpan(text: 'Utiliser les champs de recherche ou le bouton '),
+                            const TextSpan(
+                              text:
+                                  'Utiliser les champs de recherche ou le bouton ',
+                            ),
                             WidgetSpan(
                               alignment: PlaceholderAlignment.middle,
-                              child: Icon(Icons.location_on, color: Colors.white.withValues(alpha: 0.70), size: 13),
+                              child: Icon(
+                                Icons.location_on,
+                                color: Colors.white.withValues(alpha: 0.70),
+                                size: 13,
+                              ),
                             ),
-                            const TextSpan(text: ' pour placer un point sur la carte.'),
+                            const TextSpan(
+                              text: ' pour placer un point sur la carte.',
+                            ),
                           ],
                         ),
                       ),
@@ -1761,106 +2271,204 @@ class _EstimatePriceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: loadingSurge
-          ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
+          ? const Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
+              ),
+            )
           : timedOut && estimatedPrice == null
-              // ── État timeout : impossible de calculer le prix ──
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
+          // ── État timeout : impossible de calculer le prix ──
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.wifi_off_outlined,
+                  color: AppColors.textSecondary,
+                  size: 22,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Impossible de calculer le prix',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: onRetry,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.40),
+                      ),
+                    ),
+                    child: Text(
+                      'Réessayer',
+                      style: ClientText.body.copyWith(color: AppColors.primary),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          // ── État normal : affichage du prix ──
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Ligne : prix course + surge badge
+                Row(
                   children: [
-                    const Icon(Icons.wifi_off_outlined, color: AppColors.textSecondary, size: 22),
-                    const SizedBox(height: 6),
                     const Text(
-                      'Impossible de calculer le prix',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                      textAlign: TextAlign.center,
+                      'Course',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: onRetry,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                    const Spacer(),
+                    if (surgeMultiplier > 1.0) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.40)),
-                        ),
-                        child: Text('Réessayer',
-                            style: ClientText.body.copyWith(color: AppColors.primary)),
-                      ),
-                    ),
-                  ],
-                )
-              // ── État normal : affichage du prix ──
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Ligne : prix course + surge badge
-                    Row(
-                      children: [
-                        const Text('Course', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                        const Spacer(),
-                        if (surgeMultiplier > 1.0) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.surge.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppColors.surge.withValues(alpha: 0.30)),
-                            ),
-                            child: Row(children: [
-                              const Icon(Icons.flash_on, color: AppColors.surge, size: 11),
-                              const SizedBox(width: 2),
-                              Text('×${surgeMultiplier.toStringAsFixed(1)}',
-                                  style: const TextStyle(color: AppColors.surge, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ]),
+                          color: AppColors.surge.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: AppColors.surge.withValues(alpha: 0.30),
                           ),
-                          const SizedBox(width: 8),
-                        ],
-                        Text(
-                          estimatedPrice != null ? formatFcfa(estimatedPrice!) : '—',
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
                         ),
-                      ],
-                    ),
-                    // Ligne : frais DEM (visible uniquement si > 0)
-                    if (estimatedPrice != null && demFee > 0) ...[
-                      const SizedBox(height: 4),
-                      Row(children: [
-                        const Text('Frais DEM', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                        const Spacer(),
-                        Text('+${formatFcfa(demFee)}',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                      ]),
-                    ],
-                    // Ligne : réduction promo (le livreur touche toujours le
-                    // prix plein — voir orders.service.js côté serveur)
-                    if (estimatedPrice != null && discountAmount != null && discountAmount! > 0) ...[
-                      const SizedBox(height: 4),
-                      Row(children: [
-                        Text(
-                          promoLabel != null ? 'Réduction ($promoLabel)' : 'Réduction',
-                          style: const TextStyle(color: AppColors.success, fontSize: 12, fontWeight: FontWeight.w600),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.flash_on,
+                              color: AppColors.surge,
+                              size: 11,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '×${surgeMultiplier.toStringAsFixed(1)}',
+                              style: const TextStyle(
+                                color: AppColors.surge,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
-                        const Spacer(),
-                        Text('-${formatFcfa(discountAmount!)}',
-                            style: const TextStyle(color: AppColors.success, fontSize: 12, fontWeight: FontWeight.w600)),
-                      ]),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 6),
-                        child: Divider(height: 1, color: AppColors.textSecondary),
                       ),
-                      Row(children: [
-                        const Text('Total à payer',
-                            style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
-                        const Spacer(),
-                        Text(
-                          formatFcfa((estimatedPrice! + demFee - discountAmount!).clamp(0, double.infinity)),
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w800),
-                        ),
-                      ]),
+                      const SizedBox(width: 8),
                     ],
+                    Text(
+                      estimatedPrice != null
+                          ? formatFcfa(estimatedPrice!)
+                          : '—',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
+                // Ligne : frais DEM (visible uniquement si > 0)
+                if (estimatedPrice != null && demFee > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text(
+                        'Frais DEM',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '+${formatFcfa(demFee)}',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                // Ligne : réduction promo (le livreur touche toujours le
+                // prix plein — voir orders.service.js côté serveur)
+                if (estimatedPrice != null &&
+                    discountAmount != null &&
+                    discountAmount! > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        promoLabel != null
+                            ? 'Réduction ($promoLabel)'
+                            : 'Réduction',
+                        style: const TextStyle(
+                          color: AppColors.success,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '-${formatFcfa(discountAmount!)}',
+                        style: const TextStyle(
+                          color: AppColors.success,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 6),
+                    child: Divider(height: 1, color: AppColors.textSecondary),
+                  ),
+                  Row(
+                    children: [
+                      const Text(
+                        'Total à payer',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        formatFcfa(
+                          (estimatedPrice! + demFee - discountAmount!).clamp(
+                            0,
+                            double.infinity,
+                          ),
+                        ),
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
     );
   }
 }
@@ -1887,51 +2495,83 @@ class _PromoCodeField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              textCapitalization: TextCapitalization.characters,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Code promo (optionnel)',
-                hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.7), fontSize: 13),
-                filled: true,
-                fillColor: AppColors.card,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                textCapitalization: TextCapitalization.characters,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Code promo (optionnel)',
+                  hintStyle: TextStyle(
+                    color: AppColors.textSecondary.withValues(alpha: 0.7),
+                    fontSize: 13,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.card,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: checking ? null : onApply,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-              decoration: BoxDecoration(
-                color: applied ? AppColors.success.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: (applied ? AppColors.success : AppColors.primary).withValues(alpha: 0.4)),
-              ),
-              child: checking
-                  ? const SizedBox(
-                      width: 14, height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                    )
-                  : Text(
-                      applied ? 'Appliqué ✓' : 'Appliquer',
-                      style: TextStyle(
-                        color: applied ? AppColors.success : AppColors.primary,
-                        fontSize: 13, fontWeight: FontWeight.w600,
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: checking ? null : onApply,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 13,
+                ),
+                decoration: BoxDecoration(
+                  color: applied
+                      ? AppColors.success.withValues(alpha: 0.15)
+                      : AppColors.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: (applied ? AppColors.success : AppColors.primary)
+                        .withValues(alpha: 0.4),
+                  ),
+                ),
+                child: checking
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : Text(
+                        applied ? 'Appliqué ✓' : 'Appliquer',
+                        style: TextStyle(
+                          color: applied
+                              ? AppColors.success
+                              : AppColors.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
         if (error != null) ...[
           const SizedBox(height: 4),
-          Text(error!, style: const TextStyle(color: AppColors.error, fontSize: 11.5)),
+          Text(
+            error!,
+            style: const TextStyle(color: AppColors.error, fontSize: 11.5),
+          ),
         ],
       ],
     );
@@ -1949,8 +2589,10 @@ class _Step1Panel extends StatelessWidget {
 
   const _Step1Panel({
     required this.orderType,
-    required this.nameCtrl, required this.phoneCtrl,
-    required this.onPickContact, this.onPickMe,
+    required this.nameCtrl,
+    required this.phoneCtrl,
+    required this.onPickContact,
+    this.onPickMe,
     this.onPhoneComplete,
     required this.onNext,
   });
@@ -1965,7 +2607,10 @@ class _Step1Panel extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               'Utilisez vos contacts 👤 pour gagner du temps',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 12),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.70),
+                fontSize: 12,
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -2002,9 +2647,11 @@ class _Step2Panel extends StatelessWidget {
 
   const _Step2Panel({
     required this.orderType,
-    required this.nameCtrl, required this.phoneCtrl,
+    required this.nameCtrl,
+    required this.phoneCtrl,
     required this.descriptionCtrl,
-    required this.onPickContact, this.onPickMe,
+    required this.onPickContact,
+    this.onPickMe,
     this.onPhoneComplete,
     required this.onNext,
   });
@@ -2019,7 +2666,10 @@ class _Step2Panel extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               'Utilisez vos contacts 👤 pour gagner du temps',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 12),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.70),
+                fontSize: 12,
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -2043,10 +2693,20 @@ class _Step2Panel extends StatelessWidget {
                       style: const TextStyle(fontSize: 14, color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Description du colis (optionnel)...',
-                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.50), fontSize: 14),
-                        fillColor: Colors.white.withValues(alpha: 0.10), filled: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.50),
+                          fontSize: 14,
+                        ),
+                        fillColor: Colors.white.withValues(alpha: 0.10),
+                        filled: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
                         isDense: true,
                       ),
                     ),
@@ -2075,87 +2735,168 @@ class _ContactMini extends StatelessWidget {
   final VoidCallback onPick;
   final VoidCallback? onPickMe;
   final VoidCallback? onPhoneComplete;
-  const _ContactMini({required this.label, required this.dotColor, required this.nameCtrl, required this.phoneCtrl, required this.onPick, this.onPickMe, this.onPhoneComplete});
+  const _ContactMini({
+    required this.label,
+    required this.dotColor,
+    required this.nameCtrl,
+    required this.phoneCtrl,
+    required this.onPick,
+    this.onPickMe,
+    this.onPhoneComplete,
+  });
 
   @override
   Widget build(BuildContext context) {
     // Vert vif visible sur fond cyan/bleu foncé
-    final visibleDot = dotColor == AppColors.success ? AppColors.successBright : dotColor;
+    final visibleDot = dotColor == AppColors.success
+        ? AppColors.successBright
+        : dotColor;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: visibleDot.withValues(alpha: 0.85), width: 1.5),
+        border: Border.all(
+          color: visibleDot.withValues(alpha: 0.85),
+          width: 1.5,
+        ),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: visibleDot, shape: BoxShape.circle)),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(color: visibleDot, fontSize: 13, fontWeight: FontWeight.w700)),
-          const Spacer(),
-          if (onPickMe != null)
-            GestureDetector(
-              onTap: onPickMe,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                margin: const EdgeInsets.only(right: 10),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.20), borderRadius: BorderRadius.circular(8)),
-                child: const Text('Moi', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: visibleDot,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: visibleDot,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              if (onPickMe != null)
+                GestureDetector(
+                  onTap: onPickMe,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.20),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Moi',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              GestureDetector(
+                onTap: onPick,
+                child: Icon(
+                  Icons.contacts_rounded,
+                  color: Colors.white.withValues(alpha: 0.90),
+                  size: 26,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: nameCtrl,
+            inputFormatters: [NameInputFormatter()],
+            textCapitalization: TextCapitalization.words,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Nom complet',
+              hintStyle: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 14,
+              ),
+              prefixIcon: Padding(
+                padding: const EdgeInsets.only(left: 12, right: 8),
+                child: Icon(
+                  Icons.person_outline_rounded,
+                  color: Colors.white.withValues(alpha: 0.55),
+                  size: 18,
+                ),
+              ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 0,
+                minHeight: 0,
+              ),
+              fillColor: Colors.white.withValues(alpha: 0.08),
+              filled: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 13,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
               ),
             ),
-          GestureDetector(
-            onTap: onPick,
-            child: Icon(Icons.contacts_rounded, color: Colors.white.withValues(alpha: 0.90), size: 26),
           ),
-        ]),
-        const SizedBox(height: 10),
-        TextField(
-          controller: nameCtrl,
-          inputFormatters: [NameInputFormatter()],
-          textCapitalization: TextCapitalization.words,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          decoration: InputDecoration(
-            hintText: 'Nom complet',
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
-            prefixIcon: Padding(
-              padding: const EdgeInsets.only(left: 12, right: 8),
-              child: Icon(Icons.person_outline_rounded,
-                  color: Colors.white.withValues(alpha: 0.55), size: 18),
+          const SizedBox(height: 8),
+          TextField(
+            controller: phoneCtrl,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [DigitsOnlyFormatter()],
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            onChanged: (v) {
+              if (v.length >= 9) onPhoneComplete?.call();
+            },
+            decoration: InputDecoration(
+              hintText: 'Numéro de téléphone',
+              hintStyle: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 14,
+              ),
+              prefixIcon: Padding(
+                padding: const EdgeInsets.only(left: 12, right: 8),
+                child: Icon(
+                  Icons.phone_outlined,
+                  color: visibleDot.withValues(alpha: 0.80),
+                  size: 18,
+                ),
+              ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 0,
+                minHeight: 0,
+              ),
+              prefixText: '+221 ',
+              prefixStyle: ClientText.bodyStrong.copyWith(color: visibleDot),
+              fillColor: Colors.white.withValues(alpha: 0.08),
+              filled: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 13,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
             ),
-            prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-            fillColor: Colors.white.withValues(alpha: 0.08), filled: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
           ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: phoneCtrl,
-          keyboardType: TextInputType.phone,
-          inputFormatters: [DigitsOnlyFormatter()],
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          onChanged: (v) { if (v.length >= 9) onPhoneComplete?.call(); },
-          decoration: InputDecoration(
-            hintText: 'Numéro de téléphone',
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
-            prefixIcon: Padding(
-              padding: const EdgeInsets.only(left: 12, right: 8),
-              child: Icon(Icons.phone_outlined,
-                  color: visibleDot.withValues(alpha: 0.80), size: 18),
-            ),
-            prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-            prefixText: '+221 ',
-            prefixStyle: ClientText.bodyStrong.copyWith(color: visibleDot),
-            fillColor: Colors.white.withValues(alpha: 0.08), filled: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-          ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -2182,11 +2923,16 @@ class _Step3Panel extends StatelessWidget {
   final VoidCallback? onEditDelivery;
 
   const _Step3Panel({
-    required this.pickupLabel, required this.deliveryLabel,
-    required this.estimatedPrice, required this.demFee,
-    this.discountAmount, this.promoLabel,
-    required this.promoCodeCtrl, this.promoError,
-    required this.checkingPromo, required this.onApplyPromo,
+    required this.pickupLabel,
+    required this.deliveryLabel,
+    required this.estimatedPrice,
+    required this.demFee,
+    this.discountAmount,
+    this.promoLabel,
+    required this.promoCodeCtrl,
+    this.promoError,
+    required this.checkingPromo,
+    required this.onApplyPromo,
     required this.surgeMultiplier,
     required this.loadingSurge,
     required this.timedOut,
@@ -2202,66 +2948,115 @@ class _Step3Panel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Column(children: [
-        Column(children: [
-        // Route recap
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12)),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            GestureDetector(
-              onTap: onEditPickup,
-              child: Row(children: [
-                Expanded(child: AddressRow(icon: Icons.circle, iconColor: AppColors.success, address: pickupLabel, dark: true)),
-                if (onEditPickup != null) Icon(Icons.edit_outlined, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 14),
-              ]),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: Container(width: 2, height: 14, color: AppColors.textSecondary.withValues(alpha: 0.3)),
-            ),
-            GestureDetector(
-              onTap: onEditDelivery,
-              child: Row(children: [
-                Expanded(child: AddressRow(icon: Icons.location_on, iconColor: AppColors.error, address: deliveryLabel, dark: true)),
-                if (onEditDelivery != null) Icon(Icons.edit_outlined, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 14),
-              ]),
-            ),
-          ]),
-        ),
-        const SizedBox(height: 10),
+      child: Column(
+        children: [
+          Column(
+            children: [
+              // Route recap
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: onEditPickup,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: AddressRow(
+                              icon: Icons.circle,
+                              iconColor: AppColors.success,
+                              address: pickupLabel,
+                              dark: true,
+                            ),
+                          ),
+                          if (onEditPickup != null)
+                            Icon(
+                              Icons.edit_outlined,
+                              color: AppColors.textSecondary.withValues(
+                                alpha: 0.5,
+                              ),
+                              size: 14,
+                            ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: Container(
+                        width: 2,
+                        height: 14,
+                        color: AppColors.textSecondary.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: onEditDelivery,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: AddressRow(
+                              icon: Icons.location_on,
+                              iconColor: AppColors.error,
+                              address: deliveryLabel,
+                              dark: true,
+                            ),
+                          ),
+                          if (onEditDelivery != null)
+                            Icon(
+                              Icons.edit_outlined,
+                              color: AppColors.textSecondary.withValues(
+                                alpha: 0.5,
+                              ),
+                              size: 14,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
 
-        // Price card
-        _EstimatePriceCard(
-          estimatedPrice: estimatedPrice,
-          demFee: demFee,
-          discountAmount: discountAmount,
-          promoLabel: promoLabel,
-          surgeMultiplier: surgeMultiplier,
-          loadingSurge: loadingSurge,
-          timedOut: timedOut,
-          onRetry: onRetry,
-        ),
-        if (estimatedPrice != null && !loadingSurge && !timedOut) ...[
-          const SizedBox(height: 8),
-          _PromoCodeField(
-            controller: promoCodeCtrl,
-            error: promoError,
-            checking: checkingPromo,
-            applied: discountAmount != null && discountAmount! > 0,
-            onApply: onApplyPromo,
+              // Price card
+              _EstimatePriceCard(
+                estimatedPrice: estimatedPrice,
+                demFee: demFee,
+                discountAmount: discountAmount,
+                promoLabel: promoLabel,
+                surgeMultiplier: surgeMultiplier,
+                loadingSurge: loadingSurge,
+                timedOut: timedOut,
+                onRetry: onRetry,
+              ),
+              if (estimatedPrice != null && !loadingSurge && !timedOut) ...[
+                const SizedBox(height: 8),
+                _PromoCodeField(
+                  controller: promoCodeCtrl,
+                  error: promoError,
+                  checking: checkingPromo,
+                  applied: discountAmount != null && discountAmount! > 0,
+                  onApply: onApplyPromo,
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+          const Spacer(),
+          // Bouton toujours visible en bas
+          PrimaryButton(
+            label: 'Trouvez un livreur',
+            onTap: (canSubmit && !submitting) ? onSubmit : null,
+            loading: submitting,
           ),
         ],
-        const SizedBox(height: 8),
-        ]),
-        const Spacer(),
-        // Bouton toujours visible en bas
-        PrimaryButton(
-          label: 'Trouvez un livreur',
-          onTap: (canSubmit && !submitting) ? onSubmit : null,
-          loading: submitting,
-        ),
-      ]),
+      ),
     );
   }
 }
