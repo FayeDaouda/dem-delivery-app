@@ -1520,53 +1520,66 @@ class _ServiceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (subtitle != null) {
       final badgeColor = color ?? AppColors.primary;
+      // Sigma modéré (14) : donne l'effet verre dépoli sans le coût d'un
+      // blur trop large — au-dessus d'une carte Google Maps animée, un flou
+      // plus poussé serait sensible sur les Android d'entrée de gamme.
       return Pressable(
         onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.l,
-            horizontal: AppSpacing.xl,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-            boxShadow: AppShadows.card,
-          ),
-          child: Row(
-            children: [
-              _BreathingBadge(icon: icon, color: badgeColor),
-              const SizedBox(width: AppSpacing.m),
-              // `Expanded` : sans quoi le titre/sous-titre poussent le
-              // chevron hors de la carte dès qu'ils dépassent l'espace
-              // disponible (texte plus long, police système agrandie...) —
-              // toujours prévoir la place, jamais supposer un texte court.
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: ClientText.subtitle.copyWith(color: Colors.white),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      subtitle!,
-                      style: ClientText.body.copyWith(
-                        color: Colors.white.withValues(alpha: 0.65),
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+        child: ClipRRect(
+          // `ClipRRect` obligatoire : `BackdropFilter` floute tout son
+          // rectangle englobant, coins compris — sans ce clip le flou
+          // déborderait en carré au-delà des coins arrondis de la carte.
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                vertical: AppSpacing.l,
+                horizontal: AppSpacing.xl,
               ),
-              const SizedBox(width: 8),
-              NudgingChevron(color: Colors.white.withValues(alpha: 0.65)),
-            ],
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
+              ),
+              child: Row(
+                children: [
+                  _BreathingBadge(icon: icon, color: badgeColor),
+                  const SizedBox(width: AppSpacing.m),
+                  // `Expanded` : sans quoi le titre/sous-titre poussent le
+                  // chevron hors de la carte dès qu'ils dépassent l'espace
+                  // disponible (texte plus long, police système agrandie...) —
+                  // toujours prévoir la place, jamais supposer un texte court.
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: ClientText.subtitle.copyWith(
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          subtitle!,
+                          style: ClientText.body.copyWith(
+                            color: Colors.white.withValues(alpha: 0.70),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  NudgingChevron(color: Colors.white.withValues(alpha: 0.75)),
+                ],
+              ),
+            ),
           ),
         ),
       );
