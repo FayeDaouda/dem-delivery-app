@@ -109,6 +109,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
   double _surgeMultiplier = 1.0;
   double? _estimatedPrice; // prix course (= ce que le livreur gagne)
   double _demFee = 0.0; // frais DEM prélevés en sus au client
+  double? _routeDistanceKm;
+  int? _routeDurationMin;
 
   // ── Promotion (voir promo.service.js côté serveur) ──────────────────────
   // discountAmount/promoLabel peuvent venir soit d'une campagne auto-appliquée
@@ -603,11 +605,17 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
             (res.data['routes'] as List).first as Map<String, dynamic>;
         final legs = route['legs'] as List;
         double distM = 0;
+        double durS = 0;
         for (final leg in legs) {
           distM += ((leg['distance'] as Map)['value'] as num).toDouble();
+          durS += ((leg['duration'] as Map)['value'] as num).toDouble();
         }
         final encoded = route['overview_polyline']['points'] as String;
-        return {'distance': distM / 1000.0, 'points': _decodePolyline(encoded)};
+        return {
+          'distance': distM / 1000.0,
+          'durationMin': (durS / 60).round(),
+          'points': _decodePolyline(encoded),
+        };
       }
     } catch (_) {}
     return null;
@@ -629,6 +637,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
         if (routes != null && routes.isNotEmpty) {
           final route = routes[0] as Map<String, dynamic>;
           final distance = (route['distance'] as num) / 1000.0;
+          final durationMin = ((route['duration'] as num) / 60).round();
           final coords = (route['geometry']['coordinates'] as List);
           final points = coords.map((c) {
             final coord = c as List;
@@ -637,7 +646,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
               (coord[0] as num).toDouble(),
             );
           }).toList();
-          return {'distance': distance, 'points': points};
+          return {
+            'distance': distance,
+            'durationMin': durationMin,
+            'points': points,
+          };
         }
       }
     } catch (_) {}
@@ -699,7 +712,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
       // Route visuelle — peut arriver après le prix, c'est OK
       final routeData = await routeFuture;
       if (routeData != null && mounted) {
-        setState(() => _routePoints = routeData['points'] as List<LatLng>);
+        setState(() {
+          _routePoints = routeData['points'] as List<LatLng>;
+          _routeDistanceKm = (routeData['distance'] as num?)?.toDouble();
+          _routeDurationMin = routeData['durationMin'] as int?;
+        });
       } else if (mounted && _pickupLat != null && _deliveryLat != null) {
         setState(
           () => _routePoints = [
@@ -1311,6 +1328,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                         timedOut: _priceTimedOut,
                                         onRetry: _retryEstimate,
                                         onNext: () => _goStep(1),
+                                        distanceKm: _routeDistanceKm,
+                                        durationMin: _routeDurationMin,
                                       ),
                                       _Step1Panel(
                                         orderType: widget.orderType,
@@ -1397,6 +1416,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                             _estimatedPrice != null,
                                         onRetry: _retryEstimate,
                                         onSubmit: _submit,
+                                        distanceKm: _routeDistanceKm,
+                                        durationMin: _routeDurationMin,
                                         onEditPickup: () {
                                           setState(
                                             () => _isSelectingPickup = true,
@@ -1478,6 +1499,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                           _pickupLat = null;
                           _pickupLng = null;
                           _estimatedPrice = null;
+                          _routeDistanceKm = null;
+                          _routeDurationMin = null;
                           _suggestions = [];
                           _isSelectingPickup = true;
                           _isMapPlacementMode = false;
@@ -1566,6 +1589,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                           _deliveryLat = null;
                           _deliveryLng = null;
                           _estimatedPrice = null;
+                          _routeDistanceKm = null;
+                          _routeDurationMin = null;
                           _suggestions = [];
                           _isSelectingPickup = false;
                           _isMapPlacementMode = false;
@@ -2137,6 +2162,8 @@ class _Step0Panel extends StatelessWidget {
   final bool timedOut;
   final VoidCallback onRetry;
   final VoidCallback onNext;
+  final double? distanceKm;
+  final int? durationMin;
   const _Step0Panel({
     required this.routeComplete,
     required this.estimatedPrice,
@@ -2146,6 +2173,8 @@ class _Step0Panel extends StatelessWidget {
     required this.timedOut,
     required this.onRetry,
     required this.onNext,
+    this.distanceKm,
+    this.durationMin,
   });
 
   @override
@@ -2179,6 +2208,8 @@ class _Step0Panel extends StatelessWidget {
                     loadingSurge: loadingSurge,
                     timedOut: timedOut,
                     onRetry: onRetry,
+                    distanceKm: distanceKm,
+                    durationMin: durationMin,
                   )
                 : Column(
                     key: const ValueKey('tip'),
@@ -2248,6 +2279,8 @@ class _EstimatePriceCard extends StatelessWidget {
   final bool loadingSurge;
   final bool timedOut;
   final VoidCallback onRetry;
+  final double? distanceKm;
+  final int? durationMin;
 
   const _EstimatePriceCard({
     super.key,
@@ -2259,6 +2292,8 @@ class _EstimatePriceCard extends StatelessWidget {
     required this.loadingSurge,
     required this.timedOut,
     required this.onRetry,
+    this.distanceKm,
+    this.durationMin,
   });
 
   @override
@@ -2407,6 +2442,44 @@ class _EstimatePriceCard extends StatelessWidget {
                     ],
                   ),
                 ],
+                // Ligne : distance/durée estimées — comble le vide sous la
+                // carte de prix et confirme visuellement le trajet calculé.
+                if (estimatedPrice != null &&
+                    distanceKm != null &&
+                    durationMin != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.route_outlined,
+                        color: AppColors.textSecondary,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '≈ ${distanceKm!.toStringAsFixed(1)} km',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(
+                        Icons.schedule_outlined,
+                        color: AppColors.textSecondary,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$durationMin min',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 // Ligne : réduction promo (le livreur touche toujours le
                 // prix plein — voir orders.service.js côté serveur)
                 if (estimatedPrice != null &&
@@ -2436,6 +2509,11 @@ class _EstimatePriceCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                ],
+                // Total — toujours affiché dès qu'un prix existe, réduction
+                // ou non : le client ne doit jamais avoir à additionner
+                // Course + Frais DEM lui-même.
+                if (estimatedPrice != null) ...[
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 6),
                     child: Divider(height: 1, color: AppColors.textSecondary),
@@ -2453,10 +2531,8 @@ class _EstimatePriceCard extends StatelessWidget {
                       const Spacer(),
                       Text(
                         formatFcfa(
-                          (estimatedPrice! + demFee - discountAmount!).clamp(
-                            0,
-                            double.infinity,
-                          ),
+                          (estimatedPrice! + demFee - (discountAmount ?? 0))
+                              .clamp(0, double.infinity),
                         ),
                         style: const TextStyle(
                           color: AppColors.textPrimary,
@@ -2921,6 +2997,8 @@ class _Step3Panel extends StatelessWidget {
   final VoidCallback onSubmit;
   final VoidCallback? onEditPickup;
   final VoidCallback? onEditDelivery;
+  final double? distanceKm;
+  final int? durationMin;
 
   const _Step3Panel({
     required this.pickupLabel,
@@ -2942,6 +3020,8 @@ class _Step3Panel extends StatelessWidget {
     required this.onSubmit,
     this.onEditPickup,
     this.onEditDelivery,
+    this.distanceKm,
+    this.durationMin,
   });
 
   @override
@@ -3034,6 +3114,8 @@ class _Step3Panel extends StatelessWidget {
                 loadingSurge: loadingSurge,
                 timedOut: timedOut,
                 onRetry: onRetry,
+                distanceKm: distanceKm,
+                durationMin: durationMin,
               ),
               if (estimatedPrice != null && !loadingSurge && !timedOut) ...[
                 const SizedBox(height: 8),
