@@ -1530,13 +1530,27 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                       child: Row(
                         children: [
                           // Aligné avec le centre des points colorés des champs
-                          // d'adresse.
-                          const SizedBox(width: 7),
-                          Container(
-                            width: 2,
+                          // d'adresse. Pointillés pleins (pas de transparence)
+                          // façon Uber/Bolt — se lit comme "trajet en cours de
+                          // construction", visible sur n'importe quel fond de
+                          // carte contrairement à l'ancien trait translucide.
+                          const SizedBox(width: 7.5),
+                          SizedBox(
+                            width: 3,
                             height: 20,
-                            color: AppColors.textSecondary.withValues(
-                              alpha: 0.3,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: List.generate(
+                                3,
+                                (_) => Container(
+                                  width: 3,
+                                  height: 3,
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.textMuted,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                           const Spacer(),
@@ -2365,6 +2379,12 @@ class _EstimatePriceCard extends StatelessWidget {
                 // Ligne : prix course + surge badge
                 Row(
                   children: [
+                    const Icon(
+                      Icons.two_wheeler_outlined,
+                      color: AppColors.textSecondary,
+                      size: 13,
+                    ),
+                    const SizedBox(width: 5),
                     const Text(
                       'Course',
                       style: TextStyle(
@@ -2424,6 +2444,12 @@ class _EstimatePriceCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
+                      const Icon(
+                        Icons.percent_outlined,
+                        color: AppColors.textSecondary,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 5),
                       const Text(
                         'Frais DEM',
                         style: TextStyle(
@@ -2534,9 +2560,13 @@ class _EstimatePriceCard extends StatelessWidget {
                           (estimatedPrice! + demFee - (discountAmount ?? 0))
                               .clamp(0, double.infinity),
                         ),
+                        // Accent cyan + taille nettement supérieure : c'est le
+                        // seul chiffre qui compte vraiment pour le client,
+                        // il doit sauter aux yeux sans lecture des lignes
+                        // au-dessus.
                         style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 14,
+                          color: AppColors.primary,
+                          fontSize: 18,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
