@@ -1025,13 +1025,25 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     final extraH = bottomSafeArea > 20 ? 24.0 : 0.0;
     final isTablet = MediaQuery.of(context).size.width > 600;
     final heights = isTablet ? _kPanelHeightsTablet : _kPanelHeightsPhone;
-    // L'étape 3 (Résumé) affiche 2 lignes de plus (Réduction + Total à
-    // payer) dès qu'une promo s'applique — le budget de hauteur fixe de
-    // cette étape ne les prévoyait pas, d'où l'overflow en bas du panneau.
-    final promoExtra = (_step == 3 && (_discountAmount ?? 0) > 0) ? 80.0 : 0.0;
+    // L'étape 3 (Résumé) affiche plusieurs lignes optionnelles dans la carte
+    // de prix (distance/durée, réduction, total — toujours affiché depuis
+    // peu) que le budget de hauteur fixe de cette étape ne prévoyait pas à
+    // l'origine, d'où des overflows répétés à chaque ajout de ligne. Calculé
+    // ligne par ligne plutôt qu'avec un seul chiffre magique, pour rester
+    // correct si d'autres lignes s'ajoutent encore à l'avenir.
+    double priceCardExtra = 0.0;
+    if (_step == 3 && _estimatedPrice != null) {
+      priceCardExtra += 40; // Divider + "Total à payer" (toujours affiché)
+      if (_routeDistanceKm != null && _routeDurationMin != null) {
+        priceCardExtra += 26; // ligne distance/durée
+      }
+      if ((_discountAmount ?? 0) > 0) {
+        priceCardExtra += 26; // ligne Réduction
+      }
+    }
     final panelH = _isMapPlacementMode
         ? 90.0
-        : heights[_step] + extraH + promoExtra;
+        : heights[_step] + extraH + priceCardExtra;
 
     // Polyline + inactive markers
     Set<Polyline> polylines = {};
