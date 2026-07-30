@@ -54,7 +54,12 @@ const _placeSuggestionsColors = PlaceSuggestionsColors(
 
 class OrderCreateScreen extends ConsumerStatefulWidget {
   final String orderType;
-  const OrderCreateScreen({super.key, this.orderType = 'DELIVERY'});
+  final String priority; // NORMAL | EXPRESS — voir orders.service.js
+  const OrderCreateScreen({
+    super.key,
+    this.orderType = 'DELIVERY',
+    this.priority = 'NORMAL',
+  });
 
   @override
   ConsumerState<OrderCreateScreen> createState() => _OrderCreateScreenState();
@@ -688,6 +693,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
         deliveryLat: _deliveryLat!,
         deliveryLng: _deliveryLng!,
         orderType: widget.orderType,
+        priority: widget.priority,
       );
 
       // Affiche le prix dès que l'estimation revient (sans attendre la route)
@@ -970,6 +976,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     try {
       final order = await _repo.createOrder({
         'orderType': widget.orderType,
+        'priority': widget.priority,
         'pickupAddress': _pickupCtrl.text.trim(),
         'pickupLatitude': _pickupLat,
         'pickupLongitude': _pickupLng,
@@ -1472,7 +1479,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                 children: [
                   // Header
                   _TopBar(
-                    title: widget.orderType == 'RIDE'
+                    title: widget.priority == 'EXPRESS'
+                        ? 'Livraison Express ⚡'
+                        : widget.orderType == 'RIDE'
                         ? 'Transport'
                         : 'Livraison',
                     step: _step,

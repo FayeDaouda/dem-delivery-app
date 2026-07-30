@@ -189,7 +189,8 @@ final appRouter = GoRouter(
       path: '/orders/create',
       builder: (context, state) {
         final type = state.uri.queryParameters['type'] ?? 'DELIVERY';
-        return OrderCreateScreen(orderType: type);
+        final priority = state.uri.queryParameters['priority'] ?? 'NORMAL';
+        return OrderCreateScreen(orderType: type, priority: priority);
       },
     ),
     GoRoute(

@@ -25,7 +25,6 @@ import '../../core/theme/map_theme_provider.dart';
 import '../../core/utils/price_format.dart';
 import '../../shared/widgets/map_location_mode_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
-import '../../shared/widgets/nudging_chevron.dart';
 import '../../shared/widgets/pressable.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../deliveries/providers/orders_provider.dart';
@@ -1113,28 +1112,49 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           style: ClientText.title.copyWith(color: AppColors.textPrimary),
         ),
         const SizedBox(height: AppSpacing.l),
-        _ServiceCard(
-          icon: Icons.inventory_2_outlined,
-          label: 'Livraison simple',
-          subtitle: 'Envoyez ou recevez un colis',
-          onTap: () async {
-            if (!await ensureLocationEnabled(context)) return;
-            if (!mounted) return;
-            await context.push('/orders/create?type=DELIVERY');
-            _checkPendingOrder();
-          },
-        ),
-        const SizedBox(height: AppSpacing.m),
-        _ServiceCard(
-          icon: Icons.route_outlined,
-          label: 'Livraison groupée',
-          subtitle: '1 collecte, plusieurs destinations',
-          onTap: () async {
-            if (!await ensureLocationEnabled(context)) return;
-            if (!mounted) return;
-            await context.push('/orders/batch/create');
-            _checkPendingOrder();
-          },
+        Row(
+          children: [
+            Expanded(
+              child: _ServiceTile(
+                icon: Icons.inventory_2_outlined,
+                label: 'Simple',
+                onTap: () async {
+                  if (!await ensureLocationEnabled(context)) return;
+                  if (!mounted) return;
+                  await context.push('/orders/create?type=DELIVERY');
+                  _checkPendingOrder();
+                },
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s),
+            Expanded(
+              child: _ServiceTile(
+                icon: Icons.bolt_rounded,
+                label: 'Express',
+                onTap: () async {
+                  if (!await ensureLocationEnabled(context)) return;
+                  if (!mounted) return;
+                  await context.push(
+                    '/orders/create?type=DELIVERY&priority=EXPRESS',
+                  );
+                  _checkPendingOrder();
+                },
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s),
+            Expanded(
+              child: _ServiceTile(
+                icon: Icons.route_outlined,
+                label: 'Groupée',
+                onTap: () async {
+                  if (!await ensureLocationEnabled(context)) return;
+                  if (!mounted) return;
+                  await context.push('/orders/batch/create');
+                  _checkPendingOrder();
+                },
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -1496,109 +1516,54 @@ class _BreathingBadgeState extends State<_BreathingBadge>
   }
 }
 
-// ── Service card ──────────────────────────────────────────────────────────────
-class _ServiceCard extends StatelessWidget {
+// ── Tuile de service compacte — 3 côte à côte (Simple / Express / Groupée) ────
+class _ServiceTile extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String? subtitle;
   final VoidCallback onTap;
 
-  const _ServiceCard({
+  const _ServiceTile({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (subtitle != null) {
-      // Sigma modéré (14) : donne l'effet verre dépoli sans le coût d'un
-      // blur trop large — au-dessus d'une carte Google Maps animée, un flou
-      // plus poussé serait sensible sur les Android d'entrée de gamme.
-      return Pressable(
-        onTap: onTap,
-        child: ClipRRect(
-          // `ClipRRect` obligatoire : `BackdropFilter` floute tout son
-          // rectangle englobant, coins compris — sans ce clip le flou
-          // déborderait en carré au-delà des coins arrondis de la carte.
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                vertical: AppSpacing.l,
-                horizontal: AppSpacing.xl,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
-              ),
-              child: Row(
-                children: [
-                  _BreathingBadge(icon: icon),
-                  const SizedBox(width: AppSpacing.m),
-                  // `Expanded` : sans quoi le titre/sous-titre poussent le
-                  // chevron hors de la carte dès qu'ils dépassent l'espace
-                  // disponible (texte plus long, police système agrandie...) —
-                  // toujours prévoir la place, jamais supposer un texte court.
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          label,
-                          style: ClientText.subtitle.copyWith(
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          subtitle!,
-                          style: ClientText.body.copyWith(
-                            color: Colors.white.withValues(alpha: 0.70),
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  NudgingChevron(color: Colors.white.withValues(alpha: 0.75)),
-                ],
-              ),
+    // Même traitement verre dépoli que le reste de l'accueil — sigma modéré
+    // (14) pour rester correct sur les Android d'entrée de gamme.
+    return Pressable(
+      onTap: onTap,
+      child: ClipRRect(
+        // `ClipRRect` obligatoire : `BackdropFilter` floute tout son
+        // rectangle englobant, coins compris — sans ce clip le flou
+        // déborderait en carré au-delà des coins arrondis de la tuile.
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
             ),
-          ),
-        ),
-      );
-    }
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: AppColors.primary, size: 28),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _BreathingBadge(icon: icon),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: ClientText.body.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

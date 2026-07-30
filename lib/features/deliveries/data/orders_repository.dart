@@ -190,6 +190,7 @@ class OrdersRepository {
     required double deliveryLat,
     required double deliveryLng,
     String orderType = 'DELIVERY',
+    String priority = 'NORMAL',
   }) async {
     debugPrint(
       '[getEstimate] CALLING pickup=($pickupLat,$pickupLng) delivery=($deliveryLat,$deliveryLng)',
@@ -203,6 +204,7 @@ class OrdersRepository {
           'deliveryLat': deliveryLat,
           'deliveryLng': deliveryLng,
           'orderType': orderType,
+          'priority': priority,
         },
       );
       debugPrint('[getEstimate] OK: ${res.data}');
