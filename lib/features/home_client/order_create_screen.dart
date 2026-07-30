@@ -24,6 +24,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../shared/widgets/address_row.dart';
+import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
@@ -1497,7 +1498,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
 
                   // Search fields (step 0 only, not in placement mode)
                   if (_step == 0) ...[
-                    _AddressField(
+                    AddressField(
                       controller: _pickupCtrl,
                       focusNode: _pickupFocus,
                       hint: 'Point de départ...',
@@ -1601,7 +1602,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                         ],
                       ),
                     ),
-                    _AddressField(
+                    AddressField(
                       controller: _deliveryCtrl,
                       focusNode: _deliveryFocus,
                       hint: 'Destination...',
@@ -1806,208 +1807,6 @@ class _TopBar extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _AddressField extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final Color dotColor;
-  final bool active;
-  // Adresse dotée de coordonnées GPS (sélectionnée dans la liste, placée sur
-  // la carte, ou géolocalisée) — par opposition à du texte simplement tapé
-  // sans être choisi, qui a l'air identique mais ne permet pas de calculer
-  // de trajet ni de prix.
-  final bool confirmed;
-  final VoidCallback onTap;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onMapTap;
-  final VoidCallback? onDotLongPress;
-  final VoidCallback? onClear;
-  final FocusNode? focusNode;
-
-  static const _unconfirmedColor = Color(0xFFF59E0B);
-
-  const _AddressField({
-    required this.controller,
-    required this.hint,
-    required this.dotColor,
-    required this.active,
-    required this.confirmed,
-    required this.onTap,
-    required this.onChanged,
-    required this.onMapTap,
-    this.onDotLongPress,
-    this.onClear,
-    this.focusNode,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasText = controller.text.isNotEmpty;
-    final needsConfirmation = hasText && !confirmed;
-    final accentColor = needsConfirmation ? _unconfirmedColor : dotColor;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          // Fond quasi-opaque plutôt qu'un lavis translucide : la lisibilité
-          // ne doit jamais dépendre de ce qu'il y a sous le champ sur la
-          // carte (eau, route, bâti... la couleur y varie trop pour garantir
-          // un bon contraste avec un fond transparent).
-          color: Colors.white.withValues(alpha: 0.80),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: accentColor.withValues(alpha: active ? 1.0 : 0.65),
-            width: active ? 1.4 : 1.0,
-          ),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                    color: accentColor.withValues(alpha: 0.22),
-                    blurRadius: 20,
-                    spreadRadius: 0,
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: accentColor.withValues(alpha: 0.08),
-                    blurRadius: 6,
-                  ),
-                ],
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: onDotLongPress,
-              onLongPress: onDotLongPress,
-              child: active
-                  ? _PulsingDot(color: dotColor)
-                  : Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: dotColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                onChanged: onChanged,
-                onTap: onTap,
-                textInputAction: TextInputAction.search,
-                style: const TextStyle(
-                  color: AppColors.textDark,
-                  fontSize: 14.5,
-                ),
-                decoration: InputDecoration(
-                  hintText: hint,
-                  hintStyle: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 14.5,
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  isDense: true,
-                  fillColor: Colors.transparent,
-                  filled: true,
-                ),
-              ),
-            ),
-            if (needsConfirmation)
-              Padding(
-                padding: const EdgeInsets.only(right: 2),
-                child: Icon(
-                  Icons.error_outline,
-                  color: _unconfirmedColor,
-                  size: 16,
-                ),
-              ),
-            if (hasText)
-              IconButton(
-                icon: const Icon(
-                  Icons.close_rounded,
-                  color: AppColors.textMuted,
-                  size: 18,
-                ),
-                onPressed: onClear,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                constraints: const BoxConstraints(),
-                visualDensity: VisualDensity.compact,
-              ),
-            IconButton(
-              icon: Icon(
-                Icons.location_on,
-                color: active ? dotColor : AppColors.textMuted,
-                size: 20,
-              ),
-              onPressed: onMapTap,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              constraints: const BoxConstraints(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Dot vert pulsé ────────────────────────────────────────────────────────────
-class _PulsingDot extends StatefulWidget {
-  final Color color;
-  const _PulsingDot({required this.color});
-
-  @override
-  State<_PulsingDot> createState() => _PulsingDotState();
-}
-
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (_, _) => Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: widget.color,
-          boxShadow: [
-            BoxShadow(
-              color: widget.color.withValues(alpha: 0.4 + 0.3 * _ctrl.value),
-              blurRadius: 8 + 6 * _ctrl.value,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
       ),
     );
   }

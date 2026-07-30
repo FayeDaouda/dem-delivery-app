@@ -2,18 +2,25 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/error/app_exception.dart';
 import '../../core/services/places_autocomplete_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/client_text.dart';
+import '../../core/theme/map_theme_provider.dart';
 import '../../core/utils/dem_toast.dart';
 import '../../core/utils/price_format.dart';
+import '../../shared/widgets/colored_address_field.dart';
+import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../deliveries/data/orders_repository.dart';
+import '../home_driver/navigation/map_theme.dart';
 
 const _kBatchAccent = Color(0xFF0C7A5C);
 const _placeSuggestionsColors = PlaceSuggestionsColors(
@@ -27,34 +34,41 @@ const _placeSuggestionsColors = PlaceSuggestionsColors(
   accent: _kBatchAccent,
 );
 
+const _dakar = LatLng(14.6937, -17.4441);
 const int _kMinStops = 2;
 const int _kMaxStops = 3;
 
 class _StopEntry {
-  final _addressCtrl = TextEditingController();
-  final _receiverNameCtrl = TextEditingController();
-  final _receiverPhoneCtrl = TextEditingController();
-  final _focusNode = FocusNode();
+  final addressCtrl = TextEditingController();
+  final receiverNameCtrl = TextEditingController();
+  final receiverPhoneCtrl = TextEditingController();
+  final focusNode = FocusNode();
   double? lat;
   double? lng;
 
   void dispose() {
-    _addressCtrl.dispose();
-    _receiverNameCtrl.dispose();
-    _receiverPhoneCtrl.dispose();
-    _focusNode.dispose();
+    addressCtrl.dispose();
+    receiverNameCtrl.dispose();
+    receiverPhoneCtrl.dispose();
+    focusNode.dispose();
   }
 }
 
-class BatchCreateScreen extends StatefulWidget {
+// ── Livraison groupée — même identité visuelle que "Livraison simple"
+// (carte en fond, champs flottants colorés, sheet en dégradé) plutôt qu'une
+// page dédiée déconnectée du reste du flux de commande. Voir
+// colored_address_field.dart, partagé avec order_create_screen.dart.
+class BatchCreateScreen extends ConsumerStatefulWidget {
   const BatchCreateScreen({super.key});
 
   @override
-  State<BatchCreateScreen> createState() => _BatchCreateScreenState();
+  ConsumerState<BatchCreateScreen> createState() => _BatchCreateScreenState();
 }
 
-class _BatchCreateScreenState extends State<BatchCreateScreen> {
+class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   final _repo = OrdersRepository();
+  GoogleMapController? _mapController;
+  String? _mapStyle;
 
   late final _publicDio = Dio(
     BaseOptions(
@@ -87,15 +101,32 @@ class _BatchCreateScreenState extends State<BatchCreateScreen> {
   @override
   void initState() {
     super.initState();
+    _loadMapStyle();
     _pickupFocus.addListener(() {
       if (_pickupFocus.hasFocus) setState(() => _activeField = 'pickup');
     });
     for (var i = 0; i < _stops.length; i++) {
-      final idx = i;
-      _stops[i]._focusNode.addListener(() {
-        if (_stops[idx]._focusNode.hasFocus) setState(() => _activeField = idx);
-      });
+      _attachFocusListener(i);
     }
+  }
+
+  void _attachFocusListener(int index) {
+    _stops[index].focusNode.addListener(() {
+      if (_stops[index].focusNode.hasFocus) {
+        setState(() => _activeField = index);
+      }
+    });
+  }
+
+  Future<void> _loadMapStyle() async {
+    final isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
+    if (mounted) setState(() => _mapStyle = style);
+  }
+
+  Future<void> _toggleMapTheme() async {
+    await ref.read(mapNightProvider.notifier).toggle();
+    await _loadMapStyle();
   }
 
   @override
@@ -122,17 +153,19 @@ class _BatchCreateScreenState extends State<BatchCreateScreen> {
           query: query,
           sessionToken: _sessionToken,
         );
-        if (mounted)
+        if (mounted) {
           setState(() {
             _suggestions = results;
             _searching = false;
           });
+        }
       } catch (_) {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _suggestions = [];
             _searching = false;
           });
+        }
       }
     });
   }
@@ -162,7 +195,7 @@ class _BatchCreateScreenState extends State<BatchCreateScreen> {
           _pickupLat = lat;
           _pickupLng = lng;
         } else if (field is int) {
-          _stops[field]._addressCtrl.text = label;
+          _stops[field].addressCtrl.text = label;
           _stops[field].lat = lat;
           _stops[field].lng = lng;
         }
@@ -170,19 +203,41 @@ class _BatchCreateScreenState extends State<BatchCreateScreen> {
       });
       FocusScope.of(context).unfocus();
       _updateEstimate();
+      _fitMapToMarkers();
     } catch (e) {
       if (mounted) showDemToast(context, friendlyError(e), isError: true);
     }
   }
 
+  Future<void> _fitMapToMarkers() async {
+    final controller = _mapController;
+    if (controller == null) return;
+    final points = <LatLng>[
+      if (_pickupLat != null) LatLng(_pickupLat!, _pickupLng!),
+      for (final s in _stops)
+        if (s.lat != null) LatLng(s.lat!, s.lng!),
+    ];
+    if (points.length < 2) return;
+    final lats = points.map((p) => p.latitude);
+    final lngs = points.map((p) => p.longitude);
+    final bounds = LatLngBounds(
+      southwest: LatLng(
+        lats.reduce((a, b) => a < b ? a : b),
+        lngs.reduce((a, b) => a < b ? a : b),
+      ),
+      northeast: LatLng(
+        lats.reduce((a, b) => a > b ? a : b),
+        lngs.reduce((a, b) => a > b ? a : b),
+      ),
+    );
+    await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 72));
+  }
+
   void _addStop() {
     if (_stops.length >= _kMaxStops) return;
     final entry = _StopEntry();
-    final idx = _stops.length;
-    entry._focusNode.addListener(() {
-      if (entry._focusNode.hasFocus) setState(() => _activeField = idx);
-    });
     setState(() => _stops.add(entry));
+    _attachFocusListener(_stops.length - 1);
   }
 
   void _removeStop(int index) {
@@ -219,24 +274,26 @@ class _BatchCreateScreenState extends State<BatchCreateScreen> {
         stops: _stops
             .map(
               (s) => {
-                'deliveryAddress': s._addressCtrl.text,
+                'deliveryAddress': s.addressCtrl.text,
                 'deliveryLatitude': s.lat,
                 'deliveryLongitude': s.lng,
               },
             )
             .toList(),
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _estimate = result;
           _estimating = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _estimateError = friendlyError(e);
           _estimating = false;
         });
+      }
     }
   }
 
@@ -251,13 +308,13 @@ class _BatchCreateScreenState extends State<BatchCreateScreen> {
         'stops': _stops
             .map(
               (s) => {
-                'deliveryAddress': s._addressCtrl.text.trim(),
+                'deliveryAddress': s.addressCtrl.text.trim(),
                 'deliveryLatitude': s.lat,
                 'deliveryLongitude': s.lng,
-                if (s._receiverNameCtrl.text.trim().isNotEmpty)
-                  'receiverName': s._receiverNameCtrl.text.trim(),
-                if (s._receiverPhoneCtrl.text.trim().isNotEmpty)
-                  'receiverPhone': '+221${s._receiverPhoneCtrl.text.trim()}',
+                if (s.receiverNameCtrl.text.trim().isNotEmpty)
+                  'receiverName': s.receiverNameCtrl.text.trim(),
+                if (s.receiverPhoneCtrl.text.trim().isNotEmpty)
+                  'receiverPhone': '+221${s.receiverPhoneCtrl.text.trim()}',
               },
             )
             .toList(),
@@ -274,196 +331,239 @@ class _BatchCreateScreenState extends State<BatchCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final markers = <Marker>{
+      if (_pickupLat != null)
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: LatLng(_pickupLat!, _pickupLng!),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
+          infoWindow: const InfoWindow(title: 'Collecte'),
+        ),
+      for (var i = 0; i < _stops.length; i++)
+        if (_stops[i].lat != null)
+          Marker(
+            markerId: MarkerId('stop-$i'),
+            position: LatLng(_stops[i].lat!, _stops[i].lng!),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
+            infoWindow: InfoWindow(title: 'Arrêt ${i + 1}'),
+          ),
+    };
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 20, 4),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                target: _dakar,
+                zoom: 12,
+              ),
+              onMapCreated: (c) => _mapController = c,
+              style: _mapStyle,
+              markers: markers,
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              compassEnabled: false,
+              mapToolbarEnabled: false,
+            ),
+          ),
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 20, 0),
               child: Row(
                 children: [
                   IconButton(
                     onPressed: () => context.pop(),
-                    icon: const Icon(
-                      Icons.arrow_back_ios_new,
-                      color: Colors.white,
-                      size: 18,
+                    icon: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: AppColors.textDark,
+                        size: 16,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Text(
                     'Livraison groupée',
-                    style: ClientText.subtitle.copyWith(color: Colors.white),
+                    style: ClientText.subtitle.copyWith(
+                      color: Colors.white,
+                      shadows: const [
+                        Shadow(color: Colors.black45, blurRadius: 6),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Text(
-                '1 point de collecte, jusqu\'à $_kMaxStops destinations — -20% sur le total.',
-                style: ClientText.body.copyWith(color: Colors.white54),
+          ),
+          Positioned(
+            left: 16,
+            bottom: 16,
+            child: MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              width: double.infinity,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.72,
               ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                children: [
-                  Text(
-                    'Collecte',
-                    style: ClientText.bodyStrong.copyWith(color: Colors.white),
-                  ),
-                  const SizedBox(height: 8),
-                  _AddressField(
-                    controller: _pickupCtrl,
-                    focusNode: _pickupFocus,
-                    hint: 'Adresse de collecte',
-                    dotColor: AppColors.success,
-                    onChanged: _onQueryChanged,
-                  ),
-                  if (_activeField == 'pickup' &&
-                      (_suggestions.isNotEmpty || _searching))
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: PlaceSuggestionsList(
-                        suggestions: _suggestions,
-                        loading: _searching,
-                        colors: _placeSuggestionsColors,
-                        onSelect: _selectSuggestion,
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Destinations (${_stops.length}/$_kMaxStops)',
-                    style: ClientText.bodyStrong.copyWith(color: Colors.white),
-                  ),
-                  const SizedBox(height: 8),
-                  for (var i = 0; i < _stops.length; i++) ...[
-                    _StopCard(
-                      index: i,
-                      entry: _stops[i],
-                      canRemove: _stops.length > _kMinStops,
-                      onRemove: () => _removeStop(i),
-                      onQueryChanged: _onQueryChanged,
-                    ),
-                    if (_activeField == i &&
-                        (_suggestions.isNotEmpty || _searching))
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6, bottom: 6),
-                        child: PlaceSuggestionsList(
-                          suggestions: _suggestions,
-                          loading: _searching,
-                          colors: _placeSuggestionsColors,
-                          onSelect: _selectSuggestion,
+              decoration: const BoxDecoration(
+                gradient: AppColors.gradientSplash,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 20)],
+              ),
+              // `SingleChildScrollView` : le contenu s'adapte à l'espace
+              // restant plutôt que de reposer sur un budget de hauteur fixe
+              // (source répétée d'overflow ailleurs dans l'app) — quand le
+              // clavier s'ouvre, il défile simplement, jamais de débordement.
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (_stops.length < _kMaxStops)
-                    Pressable(
-                      onTap: _addStop,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: Colors.white24,
-                            style: BorderStyle.solid,
+                      Text(
+                        '1 collecte, jusqu\'à $_kMaxStops destinations — -20% sur le total.',
+                        style: ClientText.body.copyWith(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 14),
+                      AddressField(
+                        controller: _pickupCtrl,
+                        focusNode: _pickupFocus,
+                        hint: 'Adresse de collecte',
+                        dotColor: AppColors.success,
+                        active: _activeField == 'pickup',
+                        confirmed: _pickupLat != null,
+                        onTap: () {
+                          setState(() => _activeField = 'pickup');
+                          _pickupFocus.requestFocus();
+                        },
+                        onChanged: _onQueryChanged,
+                        onClear: () {
+                          setState(() {
+                            _pickupCtrl.clear();
+                            _pickupLat = null;
+                            _pickupLng = null;
+                            _estimate = null;
+                          });
+                        },
+                      ),
+                      if (_activeField == 'pickup' &&
+                          (_suggestions.isNotEmpty || _searching))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: PlaceSuggestionsList(
+                            suggestions: _suggestions,
+                            loading: _searching,
+                            colors: _placeSuggestionsColors,
+                            onSelect: _selectSuggestion,
                           ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.add,
-                              color: _kBatchAccent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Ajouter un arrêt',
-                              style: ClientText.body.copyWith(
-                                color: _kBatchAccent,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 14),
+                      Text(
+                        'Destinations (${_stops.length}/$_kMaxStops)',
+                        style: ClientText.bodyStrong.copyWith(
+                          color: Colors.white,
                         ),
                       ),
-                    ),
-                  const SizedBox(height: 20),
-                  _PriceSummary(
-                    estimate: _estimate,
-                    estimating: _estimating,
-                    error: _estimateError,
-                    ready: _readyForEstimate,
+                      const SizedBox(height: 8),
+                      for (var i = 0; i < _stops.length; i++) ...[
+                        _StopCard(
+                          index: i,
+                          entry: _stops[i],
+                          canRemove: _stops.length > _kMinStops,
+                          onRemove: () => _removeStop(i),
+                          onQueryChanged: _onQueryChanged,
+                          active: _activeField == i,
+                        ),
+                        if (_activeField == i &&
+                            (_suggestions.isNotEmpty || _searching))
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6, bottom: 6),
+                            child: PlaceSuggestionsList(
+                              suggestions: _suggestions,
+                              loading: _searching,
+                              colors: _placeSuggestionsColors,
+                              onSelect: _selectSuggestion,
+                            ),
+                          ),
+                        const SizedBox(height: 10),
+                      ],
+                      if (_stops.length < _kMaxStops)
+                        Pressable(
+                          onTap: _addStop,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.add,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Ajouter un arrêt',
+                                  style: ClientText.body.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      _PriceSummary(
+                        estimate: _estimate,
+                        estimating: _estimating,
+                        error: _estimateError,
+                        ready: _readyForEstimate,
+                      ),
+                      const SizedBox(height: 14),
+                      PrimaryButton(
+                        label: _estimate != null
+                            ? 'Confirmer — ${formatFcfa((_estimate!['total'] as num).toInt())}'
+                            : 'Confirmer la tournée',
+                        onTap: (_estimate != null && !_submitting)
+                            ? _submit
+                            : null,
+                        loading: _submitting,
+                        color: _kBatchAccent,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-              child: PrimaryButton(
-                label: _estimate != null
-                    ? 'Confirmer — ${formatFcfa((_estimate!['total'] as num).toInt())}'
-                    : 'Confirmer la tournée',
-                onTap: (_estimate != null && !_submitting) ? _submit : null,
-                loading: _submitting,
-                color: _kBatchAccent,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AddressField extends StatelessWidget {
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final String hint;
-  final Color dotColor;
-  final ValueChanged<String> onChanged;
-  const _AddressField({
-    required this.controller,
-    required this.focusNode,
-    required this.hint,
-    required this.dotColor,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: onChanged,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ),
           ),
@@ -477,12 +577,14 @@ class _StopCard extends StatelessWidget {
   final int index;
   final _StopEntry entry;
   final bool canRemove;
+  final bool active;
   final VoidCallback onRemove;
   final ValueChanged<String> onQueryChanged;
   const _StopCard({
     required this.index,
     required this.entry,
     required this.canRemove,
+    required this.active,
     required this.onRemove,
     required this.onQueryChanged,
   });
@@ -492,7 +594,7 @@ class _StopCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white12),
       ),
@@ -522,19 +624,23 @@ class _StopCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          _AddressField(
-            controller: entry._addressCtrl,
-            focusNode: entry._focusNode,
+          AddressField(
+            controller: entry.addressCtrl,
+            focusNode: entry.focusNode,
             hint: 'Adresse de destination',
             dotColor: AppColors.error,
+            active: active,
+            confirmed: entry.lat != null,
+            onTap: entry.focusNode.requestFocus,
             onChanged: onQueryChanged,
+            onClear: () => entry.addressCtrl.clear(),
           ),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: TextField(
-                  controller: entry._receiverNameCtrl,
+                  controller: entry.receiverNameCtrl,
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: const InputDecoration(
                     hintText: 'Destinataire (optionnel)',
@@ -553,7 +659,7 @@ class _StopCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: TextField(
-                  controller: entry._receiverPhoneCtrl,
+                  controller: entry.receiverPhoneCtrl,
                   keyboardType: TextInputType.phone,
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: const InputDecoration(
@@ -596,7 +702,7 @@ class _PriceSummary extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
+          color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -646,9 +752,9 @@ class _PriceSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _kBatchAccent.withValues(alpha: 0.10),
+        color: _kBatchAccent.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _kBatchAccent.withValues(alpha: 0.35)),
+        border: Border.all(color: _kBatchAccent.withValues(alpha: 0.40)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -674,7 +780,7 @@ class _PriceSummary extends StatelessWidget {
                 formatFcfa(total),
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 17,
+                  fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
               ),
