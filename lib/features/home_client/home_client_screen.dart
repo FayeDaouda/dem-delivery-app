@@ -1117,7 +1117,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             Expanded(
               child: _ServiceTile(
                 icon: Icons.inventory_2_outlined,
-                label: 'Simple',
+                label: 'Livraison simple',
                 onTap: () async {
                   if (!await ensureLocationEnabled(context)) return;
                   if (!mounted) return;
@@ -1130,7 +1130,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             Expanded(
               child: _ServiceTile(
                 icon: Icons.bolt_rounded,
-                label: 'Express',
+                label: 'Livraison Express',
                 onTap: () async {
                   if (!await ensureLocationEnabled(context)) return;
                   if (!mounted) return;
@@ -1145,7 +1145,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             Expanded(
               child: _ServiceTile(
                 icon: Icons.route_outlined,
-                label: 'Groupée',
+                label: 'Livraison groupée',
                 onTap: () async {
                   if (!await ensureLocationEnabled(context)) return;
                   if (!mounted) return;
@@ -1460,7 +1460,13 @@ class _PulsingLocationDotState extends State<_PulsingLocationDot>
 // criard (même principe que l'anneau de proximité du bouton livreur) ──────────
 class _BreathingBadge extends StatefulWidget {
   final IconData icon;
-  const _BreathingBadge({required this.icon});
+  final double size;
+  final double iconSize;
+  const _BreathingBadge({
+    required this.icon,
+    this.size = 48,
+    this.iconSize = 24,
+  });
 
   @override
   State<_BreathingBadge> createState() => _BreathingBadgeState();
@@ -1494,8 +1500,8 @@ class _BreathingBadgeState extends State<_BreathingBadge>
         return Transform.scale(
           scale: 1.0 + t * 0.08,
           child: Container(
-            width: 48,
-            height: 48,
+            width: widget.size,
+            height: widget.size,
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
@@ -1511,7 +1517,7 @@ class _BreathingBadgeState extends State<_BreathingBadge>
           ),
         );
       },
-      child: Icon(widget.icon, color: AppColors.primary, size: 24),
+      child: Icon(widget.icon, color: AppColors.primary, size: widget.iconSize),
     );
   }
 }
@@ -1542,7 +1548,7 @@ class _ServiceTile extends StatelessWidget {
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(18),
@@ -1551,15 +1557,16 @@ class _ServiceTile extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _BreathingBadge(icon: icon),
-                const SizedBox(height: 8),
+                _BreathingBadge(icon: icon, size: 36, iconSize: 18),
+                const SizedBox(height: 6),
                 Text(
                   label,
-                  style: ClientText.body.copyWith(
+                  textAlign: TextAlign.center,
+                  style: ClientText.label.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
