@@ -9,16 +9,20 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/error/app_exception.dart';
 import '../../core/services/places_autocomplete_service.dart';
+import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../core/utils/dem_toast.dart';
 import '../../core/utils/price_format.dart';
 import '../../shared/widgets/colored_address_field.dart';
+import '../../shared/widgets/contact_mini_field.dart';
+import '../../shared/widgets/contact_picker.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/wizard_top_bar.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
 
@@ -37,6 +41,7 @@ const _placeSuggestionsColors = PlaceSuggestionsColors(
 const _dakar = LatLng(14.6937, -17.4441);
 const int _kMinStops = 2;
 const int _kMaxStops = 3;
+const int _kStepCount = 4; // Trajet · Expéditeur · Destinataire(s) · Résumé
 
 class _StopEntry {
   final addressCtrl = TextEditingController();
@@ -54,10 +59,32 @@ class _StopEntry {
   }
 }
 
-// ── Livraison groupée — même identité visuelle que "Livraison simple"
-// (carte en fond, champs flottants colorés, sheet en dégradé) plutôt qu'une
-// page dédiée déconnectée du reste du flux de commande. Voir
-// colored_address_field.dart, partagé avec order_create_screen.dart.
+bool _validatePhone(
+  BuildContext context,
+  TextEditingController ctrl,
+  String label,
+) {
+  final digits = ctrl.text.replaceAll(RegExp(r'\D'), '');
+  if (digits.isEmpty) {
+    showDemToast(context, 'Numéro $label requis', isError: true);
+    return false;
+  }
+  if (digits.length < 9) {
+    showDemToast(
+      context,
+      'Numéro $label invalide — 9 chiffres minimum',
+      isError: true,
+    );
+    return false;
+  }
+  return true;
+}
+
+// ── Livraison groupée — même parcours par étapes que "Livraison simple"
+// (Trajet → Expéditeur → Destinataire → Résumé, WizardTopBar, champs
+// colorés) plutôt qu'un unique écran fourre-tout. Voir colored_address_field
+// .dart / contact_mini_field.dart / contact_picker.dart, partagés avec
+// order_create_screen.dart.
 class BatchCreateScreen extends ConsumerStatefulWidget {
   const BatchCreateScreen({super.key});
 
@@ -69,6 +96,8 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   final _repo = OrdersRepository();
   GoogleMapController? _mapController;
   String? _mapStyle;
+  final _pageCtrl = PageController();
+  int _step = 0;
 
   late final _publicDio = Dio(
     BaseOptions(
@@ -83,6 +112,10 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   final _pickupFocus = FocusNode();
   double? _pickupLat;
   double? _pickupLng;
+
+  final _senderNameCtrl = TextEditingController();
+  final _senderPhoneCtrl = TextEditingController();
+  Map<String, dynamic>? _currentUser;
 
   final List<_StopEntry> _stops = [_StopEntry(), _StopEntry()];
 
@@ -102,6 +135,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   void initState() {
     super.initState();
     _loadMapStyle();
+    _loadUser();
     _pickupFocus.addListener(() {
       if (_pickupFocus.hasFocus) setState(() => _activeField = 'pickup');
     });
@@ -118,6 +152,30 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
     });
   }
 
+  Future<void> _loadUser() async {
+    final user = await AuthStorage.getUser();
+    if (mounted) setState(() => _currentUser = user);
+  }
+
+  void _fillMe(
+    TextEditingController nameCtrl,
+    TextEditingController phoneCtrl,
+  ) {
+    if (_currentUser != null) {
+      nameCtrl.text = _currentUser!['name'] ?? _currentUser!['firstName'] ?? '';
+      phoneCtrl.text = (_currentUser!['phone'] ?? '').replaceFirst('+221', '');
+    }
+  }
+
+  void _goStep(int step) {
+    setState(() => _step = step);
+    _pageCtrl.animateToPage(
+      step,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   Future<void> _loadMapStyle() async {
     final isNight = ref.read(mapNightProvider);
     final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
@@ -132,8 +190,11 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _pageCtrl.dispose();
     _pickupCtrl.dispose();
     _pickupFocus.dispose();
+    _senderNameCtrl.dispose();
+    _senderPhoneCtrl.dispose();
     for (final s in _stops) {
       s.dispose();
     }
@@ -305,6 +366,10 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
         'pickupAddress': _pickupCtrl.text.trim(),
         'pickupLatitude': _pickupLat,
         'pickupLongitude': _pickupLng,
+        if (_senderNameCtrl.text.trim().isNotEmpty)
+          'senderName': _senderNameCtrl.text.trim(),
+        if (_senderPhoneCtrl.text.trim().isNotEmpty)
+          'senderPhone': '+221${_senderPhoneCtrl.text.trim()}',
         'stops': _stops
             .map(
               (s) => {
@@ -373,38 +438,44 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
               mapToolbarEnabled: false,
             ),
           ),
+          // Voile dégradé en haut — même correctif que Livraison simple :
+          // un libellé de lieu Google Maps un peu long peut sinon déborder
+          // dans l'interstice entre le bandeau et le reste de l'écran.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 140,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.30),
+                      Colors.black.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
           SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 20, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => context.pop(),
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.arrow_back_ios_new,
-                        color: AppColors.textDark,
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Livraison groupée',
-                    style: ClientText.subtitle.copyWith(
-                      color: Colors.white,
-                      shadows: const [
-                        Shadow(color: Colors.black45, blurRadius: 6),
-                      ],
-                    ),
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: WizardTopBar(
+                title: 'Livraison groupée',
+                step: _step,
+                stepCount: _kStepCount,
+                onBack: () {
+                  if (_step > 0) {
+                    _goStep(_step - 1);
+                  } else {
+                    context.pop();
+                  }
+                },
               ),
             ),
           ),
@@ -418,154 +489,255 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
             child: Container(
               width: double.infinity,
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+                maxHeight: MediaQuery.sizeOf(context).height * 0.62,
               ),
               decoration: const BoxDecoration(
                 gradient: AppColors.gradientSplash,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 20)],
               ),
-              // `SingleChildScrollView` : le contenu s'adapte à l'espace
-              // restant plutôt que de reposer sur un budget de hauteur fixe
-              // (source répétée d'overflow ailleurs dans l'app) — quand le
-              // clavier s'ouvre, il défile simplement, jamais de débordement.
               child: SafeArea(
                 top: false,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      Text(
-                        '1 collecte, jusqu\'à $_kMaxStops destinations — -20% sur le total.',
-                        style: ClientText.body.copyWith(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 14),
-                      AddressField(
-                        controller: _pickupCtrl,
-                        focusNode: _pickupFocus,
-                        hint: 'Adresse de collecte',
-                        dotColor: AppColors.success,
-                        active: _activeField == 'pickup',
-                        confirmed: _pickupLat != null,
-                        onTap: () {
-                          setState(() => _activeField = 'pickup');
-                          _pickupFocus.requestFocus();
-                        },
-                        onChanged: _onQueryChanged,
-                        onClear: () {
-                          setState(() {
-                            _pickupCtrl.clear();
-                            _pickupLat = null;
-                            _pickupLng = null;
-                            _estimate = null;
-                          });
-                        },
-                      ),
-                      if (_activeField == 'pickup' &&
-                          (_suggestions.isNotEmpty || _searching))
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: PlaceSuggestionsList(
+                    ),
+                    Flexible(
+                      child: PageView(
+                        controller: _pageCtrl,
+                        physics: const NeverScrollableScrollPhysics(),
+                        onPageChanged: (i) => setState(() => _step = i),
+                        children: [
+                          _TrajetStep(
+                            pickupCtrl: _pickupCtrl,
+                            pickupFocus: _pickupFocus,
+                            pickupConfirmed: _pickupLat != null,
+                            stops: _stops,
+                            activeField: _activeField,
                             suggestions: _suggestions,
-                            loading: _searching,
-                            colors: _placeSuggestionsColors,
-                            onSelect: _selectSuggestion,
+                            searching: _searching,
+                            onPickupTap: () {
+                              setState(() => _activeField = 'pickup');
+                              _pickupFocus.requestFocus();
+                            },
+                            onQueryChanged: _onQueryChanged,
+                            onSelectSuggestion: _selectSuggestion,
+                            onPickupClear: () {
+                              setState(() {
+                                _pickupCtrl.clear();
+                                _pickupLat = null;
+                                _pickupLng = null;
+                                _estimate = null;
+                              });
+                            },
+                            onAddStop: _addStop,
+                            onRemoveStop: _removeStop,
+                            onNext: () => _goStep(1),
+                            canNext: _readyForEstimate,
                           ),
-                        ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'Destinations (${_stops.length}/$_kMaxStops)',
-                        style: ClientText.bodyStrong.copyWith(
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      for (var i = 0; i < _stops.length; i++) ...[
-                        _StopCard(
-                          index: i,
-                          entry: _stops[i],
-                          canRemove: _stops.length > _kMinStops,
-                          onRemove: () => _removeStop(i),
-                          onQueryChanged: _onQueryChanged,
-                          active: _activeField == i,
-                        ),
-                        if (_activeField == i &&
-                            (_suggestions.isNotEmpty || _searching))
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6, bottom: 6),
-                            child: PlaceSuggestionsList(
-                              suggestions: _suggestions,
-                              loading: _searching,
-                              colors: _placeSuggestionsColors,
-                              onSelect: _selectSuggestion,
+                          _ExpediteurStep(
+                            nameCtrl: _senderNameCtrl,
+                            phoneCtrl: _senderPhoneCtrl,
+                            onPickContact: () => pickContact(
+                              context,
+                              nameCtrl: _senderNameCtrl,
+                              phoneCtrl: _senderPhoneCtrl,
                             ),
+                            onPickMe: () {
+                              _fillMe(_senderNameCtrl, _senderPhoneCtrl);
+                              if (_senderPhoneCtrl.text.length >= 9) _goStep(2);
+                            },
+                            onNext: () {
+                              if (!_validatePhone(
+                                context,
+                                _senderPhoneCtrl,
+                                'expéditeur',
+                              )) {
+                                return;
+                              }
+                              _goStep(2);
+                            },
                           ),
-                        const SizedBox(height: 10),
-                      ],
-                      if (_stops.length < _kMaxStops)
-                        Pressable(
-                          onTap: _addStop,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.white24),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.add,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Ajouter un arrêt',
-                                  style: ClientText.body.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          _DestinatairesStep(
+                            stops: _stops,
+                            onNext: () => _goStep(3),
                           ),
-                        ),
-                      const SizedBox(height: 16),
-                      _PriceSummary(
-                        estimate: _estimate,
-                        estimating: _estimating,
-                        error: _estimateError,
-                        ready: _readyForEstimate,
+                          _ResumeStep(
+                            pickupLabel: _pickupCtrl.text,
+                            stops: _stops,
+                            estimate: _estimate,
+                            estimating: _estimating,
+                            error: _estimateError,
+                            ready: _readyForEstimate,
+                            submitting: _submitting,
+                            onEditTrajet: () => _goStep(0),
+                            onSubmit: _submit,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 14),
-                      PrimaryButton(
-                        label: _estimate != null
-                            ? 'Confirmer — ${formatFcfa((_estimate!['total'] as num).toInt())}'
-                            : 'Confirmer la tournée',
-                        onTap: (_estimate != null && !_submitting)
-                            ? _submit
-                            : null,
-                        loading: _submitting,
-                        color: _kBatchAccent,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Étape 0 — Trajet ─────────────────────────────────────────────────────────
+class _TrajetStep extends StatelessWidget {
+  final TextEditingController pickupCtrl;
+  final FocusNode pickupFocus;
+  final bool pickupConfirmed;
+  final List<_StopEntry> stops;
+  final Object? activeField;
+  final List<Map<String, dynamic>> suggestions;
+  final bool searching;
+  final VoidCallback onPickupTap;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<Map<String, dynamic>> onSelectSuggestion;
+  final VoidCallback onPickupClear;
+  final VoidCallback onAddStop;
+  final ValueChanged<int> onRemoveStop;
+  final VoidCallback onNext;
+  final bool canNext;
+
+  const _TrajetStep({
+    required this.pickupCtrl,
+    required this.pickupFocus,
+    required this.pickupConfirmed,
+    required this.stops,
+    required this.activeField,
+    required this.suggestions,
+    required this.searching,
+    required this.onPickupTap,
+    required this.onQueryChanged,
+    required this.onSelectSuggestion,
+    required this.onPickupClear,
+    required this.onAddStop,
+    required this.onRemoveStop,
+    required this.onNext,
+    required this.canNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '1 collecte, jusqu\'à $_kMaxStops destinations — -20% sur le total.',
+                    style: ClientText.body.copyWith(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 12),
+                  AddressField(
+                    controller: pickupCtrl,
+                    focusNode: pickupFocus,
+                    hint: 'Adresse de collecte',
+                    dotColor: AppColors.success,
+                    active: activeField == 'pickup',
+                    confirmed: pickupConfirmed,
+                    onTap: onPickupTap,
+                    onChanged: onQueryChanged,
+                    onClear: onPickupClear,
+                  ),
+                  if (activeField == 'pickup' &&
+                      (suggestions.isNotEmpty || searching))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: PlaceSuggestionsList(
+                        suggestions: suggestions,
+                        loading: searching,
+                        colors: _placeSuggestionsColors,
+                        onSelect: onSelectSuggestion,
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Destinations (${stops.length}/$_kMaxStops)',
+                    style: ClientText.bodyStrong.copyWith(color: Colors.white),
+                  ),
+                  const SizedBox(height: 8),
+                  for (var i = 0; i < stops.length; i++) ...[
+                    _StopCard(
+                      index: i,
+                      entry: stops[i],
+                      canRemove: stops.length > _kMinStops,
+                      onRemove: () => onRemoveStop(i),
+                      onQueryChanged: onQueryChanged,
+                      active: activeField == i,
+                    ),
+                    if (activeField == i &&
+                        (suggestions.isNotEmpty || searching))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, bottom: 6),
+                        child: PlaceSuggestionsList(
+                          suggestions: suggestions,
+                          loading: searching,
+                          colors: _placeSuggestionsColors,
+                          onSelect: onSelectSuggestion,
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (stops.length < _kMaxStops)
+                    Pressable(
+                      onTap: onAddStop,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Ajouter un arrêt',
+                              style: ClientText.body.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          PrimaryButton(
+            label: 'Suivant — Expéditeur',
+            trailingIcon: Icons.arrow_forward,
+            onTap: canNext ? onNext : null,
+            color: _kBatchAccent,
           ),
         ],
       ),
@@ -635,48 +807,261 @@ class _StopCard extends StatelessWidget {
             onChanged: onQueryChanged,
             onClear: () => entry.addressCtrl.clear(),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: entry.receiverNameCtrl,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: const InputDecoration(
-                    hintText: 'Destinataire (optionnel)',
-                    hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 10),
-                    border: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Étape 1 — Expéditeur ─────────────────────────────────────────────────────
+class _ExpediteurStep extends StatelessWidget {
+  final TextEditingController nameCtrl;
+  final TextEditingController phoneCtrl;
+  final VoidCallback onPickContact;
+  final VoidCallback onPickMe;
+  final VoidCallback onNext;
+
+  const _ExpediteurStep({
+    required this.nameCtrl,
+    required this.phoneCtrl,
+    required this.onPickContact,
+    required this.onPickMe,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Qui dépose le colis au point de collecte ?',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.70),
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: SingleChildScrollView(
+              child: ContactMiniField(
+                label: 'Expéditeur',
+                dotColor: AppColors.success,
+                nameCtrl: nameCtrl,
+                phoneCtrl: phoneCtrl,
+                onPick: onPickContact,
+                onPickMe: onPickMe,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          PrimaryButton(
+            label: 'Suivant — Destinataire',
+            trailingIcon: Icons.arrow_forward,
+            onTap: onNext,
+            color: _kBatchAccent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Étape 2 — Destinataire(s) ────────────────────────────────────────────────
+class _DestinatairesStep extends StatelessWidget {
+  final List<_StopEntry> stops;
+  final VoidCallback onNext;
+  const _DestinatairesStep({required this.stops, required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Qui réceptionne à chaque arrêt ? (optionnel)',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.70),
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (var i = 0; i < stops.length; i++) ...[
+                    ContactMiniField(
+                      label: 'Destinataire — Arrêt ${i + 1}',
+                      dotColor: AppColors.error,
+                      nameCtrl: stops[i].receiverNameCtrl,
+                      phoneCtrl: stops[i].receiverPhoneCtrl,
+                      onPick: () => pickContact(
+                        context,
+                        nameCtrl: stops[i].receiverNameCtrl,
+                        phoneCtrl: stops[i].receiverPhoneCtrl,
+                      ),
                     ),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
+                    if (i < stops.length - 1) const SizedBox(height: 10),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          PrimaryButton(
+            label: 'Suivant — Résumé',
+            trailingIcon: Icons.arrow_forward,
+            onTap: onNext,
+            color: _kBatchAccent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Étape 3 — Résumé ─────────────────────────────────────────────────────────
+class _ResumeStep extends StatelessWidget {
+  final String pickupLabel;
+  final List<_StopEntry> stops;
+  final Map<String, dynamic>? estimate;
+  final bool estimating;
+  final String? error;
+  final bool ready;
+  final bool submitting;
+  final VoidCallback onEditTrajet;
+  final VoidCallback onSubmit;
+
+  const _ResumeStep({
+    required this.pickupLabel,
+    required this.stops,
+    required this.estimate,
+    required this.estimating,
+    required this.error,
+    required this.ready,
+    required this.submitting,
+    required this.onEditTrajet,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: onEditTrajet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.circle,
+                                color: AppColors.success,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  pickupLabel,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.textSecondary.withValues(
+                                  alpha: 0.5,
+                                ),
+                                size: 14,
+                              ),
+                            ],
+                          ),
+                          for (final s in stops) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(left: 5),
+                              child: Container(
+                                width: 2,
+                                height: 12,
+                                color: AppColors.textSecondary.withValues(
+                                  alpha: 0.3,
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.location_on,
+                                  color: AppColors.error,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    s.addressCtrl.text,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: entry.receiverPhoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: const InputDecoration(
-                    hintText: 'Téléphone (optionnel)',
-                    hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 10),
-                    border: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
-                    ),
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
-                    ),
+                  const SizedBox(height: 12),
+                  _PriceSummary(
+                    estimate: estimate,
+                    estimating: estimating,
+                    error: error,
+                    ready: ready,
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          PrimaryButton(
+            label: estimate != null
+                ? 'Confirmer — ${formatFcfa((estimate!['total'] as num).toInt())}'
+                : 'Confirmer la tournée',
+            onTap: (estimate != null && !submitting) ? onSubmit : null,
+            loading: submitting,
+            color: _kBatchAccent,
           ),
         ],
       ),

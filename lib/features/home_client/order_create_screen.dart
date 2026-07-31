@@ -2,13 +2,11 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
-import '../../core/utils/input_formatters.dart';
 import '../../core/utils/dem_toast.dart';
 import '../../core/utils/price_format.dart';
 import '../../core/error/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'package:go_router/go_router.dart';
@@ -25,11 +23,14 @@ import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../shared/widgets/address_row.dart';
 import '../../shared/widgets/colored_address_field.dart';
+import '../../shared/widgets/contact_mini_field.dart';
+import '../../shared/widgets/contact_picker.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/screen_pulse_ring.dart';
+import '../../shared/widgets/wizard_top_bar.dart';
 import '../client_profile/data/favorite_addresses_repository.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
@@ -806,162 +807,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
   }
 
   // ── Contacts ─────────────────────────────────────────────────────────────
-  Future<void> _pickContact({
-    required TextEditingController nameCtrl,
-    required TextEditingController phoneCtrl,
-  }) async {
-    final status = await FlutterContacts.permissions.request(
-      PermissionType.read,
-    );
-    final granted =
-        status == PermissionStatus.granted ||
-        status == PermissionStatus.limited;
-
-    if (!granted) {
-      if (!mounted) return;
-      showDemToast(context, 'Accès aux contacts refusé', isError: true);
-      return;
-    }
-    final contacts = await FlutterContacts.getAll(
-      properties: {ContactProperty.name, ContactProperty.phone},
-    );
-    if (!mounted) return;
-    _showContactPicker(contacts, nameCtrl: nameCtrl, phoneCtrl: phoneCtrl);
-  }
-
-  void _showContactPicker(
-    List<Contact> contacts, {
-    required TextEditingController nameCtrl,
-    required TextEditingController phoneCtrl,
-  }) {
-    String q = '';
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setSB) {
-          final filtered = contacts
-              .where(
-                (c) =>
-                    q.isEmpty ||
-                    (c.displayName ?? '').toLowerCase().contains(
-                      q.toLowerCase(),
-                    ),
-              )
-              .toList();
-          return DraggableScrollableSheet(
-            initialChildSize: 0.65,
-            maxChildSize: 0.95,
-            minChildSize: 0.4,
-            builder: (_, sc) => Container(
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                children: [
-                  const SizedBox(height: 12),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Choisir un contact',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: TextField(
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: 'Rechercher...',
-                        prefixIcon: const Icon(Icons.search),
-                        fillColor: AppColors.card,
-                        filled: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onChanged: (v) => setSB(() => q = v),
-                    ),
-                  ),
-                  Divider(
-                    color: AppColors.textSecondary.withValues(alpha: 0.2),
-                    height: 1,
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      controller: sc,
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) {
-                        final c = filtered[i];
-                        final phoneObj = c.phones.isNotEmpty
-                            ? c.phones.first
-                            : null;
-                        if (phoneObj == null) return const SizedBox.shrink();
-                        final cleaned = phoneObj.number
-                            .replaceAll(RegExp(r'[\s\-\(\)]'), '')
-                            .replaceFirst('+221', '');
-                        final name = c.displayName ?? 'Contact';
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.primary.withValues(
-                              alpha: 0.12,
-                            ),
-                            child: Text(
-                              name.isNotEmpty ? name[0].toUpperCase() : '?',
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          subtitle: Text(
-                            cleaned,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            nameCtrl.text = name;
-                            phoneCtrl.text = cleaned;
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  // Voir shared/widgets/contact_picker.dart (partagé avec Livraison groupée).
 
   // ── Submit ────────────────────────────────────────────────────────────────
   Future<void> _submit() async {
@@ -1383,7 +1229,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                         orderType: widget.orderType,
                                         nameCtrl: _senderNameCtrl,
                                         phoneCtrl: _senderPhoneCtrl,
-                                        onPickContact: () => _pickContact(
+                                        onPickContact: () => pickContact(
+                                          context,
                                           nameCtrl: _senderNameCtrl,
                                           phoneCtrl: _senderPhoneCtrl,
                                         ),
@@ -1410,7 +1257,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                         nameCtrl: _receiverNameCtrl,
                                         phoneCtrl: _receiverPhoneCtrl,
                                         descriptionCtrl: _descriptionCtrl,
-                                        onPickContact: () => _pickContact(
+                                        onPickContact: () => pickContact(
+                                          context,
                                           nameCtrl: _receiverNameCtrl,
                                           phoneCtrl: _receiverPhoneCtrl,
                                         ),
@@ -1507,7 +1355,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Header
-                  _TopBar(
+                  WizardTopBar(
                     title: widget.priority == 'EXPRESS'
                         ? 'Livraison Express ⚡'
                         : widget.orderType == 'RIDE'
@@ -1766,95 +1614,6 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-widgets
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _TopBar extends StatelessWidget {
-  final String title;
-  final int step;
-  final VoidCallback onBack;
-  const _TopBar({
-    required this.title,
-    required this.step,
-    required this.onBack,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: AppColors.gradientSplash,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 12,
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: onBack,
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios_new,
-                color: AppColors.textPrimary,
-                size: 14,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const Spacer(),
-          // Compteur texte — ne pas reposer uniquement sur la couleur des
-          // points pour indiquer la progression (peu lisible en plein
-          // soleil sur mobile).
-          Text(
-            '${step + 1}/4',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.65),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 6),
-          // Step dots
-          Row(
-            children: List.generate(
-              4,
-              (i) => AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.only(left: 4),
-                width: i == step ? 20 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: i == step ? AppColors.primary : AppColors.card,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ── Pin flottant (mode placement carte) ───────────────────────────────────────
 class _FloatingPin extends StatefulWidget {
@@ -2636,7 +2395,7 @@ class _Step1Panel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          _ContactMini(
+          ContactMiniField(
             label: orderType == 'RIDE' ? 'Passager' : 'Expéditeur',
             dotColor: AppColors.success,
             nameCtrl: nameCtrl,
@@ -2699,7 +2458,7 @@ class _Step2Panel extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  _ContactMini(
+                  ContactMiniField(
                     label: orderType == 'RIDE' ? 'Destination' : 'Destinataire',
                     dotColor: AppColors.error,
                     nameCtrl: nameCtrl,
@@ -2768,172 +2527,6 @@ class _Step2Panel extends StatelessWidget {
             label: 'Suivant — Résumé',
             trailingIcon: Icons.arrow_forward,
             onTap: onNext,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ContactMini extends StatelessWidget {
-  final String label;
-  final Color dotColor;
-  final TextEditingController nameCtrl;
-  final TextEditingController phoneCtrl;
-  final VoidCallback onPick;
-  final VoidCallback? onPickMe;
-  final VoidCallback? onPhoneComplete;
-  const _ContactMini({
-    required this.label,
-    required this.dotColor,
-    required this.nameCtrl,
-    required this.phoneCtrl,
-    required this.onPick,
-    this.onPickMe,
-    this.onPhoneComplete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Même traitement que les champs départ/destination (AddressField) :
-    // fond blanc quasi-opaque plutôt qu'un lavis translucide sur le
-    // dégradé du panneau — la lisibilité ne doit jamais dépendre de
-    // l'endroit où ce dégradé se trouve être clair ou foncé à cet endroit.
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.80),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: dotColor.withValues(alpha: 0.75), width: 1.4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: dotColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: dotColor,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              if (onPickMe != null)
-                GestureDetector(
-                  onTap: onPickMe,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 5,
-                    ),
-                    margin: const EdgeInsets.only(right: 10),
-                    decoration: BoxDecoration(
-                      color: dotColor.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Moi',
-                      style: TextStyle(
-                        color: dotColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              GestureDetector(
-                onTap: onPick,
-                child: const Icon(
-                  Icons.contacts_rounded,
-                  color: AppColors.textMuted,
-                  size: 26,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: nameCtrl,
-            inputFormatters: [NameInputFormatter()],
-            textCapitalization: TextCapitalization.words,
-            style: const TextStyle(color: AppColors.textDark, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Nom complet',
-              hintStyle: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 14,
-              ),
-              prefixIcon: const Padding(
-                padding: EdgeInsets.only(left: 12, right: 8),
-                child: Icon(
-                  Icons.person_outline_rounded,
-                  color: AppColors.textMuted,
-                  size: 18,
-                ),
-              ),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 0,
-                minHeight: 0,
-              ),
-              fillColor: Colors.black.withValues(alpha: 0.045),
-              filled: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 13,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: phoneCtrl,
-            keyboardType: TextInputType.phone,
-            inputFormatters: [DigitsOnlyFormatter()],
-            style: const TextStyle(color: AppColors.textDark, fontSize: 14),
-            onChanged: (v) {
-              if (v.length >= 9) onPhoneComplete?.call();
-            },
-            decoration: InputDecoration(
-              hintText: 'Numéro de téléphone',
-              hintStyle: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 14,
-              ),
-              prefixIcon: Padding(
-                padding: const EdgeInsets.only(left: 12, right: 8),
-                child: Icon(Icons.phone_outlined, color: dotColor, size: 18),
-              ),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 0,
-                minHeight: 0,
-              ),
-              prefixText: '+221 ',
-              prefixStyle: ClientText.bodyStrong.copyWith(color: dotColor),
-              fillColor: Colors.black.withValues(alpha: 0.045),
-              filled: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 13,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
           ),
         ],
       ),
