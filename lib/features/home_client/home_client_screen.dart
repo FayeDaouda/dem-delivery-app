@@ -1115,46 +1115,55 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         Row(
           children: [
             Expanded(
-              child: _ServiceTile(
-                icon: Icons.inventory_2_outlined,
-                label: 'Simple',
-                valueLabel: 'Standard',
-                onTap: () async {
-                  if (!await ensureLocationEnabled(context)) return;
-                  if (!mounted) return;
-                  await context.push('/orders/create?type=DELIVERY');
-                  _checkPendingOrder();
-                },
+              child: _StaggeredEntrance(
+                index: 0,
+                child: _ServiceTile(
+                  icon: Icons.inventory_2_outlined,
+                  label: 'Simple',
+                  valueLabel: 'Standard',
+                  onTap: () async {
+                    if (!await ensureLocationEnabled(context)) return;
+                    if (!mounted) return;
+                    await context.push('/orders/create?type=DELIVERY');
+                    _checkPendingOrder();
+                  },
+                ),
               ),
             ),
             const SizedBox(width: AppSpacing.s),
             Expanded(
-              child: _ServiceTile(
-                icon: Icons.bolt_rounded,
-                label: 'Express',
-                valueLabel: 'Rapide',
-                onTap: () async {
-                  if (!await ensureLocationEnabled(context)) return;
-                  if (!mounted) return;
-                  await context.push(
-                    '/orders/create?type=DELIVERY&priority=EXPRESS',
-                  );
-                  _checkPendingOrder();
-                },
+              child: _StaggeredEntrance(
+                index: 1,
+                child: _ServiceTile(
+                  icon: Icons.bolt_rounded,
+                  label: 'Express',
+                  valueLabel: 'Rapide',
+                  onTap: () async {
+                    if (!await ensureLocationEnabled(context)) return;
+                    if (!mounted) return;
+                    await context.push(
+                      '/orders/create?type=DELIVERY&priority=EXPRESS',
+                    );
+                    _checkPendingOrder();
+                  },
+                ),
               ),
             ),
             const SizedBox(width: AppSpacing.s),
             Expanded(
-              child: _ServiceTile(
-                icon: Icons.route_outlined,
-                label: 'Groupée',
-                valueLabel: 'Économique',
-                onTap: () async {
-                  if (!await ensureLocationEnabled(context)) return;
-                  if (!mounted) return;
-                  await context.push('/orders/batch/create');
-                  _checkPendingOrder();
-                },
+              child: _StaggeredEntrance(
+                index: 2,
+                child: _ServiceTile(
+                  icon: Icons.route_outlined,
+                  label: 'Groupée',
+                  valueLabel: 'Économique',
+                  onTap: () async {
+                    if (!await ensureLocationEnabled(context)) return;
+                    if (!mounted) return;
+                    await context.push('/orders/batch/create');
+                    _checkPendingOrder();
+                  },
+                ),
               ),
             ),
           ],
@@ -1526,6 +1535,47 @@ class _BreathingBadgeState extends State<_BreathingBadge>
 }
 
 // ── Tuile de service compacte — 3 côte à côte (Simple / Express / Groupée) ────
+// ── Entrée en fondu + léger glissement, décalée par index ──────────────────
+// Donne une impression de fluidité à l'apparition des 3 tuiles (au lieu
+// qu'elles apparaissent toutes d'un bloc) — effet courant sur les apps
+// premium (Revolut, Cash App). Délai croissant par `index`, indépendant
+// pour chaque tuile.
+class _StaggeredEntrance extends StatefulWidget {
+  final int index;
+  final Widget child;
+  const _StaggeredEntrance({required this.index, required this.child});
+
+  @override
+  State<_StaggeredEntrance> createState() => _StaggeredEntranceState();
+}
+
+class _StaggeredEntranceState extends State<_StaggeredEntrance> {
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration(milliseconds: 70 * widget.index), () {
+      if (mounted) setState(() => _visible = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      offset: _visible ? Offset.zero : const Offset(0, 0.18),
+      duration: const Duration(milliseconds: 340),
+      curve: Curves.easeOutCubic,
+      child: AnimatedOpacity(
+        opacity: _visible ? 1 : 0,
+        duration: const Duration(milliseconds: 340),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _ServiceTile extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1545,6 +1595,7 @@ class _ServiceTile extends StatelessWidget {
     // (14) pour rester correct sur les Android d'entrée de gamme.
     return Pressable(
       onTap: onTap,
+      haptic: true,
       child: ClipRRect(
         // `ClipRRect` obligatoire : `BackdropFilter` floute tout son
         // rectangle englobant, coins compris — sans ce clip le flou
