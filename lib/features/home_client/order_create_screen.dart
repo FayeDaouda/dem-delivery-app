@@ -2701,20 +2701,16 @@ class _ContactMini extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Vert vif visible sur fond cyan/bleu foncé
-    final visibleDot = dotColor == AppColors.success
-        ? AppColors.successBright
-        : dotColor;
-
+    // Même traitement que les champs départ/destination (AddressField) :
+    // fond blanc quasi-opaque plutôt qu'un lavis translucide sur le
+    // dégradé du panneau — la lisibilité ne doit jamais dépendre de
+    // l'endroit où ce dégradé se trouve être clair ou foncé à cet endroit.
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: Colors.white.withValues(alpha: 0.80),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: visibleDot.withValues(alpha: 0.85),
-          width: 1.5,
-        ),
+        border: Border.all(color: dotColor.withValues(alpha: 0.75), width: 1.4),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2725,7 +2721,7 @@ class _ContactMini extends StatelessWidget {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: visibleDot,
+                  color: dotColor,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -2733,7 +2729,7 @@ class _ContactMini extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  color: visibleDot,
+                  color: dotColor,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
@@ -2749,13 +2745,13 @@ class _ContactMini extends StatelessWidget {
                     ),
                     margin: const EdgeInsets.only(right: 10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.20),
+                      color: dotColor.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Moi',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: dotColor,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -2764,9 +2760,9 @@ class _ContactMini extends StatelessWidget {
                 ),
               GestureDetector(
                 onTap: onPick,
-                child: Icon(
+                child: const Icon(
                   Icons.contacts_rounded,
-                  color: Colors.white.withValues(alpha: 0.90),
+                  color: AppColors.textMuted,
                   size: 26,
                 ),
               ),
@@ -2777,18 +2773,18 @@ class _ContactMini extends StatelessWidget {
             controller: nameCtrl,
             inputFormatters: [NameInputFormatter()],
             textCapitalization: TextCapitalization.words,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: const TextStyle(color: AppColors.textDark, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Nom complet',
-              hintStyle: TextStyle(
-                color: Colors.white.withValues(alpha: 0.45),
+              hintStyle: const TextStyle(
+                color: AppColors.textMuted,
                 fontSize: 14,
               ),
-              prefixIcon: Padding(
-                padding: const EdgeInsets.only(left: 12, right: 8),
+              prefixIcon: const Padding(
+                padding: EdgeInsets.only(left: 12, right: 8),
                 child: Icon(
                   Icons.person_outline_rounded,
-                  color: Colors.white.withValues(alpha: 0.55),
+                  color: AppColors.textMuted,
                   size: 18,
                 ),
               ),
@@ -2796,7 +2792,7 @@ class _ContactMini extends StatelessWidget {
                 minWidth: 0,
                 minHeight: 0,
               ),
-              fillColor: Colors.white.withValues(alpha: 0.08),
+              fillColor: Colors.black.withValues(alpha: 0.045),
               filled: true,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
@@ -2813,31 +2809,27 @@ class _ContactMini extends StatelessWidget {
             controller: phoneCtrl,
             keyboardType: TextInputType.phone,
             inputFormatters: [DigitsOnlyFormatter()],
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: const TextStyle(color: AppColors.textDark, fontSize: 14),
             onChanged: (v) {
               if (v.length >= 9) onPhoneComplete?.call();
             },
             decoration: InputDecoration(
               hintText: 'Numéro de téléphone',
-              hintStyle: TextStyle(
-                color: Colors.white.withValues(alpha: 0.45),
+              hintStyle: const TextStyle(
+                color: AppColors.textMuted,
                 fontSize: 14,
               ),
               prefixIcon: Padding(
                 padding: const EdgeInsets.only(left: 12, right: 8),
-                child: Icon(
-                  Icons.phone_outlined,
-                  color: visibleDot.withValues(alpha: 0.80),
-                  size: 18,
-                ),
+                child: Icon(Icons.phone_outlined, color: dotColor, size: 18),
               ),
               prefixIconConstraints: const BoxConstraints(
                 minWidth: 0,
                 minHeight: 0,
               ),
               prefixText: '+221 ',
-              prefixStyle: ClientText.bodyStrong.copyWith(color: visibleDot),
-              fillColor: Colors.white.withValues(alpha: 0.08),
+              prefixStyle: ClientText.bodyStrong.copyWith(color: dotColor),
+              fillColor: Colors.black.withValues(alpha: 0.045),
               filled: true,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
