@@ -1190,6 +1190,34 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
             ),
           ),
 
+          // ── Voile dégradé en haut de la carte ───────────────────────────────
+          // Sans lui, un libellé de lieu Google Maps assez long (ex: nom de
+          // quartier) peut parfois déborder dans les interstices entre la
+          // barre du haut et les champs départ/destination — ces champs sont
+          // quasi-opaques mais pas le petit espace qui les sépare de l'en-
+          // tête. Ce voile assourdit tout ce qu'il y a derrière sur cette
+          // zone, quel que soit le libellé qui s'y trouve.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 260,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.30),
+                      Colors.black.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           // ── Anneau continu autour du point de départ ────────────────────────
           if (_pickupLat != null &&
               (!_isSelectingPickup || !_isMapPlacementMode))
