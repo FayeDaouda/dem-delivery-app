@@ -2221,208 +2221,260 @@ class _EstimatePriceCard extends StatelessWidget {
               ],
             )
           // ── État normal : affichage du prix ──
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Ligne : prix course + surge badge
-                Row(
+          : Builder(
+              builder: (context) {
+                // Rien à détailler (pas de frais, pas de réduction) : Total
+                // == Course exactement — inutile de répéter le même chiffre
+                // deux fois. Un seul montant net et bien visible, comme
+                // Uber/Bolt le font quand il n'y a rien à justifier. Dès
+                // qu'il y a un frais ou une réduction, la ventilation
+                // complète reprend son sens.
+                final hasBreakdown = demFee > 0 || (discountAmount ?? 0) > 0;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.two_wheeler_outlined,
-                      color: AppColors.textSecondary,
-                      size: 13,
-                    ),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'Course',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (surgeMultiplier > 1.0) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.surge.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: AppColors.surge.withValues(alpha: 0.30),
+                    if (hasBreakdown) ...[
+                      // Ligne : prix course + surge badge
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.two_wheeler_outlined,
+                            color: AppColors.textSecondary,
+                            size: 13,
                           ),
-                        ),
-                        child: Row(
+                          const SizedBox(width: 5),
+                          const Text(
+                            'Course',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (surgeMultiplier > 1.0) ...[
+                            _SurgeBadge(surgeMultiplier: surgeMultiplier),
+                            const SizedBox(width: 8),
+                          ],
+                          Text(
+                            estimatedPrice != null
+                                ? formatFcfa(estimatedPrice!)
+                                : '—',
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else if (estimatedPrice != null) ...[
+                      // Rien à détailler — un seul chiffre net.
+                      Row(
+                        children: [
+                          if (surgeMultiplier > 1.0) ...[
+                            _SurgeBadge(surgeMultiplier: surgeMultiplier),
+                            const SizedBox(width: 8),
+                          ],
+                          const Text(
+                            'Total à payer',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            formatFcfa(estimatedPrice!),
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    // Ligne : distance/durée estimées — comble le vide sous
+                    // la carte de prix et confirme visuellement le trajet
+                    // calculé.
+                    if (estimatedPrice != null &&
+                        distanceKm != null &&
+                        durationMin != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.route_outlined,
+                            color: AppColors.textSecondary,
+                            size: 13,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '≈ ${distanceKm!.toStringAsFixed(1)} km',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Icon(
+                            Icons.schedule_outlined,
+                            color: AppColors.textSecondary,
+                            size: 13,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$durationMin min',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (hasBreakdown) ...[
+                      // Ligne : frais DEM (visible uniquement si > 0)
+                      if (estimatedPrice != null && demFee > 0) ...[
+                        const SizedBox(height: 4),
+                        Row(
                           children: [
                             const Icon(
-                              Icons.flash_on,
-                              color: AppColors.surge,
-                              size: 11,
+                              Icons.percent_outlined,
+                              color: AppColors.textSecondary,
+                              size: 13,
                             ),
-                            const SizedBox(width: 2),
+                            const SizedBox(width: 5),
+                            const Text(
+                              'Frais DEM',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const Spacer(),
                             Text(
-                              '×${surgeMultiplier.toStringAsFixed(1)}',
+                              '+${formatFcfa(demFee)}',
                               style: const TextStyle(
-                                color: AppColors.surge,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
+                      ],
+                      // Ligne : réduction promo (le livreur touche toujours
+                      // le prix plein — voir orders.service.js côté serveur)
+                      if (estimatedPrice != null &&
+                          discountAmount != null &&
+                          discountAmount! > 0) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              promoLabel != null
+                                  ? 'Réduction ($promoLabel)'
+                                  : 'Réduction',
+                              style: const TextStyle(
+                                color: AppColors.success,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '-${formatFcfa(discountAmount!)}',
+                              style: const TextStyle(
+                                color: AppColors.success,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      // Total — toujours affiché dès qu'un prix existe,
+                      // réduction ou non : le client ne doit jamais avoir à
+                      // additionner Course + Frais DEM lui-même.
+                      if (estimatedPrice != null) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 6),
+                          child: Divider(
+                            height: 1,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            const Text(
+                              'Total à payer',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              formatFcfa(
+                                (estimatedPrice! +
+                                        demFee -
+                                        (discountAmount ?? 0))
+                                    .clamp(0, double.infinity),
+                              ),
+                              // Accent cyan + taille nettement supérieure :
+                              // c'est le seul chiffre qui compte vraiment
+                              // pour le client, il doit sauter aux yeux sans
+                              // lecture des lignes au-dessus.
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                    Text(
-                      estimatedPrice != null
-                          ? formatFcfa(estimatedPrice!)
-                          : '—',
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
                   ],
-                ),
-                // Ligne : frais DEM (visible uniquement si > 0)
-                if (estimatedPrice != null && demFee > 0) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.percent_outlined,
-                        color: AppColors.textSecondary,
-                        size: 13,
-                      ),
-                      const SizedBox(width: 5),
-                      const Text(
-                        'Frais DEM',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '+${formatFcfa(demFee)}',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                // Ligne : distance/durée estimées — comble le vide sous la
-                // carte de prix et confirme visuellement le trajet calculé.
-                if (estimatedPrice != null &&
-                    distanceKm != null &&
-                    durationMin != null) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.route_outlined,
-                        color: AppColors.textSecondary,
-                        size: 13,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '≈ ${distanceKm!.toStringAsFixed(1)} km',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      const Icon(
-                        Icons.schedule_outlined,
-                        color: AppColors.textSecondary,
-                        size: 13,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$durationMin min',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                // Ligne : réduction promo (le livreur touche toujours le
-                // prix plein — voir orders.service.js côté serveur)
-                if (estimatedPrice != null &&
-                    discountAmount != null &&
-                    discountAmount! > 0) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(
-                        promoLabel != null
-                            ? 'Réduction ($promoLabel)'
-                            : 'Réduction',
-                        style: const TextStyle(
-                          color: AppColors.success,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '-${formatFcfa(discountAmount!)}',
-                        style: const TextStyle(
-                          color: AppColors.success,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                // Total — toujours affiché dès qu'un prix existe, réduction
-                // ou non : le client ne doit jamais avoir à additionner
-                // Course + Frais DEM lui-même.
-                if (estimatedPrice != null) ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 6),
-                    child: Divider(height: 1, color: AppColors.textSecondary),
-                  ),
-                  Row(
-                    children: [
-                      const Text(
-                        'Total à payer',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        formatFcfa(
-                          (estimatedPrice! + demFee - (discountAmount ?? 0))
-                              .clamp(0, double.infinity),
-                        ),
-                        // Accent cyan + taille nettement supérieure : c'est le
-                        // seul chiffre qui compte vraiment pour le client,
-                        // il doit sauter aux yeux sans lecture des lignes
-                        // au-dessus.
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
+                );
+              },
             ),
+    );
+  }
+}
+
+// Badge "×1.5" etc. — utilisé à la fois par la ligne "Course" (ventilation
+// complète) et par la ligne "Total à payer" (vue simplifiée sans frais ni
+// réduction), d'où l'extraction pour ne pas dupliquer ce petit morceau.
+class _SurgeBadge extends StatelessWidget {
+  final double surgeMultiplier;
+  const _SurgeBadge({required this.surgeMultiplier});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.surge.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.surge.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.flash_on, color: AppColors.surge, size: 11),
+          const SizedBox(width: 2),
+          Text(
+            '×${surgeMultiplier.toStringAsFixed(1)}',
+            style: const TextStyle(
+              color: AppColors.surge,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
