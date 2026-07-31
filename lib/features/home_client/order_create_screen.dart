@@ -1809,15 +1809,31 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
+          Flexible(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const Spacer(),
+          // Compteur texte — ne pas reposer uniquement sur la couleur des
+          // points pour indiquer la progression (peu lisible en plein
+          // soleil sur mobile).
+          Text(
+            '${step + 1}/4',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.65),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 6),
           // Step dots
           Row(
             children: List.generate(
@@ -2698,20 +2714,46 @@ class _Step2Panel extends StatelessWidget {
                       controller: descriptionCtrl,
                       style: const TextStyle(fontSize: 14, color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'Description du colis (optionnel)...',
+                        hintText: 'Description du colis (optionnel)',
                         hintStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.50),
+                          color: Colors.white.withValues(alpha: 0.65),
                           fontSize: 14,
                         ),
-                        fillColor: Colors.white.withValues(alpha: 0.10),
+                        prefixIcon: Padding(
+                          padding: const EdgeInsets.only(left: 12, right: 8),
+                          child: Icon(
+                            Icons.inventory_2_outlined,
+                            color: Colors.white.withValues(alpha: 0.65),
+                            size: 18,
+                          ),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 0,
+                          minHeight: 0,
+                        ),
+                        fillColor: Colors.white.withValues(alpha: 0.14),
                         filled: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 10,
+                          vertical: 12,
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.22),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.22),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.45),
+                          ),
                         ),
                         isDense: true,
                       ),
