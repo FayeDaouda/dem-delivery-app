@@ -1117,7 +1117,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             Expanded(
               child: _ServiceTile(
                 icon: Icons.inventory_2_outlined,
-                label: 'Livraison simple',
+                label: 'Simple',
+                valueLabel: 'Standard',
                 onTap: () async {
                   if (!await ensureLocationEnabled(context)) return;
                   if (!mounted) return;
@@ -1130,7 +1131,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             Expanded(
               child: _ServiceTile(
                 icon: Icons.bolt_rounded,
-                label: 'Livraison Express',
+                label: 'Express',
+                valueLabel: 'Rapide',
                 onTap: () async {
                   if (!await ensureLocationEnabled(context)) return;
                   if (!mounted) return;
@@ -1145,7 +1147,8 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             Expanded(
               child: _ServiceTile(
                 icon: Icons.route_outlined,
-                label: 'Livraison groupée',
+                label: 'Groupée',
+                valueLabel: 'Économique',
                 onTap: () async {
                   if (!await ensureLocationEnabled(context)) return;
                   if (!mounted) return;
@@ -1526,11 +1529,13 @@ class _BreathingBadgeState extends State<_BreathingBadge>
 class _ServiceTile extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String valueLabel;
   final VoidCallback onTap;
 
   const _ServiceTile({
     required this.icon,
     required this.label,
+    required this.valueLabel,
     required this.onTap,
   });
 
@@ -1566,7 +1571,19 @@ class _ServiceTile extends StatelessWidget {
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                   ),
-                  maxLines: 2,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  valueLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
