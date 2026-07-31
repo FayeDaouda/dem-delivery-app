@@ -2900,108 +2900,121 @@ class _Step3Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
-          Column(
-            children: [
-              // Route recap
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: onEditPickup,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: AddressRow(
-                              icon: Icons.circle,
-                              iconColor: AppColors.success,
-                              address: pickupLabel,
-                              dark: true,
+          // `Expanded` + scroll plutôt qu'un simple `Column` : le contenu
+          // ci-dessous (récap trajet, prix, code promo) a grandi plusieurs
+          // fois depuis le premier réglage du budget de hauteur fixe de ce
+          // panneau, provoquant à chaque fois un nouvel overflow. Avec un
+          // scroll, un ajout futur réduit l'espace visible au pire, mais ne
+          // peut plus jamais déborder — le bouton reste toujours visible en
+          // bas, épinglé hors du scroll.
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Route recap
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: onEditPickup,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: AddressRow(
+                                  icon: Icons.circle,
+                                  iconColor: AppColors.success,
+                                  address: pickupLabel,
+                                  dark: true,
+                                ),
+                              ),
+                              if (onEditPickup != null)
+                                Icon(
+                                  Icons.edit_outlined,
+                                  color: AppColors.textSecondary.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                  size: 14,
+                                ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: Container(
+                            width: 2,
+                            height: 14,
+                            color: AppColors.textSecondary.withValues(
+                              alpha: 0.3,
                             ),
                           ),
-                          if (onEditPickup != null)
-                            Icon(
-                              Icons.edit_outlined,
-                              color: AppColors.textSecondary.withValues(
-                                alpha: 0.5,
+                        ),
+                        GestureDetector(
+                          onTap: onEditDelivery,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: AddressRow(
+                                  icon: Icons.location_on,
+                                  iconColor: AppColors.error,
+                                  address: deliveryLabel,
+                                  dark: true,
+                                ),
                               ),
-                              size: 14,
-                            ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Container(
-                        width: 2,
-                        height: 14,
-                        color: AppColors.textSecondary.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: onEditDelivery,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: AddressRow(
-                              icon: Icons.location_on,
-                              iconColor: AppColors.error,
-                              address: deliveryLabel,
-                              dark: true,
-                            ),
+                              if (onEditDelivery != null)
+                                Icon(
+                                  Icons.edit_outlined,
+                                  color: AppColors.textSecondary.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                  size: 14,
+                                ),
+                            ],
                           ),
-                          if (onEditDelivery != null)
-                            Icon(
-                              Icons.edit_outlined,
-                              color: AppColors.textSecondary.withValues(
-                                alpha: 0.5,
-                              ),
-                              size: 14,
-                            ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Price card
+                  _EstimatePriceCard(
+                    estimatedPrice: estimatedPrice,
+                    demFee: demFee,
+                    discountAmount: discountAmount,
+                    promoLabel: promoLabel,
+                    surgeMultiplier: surgeMultiplier,
+                    loadingSurge: loadingSurge,
+                    timedOut: timedOut,
+                    onRetry: onRetry,
+                    distanceKm: distanceKm,
+                    durationMin: durationMin,
+                  ),
+                  if (estimatedPrice != null && !loadingSurge && !timedOut) ...[
+                    const SizedBox(height: 8),
+                    _PromoCodeField(
+                      controller: promoCodeCtrl,
+                      error: promoError,
+                      checking: checkingPromo,
+                      applied: discountAmount != null && discountAmount! > 0,
+                      onApply: onApplyPromo,
                     ),
                   ],
-                ),
+                  const SizedBox(height: 8),
+                ],
               ),
-              const SizedBox(height: 10),
-
-              // Price card
-              _EstimatePriceCard(
-                estimatedPrice: estimatedPrice,
-                demFee: demFee,
-                discountAmount: discountAmount,
-                promoLabel: promoLabel,
-                surgeMultiplier: surgeMultiplier,
-                loadingSurge: loadingSurge,
-                timedOut: timedOut,
-                onRetry: onRetry,
-                distanceKm: distanceKm,
-                durationMin: durationMin,
-              ),
-              if (estimatedPrice != null && !loadingSurge && !timedOut) ...[
-                const SizedBox(height: 8),
-                _PromoCodeField(
-                  controller: promoCodeCtrl,
-                  error: promoError,
-                  checking: checkingPromo,
-                  applied: discountAmount != null && discountAmount! > 0,
-                  onApply: onApplyPromo,
-                ),
-              ],
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
-          const Spacer(),
-          // Bouton toujours visible en bas
+          const SizedBox(height: 8),
+          // Bouton toujours visible en bas — épinglé hors du scroll ci-dessus.
           PrimaryButton(
             label: 'Trouvez un livreur',
             onTap: (canSubmit && !submitting) ? onSubmit : null,
