@@ -879,25 +879,30 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     final extraH = bottomSafeArea > 20 ? 24.0 : 0.0;
     final isTablet = MediaQuery.of(context).size.width > 600;
     final heights = isTablet ? _kPanelHeightsTablet : _kPanelHeightsPhone;
-    // L'étape 3 (Résumé) affiche plusieurs lignes optionnelles dans la carte
-    // de prix (distance/durée, réduction, total — toujours affiché depuis
-    // peu) que le budget de hauteur fixe de cette étape ne prévoyait pas à
-    // l'origine, d'où des overflows répétés à chaque ajout de ligne. Calculé
-    // ligne par ligne plutôt qu'avec un seul chiffre magique, pour rester
-    // correct si d'autres lignes s'ajoutent encore à l'avenir.
-    double priceCardExtra = 0.0;
-    if (_step == 3 && _estimatedPrice != null) {
-      priceCardExtra += 40; // Divider + "Total à payer" (toujours affiché)
+    // Le badge de type de livraison (Simple/Express) en haut de chaque
+    // étape n'existait pas quand `_kPanelHeightsPhone`/`Tablet` ont été
+    // réglées — +34 sur toutes les étapes pour l'absorber sans dépendre du
+    // scroll de secours.
+    double stepExtra = 34.0;
+    // Les étapes 0 (Trajet, une fois le trajet complet) et 3 (Résumé)
+    // affichent la même carte de prix, avec plusieurs lignes optionnelles
+    // (distance/durée, réduction, total — toujours affiché depuis peu) que
+    // le budget de hauteur fixe ne prévoyait pas à l'origine, d'où des
+    // overflows/rendus tassés répétés à chaque ajout de ligne. Calculé ligne
+    // par ligne plutôt qu'avec un seul chiffre magique, pour rester correct
+    // si d'autres lignes s'ajoutent encore à l'avenir.
+    if ((_step == 0 || _step == 3) && _estimatedPrice != null) {
+      stepExtra += 40; // Divider + "Total à payer" (toujours affiché)
       if (_routeDistanceKm != null && _routeDurationMin != null) {
-        priceCardExtra += 26; // ligne distance/durée
+        stepExtra += 26; // ligne distance/durée
       }
       if ((_discountAmount ?? 0) > 0) {
-        priceCardExtra += 26; // ligne Réduction
+        stepExtra += 26; // ligne Réduction
       }
     }
     final panelH = _isMapPlacementMode
         ? 90.0
-        : heights[_step] + extraH + priceCardExtra;
+        : heights[_step] + extraH + stepExtra;
 
     // Polyline + inactive markers
     Set<Polyline> polylines = {};
@@ -1214,6 +1219,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                         setState(() => _step = i),
                                     children: [
                                       _Step0Panel(
+                                        priority: widget.priority,
                                         routeComplete: _routeComplete,
                                         estimatedPrice: _estimatedPrice,
                                         demFee: _demFee,
@@ -1226,6 +1232,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                         durationMin: _routeDurationMin,
                                       ),
                                       _Step1Panel(
+                                        priority: widget.priority,
                                         orderType: widget.orderType,
                                         nameCtrl: _senderNameCtrl,
                                         phoneCtrl: _senderPhoneCtrl,
@@ -1253,6 +1260,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                         },
                                       ),
                                       _Step2Panel(
+                                        priority: widget.priority,
                                         orderType: widget.orderType,
                                         nameCtrl: _receiverNameCtrl,
                                         phoneCtrl: _receiverPhoneCtrl,
@@ -1288,6 +1296,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                         },
                                       ),
                                       _Step3Panel(
+                                        priority: widget.priority,
                                         pickupLabel: _pickupCtrl.text.isNotEmpty
                                             ? _pickupCtrl.text
                                             : 'Départ',
@@ -1360,7 +1369,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                         ? 'Livraison Express ⚡'
                         : widget.orderType == 'RIDE'
                         ? 'Transport'
-                        : 'Livraison',
+                        : 'Livraison Simple',
                     step: _step,
                     onBack: () {
                       if (_step > 0) {
@@ -1790,7 +1799,51 @@ class _PlacementConfirmPanel extends StatelessWidget {
   }
 }
 
+// Rappel du type de livraison choisi (Simple/Express) — répété en haut de
+// chaque étape du tunnel pour que ce soit visible sans avoir à remonter à
+// la barre du haut. Un seul widget pour éviter 4 copies divergentes.
+class _DeliveryTypeBadge extends StatelessWidget {
+  final String priority;
+  const _DeliveryTypeBadge({required this.priority});
+
+  @override
+  Widget build(BuildContext context) {
+    final isExpress = priority == 'EXPRESS';
+    final color = isExpress ? AppColors.warning : AppColors.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.40)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isExpress ? Icons.bolt_rounded : Icons.inventory_2_outlined,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            isExpress
+                ? 'Livraison Express — livreur le plus proche, +40%'
+                : 'Livraison Simple — tarif standard',
+            style: TextStyle(
+              color: color,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Step0Panel extends StatelessWidget {
+  final String priority;
   final bool routeComplete;
   final double? estimatedPrice;
   final double demFee;
@@ -1802,6 +1855,7 @@ class _Step0Panel extends StatelessWidget {
   final double? distanceKm;
   final int? durationMin;
   const _Step0Panel({
+    required this.priority,
     required this.routeComplete,
     required this.estimatedPrice,
     required this.demFee,
@@ -1821,79 +1875,105 @@ class _Step0Panel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Le conseil "Astuce" cède la place au prix dès qu'il est
-          // disponible — évite d'empiler un texte devenu obsolète (l'action
-          // qu'il décrit est déjà faite) au-dessus de l'info la plus utile.
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 320),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, anim) => FadeTransition(
-              opacity: anim,
-              child: SizeTransition(
-                sizeFactor: anim,
-                alignment: Alignment.topCenter,
-                child: child,
+          // `Expanded` + scroll plutôt qu'un `Spacer` fixe : le badge de
+          // type de livraison ajouté au-dessus du conseil "Astuce" laissait
+          // à peine quelques pixels de marge sur le budget de hauteur fixe
+          // de cette étape — même remède que le panneau Résumé (voir plus
+          // bas) pour ne plus jamais dépendre d'un calcul au pixel près.
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Rappel du type de livraison choisi — visible dès
+                  // l'étape Trajet, avant même que le prix ne soit
+                  // disponible, ET une fois le prix affiché (auparavant
+                  // visible seulement dans l'état "Astuce", donc absent dès
+                  // que le trajet était complet).
+                  _DeliveryTypeBadge(priority: priority),
+                  const SizedBox(height: 8),
+                  // Le conseil "Astuce" cède la place au prix dès qu'il est
+                  // disponible — évite d'empiler un texte devenu obsolète
+                  // (l'action qu'il décrit est déjà faite) au-dessus de
+                  // l'info la plus utile.
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 320),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: SizeTransition(
+                        sizeFactor: anim,
+                        alignment: Alignment.topCenter,
+                        child: child,
+                      ),
+                    ),
+                    child: routeComplete
+                        ? _EstimatePriceCard(
+                            key: const ValueKey('price'),
+                            estimatedPrice: estimatedPrice,
+                            demFee: demFee,
+                            surgeMultiplier: surgeMultiplier,
+                            loadingSurge: loadingSurge,
+                            timedOut: timedOut,
+                            onRetry: onRetry,
+                            distanceKm: distanceKm,
+                            durationMin: durationMin,
+                          )
+                        : Column(
+                            key: const ValueKey('tip'),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Astuce',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              RichText(
+                                maxLines: 3,
+                                text: TextSpan(
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.70),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.normal,
+                                    height: 1.4,
+                                  ),
+                                  children: [
+                                    const TextSpan(
+                                      text:
+                                          'Utiliser les champs de recherche ou le bouton ',
+                                    ),
+                                    WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: Icon(
+                                        Icons.location_on,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.70,
+                                        ),
+                                        size: 13,
+                                      ),
+                                    ),
+                                    const TextSpan(
+                                      text:
+                                          ' pour placer un point sur la carte.',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
               ),
             ),
-            child: routeComplete
-                ? _EstimatePriceCard(
-                    key: const ValueKey('price'),
-                    estimatedPrice: estimatedPrice,
-                    demFee: demFee,
-                    surgeMultiplier: surgeMultiplier,
-                    loadingSurge: loadingSurge,
-                    timedOut: timedOut,
-                    onRetry: onRetry,
-                    distanceKm: distanceKm,
-                    durationMin: durationMin,
-                  )
-                : Column(
-                    key: const ValueKey('tip'),
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Astuce',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      RichText(
-                        maxLines: 3,
-                        text: TextSpan(
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.70),
-                            fontSize: 14,
-                            fontWeight: FontWeight.normal,
-                            height: 1.4,
-                          ),
-                          children: [
-                            const TextSpan(
-                              text:
-                                  'Utiliser les champs de recherche ou le bouton ',
-                            ),
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.middle,
-                              child: Icon(
-                                Icons.location_on,
-                                color: Colors.white.withValues(alpha: 0.70),
-                                size: 13,
-                              ),
-                            ),
-                            const TextSpan(
-                              text: ' pour placer un point sur la carte.',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
           ),
-          const Spacer(),
+          const SizedBox(height: 12),
           PrimaryButton(
             label: 'Suivant — Contacts',
             trailingIcon: Icons.arrow_forward,
@@ -2360,6 +2440,7 @@ class _PromoCodeField extends StatelessWidget {
 }
 
 class _Step1Panel extends StatelessWidget {
+  final String priority;
   final String orderType;
   final TextEditingController nameCtrl;
   final TextEditingController phoneCtrl;
@@ -2369,6 +2450,7 @@ class _Step1Panel extends StatelessWidget {
   final VoidCallback onNext;
 
   const _Step1Panel({
+    required this.priority,
     required this.orderType,
     required this.nameCtrl,
     required this.phoneCtrl,
@@ -2384,27 +2466,41 @@ class _Step1Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Utilisez vos contacts 👤 pour gagner du temps',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.70),
-                fontSize: 12,
+          _DeliveryTypeBadge(priority: priority),
+          const SizedBox(height: 8),
+          // `Expanded` + scroll : le badge ajouté au-dessus laissait trop
+          // peu de marge sur le budget de hauteur fixe de cette étape
+          // (quelques pixels à peine) — même remède que Step0/Step2/Step3
+          // pour ne plus jamais dépendre d'un calcul au pixel près.
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Utilisez vos contacts 👤 pour gagner du temps',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.70),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ContactMiniField(
+                    label: orderType == 'RIDE' ? 'Passager' : 'Expéditeur',
+                    dotColor: AppColors.success,
+                    nameCtrl: nameCtrl,
+                    phoneCtrl: phoneCtrl,
+                    onPick: onPickContact,
+                    onPickMe: onPickMe,
+                    onPhoneComplete: onPhoneComplete,
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 10),
-          ContactMiniField(
-            label: orderType == 'RIDE' ? 'Passager' : 'Expéditeur',
-            dotColor: AppColors.success,
-            nameCtrl: nameCtrl,
-            phoneCtrl: phoneCtrl,
-            onPick: onPickContact,
-            onPickMe: onPickMe,
-            onPhoneComplete: onPhoneComplete,
-          ),
-          const Spacer(),
+          const SizedBox(height: 12),
           PrimaryButton(
             label: 'Suivant — Destinataire',
             trailingIcon: Icons.arrow_forward,
@@ -2417,6 +2513,7 @@ class _Step1Panel extends StatelessWidget {
 }
 
 class _Step2Panel extends StatelessWidget {
+  final String priority;
   final String orderType;
   final TextEditingController nameCtrl;
   final TextEditingController phoneCtrl;
@@ -2427,6 +2524,7 @@ class _Step2Panel extends StatelessWidget {
   final VoidCallback onNext;
 
   const _Step2Panel({
+    required this.priority,
     required this.orderType,
     required this.nameCtrl,
     required this.phoneCtrl,
@@ -2443,6 +2541,8 @@ class _Step2Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
+          _DeliveryTypeBadge(priority: priority),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -2535,6 +2635,7 @@ class _Step2Panel extends StatelessWidget {
 }
 
 class _Step3Panel extends StatelessWidget {
+  final String priority;
   final String pickupLabel;
   final String deliveryLabel;
   final double? estimatedPrice;
@@ -2558,6 +2659,7 @@ class _Step3Panel extends StatelessWidget {
   final int? durationMin;
 
   const _Step3Panel({
+    required this.priority,
     required this.pickupLabel,
     required this.deliveryLabel,
     required this.estimatedPrice,
@@ -2587,6 +2689,8 @@ class _Step3Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
+          _DeliveryTypeBadge(priority: priority),
+          const SizedBox(height: 8),
           // `Expanded` + scroll plutôt qu'un simple `Column` : le contenu
           // ci-dessous (récap trajet, prix, code promo) a grandi plusieurs
           // fois depuis le premier réglage du budget de hauteur fixe de ce
