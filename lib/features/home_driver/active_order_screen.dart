@@ -1664,6 +1664,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                   // point d'être livré). Aucune preuve n'existait jusqu'ici
                   // en cas de litige (ni photo, ni signature, ni code).
                   if (_isPickedUp && !_isDelivered) ...[
+                    const SizedBox(height: 12),
                     GestureDetector(
                       onTap: _pickProofPhoto,
                       child: Container(
