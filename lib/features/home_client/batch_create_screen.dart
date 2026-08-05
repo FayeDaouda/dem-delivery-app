@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geocoding/geocoding.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -18,6 +19,7 @@ import '../../core/utils/price_format.dart';
 import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/contact_mini_field.dart';
 import '../../shared/widgets/contact_picker.dart';
+import '../../shared/widgets/floating_map_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
@@ -25,6 +27,7 @@ import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/wizard_top_bar.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
+import '../home_driver/navigation/navigation_service.dart';
 
 const _kBatchAccent = Color(0xFF0C7A5C);
 const _placeSuggestionsColors = PlaceSuggestionsColors(
@@ -112,6 +115,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   final _pickupFocus = FocusNode();
   double? _pickupLat;
   double? _pickupLng;
+  bool _loadingGps = false;
 
   final _senderNameCtrl = TextEditingController();
   final _senderPhoneCtrl = TextEditingController();
@@ -136,6 +140,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
     super.initState();
     _loadMapStyle();
     _loadUser();
+    _fetchGpsInit();
     _pickupFocus.addListener(() {
       if (_pickupFocus.hasFocus) setState(() => _activeField = 'pickup');
     });
@@ -149,6 +154,60 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
       if (_stops[index].focusNode.hasFocus) {
         setState(() => _activeField = index);
       }
+    });
+  }
+
+  // ── GPS ──────────────────────────────────────────────────────────────────
+  // Même comportement que Livraison simple/Express : la collecte démarre
+  // pré-remplie avec la position actuelle du client, modifiable ensuite via
+  // la recherche — évite d'avoir à taper sa propre adresse à chaque fois.
+  Future<void> _fetchGpsInit() async {
+    setState(() => _loadingGps = true);
+    try {
+      final pos = await NavigationService.requestAndGetPosition();
+      if (pos != null && mounted) {
+        final ll = LatLng(pos.latitude, pos.longitude);
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: ll, zoom: 14, tilt: 30),
+          ),
+        );
+        setState(() {
+          _pickupLat = ll.latitude;
+          _pickupLng = ll.longitude;
+        });
+        await _reverseGeocodePickup(ll);
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingGps = false);
+    }
+  }
+
+  Future<void> _reverseGeocodePickup(LatLng pos) async {
+    String? addr = await _placesService.reverseGeocode(
+      pos.latitude,
+      pos.longitude,
+    );
+    if (addr == null || addr.isEmpty) {
+      try {
+        final marks = await geo
+            .placemarkFromCoordinates(pos.latitude, pos.longitude)
+            .timeout(const Duration(seconds: 5));
+        if (marks.isNotEmpty) {
+          final p = marks.first;
+          final street = p.street ?? p.name ?? '';
+          final local = p.subLocality ?? p.locality ?? '';
+          final built = street.isNotEmpty ? '$street, $local' : local;
+          if (built.isNotEmpty) addr = built;
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() {
+      _pickupCtrl.text = (addr != null && addr.isNotEmpty)
+          ? addr
+          : 'Position sélectionnée';
     });
   }
 
@@ -479,10 +538,26 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
               ),
             ),
           ),
+          // `bottom: 16` seul plaçait ce bouton sous la feuille du bas (elle
+          // occupe toujours 62% de l'écran, cf. Container ci-dessous) — donc
+          // invisible en pratique. Positionné juste au-dessus, avec le
+          // nouveau bouton de recentrage GPS à côté (même paire que
+          // Livraison simple/Express).
           Positioned(
             left: 16,
-            bottom: 16,
-            child: MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
+            right: 16,
+            bottom: MediaQuery.sizeOf(context).height * 0.62 + 16,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
+                FloatingMapButton(
+                  icon: _loadingGps ? null : Icons.my_location,
+                  loading: _loadingGps,
+                  onTap: _fetchGpsInit,
+                ),
+              ],
+            ),
           ),
           Align(
             alignment: Alignment.bottomCenter,

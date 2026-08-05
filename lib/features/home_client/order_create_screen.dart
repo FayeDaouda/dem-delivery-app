@@ -25,6 +25,7 @@ import '../../shared/widgets/address_row.dart';
 import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/contact_mini_field.dart';
 import '../../shared/widgets/contact_picker.dart';
+import '../../shared/widgets/floating_map_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
@@ -1108,7 +1109,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
-                _FloatingBtn(
+                FloatingMapButton(
                   icon: _loadingGps ? null : Icons.my_location,
                   loading: _loadingGps,
                   onTap: _fetchGpsInit,
@@ -1717,47 +1718,6 @@ class _FloatingPinState extends State<_FloatingPin>
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _FloatingBtn extends StatelessWidget {
-  final IconData? icon;
-  final bool loading;
-  final VoidCallback onTap;
-  const _FloatingBtn({
-    required this.icon,
-    required this.loading,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 8,
-            ),
-          ],
-        ),
-        child: loading
-            ? const Padding(
-                padding: EdgeInsets.all(12),
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.primary,
-                ),
-              )
-            : Icon(icon, color: AppColors.primary, size: 20),
       ),
     );
   }
