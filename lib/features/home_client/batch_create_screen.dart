@@ -787,10 +787,21 @@ class _StopCard extends StatelessWidget {
               if (canRemove)
                 GestureDetector(
                   onTap: onRemove,
-                  child: const Icon(
-                    Icons.close,
-                    color: Colors.white38,
-                    size: 16,
+                  behavior: HitTestBehavior.opaque,
+                  // Zone de tap élargie (bulle colorée) plutôt qu'une icône
+                  // nue de 16px — trop petite/discrète pour être repérée
+                  // comme une action de suppression sur un vrai appareil.
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.16),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      color: AppColors.error,
+                      size: 15,
+                    ),
                   ),
                 ),
             ],
