@@ -22,7 +22,7 @@ const _kStatusColor = {
   'ACCEPTED': AppColors.accentIndigo,
   'PICKED_UP': Color(0xFF9C27B0),
   'IN_TRANSIT': AppColors.accentIndigo,
-  'DELIVERED': AppColors.successLight,
+  'DELIVERED': AppColors.successBright,
   'CANCELLED': AppColors.error,
 };
 
@@ -77,45 +77,61 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   Widget build(BuildContext context) {
     final order = _order;
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 20, 4),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => context.pop(),
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Détail de la commande',
-                    style: ClientText.subtitle.copyWith(color: Colors.white),
-                  ),
-                ],
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(gradient: AppColors.gradientDialog),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 20, 4),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => context.pop(),
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Détail de la commande',
+                      style: ClientText.subtitle.copyWith(color: Colors.white),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (_loading && order == null)
-              const Expanded(
-                child: Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                ),
-              )
-            else if (order == null)
-              Expanded(
-                child: Center(
-                  child: Text(
-                    _error ?? 'Commande introuvable.',
-                    style: const TextStyle(color: Colors.white70),
+              if (_loading && order == null)
+                const Expanded(
+                  child: Center(
+                    child: CircularProgressIndicator(color: Colors.white),
                   ),
-                ),
-              )
-            else
-              Expanded(child: _OrderDetailBody(order: order)),
-          ],
+                )
+              else if (order == null)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      _error ?? 'Commande introuvable.',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ),
+                )
+              else
+                Expanded(child: _OrderDetailBody(order: order)),
+            ],
+          ),
         ),
       ),
     );
@@ -129,7 +145,7 @@ class _OrderDetailBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = (order['status'] as String? ?? '').toUpperCase();
-    final statusColor = _kStatusColor[status] ?? AppColors.textMuted;
+    final statusColor = _kStatusColor[status] ?? Colors.white70;
     final statusLabel = _kStatusLabel[status] ?? status;
     final price = (order['price'] as num?)?.toInt() ?? 0;
     final charge = clientChargeFor(order);
@@ -140,6 +156,7 @@ class _OrderDetailBody extends StatelessWidget {
     final driverName = driver?['name'] as String?;
     final driverRating = (driver?['averageRating'] as num?)?.toDouble();
     final proofPhotoUrl = order['proofPhotoUrl'] as String?;
+    final hasProofPhoto = proofPhotoUrl != null && proofPhotoUrl.isNotEmpty;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -147,8 +164,9 @@ class _OrderDetailBody extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: statusColor.withValues(alpha: 0.15),
+            color: statusColor.withValues(alpha: 0.16),
             borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: statusColor.withValues(alpha: 0.4)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -164,64 +182,77 @@ class _OrderDetailBody extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
+        // ── Carte livreur ──
         if (driverName != null) ...[
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
-                child: const Icon(Icons.person, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      driverName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        driverName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    if (driverRating != null) ...[
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.star_rounded,
-                            color: AppColors.ratingGold,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            driverRating.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
+                      if (driverRating != null) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.star_rounded,
+                              color: AppColors.ratingGold,
+                              size: 14,
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 3),
+                            Text(
+                              driverRating.toStringAsFixed(1),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
         ],
 
+        // ── Carte trajet ──
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+            color: Colors.white.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
             children: [
@@ -248,93 +279,136 @@ class _OrderDetailBody extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
-        Row(
-          children: [
-            const Icon(
-              Icons.payments_outlined,
-              size: 16,
-              color: Colors.white70,
-            ),
-            const SizedBox(width: 6),
-            if (!hasDiscount)
-              Text(
-                formatFcfa(price),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              )
-            else ...[
-              Text(
-                formatFcfa(price),
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.55),
-                  fontSize: 12,
-                  decoration: TextDecoration.lineThrough,
-                ),
+        // ── Carte prix ──
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.payments_outlined,
+                size: 16,
+                color: Colors.white70,
               ),
-              const SizedBox(width: 6),
-              Text(
-                formatFcfa(charge),
-                style: const TextStyle(
-                  color: AppColors.successLight,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
+              const SizedBox(width: 8),
+              const Text(
+                'Montant payé',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
+              const Spacer(),
+              if (!hasDiscount)
+                Text(
+                  formatFcfa(price),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                )
+              else ...[
+                Text(
+                  formatFcfa(price),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 12,
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  formatFcfa(charge),
+                  style: const TextStyle(
+                    color: AppColors.successBright,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
 
-        // Preuve de livraison — n'existe que si le livreur a choisi d'en
-        // prendre une (optionnel), donc absente pour la plupart des
-        // commandes. Utile surtout en cas de litige, potentiellement
-        // consultée bien après la livraison, d'où cet écran persistant.
-        if (proofPhotoUrl != null && proofPhotoUrl.isNotEmpty) ...[
-          const SizedBox(height: 20),
+        // Preuve de livraison — section toujours affichée pour une commande
+        // livrée (même sans photo, état vide explicite) plutôt que masquée
+        // en silence : sans ça, impossible de distinguer "le livreur n'a
+        // pas pris de photo" d'un bug d'affichage.
+        if (status == 'DELIVERED') ...[
+          const SizedBox(height: 14),
           Text(
             'Preuve de livraison',
             style: ClientText.bodyStrong.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () => _showFullscreenPhoto(context, proofPhotoUrl),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Image.network(
-                proofPhotoUrl,
-                width: double.infinity,
-                height: 220,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    height: 220,
-                    color: Colors.white.withValues(alpha: 0.06),
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stack) => Container(
+          if (hasProofPhoto)
+            GestureDetector(
+              onTap: () => _showFullscreenPhoto(context, proofPhotoUrl),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  proofPhotoUrl,
+                  width: double.infinity,
                   height: 220,
-                  color: Colors.white.withValues(alpha: 0.06),
-                  child: const Center(
-                    child: Icon(
-                      Icons.broken_image_outlined,
-                      color: Colors.white38,
-                      size: 32,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      height: 220,
+                      color: Colors.white.withValues(alpha: 0.08),
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stack) => Container(
+                    height: 220,
+                    color: Colors.white.withValues(alpha: 0.08),
+                    child: const Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white38,
+                        size: 32,
+                      ),
                     ),
                   ),
                 ),
               ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.photo_camera_outlined,
+                    color: Colors.white38,
+                    size: 26,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Aucune photo prise pour cette livraison',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ],
     );
