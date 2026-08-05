@@ -884,14 +884,15 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     // réglées — +34 sur toutes les étapes pour l'absorber sans dépendre du
     // scroll de secours.
     double stepExtra = 34.0;
-    // Les étapes 0 (Trajet, une fois le trajet complet) et 3 (Résumé)
-    // affichent la même carte de prix, avec plusieurs lignes optionnelles
-    // (distance/durée, réduction, total — toujours affiché depuis peu) que
-    // le budget de hauteur fixe ne prévoyait pas à l'origine, d'où des
-    // overflows/rendus tassés répétés à chaque ajout de ligne. Calculé ligne
-    // par ligne plutôt qu'avec un seul chiffre magique, pour rester correct
-    // si d'autres lignes s'ajoutent encore à l'avenir.
-    if ((_step == 0 || _step == 3) && _estimatedPrice != null) {
+    // L'étape 3 (Résumé) empile la carte de prix SOUS un récap de trajet et
+    // un champ promo — elle seule a besoin de ces suppléments pour ses
+    // lignes optionnelles (distance/durée, réduction, total — toujours
+    // affiché depuis peu). L'étape 0 affiche la carte de prix seule : lui
+    // appliquer les mêmes suppléments laissait un grand vide sous la carte
+    // (le badge +34 ci-dessus suffit largement, le scroll de secours couvre
+    // le reste). Calculé ligne par ligne plutôt qu'avec un seul chiffre
+    // magique, pour rester correct si d'autres lignes s'ajoutent encore.
+    if (_step == 3 && _estimatedPrice != null) {
       stepExtra += 40; // Divider + "Total à payer" (toujours affiché)
       if (_routeDistanceKm != null && _routeDurationMin != null) {
         stepExtra += 26; // ligne distance/durée
