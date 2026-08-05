@@ -1770,7 +1770,11 @@ class _DeliveryTypeBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isExpress = priority == 'EXPRESS';
-    final color = isExpress ? AppColors.warning : AppColors.primary;
+    // `AppColors.primary` (cyan) sur le dégradé bleu de fond (gradientSplash)
+    // manque de contraste — les deux teintes sont trop proches, texte
+    // presque illisible. Blanc pour Simple, l'ambre reste lisible tel quel
+    // pour Express.
+    final color = isExpress ? AppColors.warning : AppColors.textPrimary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
