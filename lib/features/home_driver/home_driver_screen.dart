@@ -1234,11 +1234,11 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                                   vertical: 12,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.driverAccent,
+                                  color: AppColors.accentIndigo,
                                   borderRadius: BorderRadius.circular(30),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: AppColors.driverAccent.withValues(
+                                      color: AppColors.accentIndigo.withValues(
                                         alpha: 0.4,
                                       ),
                                       blurRadius: 12,
@@ -1997,7 +1997,7 @@ class _BatchNotificationSheet extends StatelessWidget {
         ),
         decoration: const BoxDecoration(
           border: Border(
-            top: BorderSide(color: AppColors.driverAccent, width: 2),
+            top: BorderSide(color: AppColors.accentIndigo, width: 2),
           ),
         ),
         child: Column(
@@ -2010,7 +2010,7 @@ class _BatchNotificationSheet extends StatelessWidget {
               children: [
                 const Icon(
                   Icons.route_outlined,
-                  color: AppColors.driverAccent,
+                  color: AppColors.accentIndigo,
                   size: 26,
                 ),
                 const SizedBox(width: 10),
@@ -2047,14 +2047,14 @@ class _BatchNotificationSheet extends StatelessWidget {
                         strokeWidth: 3,
                         backgroundColor: AppColors.card,
                         color: countdown > 10
-                            ? AppColors.driverAccent
+                            ? AppColors.accentIndigo
                             : AppColors.surge,
                       ),
                       Text(
                         '$countdown',
                         style: TextStyle(
                           color: countdown > 10
-                              ? AppColors.driverAccent
+                              ? AppColors.accentIndigo
                               : AppColors.surge,
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -2130,7 +2130,7 @@ class _BatchNotificationSheet extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.driverAccent.withValues(alpha: 0.15),
+                color: AppColors.accentIndigo.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -2184,9 +2184,9 @@ class _BatchNotificationSheet extends StatelessWidget {
                     label: 'Glissez pour accepter',
                     onConfirmed: onAccept,
                     loading: loading,
-                    trackColor: AppColors.driverAccent,
+                    trackColor: AppColors.accentIndigo,
                     thumbColor: Colors.white,
-                    iconColor: AppColors.driverAccent,
+                    iconColor: AppColors.accentIndigo,
                     labelColor: Colors.white,
                   ),
                 ),

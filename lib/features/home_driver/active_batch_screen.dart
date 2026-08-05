@@ -55,7 +55,9 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   Position? _driverPosition;
   bool _autoFollow = true;
   DateTime? _lastLocationEmit;
-  late final _locationQueue = LocationQueueService(ref.read(ordersRepositoryProvider));
+  late final _locationQueue = LocationQueueService(
+    ref.read(ordersRepositoryProvider),
+  );
 
   // ── Batch state ───────────────────────────────────────────────────────────
   late List<Map<String, dynamic>> _stops;
@@ -88,10 +90,14 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    final orders = (widget.batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final orders =
+        (widget.batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     _stops = List.from(orders)
-      ..sort((a, b) => ((a['sequenceIndex'] as num?) ?? 0)
-          .compareTo((b['sequenceIndex'] as num?) ?? 0));
+      ..sort(
+        (a, b) => ((a['sequenceIndex'] as num?) ?? 0).compareTo(
+          (b['sequenceIndex'] as num?) ?? 0,
+        ),
+      );
     buildDriverMarkerIcon().then((icon) {
       if (mounted) setState(() => _driverIcon = icon);
     });
@@ -127,7 +133,9 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
       final cancelledId = data['orderId'] as String?;
       final index = _stops.indexWhere((s) => s['id'] == cancelledId);
       if (index == -1) return;
-      final reason = data['reason'] as String? ?? 'Un arrêt de cette tournée a été annulé.';
+      final reason =
+          data['reason'] as String? ??
+          'Un arrêt de cette tournée a été annulé.';
 
       if (_isPickedUp && index == _currentStopIndex) {
         showGradientInfoDialog(
@@ -135,7 +143,9 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
           title: 'Arrêt annulé',
           message: reason,
           icon: Icons.cancel_outlined,
-          actionLabel: index < _stops.length - 1 ? 'Arrêt suivant' : 'Terminer la tournée',
+          actionLabel: index < _stops.length - 1
+              ? 'Arrêt suivant'
+              : 'Terminer la tournée',
           onAction: () => _removeCancelledStop(index),
         );
       } else {
@@ -177,7 +187,8 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
 
   Future<void> _startNavigation() async {
     await VoiceNavService.instance.init();
-    if (mounted) setState(() => _voiceNavEnabled = VoiceNavService.instance.enabled);
+    if (mounted)
+      setState(() => _voiceNavEnabled = VoiceNavService.instance.enabled);
     VoiceNavService.instance.onPhaseChanged(isPickedUp: _isPickedUp);
 
     final fresh = await NavigationService.requestAndGetPosition();
@@ -218,7 +229,11 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     } catch (_) {
       // Best-effort : la ligne droite (marqueurs seuls) reste affichée.
     } finally {
-      if (mounted) setState(() { _loadingRoute = false; _isRerouting = false; });
+      if (mounted)
+        setState(() {
+          _loadingRoute = false;
+          _isRerouting = false;
+        });
     }
   }
 
@@ -234,7 +249,9 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     if (match.segmentIndex < _lastTrimIdx) return;
     _lastTrimIdx = match.segmentIndex;
     if (mounted) {
-      setState(() => _displayRoute = RouteTracker.remainingRoute(_routePoints, match));
+      setState(
+        () => _displayRoute = RouteTracker.remainingRoute(_routePoints, match),
+      );
     }
   }
 
@@ -260,7 +277,8 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     // Réutilise la distance perpendiculaire déjà calculée par _matchRoute.
     if (_routePoints.isNotEmpty && !_loadingRoute && routeMatch != null) {
       final now = DateTime.now();
-      if (_lastReroute == null || now.difference(_lastReroute!).inSeconds >= 15) {
+      if (_lastReroute == null ||
+          now.difference(_lastReroute!).inSeconds >= 15) {
         if (routeMatch.distanceMeters > 60) {
           _lastReroute = now;
           _lastTrimIdx = 0;
@@ -294,10 +312,7 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   void _centerOn(Position pos) {
     _mapController?.animateCamera(
       CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: LatLng(pos.latitude, pos.longitude),
-          zoom: 15.5,
-        ),
+        CameraPosition(target: LatLng(pos.latitude, pos.longitude), zoom: 15.5),
       ),
     );
   }
@@ -339,25 +354,33 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   Set<Marker> get _markers {
     final markers = <Marker>{};
     if (_driverPosition != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('driver'),
-        position: LatLng(_driverPosition!.latitude, _driverPosition!.longitude),
-        icon: _driverIcon ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        flat: true,
-        rotation: _driverPosition!.heading,
-        anchor: const Offset(0.5, 0.5),
-        zIndexInt: 2,
-      ));
+      markers.add(
+        Marker(
+          markerId: const MarkerId('driver'),
+          position: LatLng(
+            _driverPosition!.latitude,
+            _driverPosition!.longitude,
+          ),
+          icon:
+              _driverIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          flat: true,
+          rotation: _driverPosition!.heading,
+          anchor: const Offset(0.5, 0.5),
+          zIndexInt: 2,
+        ),
+      );
     }
-    markers.add(Marker(
-      markerId: const MarkerId('target'),
-      position: _targetLatLng,
-      icon: BitmapDescriptor.defaultMarkerWithHue(
-        _isPickedUp ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange,
+    markers.add(
+      Marker(
+        markerId: const MarkerId('target'),
+        position: _targetLatLng,
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          _isPickedUp ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange,
+        ),
+        zIndexInt: 1,
       ),
-      zIndexInt: 1,
-    ));
+    );
     return markers;
   }
 
@@ -381,22 +404,27 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   void _fitToTarget() {
     if (_driverPosition == null) return;
     final target = _targetLatLng;
-    final driver = LatLng(_driverPosition!.latitude, _driverPosition!.longitude);
+    final driver = LatLng(
+      _driverPosition!.latitude,
+      _driverPosition!.longitude,
+    );
     if ((driver.latitude - target.latitude).abs() < 0.0001 &&
         (driver.longitude - target.longitude).abs() < 0.0001) {
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(target, 16),
-      );
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
       return;
     }
     final bounds = LatLngBounds(
       southwest: LatLng(
         driver.latitude < target.latitude ? driver.latitude : target.latitude,
-        driver.longitude < target.longitude ? driver.longitude : target.longitude,
+        driver.longitude < target.longitude
+            ? driver.longitude
+            : target.longitude,
       ),
       northeast: LatLng(
         driver.latitude > target.latitude ? driver.latitude : target.latitude,
-        driver.longitude > target.longitude ? driver.longitude : target.longitude,
+        driver.longitude > target.longitude
+            ? driver.longitude
+            : target.longitude,
       ),
     );
     setState(() => _autoFollow = false);
@@ -407,13 +435,14 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     if (_stops.isEmpty) return;
     setState(() => _loading = true);
     try {
-      await ref.read(ordersRepositoryProvider).pickupOrder(
-            _stops[0]['id'] as String,
-          );
+      await ref
+          .read(ordersRepositoryProvider)
+          .pickupOrder(_stops[0]['id'] as String);
       NotificationService.showOngoingNotification(
         id: 9998,
         title: 'Tournée en cours',
-        body: 'Arrêt 1/${_stops.length} : ${_stops[0]['deliveryAddress'] ?? ''}',
+        body:
+            'Arrêt 1/${_stops.length} : ${_stops[0]['deliveryAddress'] ?? ''}',
       );
       setState(() {
         _isPickedUp = true;
@@ -437,9 +466,9 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     final stop = _stops[_currentStopIndex];
     setState(() => _loading = true);
     try {
-      await ref.read(ordersRepositoryProvider).deliverOrder(
-            stop['id'] as String,
-          );
+      await ref
+          .read(ordersRepositoryProvider)
+          .deliverOrder(stop['id'] as String);
       if (_currentStopIndex < _stops.length - 1) {
         final next = _stops[_currentStopIndex + 1];
         NotificationService.showOngoingNotification(
@@ -453,7 +482,9 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
           _autoFollow = true;
           _alertManager = AlertManager();
         });
-        VoiceNavService.instance.speakDirect('Livraison confirmée. Direction l\'arrêt suivant.');
+        VoiceNavService.instance.speakDirect(
+          'Livraison confirmée. Direction l\'arrêt suivant.',
+        );
         _fitToTarget();
         _loadRoute();
       } else {
@@ -479,35 +510,59 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
         builder: (ctx, setDialogState) => Dialog(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Container(
             decoration: BoxDecoration(
               gradient: AppColors.gradientDialog,
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, 8)),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
               ],
             ),
             padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.check_circle, color: Colors.white, size: 28),
-                  SizedBox(width: 10),
-                  Text(
-                    'Tournée terminée !',
-                    style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
-                  ),
-                ]),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white, size: 28),
+                    SizedBox(width: 10),
+                    Text(
+                      'Tournée terminée !',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'Tous les ${_stops.length} arrêts ont été livrés avec succès.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
                 ),
                 const SizedBox(height: 20),
-                const Text('Notez le client', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Notez le client',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -518,8 +573,12 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: Icon(
-                          star <= selectedRating ? Icons.star : Icons.star_border,
-                          color: star <= selectedRating ? AppColors.ratingGold : Colors.white38,
+                          star <= selectedRating
+                              ? Icons.star
+                              : Icons.star_border,
+                          color: star <= selectedRating
+                              ? AppColors.ratingGold
+                              : Colors.white38,
                           size: 32,
                         ),
                       ),
@@ -533,15 +592,21 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                     onPressed: () async {
                       final batchId = widget.batch['id'] as String?;
                       final clientId = widget.batch['clientId'] as String?;
-                      if (batchId != null && clientId != null && selectedRating > 0) {
+                      if (batchId != null &&
+                          clientId != null &&
+                          selectedRating > 0) {
                         try {
-                          final firstOrderId = _stops.isNotEmpty ? _stops.first['id'] as String? : null;
+                          final firstOrderId = _stops.isNotEmpty
+                              ? _stops.first['id'] as String?
+                              : null;
                           if (firstOrderId != null) {
-                            await ref.read(ordersRepositoryProvider).rateDriver(
-                              orderId: firstOrderId,
-                              driverId: clientId,
-                              score: selectedRating,
-                            );
+                            await ref
+                                .read(ordersRepositoryProvider)
+                                .rateDriver(
+                                  orderId: firstOrderId,
+                                  driverId: clientId,
+                                  score: selectedRating,
+                                );
                           }
                         } catch (_) {}
                       }
@@ -553,9 +618,14 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                       backgroundColor: Colors.white,
                       foregroundColor: AppColors.primaryDark,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: const Text('Terminer', style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Terminer',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],
@@ -569,7 +639,8 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   Future<void> _openMaps() async {
     final t = _targetLatLng;
     final url = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=${t.latitude},${t.longitude}&travelmode=two-wheeler');
+      'https://www.google.com/maps/dir/?api=1&destination=${t.latitude},${t.longitude}&travelmode=two-wheeler',
+    );
     if (await canLaunchUrl(url)) await launchUrl(url);
   }
 
@@ -581,19 +652,20 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   }
 
   void _callClient() {
-    final phone = widget.batch['clientPhone'] as String?
-        ?? (widget.batch['client'] as Map?)?['phone'] as String?;
+    final phone =
+        widget.batch['clientPhone'] as String? ??
+        (widget.batch['client'] as Map?)?['phone'] as String?;
     if (phone == null || phone.isEmpty) return;
     launchUrl(Uri.parse('tel:$phone'));
   }
 
   String? get _clientPhone =>
-      widget.batch['clientPhone'] as String?
-      ?? (widget.batch['client'] as Map?)?['phone'] as String?;
+      widget.batch['clientPhone'] as String? ??
+      (widget.batch['client'] as Map?)?['phone'] as String?;
 
   String? get _clientName =>
-      widget.batch['clientName'] as String?
-      ?? (widget.batch['client'] as Map?)?['name'] as String?;
+      widget.batch['clientName'] as String? ??
+      (widget.batch['client'] as Map?)?['name'] as String?;
 
   // Affiche le QR SamirPay pour l'arrêt en cours — même logique que sur
   // l'écran de course simple (active_order_screen.dart), adaptée à l'arrêt
@@ -605,16 +677,21 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     if (orderId == null) return;
     final estimatedAmount = clientChargeFor(stop);
 
-    final operatorName = await chooseOperator(context, title: 'Le client paie avec');
+    final operatorName = await chooseOperator(
+      context,
+      title: 'Le client paie avec',
+    );
     if (operatorName == null || !mounted) return;
 
     await SamirpayPaymentSheet.show(
       context,
       amount: estimatedAmount,
       title: 'Paiement de l\'arrêt ${_currentStopIndex + 1}',
-      initPayment: () => ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
-      confirmationStream: SocketService.instance.onOrderPaymentConfirmed
-          .where((event) => event['orderId'] == orderId),
+      initPayment: () =>
+          ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
+      confirmationStream: SocketService.instance.onOrderPaymentConfirmed.where(
+        (event) => event['orderId'] == orderId,
+      ),
       onSuccess: () => showDemToast(context, 'Paiement confirmé !'),
       displayOnly: true,
     );
@@ -625,7 +702,8 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     final confirmed = await showGradientConfirmDialog(
       context,
       title: 'Quitter la tournée ?',
-      message: 'La tournée est toujours en cours.\nVous pourrez y revenir depuis l\'accueil.',
+      message:
+          'La tournée est toujours en cours.\nVous pourrez y revenir depuis l\'accueil.',
       cancelLabel: 'Rester',
       confirmLabel: 'Quitter',
     );
@@ -640,194 +718,237 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
         if (!didPop) _confirmExit();
       },
       child: Scaffold(
-      body: Stack(children: [
-        // ── Carte ─────────────────────────────────────────────────────────
-        SizedBox.expand(
-          child: GoogleMap(
-            initialCameraPosition:
-                const CameraPosition(target: _dakarBatch, zoom: 14),
-            onMapCreated: (c) {
-              _mapController = c;
-              if (_driverPosition != null) _centerOn(_driverPosition!);
-            },
-            style: _mapStyle,
-            markers: _markers,
-            polylines: _polylines,
-            onCameraMove: (_) {
-              if (_autoFollow) setState(() => _autoFollow = false);
-            },
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            compassEnabled: false,
-            mapToolbarEnabled: false,
-            trafficEnabled: false,
-          ),
-        ),
-
-        // ── Bannière d'alerte (glisse depuis le haut) ──────────────────────
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-          top: _currentAlert != null ? 0 : -120,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            child: _currentAlert != null
-                ? AlertBanner(
-                    message: _currentAlert!,
-                    priority: _alertPriority ?? AlertPriority.low,
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ),
-
-        // ── Bouton guidage vocal ────────────────────────────────────────────
-        Positioned(
-          right: 16,
-          bottom: 230,
-          child: GestureDetector(
-            onTap: () async {
-              await VoiceNavService.instance.toggle();
-              if (mounted) setState(() => _voiceNavEnabled = VoiceNavService.instance.enabled);
-            },
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: _voiceNavEnabled ? AppColors.primary : Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
-              ),
-              child: Icon(
-                _voiceNavEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                color: _voiceNavEnabled ? Colors.white : Colors.grey,
-                size: 22,
+        body: Stack(
+          children: [
+            // ── Carte ─────────────────────────────────────────────────────────
+            SizedBox.expand(
+              child: GoogleMap(
+                initialCameraPosition: const CameraPosition(
+                  target: _dakarBatch,
+                  zoom: 14,
+                ),
+                onMapCreated: (c) {
+                  _mapController = c;
+                  if (_driverPosition != null) _centerOn(_driverPosition!);
+                },
+                style: _mapStyle,
+                markers: _markers,
+                polylines: _polylines,
+                onCameraMove: (_) {
+                  if (_autoFollow) setState(() => _autoFollow = false);
+                },
+                myLocationEnabled: false,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                compassEnabled: false,
+                mapToolbarEnabled: false,
+                trafficEnabled: false,
               ),
             ),
-          ),
-        ),
 
-        // ── Header ────────────────────────────────────────────────────────
-        SafeArea(
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(children: [
-              // Progress badge
-              Container(
+            // ── Bannière d'alerte (glisse depuis le haut) ──────────────────────
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              top: _currentAlert != null ? 0 : -120,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                child: _currentAlert != null
+                    ? AlertBanner(
+                        message: _currentAlert!,
+                        priority: _alertPriority ?? AlertPriority.low,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+
+            // ── Bouton guidage vocal ────────────────────────────────────────────
+            Positioned(
+              right: 16,
+              bottom: 230,
+              child: GestureDetector(
+                onTap: () async {
+                  await VoiceNavService.instance.toggle();
+                  if (mounted)
+                    setState(
+                      () => _voiceNavEnabled = VoiceNavService.instance.enabled,
+                    );
+                },
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: _voiceNavEnabled ? AppColors.primary : Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    _voiceNavEnabled
+                        ? Icons.volume_up_rounded
+                        : Icons.volume_off_rounded,
+                    color: _voiceNavEnabled ? Colors.white : Colors.grey,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Header ────────────────────────────────────────────────────────
+            SafeArea(
+              child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.35),
-                        blurRadius: 8)
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    // Progress badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.route,
+                            color: AppColors.accentIndigo,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _isPickedUp
+                                ? 'Arrêt ${_currentStopIndex + 1} / ${_stops.length}'
+                                : 'Récupération',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    // Paiement en ligne de l'arrêt en cours — pertinent seulement
+                    // une fois le colis récupéré (chaque arrêt a alors son propre
+                    // montant/destinataire ; avant récupération, il n'y a qu'un
+                    // point de départ partagé par toute la tournée).
+                    if (_isPickedUp && _currentStopIndex < _stops.length) ...[
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: _openPaymentQr,
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.qr_code_2_rounded,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
+                    // Recenter button when camera drifted
+                    if (!_autoFollow) ...[
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() => _autoFollow = true);
+                          if (_driverPosition != null)
+                            _centerOn(_driverPosition!);
+                        },
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.72),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.my_location,
+                            color: AppColors.accentIndigo,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.route, color: AppColors.driverAccent, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    _isPickedUp
-                        ? 'Arrêt ${_currentStopIndex + 1} / ${_stops.length}'
-                        : 'Récupération',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700),
-                  ),
-                ]),
               ),
-              const Spacer(),
-              // Paiement en ligne de l'arrêt en cours — pertinent seulement
-              // une fois le colis récupéré (chaque arrêt a alors son propre
-              // montant/destinataire ; avant récupération, il n'y a qu'un
-              // point de départ partagé par toute la tournée).
-              if (_isPickedUp && _currentStopIndex < _stops.length) ...[
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: _openPaymentQr,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
-                    ),
-                    child: const Icon(Icons.qr_code_2_rounded, color: AppColors.primary, size: 20),
-                  ),
-                ),
-              ],
-              // Recenter button when camera drifted
-              if (!_autoFollow) ...[
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: () {
-                    setState(() => _autoFollow = true);
-                    if (_driverPosition != null) _centerOn(_driverPosition!);
-                  },
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.72),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 8)
-                      ],
-                    ),
-                    child: const Icon(Icons.my_location,
-                        color: AppColors.driverAccent, size: 22),
-                  ),
-                ),
-              ],
-            ]),
-          ),
-        ),
-
-        // ── Stop progress dots (when picked up) ───────────────────────────
-        if (_isPickedUp)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 72,
-            left: 16,
-            right: 16,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(_stops.length, (i) {
-                final done = i < _currentStopIndex;
-                final current = i == _currentStopIndex;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: current ? 24 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    color: done
-                        ? AppColors.driverAccentDone
-                        : current
-                            ? AppColors.driverAccent
-                            : Colors.white.withValues(alpha: 0.35),
-                  ),
-                );
-              }),
             ),
-          ),
 
-        // ── Bottom sheet ──────────────────────────────────────────────────
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: _buildBottomSheet(),
+            // ── Stop progress dots (when picked up) ───────────────────────────
+            if (_isPickedUp)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 72,
+                left: 16,
+                right: 16,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(_stops.length, (i) {
+                    final done = i < _currentStopIndex;
+                    final current = i == _currentStopIndex;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: current ? 24 : 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        color: done
+                            ? AppColors.driverAccentDone
+                            : current
+                            ? AppColors.accentIndigo
+                            : Colors.white.withValues(alpha: 0.35),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+
+            // ── Bottom sheet ──────────────────────────────────────────────────
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildBottomSheet(),
+            ),
+          ],
         ),
-      ]),
       ),
     );
   }
@@ -835,7 +956,11 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
   Widget _buildBottomSheet() {
     return GradientSheet(
       padding: EdgeInsets.fromLTRB(
-          20, 16, 20, MediaQuery.of(context).viewPadding.bottom + 24),
+        20,
+        16,
+        20,
+        MediaQuery.of(context).viewPadding.bottom + 24,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -849,37 +974,130 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     );
   }
 
+  int get _totalTourPrice =>
+      _stops.fold(0, (s, o) => s + ((o['price'] as num?)?.toInt() ?? 0));
+
+  int get _remainingTourPrice => _stops
+      .skip(_currentStopIndex)
+      .fold(0, (s, o) => s + ((o['price'] as num?)?.toInt() ?? 0));
+
   List<Widget> _buildPickupContent() {
     final address = widget.batch['pickupAddress'] as String? ?? '';
     return [
-      Row(children: [
-        const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 22),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
+      Row(
+        children: [
+          const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Récupérer les colis',
-                    style: ClientText.subtitle.copyWith(color: Colors.white)),
+                Text(
+                  'Récupérer les colis',
+                  style: ClientText.subtitle.copyWith(color: Colors.white),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   '${_stops.length} arrêt${_stops.length > 1 ? 's' : ''} à livrer',
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
-              ]),
-        ),
-        _MapBtn(onTap: _openMaps),
-        if (_clientPhone != null && _clientPhone!.isNotEmpty) ...[
-          const SizedBox(width: 8),
-          CallButton(onTap: _callClient, size: 44),
+              ],
+            ),
+          ),
+          _MapBtn(onTap: _openMaps),
+          if (_clientPhone != null && _clientPhone!.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            CallButton(onTap: _callClient, size: 44),
+          ],
         ],
-      ]),
+      ),
       const SizedBox(height: 14),
       _AddressCard(
         icon: Icons.circle,
         label: 'Point de départ',
         address: address,
         receiverName: _clientName,
+      ),
+      // Aperçu de toute la tournée avant même de partir — jusqu'ici le
+      // livreur ne voyait qu'un compteur ("3 arrêts à livrer"), jamais les
+      // adresses, impossible de se projeter sur le trajet à venir.
+      const SizedBox(height: 10),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < _stops.length; i++)
+              Padding(
+                padding: EdgeInsets.only(bottom: i < _stops.length - 1 ? 8 : 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      margin: const EdgeInsets.only(top: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentIndigo.withValues(alpha: 0.20),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${i + 1}',
+                          style: const TextStyle(
+                            color: AppColors.accentIndigo,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        (_stops[i]['deliveryAddress'] as String?) ?? '',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Divider(height: 1, color: Colors.white24),
+            ),
+            Row(
+              children: [
+                const Text(
+                  'Total de la tournée',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$_totalTourPrice FCFA',
+                  style: const TextStyle(
+                    color: AppColors.accentIndigo,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
       if (_clientPhone != null && _clientPhone!.isNotEmpty)
         Padding(
@@ -892,17 +1110,35 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                 color: Colors.white.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(children: [
-                const Icon(Icons.person_outline, color: Colors.white70, size: 16),
-                const SizedBox(width: 8),
-                if (_clientName != null) ...[
-                  Text(_clientName!, style: ClientText.body.copyWith(color: Colors.white)),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.person_outline,
+                    color: Colors.white70,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
+                  if (_clientName != null) ...[
+                    Text(
+                      _clientName!,
+                      style: ClientText.body.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    _clientPhone!,
+                    style: ClientText.body.copyWith(
+                      color: AppColors.accentIndigo,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.phone_outlined,
+                    color: AppColors.accentIndigo,
+                    size: 16,
+                  ),
                 ],
-                Text(_clientPhone!, style: ClientText.body.copyWith(color: AppColors.driverAccent)),
-                const Spacer(),
-                const Icon(Icons.phone_outlined, color: AppColors.driverAccent, size: 16),
-              ]),
+              ),
             ),
           ),
         ),
@@ -940,30 +1176,33 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     final landmark = stop['landmark'] as String?;
 
     return [
-      Row(children: [
-        // Stop number badge
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: AppColors.driverAccent.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: AppColors.driverAccent.withValues(alpha: 0.4)),
-          ),
-          child: Center(
-            child: Text(
-              '${_currentStopIndex + 1}',
-              style: const TextStyle(
-                  color: AppColors.driverAccent,
+      Row(
+        children: [
+          // Stop number badge
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.accentIndigo.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppColors.accentIndigo.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Center(
+              child: Text(
+                '${_currentStopIndex + 1}',
+                style: const TextStyle(
+                  color: AppColors.accentIndigo,
                   fontSize: 16,
-                  fontWeight: FontWeight.w900),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -973,16 +1212,27 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                 if (price > 0)
                   Text(
                     '$price FCFA',
-                    style: ClientText.label.copyWith(color: AppColors.driverAccent),
+                    style: ClientText.label.copyWith(
+                      color: AppColors.accentIndigo,
+                    ),
                   ),
-              ]),
-        ),
-        _MapBtn(onTap: _openMaps),
-        if (receiverPhone != null && receiverPhone.isNotEmpty) ...[
-          const SizedBox(width: 8),
-          CallButton(onTap: _callReceiver, size: 44),
+                // Total restant sur la tournée — avant, seul le prix de cet
+                // arrêt était visible pendant l'exécution, jamais un total.
+                if (!isLastStop)
+                  Text(
+                    'Reste $_remainingTourPrice FCFA sur la tournée',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+              ],
+            ),
+          ),
+          _MapBtn(onTap: _openMaps),
+          if (receiverPhone != null && receiverPhone.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            CallButton(onTap: _callReceiver, size: 44),
+          ],
         ],
-      ]),
+      ),
       const SizedBox(height: 14),
       _AddressCard(
         icon: Icons.location_on,
@@ -1002,24 +1252,44 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                 color: Colors.white.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(children: [
-                const Icon(Icons.person_outline, color: Colors.white70, size: 16),
-                const SizedBox(width: 8),
-                if (receiverName != null && receiverName.isNotEmpty) ...[
-                  Text(receiverName, style: ClientText.body.copyWith(color: Colors.white)),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.person_outline,
+                    color: Colors.white70,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
+                  if (receiverName != null && receiverName.isNotEmpty) ...[
+                    Text(
+                      receiverName,
+                      style: ClientText.body.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    receiverPhone,
+                    style: ClientText.body.copyWith(
+                      color: AppColors.accentIndigo,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.phone_outlined,
+                    color: AppColors.accentIndigo,
+                    size: 16,
+                  ),
                 ],
-                Text(receiverPhone, style: ClientText.body.copyWith(color: AppColors.driverAccent)),
-                const Spacer(),
-                const Icon(Icons.phone_outlined, color: AppColors.driverAccent, size: 16),
-              ]),
+              ),
             ),
           ),
         ),
       const SizedBox(height: 14),
       SwipeToConfirm(
         key: ValueKey('stop-$_currentStopIndex-$_swipeTick'),
-        label: isLastStop ? 'Glissez : dernière livraison' : 'Glissez : livré, arrêt suivant',
+        label: isLastStop
+            ? 'Glissez : dernière livraison'
+            : 'Glissez : livré, arrêt suivant',
         lockedLabel: _distanceToTarget != null
             ? 'Trop loin (${NavigationService.formatDistance(_distanceToTarget!)})'
             : 'Localisation requise',
@@ -1056,10 +1326,16 @@ class _MapBtn extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
-          border:
-              Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.8),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.2),
+            width: 0.8,
+          ),
         ),
-        child: const Icon(Icons.navigation_outlined, color: Colors.white, size: 20),
+        child: const Icon(
+          Icons.navigation_outlined,
+          color: Colors.white,
+          size: 20,
+        ),
       ),
     );
   }
@@ -1091,49 +1367,70 @@ class _AddressCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Icon(icon, color: Colors.black87, size: 14),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Icon(icon, color: Colors.black87, size: 14),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(label,
-                        style: ClientText.micro.copyWith(color: Colors.black45)),
-                    Text(address,
-                        style: const TextStyle(
-                            color: Colors.black87,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      label,
+                      style: ClientText.micro.copyWith(color: Colors.black45),
+                    ),
+                    Text(
+                      address,
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     if (sub != null && sub!.isNotEmpty)
-                      Text(sub!,
-                          style: const TextStyle(
-                              color: Colors.black45, fontSize: 11)),
-                  ]),
-            ),
-          ]),
+                      Text(
+                        sub!,
+                        style: const TextStyle(
+                          color: Colors.black45,
+                          fontSize: 11,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
           if (receiverName != null && receiverName!.isNotEmpty) ...[
             const SizedBox(height: 8),
             const Divider(color: Colors.black12, height: 1),
             const SizedBox(height: 8),
-            Row(children: [
-              const Icon(Icons.person_outline, color: Colors.black45, size: 14),
-              const SizedBox(width: 8),
-              Text(receiverName!,
+            Row(
+              children: [
+                const Icon(
+                  Icons.person_outline,
+                  color: Colors.black45,
+                  size: 14,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  receiverName!,
                   style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500)),
-            ]),
+                    color: Colors.black87,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ],
         ],
       ),
     );
   }
 }
-
