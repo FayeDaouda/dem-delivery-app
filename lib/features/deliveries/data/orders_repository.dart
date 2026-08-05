@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/api/api_client.dart';
@@ -132,6 +134,25 @@ class OrdersRepository {
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Erreur lors de la livraison.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  // Preuve de livraison (photo optionnelle) — appel indépendant de
+  // deliverOrder pour ne jamais bloquer la confirmation de livraison sur un
+  // échec d'upload.
+  Future<Map<String, dynamic>> uploadProofPhoto(String id, File file) async {
+    try {
+      final form = FormData.fromMap({
+        'file': await MultipartFile.fromFile(file.path, filename: 'proof.jpg'),
+      });
+      final response = await _dio.post('/orders/$id/proof-photo', data: form);
+      final data = response.data as Map<String, dynamic>;
+      return (data['order'] ?? data) as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Erreur lors de l\'envoi de la photo.',
         e.response?.statusCode,
       );
     }

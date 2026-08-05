@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config/app_config.dart';
@@ -85,6 +87,20 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
 
   // ── Guidage vocal ──────────────────────────────────────────────────────────
   bool _voiceNavEnabled = true;
+
+  // ── Preuve de livraison (photo optionnelle, par arrêt) ────────────────────
+  final _proofPicker = ImagePicker();
+  File? _proofPhoto;
+
+  Future<void> _pickProofPhoto() async {
+    final xfile = await _proofPicker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
+    if (xfile != null && mounted) {
+      setState(() => _proofPhoto = File(xfile.path));
+    }
+  }
 
   @override
   void initState() {
@@ -466,9 +482,18 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     final stop = _stops[_currentStopIndex];
     setState(() => _loading = true);
     try {
-      await ref
-          .read(ordersRepositoryProvider)
-          .deliverOrder(stop['id'] as String);
+      final repo = ref.read(ordersRepositoryProvider);
+      await repo.deliverOrder(stop['id'] as String);
+      // Photo optionnelle — jamais bloquante, la livraison de cet arrêt est
+      // déjà confirmée. Réinitialisée pour laisser reprendre une photo au
+      // prochain arrêt.
+      final photo = _proofPhoto;
+      if (photo != null) {
+        repo
+            .uploadProofPhoto(stop['id'] as String, photo)
+            .catchError((_) => <String, dynamic>{});
+      }
+      _proofPhoto = null;
       if (_currentStopIndex < _stops.length - 1) {
         final next = _stops[_currentStopIndex + 1];
         NotificationService.showOngoingNotification(
@@ -1284,7 +1309,68 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
             ),
           ),
         ),
-      const SizedBox(height: 14),
+      const SizedBox(height: 10),
+      GestureDetector(
+        onTap: _pickProofPhoto,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Row(
+            children: [
+              if (_proofPhoto != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    _proofPhoto!,
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Photo ajoutée — appuyez pour la reprendre',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.check_circle,
+                  color: AppColors.success,
+                  size: 18,
+                ),
+              ] else ...[
+                const Icon(
+                  Icons.camera_alt_outlined,
+                  color: Colors.white70,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Ajouter une photo de preuve (optionnel)',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
       SwipeToConfirm(
         key: ValueKey('stop-$_currentStopIndex-$_swipeTick'),
         label: isLastStop

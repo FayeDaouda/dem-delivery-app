@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../core/error/app_exception.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/config/app_config.dart';
@@ -89,6 +91,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   Timer? _cancelWindowTimer;
   int _cancelSecondsLeft = 90;
   bool _driverCancelling = false;
+
+  // ── Preuve de livraison (photo optionnelle) ───────────────────────────────
+  final _proofPicker = ImagePicker();
+  File? _proofPhoto;
 
   // ── Getters ───────────────────────────────────────────────────────────────
   double _parseCoord(dynamic val, [double fallback = 0.0]) {
@@ -603,6 +609,16 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     }
   }
 
+  Future<void> _pickProofPhoto() async {
+    final xfile = await _proofPicker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
+    if (xfile != null && mounted) {
+      setState(() => _proofPhoto = File(xfile.path));
+    }
+  }
+
   Future<void> _deliver() async {
     if (_actionLoading) return;
     if (_isDevOrder) {
@@ -616,6 +632,15 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       final updated = await repo.deliverOrder(_order['id']);
       // Fusionne : _order (conserve client/clientPhone) + updated (nouveau statut)
       setState(() => _order = {..._order, ...updated});
+      // Photo optionnelle — jamais bloquante : la livraison est déjà
+      // confirmée, un échec d'upload ne doit surtout pas empêcher le
+      // livreur d'avancer.
+      final photo = _proofPhoto;
+      if (photo != null) {
+        repo
+            .uploadProofPhoto(_order['id'], photo)
+            .catchError((_) => <String, dynamic>{});
+      }
       if (mounted) _showPaymentDialog();
     } catch (e) {
       if (mounted) {
@@ -1633,6 +1658,77 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                         ),
                       ),
                     ),
+
+                  // Preuve de livraison — optionnelle, proposée uniquement
+                  // juste avant le dernier swipe (colis en main, sur le
+                  // point d'être livré). Aucune preuve n'existait jusqu'ici
+                  // en cas de litige (ni photo, ni signature, ni code).
+                  if (_isPickedUp && !_isDelivered) ...[
+                    GestureDetector(
+                      onTap: _pickProofPhoto,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Row(
+                          children: [
+                            if (_proofPhoto != null) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  _proofPhoto!,
+                                  width: 36,
+                                  height: 36,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Text(
+                                  'Photo ajoutée — appuyez pour la reprendre',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const Icon(
+                                Icons.check_circle,
+                                color: AppColors.success,
+                                size: 18,
+                              ),
+                            ] else ...[
+                              const Icon(
+                                Icons.camera_alt_outlined,
+                                color: Colors.white70,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Text(
+                                  'Ajouter une photo de preuve (optionnel)',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
 
                   const SizedBox(height: 8),
 
