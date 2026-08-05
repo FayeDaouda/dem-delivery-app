@@ -25,6 +25,7 @@ import '../../shared/widgets/address_row.dart';
 import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/contact_mini_field.dart';
 import '../../shared/widgets/contact_picker.dart';
+import '../../shared/widgets/favorite_address_chips.dart';
 import '../../shared/widgets/floating_map_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
@@ -1539,55 +1540,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                     // ── Chips adresses favorites ──────────────────────────
                     if (_favorites.isNotEmpty && !_isMapPlacementMode) ...[
                       const SizedBox(height: 6),
-                      SizedBox(
-                        height: 32,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _favorites.length,
-                          separatorBuilder: (_, _) => const SizedBox(width: 6),
-                          itemBuilder: (_, i) {
-                            final fav = _favorites[i];
-                            return Pressable(
-                              onTap: () => _applyFavorite(fav),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      AppColors.primary,
-                                      AppColors.primaryMid,
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: AppShadows.tinted(
-                                    AppColors.primary,
-                                    alpha: 0.35,
-                                    blur: 6,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      fav['icon'] as String? ?? '📍',
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      fav['label'] as String? ?? '',
-                                      style: ClientText.label.copyWith(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                      FavoriteAddressChips(
+                        favorites: _favorites,
+                        onSelect: _applyFavorite,
                       ),
                     ],
 

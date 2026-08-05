@@ -19,12 +19,14 @@ import '../../core/utils/price_format.dart';
 import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/contact_mini_field.dart';
 import '../../shared/widgets/contact_picker.dart';
+import '../../shared/widgets/favorite_address_chips.dart';
 import '../../shared/widgets/floating_map_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/wizard_top_bar.dart';
+import '../client_profile/data/favorite_addresses_repository.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
@@ -117,6 +119,9 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   double? _pickupLng;
   bool _loadingGps = false;
 
+  final _favRepo = FavoriteAddressesRepository();
+  List<Map<String, dynamic>> _favorites = [];
+
   final _senderNameCtrl = TextEditingController();
   final _senderPhoneCtrl = TextEditingController();
   Map<String, dynamic>? _currentUser;
@@ -140,6 +145,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
     super.initState();
     _loadMapStyle();
     _loadUser();
+    _loadFavorites();
     _fetchGpsInit();
     _pickupFocus.addListener(() {
       if (_pickupFocus.hasFocus) setState(() => _activeField = 'pickup');
@@ -147,6 +153,39 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
     for (var i = 0; i < _stops.length; i++) {
       _attachFocusListener(i);
     }
+  }
+
+  Future<void> _loadFavorites() async {
+    try {
+      final list = await _favRepo.getAll();
+      if (mounted) setState(() => _favorites = list);
+    } catch (_) {}
+  }
+
+  // Même logique que order_create_screen.dart : remplit le champ
+  // actuellement en recherche (collecte ou l'arrêt en cours), 'pickup' ou
+  // un index — voir _selectSuggestion pour le même aiguillage.
+  void _applyFavorite(Map<String, dynamic> fav) {
+    final field = _activeField;
+    final lat = (fav['lat'] as num).toDouble();
+    final lng = (fav['lng'] as num).toDouble();
+    final addr = fav['address'] as String;
+    setState(() {
+      if (field == 'pickup') {
+        _pickupCtrl.text = addr;
+        _pickupLat = lat;
+        _pickupLng = lng;
+      } else if (field is int) {
+        _stops[field].addressCtrl.text = addr;
+        _stops[field].lat = lat;
+        _stops[field].lng = lng;
+      }
+      _suggestions = [];
+      _activeField = null;
+    });
+    FocusScope.of(context).unfocus();
+    _updateEstimate();
+    _fitMapToMarkers();
   }
 
   void _attachFocusListener(int index) {
@@ -599,6 +638,8 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
                             activeField: _activeField,
                             suggestions: _suggestions,
                             searching: _searching,
+                            favorites: _favorites,
+                            onSelectFavorite: _applyFavorite,
                             onPickupTap: () {
                               setState(() => _activeField = 'pickup');
                               _pickupFocus.requestFocus();
@@ -679,6 +720,8 @@ class _TrajetStep extends StatelessWidget {
   final Object? activeField;
   final List<Map<String, dynamic>> suggestions;
   final bool searching;
+  final List<Map<String, dynamic>> favorites;
+  final ValueChanged<Map<String, dynamic>> onSelectFavorite;
   final VoidCallback onPickupTap;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<Map<String, dynamic>> onSelectSuggestion;
@@ -696,6 +739,8 @@ class _TrajetStep extends StatelessWidget {
     required this.activeField,
     required this.suggestions,
     required this.searching,
+    required this.favorites,
+    required this.onSelectFavorite,
     required this.onPickupTap,
     required this.onQueryChanged,
     required this.onSelectSuggestion,
@@ -744,6 +789,14 @@ class _TrajetStep extends StatelessWidget {
                         onSelect: onSelectSuggestion,
                       ),
                     ),
+                  if (activeField == 'pickup' && favorites.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: FavoriteAddressChips(
+                        favorites: favorites,
+                        onSelect: onSelectFavorite,
+                      ),
+                    ),
                   const SizedBox(height: 14),
                   Text(
                     'Destinations (${stops.length}/$_kMaxStops)',
@@ -768,6 +821,14 @@ class _TrajetStep extends StatelessWidget {
                           loading: searching,
                           colors: _placeSuggestionsColors,
                           onSelect: onSelectSuggestion,
+                        ),
+                      ),
+                    if (activeField == i && favorites.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: FavoriteAddressChips(
+                          favorites: favorites,
+                          onSelect: onSelectFavorite,
                         ),
                       ),
                     const SizedBox(height: 10),
