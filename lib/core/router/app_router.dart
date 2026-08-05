@@ -21,6 +21,7 @@ import '../../features/client_profile/favorite_addresses_screen.dart';
 import '../../features/client_profile/promo_code_screen.dart';
 import '../../features/home_client/orders_history_screen.dart';
 import '../../features/home_client/order_tracking_screen.dart';
+import '../../features/home_client/order_detail_screen.dart';
 
 import '../../features/splash/screens/splash_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
@@ -308,6 +309,16 @@ final appRouter = GoRouter(
           orderId: extra['orderId'] as String,
           driverId: extra['driverId'] as String,
           etaPickupMin: extra['etaPickupMin'] as int?,
+          initialOrder: extra['initialOrder'] as Map<String, dynamic>?,
+        );
+      },
+    ),
+    GoRoute(
+      path: '/orders/detail',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        return OrderDetailScreen(
+          orderId: extra['orderId'] as String,
           initialOrder: extra['initialOrder'] as Map<String, dynamic>?,
         );
       },

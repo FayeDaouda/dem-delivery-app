@@ -19,37 +19,37 @@ const _kPageSize = 30;
 
 // ── Filtres statuts ───────────────────────────────────────────────────────────
 const _statusFilters = [
-  {'key': 'all',       'label': 'Toutes'},
+  {'key': 'all', 'label': 'Toutes'},
   {'key': 'DELIVERED', 'label': 'Livrées'},
   {'key': 'CANCELLED', 'label': 'Annulées'},
-  {'key': 'PENDING',   'label': 'En attente'},
+  {'key': 'PENDING', 'label': 'En attente'},
 ];
 
 // ── Filtres période ───────────────────────────────────────────────────────────
 const _periodFilters = [
-  {'key': 'all',   'label': 'Tout'},
+  {'key': 'all', 'label': 'Tout'},
   {'key': 'today', 'label': "Aujourd'hui"},
-  {'key': 'week',  'label': 'Cette semaine'},
+  {'key': 'week', 'label': 'Cette semaine'},
   {'key': 'month', 'label': 'Ce mois'},
 ];
 
 const _statusLabel = {
-  'PENDING':           'En attente',
-  'ACCEPTED':          'Acceptée',
-  'PICKED_UP':         'En route',
-  'IN_TRANSIT':        'En cours',
-  'DELIVERED':         'Livrée',
-  'CANCELLED':         'Annulée',
+  'PENDING': 'En attente',
+  'ACCEPTED': 'Acceptée',
+  'PICKED_UP': 'En route',
+  'IN_TRANSIT': 'En cours',
+  'DELIVERED': 'Livrée',
+  'CANCELLED': 'Annulée',
   'PAYMENT_CONFIRMED': 'Payée',
 };
 
 const _statusColor = {
-  'PENDING':           AppColors.warning,
-  'ACCEPTED':          AppColors.accentIndigo,
-  'PICKED_UP':         Color(0xFF9C27B0),
-  'IN_TRANSIT':        AppColors.accentIndigo,
-  'DELIVERED':         AppColors.successLight,
-  'CANCELLED':         AppColors.error,
+  'PENDING': AppColors.warning,
+  'ACCEPTED': AppColors.accentIndigo,
+  'PICKED_UP': Color(0xFF9C27B0),
+  'IN_TRANSIT': AppColors.accentIndigo,
+  'DELIVERED': AppColors.successLight,
+  'CANCELLED': AppColors.error,
   'PAYMENT_CONFIRMED': AppColors.accentCyan,
 };
 
@@ -88,15 +88,22 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
       _loadMore();
     }
   }
 
   Future<void> _loadInitial() async {
-    setState(() { _initialLoading = true; _error = null; _page = 1; });
+    setState(() {
+      _initialLoading = true;
+      _error = null;
+      _page = 1;
+    });
     try {
-      final result = await ref.read(ordersRepositoryProvider).getMyOrdersPage(page: 1, limit: _kPageSize);
+      final result = await ref
+          .read(ordersRepositoryProvider)
+          .getMyOrdersPage(page: 1, limit: _kPageSize);
       if (!mounted) return;
       setState(() {
         _orders = result.orders;
@@ -105,7 +112,11 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
       });
       _maybeAutoLoadForFilter();
     } catch (e) {
-      if (mounted) setState(() { _initialLoading = false; _error = friendlyError(e); });
+      if (mounted)
+        setState(() {
+          _initialLoading = false;
+          _error = friendlyError(e);
+        });
     }
   }
 
@@ -114,7 +125,9 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
     setState(() => _loadingMore = true);
     final nextPage = _page + 1;
     try {
-      final result = await ref.read(ordersRepositoryProvider).getMyOrdersPage(page: nextPage, limit: _kPageSize);
+      final result = await ref
+          .read(ordersRepositoryProvider)
+          .getMyOrdersPage(page: nextPage, limit: _kPageSize);
       if (!mounted) return;
       setState(() {
         _orders = [..._orders, ...result.orders];
@@ -148,9 +161,12 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
     var result = orders;
 
     if (_statusFilter != 'all') {
-      result = result.where((o) =>
-        (o['status'] as String? ?? '').toUpperCase() == _statusFilter
-      ).toList();
+      result = result
+          .where(
+            (o) =>
+                (o['status'] as String? ?? '').toUpperCase() == _statusFilter,
+          )
+          .toList();
     }
 
     if (_periodFilter != 'all') {
@@ -162,10 +178,16 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
         if (dt == null) return false;
         switch (_periodFilter) {
           case 'today':
-            return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+            return dt.year == now.year &&
+                dt.month == now.month &&
+                dt.day == now.day;
           case 'week':
             final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-            final start = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+            final start = DateTime(
+              startOfWeek.year,
+              startOfWeek.month,
+              startOfWeek.day,
+            );
             return dt.isAfter(start);
           case 'month':
             return dt.year == now.year && dt.month == now.month;
@@ -196,22 +218,35 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     child: Row(
                       children: [
                         IconButton(
                           onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.arrow_back_ios_new,
-                              color: Colors.white, size: 20),
+                          icon: const Icon(
+                            Icons.arrow_back_ios_new,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                         const Spacer(),
-                        Text('Mes commandes',
-                            style: ClientText.subtitle.copyWith(color: Colors.white)),
+                        Text(
+                          'Mes commandes',
+                          style: ClientText.subtitle.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
                         const Spacer(),
                         IconButton(
                           onPressed: _loadInitial,
-                          icon: const Icon(Icons.refresh,
-                              color: Colors.white, size: 20),
+                          icon: const Icon(
+                            Icons.refresh,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ],
                     ),
@@ -223,8 +258,9 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
                         '${filtered.length} commande${filtered.length != 1 ? 's' : ''}'
                         '${_hasMore ? '+' : ''}',
                         style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.75),
-                            fontSize: 13),
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontSize: 13,
+                        ),
                       ),
                     )
                   else
@@ -238,173 +274,217 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
           Expanded(
             child: Column(
               children: [
-                    // ── Filtres statut ──
-                    Container(
-                      color: AppColors.lightBg,
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: _statusFilters.map((f) {
-                            final active = _statusFilter == f['key'];
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() => _statusFilter = f['key']!);
-                                _maybeAutoLoadForFilter();
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                margin: const EdgeInsets.only(right: 8, bottom: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                                decoration: BoxDecoration(
-                                  color: active ? AppColors.primary : AppColors.lightBorder,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color: active ? AppColors.primary : Colors.transparent),
+                // ── Filtres statut ──
+                Container(
+                  color: AppColors.lightBg,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _statusFilters.map((f) {
+                        final active = _statusFilter == f['key'];
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() => _statusFilter = f['key']!);
+                            _maybeAutoLoadForFilter();
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.only(right: 8, bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? AppColors.primary
+                                  : AppColors.lightBorder,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: active
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                              ),
+                            ),
+                            child: Text(
+                              f['label']!,
+                              style: TextStyle(
+                                color: active
+                                    ? Colors.white
+                                    : AppColors.textMuted,
+                                fontSize: 13,
+                                fontWeight: active
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+
+                // ── Filtres période ──
+                Container(
+                  color: AppColors.lightBg,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _periodFilters.map((f) {
+                        final active = _periodFilter == f['key'];
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() => _periodFilter = f['key']!);
+                            _maybeAutoLoadForFilter();
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.only(right: 8, bottom: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? AppColors.primary.withValues(alpha: 0.15)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: active
+                                    ? AppColors.primary.withValues(alpha: 0.6)
+                                    : const Color(0xFFDDE3EC),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.calendar_today_outlined,
+                                  size: 11,
+                                  color: active
+                                      ? AppColors.primary
+                                      : AppColors.textMuted,
                                 ),
-                                child: Text(
+                                const SizedBox(width: 5),
+                                Text(
                                   f['label']!,
                                   style: TextStyle(
-                                    color: active ? Colors.white : AppColors.textMuted,
-                                    fontSize: 13,
-                                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-
-                    // ── Filtres période ──
-                    Container(
-                      color: AppColors.lightBg,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: _periodFilters.map((f) {
-                            final active = _periodFilter == f['key'];
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() => _periodFilter = f['key']!);
-                                _maybeAutoLoadForFilter();
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                margin: const EdgeInsets.only(right: 8, bottom: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: active
-                                      ? AppColors.primary.withValues(alpha: 0.15)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
                                     color: active
-                                        ? AppColors.primary.withValues(alpha: 0.6)
-                                        : const Color(0xFFDDE3EC),
+                                        ? AppColors.primary
+                                        : AppColors.textMuted,
+                                    fontSize: 12,
+                                    fontWeight: active
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
                                   ),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.calendar_today_outlined,
-                                      size: 11,
-                                      color: active ? AppColors.primary : AppColors.textMuted,
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      f['label']!,
-                                      style: TextStyle(
-                                        color: active ? AppColors.primary : AppColors.textMuted,
-                                        fontSize: 12,
-                                        fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
-
-                    // ── Liste ──
-                    Expanded(
-                      child: Container(
-                        color: AppColors.lightBg,
-                        child: _initialLoading
-                            ? ListView.builder(
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                                itemCount: 5,
-                                itemBuilder: (_, _) => const _OrderCardSkeleton(),
-                              )
-                            : _error != null
-                                ? Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.wifi_off_outlined,
-                                            color: AppColors.textMuted, size: 48),
-                                        const SizedBox(height: 12),
-                                        Text(_error!,
-                                            style: const TextStyle(
-                                                color: AppColors.textMuted, fontSize: 13),
-                                            textAlign: TextAlign.center),
-                                        const SizedBox(height: 16),
-                                        TextButton(
-                                          onPressed: _loadInitial,
-                                          child: const Text('Réessayer',
-                                              style: TextStyle(color: AppColors.primary)),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : filtered.isEmpty
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(Icons.receipt_long_outlined,
-                                                color: AppColors.lightIconMuted, size: 64),
-                                            const SizedBox(height: 12),
-                                            const Text('Aucune commande trouvée',
-                                                style: TextStyle(
-                                                    color: AppColors.textMuted, fontSize: 15)),
-                                          ],
-                                        ),
-                                      )
-                                    : RefreshIndicator(
-                                        color: AppColors.primary,
-                                        onRefresh: _loadInitial,
-                                        child: ListView.builder(
-                                          controller: _scrollController,
-                                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                                          itemCount: filtered.length + (_hasMore ? 1 : 0),
-                                          itemBuilder: (_, i) {
-                                            if (i >= filtered.length) {
-                                              return const Padding(
-                                                padding: EdgeInsets.symmetric(vertical: 16),
-                                                child: Center(
-                                                  child: SizedBox(
-                                                    width: 22, height: 22,
-                                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                            return _OrderCard(order: filtered[i], onPaid: _loadInitial);
-                                          },
-                                        ),
-                                      ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+
+                // ── Liste ──
+                Expanded(
+                  child: Container(
+                    color: AppColors.lightBg,
+                    child: _initialLoading
+                        ? ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                            itemCount: 5,
+                            itemBuilder: (_, _) => const _OrderCardSkeleton(),
+                          )
+                        : _error != null
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.wifi_off_outlined,
+                                  color: AppColors.textMuted,
+                                  size: 48,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 13,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 16),
+                                TextButton(
+                                  onPressed: _loadInitial,
+                                  child: const Text(
+                                    'Réessayer',
+                                    style: TextStyle(color: AppColors.primary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : filtered.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.receipt_long_outlined,
+                                  color: AppColors.lightIconMuted,
+                                  size: 64,
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Aucune commande trouvée',
+                                  style: TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            color: AppColors.primary,
+                            onRefresh: _loadInitial,
+                            child: ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                              itemCount: filtered.length + (_hasMore ? 1 : 0),
+                              itemBuilder: (_, i) {
+                                if (i >= filtered.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 16),
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return _OrderCard(
+                                  order: filtered[i],
+                                  onPaid: _loadInitial,
+                                );
+                              },
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -412,7 +492,7 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
 }
 
 // ── Statuts actifs / en attente ───────────────────────────────────────────────
-const _activeStatuses  = {'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'};
+const _activeStatuses = {'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'};
 
 // ── Carte commande ────────────────────────────────────────────────────────────
 // ── Skeleton (chargement) — épouse la forme de _OrderCard ──────────────────
@@ -432,21 +512,33 @@ class _OrderCardSkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            const SkeletonBox(width: 90, height: 13),
-            const Spacer(),
-            SkeletonBox(width: 64, height: 20, borderRadius: BorderRadius.circular(20)),
-          ]),
+          Row(
+            children: [
+              const SkeletonBox(width: 90, height: 13),
+              const Spacer(),
+              SkeletonBox(
+                width: 64,
+                height: 20,
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           const SkeletonBox(width: double.infinity, height: 11),
           const SizedBox(height: 8),
           const SkeletonBox(width: 160, height: 11),
           const SizedBox(height: 16),
-          Row(children: [
-            const SkeletonBox(width: 70, height: 10),
-            const Spacer(),
-            SkeletonBox(width: 60, height: 12, borderRadius: BorderRadius.circular(4)),
-          ]),
+          Row(
+            children: [
+              const SkeletonBox(width: 70, height: 10),
+              const Spacer(),
+              SkeletonBox(
+                width: 60,
+                height: 12,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -471,18 +563,32 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
       return;
     }
     if (_activeStatuses.contains(status)) {
-      final driverId = (widget.order['driver'] as Map?)?['id'] as String?
-          ?? widget.order['driverId'] as String?;
+      final driverId =
+          (widget.order['driver'] as Map?)?['id'] as String? ??
+          widget.order['driverId'] as String?;
       if (driverId == null) return;
-      context.push('/orders/tracking', extra: {
-        'orderId': widget.order['id'] as String,
-        'driverId': driverId,
-        'initialOrder': widget.order,
-      });
+      context.push(
+        '/orders/tracking',
+        extra: {
+          'orderId': widget.order['id'] as String,
+          'driverId': driverId,
+          'initialOrder': widget.order,
+        },
+      );
       return;
     }
     if (status == 'DELIVERED' && paymentStatus != 'PAID') {
       _payIfStillUnpaid();
+      return;
+    }
+    if (status == 'DELIVERED') {
+      context.push(
+        '/orders/detail',
+        extra: {
+          'orderId': widget.order['id'] as String,
+          'initialOrder': widget.order,
+        },
+      );
     }
   }
 
@@ -501,7 +607,9 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
 
     setState(() => _checkingPayment = true);
     try {
-      final fresh = await ref.read(ordersRepositoryProvider).getOrderById(orderId);
+      final fresh = await ref
+          .read(ordersRepositoryProvider)
+          .getOrderById(orderId);
       if (!mounted) return;
 
       if ((fresh['paymentStatus'] as String? ?? 'PENDING') == 'PAID') {
@@ -518,7 +626,8 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
         context,
         amount: amount,
         title: 'Paiement de la course',
-        initPayment: () => ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
+        initPayment: () =>
+            ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
         confirmationStream: SocketService.instance.onOrderPaymentConfirmed
             .where((event) => event['orderId'] == orderId),
         onSuccess: widget.onPaid,
@@ -532,28 +641,39 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
 
   @override
   Widget build(BuildContext context) {
-    final order    = widget.order;
-    final id       = (order['id'] as String? ?? '').toUpperCase();
-    final shortId  = id.length >= 8 ? id.substring(0, 8) : id;
-    final price    = (order['price'] as num?)?.toInt() ?? 0;
-    final status   = (order['status'] as String? ?? '').toUpperCase();
+    final order = widget.order;
+    final id = (order['id'] as String? ?? '').toUpperCase();
+    final shortId = id.length >= 8 ? id.substring(0, 8) : id;
+    final price = (order['price'] as num?)?.toInt() ?? 0;
+    final status = (order['status'] as String? ?? '').toUpperCase();
     final paymentStatus = (order['paymentStatus'] as String?) ?? 'PENDING';
-    final rawDate  = order['createdAt'] as String?;
-    final date     = rawDate != null ? _formatDate(DateTime.tryParse(rawDate)) : '—';
-    final pickup   = order['pickupAddress'] as String? ?? '—';
+    final rawDate = order['createdAt'] as String?;
+    final date = rawDate != null
+        ? _formatDate(DateTime.tryParse(rawDate))
+        : '—';
+    final pickup = order['pickupAddress'] as String? ?? '—';
     final delivery = order['deliveryAddress'] as String? ?? '—';
-    final type     = (order['orderType'] as String?) ?? (order['type'] as String?) ?? '';
-    final color    = _statusColor[status] ?? AppColors.textMuted;
-    final label    = _statusLabel[status] ?? status;
+    final type =
+        (order['orderType'] as String?) ?? (order['type'] as String?) ?? '';
+    final color = _statusColor[status] ?? AppColors.textMuted;
+    final label = _statusLabel[status] ?? status;
 
     // Une commande livrée mais pas encore payée en ligne reste actionnable —
     // le client peut la régler après coup (ex: le paiement à la livraison
     // n'a pas abouti).
     final unpaidDelivered = status == 'DELIVERED' && paymentStatus != 'PAID';
-    final tappable = status == 'PENDING' || _activeStatuses.contains(status) || unpaidDelivered;
+    // Une commande livrée et payée reste consultable — récap + éventuelle
+    // photo de preuve (voir order_detail_screen.dart), utile en cas de
+    // litige bien après la livraison.
+    final tappable =
+        status == 'PENDING' ||
+        _activeStatuses.contains(status) ||
+        status == 'DELIVERED';
 
     return Pressable(
-      onTap: tappable && !_checkingPayment ? () => _onTap(context, status, paymentStatus) : null,
+      onTap: tappable && !_checkingPayment
+          ? () => _onTap(context, status, paymentStatus)
+          : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
@@ -573,36 +693,67 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                 children: [
                   Icon(_typeIcon(type), color: AppColors.primary, size: 16),
                   const SizedBox(width: 6),
-                  Text('# $shortId',
-                      style: ClientText.bodyStrong.copyWith(color: AppColors.textDark, fontFamily: 'monospace')),
+                  Text(
+                    '# $shortId',
+                    style: ClientText.bodyStrong.copyWith(
+                      color: AppColors.textDark,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(label,
-                        style: ClientText.caption.copyWith(color: color)),
+                    child: Text(
+                      label,
+                      style: ClientText.caption.copyWith(color: color),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
-              AddressRow(icon: Icons.circle, iconColor: AppColors.successLight, address: pickup, compact: true),
+              AddressRow(
+                icon: Icons.circle,
+                iconColor: AppColors.successLight,
+                address: pickup,
+                compact: true,
+              ),
               const SizedBox(height: 4),
-              AddressRow(icon: Icons.location_on, iconColor: AppColors.primary, address: delivery, compact: true),
+              AddressRow(
+                icon: Icons.location_on,
+                iconColor: AppColors.primary,
+                address: delivery,
+                compact: true,
+              ),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  const Icon(Icons.access_time, color: AppColors.textMuted, size: 13),
+                  const Icon(
+                    Icons.access_time,
+                    color: AppColors.textMuted,
+                    size: 13,
+                  ),
                   const SizedBox(width: 4),
-                  Text(date, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  Text(
+                    date,
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
                   const Spacer(),
                   if (_checkingPayment)
                     const Padding(
                       padding: EdgeInsets.only(right: 8),
                       child: SizedBox(
-                        width: 12, height: 12,
+                        width: 12,
+                        height: 12,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
@@ -613,15 +764,19 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                           status == 'PENDING'
                               ? 'Voir →'
                               : unpaidDelivered
-                                  ? 'Payer →'
-                                  : 'Suivre →',
+                              ? 'Payer →'
+                              : status == 'DELIVERED'
+                              ? 'Détails →'
+                              : 'Suivre →',
                           style: ClientText.labelStrong.copyWith(color: color),
                         ),
                         const SizedBox(width: 8),
                       ],
                     ),
-                  Text(formatFcfa(price),
-                      style: ClientText.button.copyWith(color: AppColors.primary)),
+                  Text(
+                    formatFcfa(price),
+                    style: ClientText.button.copyWith(color: AppColors.primary),
+                  ),
                 ],
               ),
             ],
