@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/widgets/address_row.dart';
 import '../../shared/widgets/call_button.dart';
+import '../../shared/widgets/driver_rating_dialog.dart';
 import '../../shared/widgets/map_location_mode_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/operator_picker_sheet.dart';
@@ -42,7 +43,8 @@ class OrderTrackingScreen extends ConsumerStatefulWidget {
   final String orderId;
   final String driverId;
   final int? etaPickupMin;
-  final Map<String, dynamic>? initialOrder; // données pré-chargées → zéro latence
+  final Map<String, dynamic>?
+  initialOrder; // données pré-chargées → zéro latence
 
   const OrderTrackingScreen({
     super.key,
@@ -75,7 +77,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
   Timer? _routeRefreshTimer;
 
-  late final _locationModeCtrl = MapLocationModeController(onUpdate: _onLocationModeUpdate);
+  late final _locationModeCtrl = MapLocationModeController(
+    onUpdate: _onLocationModeUpdate,
+  );
   bool _programmaticMove = false;
   Timer? _programmaticMoveTimer;
   bool _nearbyAlerted = false;
@@ -153,7 +157,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
         SocketService.instance.connect(token);
         // Redemande la dernière position connue du driver après reconnexion
         Future.delayed(const Duration(milliseconds: 600), () {
-          if (mounted) SocketService.instance.requestDriverLocation(widget.orderId);
+          if (mounted)
+            SocketService.instance.requestDriverLocation(widget.orderId);
         });
       });
     } else {
@@ -175,7 +180,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
       _clientCancelSecondsLeft = 0;
       return;
     }
-    final elapsed = DateTime.now().difference(DateTime.parse(acceptedAt)).inSeconds;
+    final elapsed = DateTime.now()
+        .difference(DateTime.parse(acceptedAt))
+        .inSeconds;
     _clientCancelSecondsLeft = (120 - elapsed).clamp(0, 120);
     if (_clientCancelSecondsLeft <= 0) return;
     _clientCancelTimer?.cancel();
@@ -218,10 +225,16 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     final canvas = Canvas(recorder);
 
     // Halo externe pulsé
-    canvas.drawCircle(const Offset(cx, cy), 56,
-        Paint()..color = const Color(0x18FF6B00));
-    canvas.drawCircle(const Offset(cx, cy), 42,
-        Paint()..color = const Color(0x30FF6B00));
+    canvas.drawCircle(
+      const Offset(cx, cy),
+      56,
+      Paint()..color = const Color(0x18FF6B00),
+    );
+    canvas.drawCircle(
+      const Offset(cx, cy),
+      42,
+      Paint()..color = const Color(0x30FF6B00),
+    );
 
     // Ombre portée de la flèche
     final shadowPaint = Paint()
@@ -236,18 +249,24 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     canvas.drawPath(shadowPath, shadowPaint);
 
     // Cercle de base blanc (effet 3D)
-    canvas.drawCircle(const Offset(cx, cy + 4), 22,
-        Paint()..color = Colors.white);
-    canvas.drawCircle(const Offset(cx, cy + 4), 20,
-        Paint()..color = const Color(0xFFFF6B00));
+    canvas.drawCircle(
+      const Offset(cx, cy + 4),
+      22,
+      Paint()..color = Colors.white,
+    );
+    canvas.drawCircle(
+      const Offset(cx, cy + 4),
+      20,
+      Paint()..color = const Color(0xFFFF6B00),
+    );
 
     // Flèche pointant vers le haut (nord = 0°)
     // La rotation est appliquée via Marker.rotation au niveau de la carte
     final arrowPath = Path()
-      ..moveTo(cx, cy - 26)        // pointe
-      ..lineTo(cx + 16, cy + 13)   // coin droit
-      ..lineTo(cx, cy + 7)         // encoche centrale
-      ..lineTo(cx - 16, cy + 13)   // coin gauche
+      ..moveTo(cx, cy - 26) // pointe
+      ..lineTo(cx + 16, cy + 13) // coin droit
+      ..lineTo(cx, cy + 7) // encoche centrale
+      ..lineTo(cx - 16, cy + 13) // coin gauche
       ..close();
 
     canvas.drawPath(
@@ -271,18 +290,22 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     final picture = recorder.endRecording();
     final img = await picture.toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(),
-        width: 54, height: 54);
+    return BitmapDescriptor.bytes(
+      bytes!.buffer.asUint8List(),
+      width: 54,
+      height: 54,
+    );
   }
 
   // ── Cap du livreur (bearing entre deux positions consécutives) ────────────
   static double _calculateBearing(LatLng from, LatLng to) {
-    final lat1 = from.latitude  * math.pi / 180;
-    final lat2 = to.latitude    * math.pi / 180;
+    final lat1 = from.latitude * math.pi / 180;
+    final lat2 = to.latitude * math.pi / 180;
     final dLng = (to.longitude - from.longitude) * math.pi / 180;
     final y = math.sin(dLng) * math.cos(lat2);
-    final x = math.cos(lat1) * math.sin(lat2) -
-              math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+    final x =
+        math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
     return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 
@@ -300,7 +323,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     if (match.segmentIndex == _lastTrimIdx && _displayRoute.isNotEmpty) return;
     _lastTrimIdx = match.segmentIndex;
     if (mounted) {
-      setState(() => _displayRoute = RouteTracker.remainingRoute(_routePoints, match));
+      setState(
+        () => _displayRoute = RouteTracker.remainingRoute(_routePoints, match),
+      );
     }
   }
 
@@ -311,11 +336,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     if (order == null) return;
     _isRerouting = true;
 
-    final pickupLat = (order['pickupLatitude']   as num?)?.toDouble();
-    final pickupLng = (order['pickupLongitude']  as num?)?.toDouble();
-    final delivLat  = (order['deliveryLatitude'] as num?)?.toDouble();
-    final delivLng  = (order['deliveryLongitude'] as num?)?.toDouble();
-    if (pickupLat == null || pickupLng == null || delivLat == null || delivLng == null) {
+    final pickupLat = (order['pickupLatitude'] as num?)?.toDouble();
+    final pickupLng = (order['pickupLongitude'] as num?)?.toDouble();
+    final delivLat = (order['deliveryLatitude'] as num?)?.toDouble();
+    final delivLng = (order['deliveryLongitude'] as num?)?.toDouble();
+    if (pickupLat == null ||
+        pickupLng == null ||
+        delivLat == null ||
+        delivLng == null) {
       _isRerouting = false;
       return;
     }
@@ -323,15 +351,20 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     final driverLoc = s.driverLocation;
     final double oLat, oLng, dLat, dLng;
     if (s.phase == 'ACCEPTED' && driverLoc != null) {
-      oLat = driverLoc.latitude;  oLng = driverLoc.longitude;
-      dLat = pickupLat;           dLng = pickupLng;
+      oLat = driverLoc.latitude;
+      oLng = driverLoc.longitude;
+      dLat = pickupLat;
+      dLng = pickupLng;
     } else if (s.phase == 'PICKED_UP') {
-      oLat = driverLoc?.latitude  ?? pickupLat;
+      oLat = driverLoc?.latitude ?? pickupLat;
       oLng = driverLoc?.longitude ?? pickupLng;
-      dLat = delivLat;            dLng = delivLng;
+      dLat = delivLat;
+      dLng = delivLng;
     } else {
-      oLat = pickupLat; oLng = pickupLng;
-      dLat = delivLat;  dLng = delivLng;
+      oLat = pickupLat;
+      oLng = pickupLng;
+      dLat = delivLat;
+      dLng = delivLng;
     }
 
     try {
@@ -343,7 +376,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
           (res.data['routes'] as List?)?.isNotEmpty == true) {
         final coords = res.data['routes'][0]['geometry']['coordinates'] as List;
         final points = coords
-            .map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
+            .map(
+              (c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
+            )
             .toList();
         if (mounted) {
           setState(() {
@@ -394,162 +429,33 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
       ctx,
       amount: estimatedAmount,
       title: 'Paiement de la course',
-      initPayment: () => ref.read(ordersRepositoryProvider).payOnline(widget.orderId, operatorName),
-      confirmationStream: SocketService.instance.onOrderPaymentConfirmed
-          .where((event) => event['orderId'] == widget.orderId),
+      initPayment: () => ref
+          .read(ordersRepositoryProvider)
+          .payOnline(widget.orderId, operatorName),
+      confirmationStream: SocketService.instance.onOrderPaymentConfirmed.where(
+        (event) => event['orderId'] == widget.orderId,
+      ),
       onSuccess: () => showDemToast(ctx, 'Paiement confirmé !'),
     );
   }
 
   void _showRatingDialog() {
     if (!mounted || _rated) return;
-    int selectedRating = 5;
-    final commentController = TextEditingController();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setDialogState) => Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: AppColors.gradientSplash,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8))
-              ],
-            ),
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: const BoxDecoration(
-                      color: AppColors.success, shape: BoxShape.circle),
-                  child:
-                      const Icon(Icons.check, color: Colors.white, size: 40),
-                ),
-                const SizedBox(height: 16),
-                const Text('Livraison effectuée !',
-                    style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-                const SizedBox(height: 6),
-                Text(
-                    formatFcfa((_s.orderData?['price'] as num?) ?? 0),
-                    style: ClientText.title.copyWith(color: Colors.white)),
-                const SizedBox(height: 20),
-                const Text('Notez votre livreur',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white)),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (i) {
-                    final star = i + 1;
-                    return GestureDetector(
-                      onTap: () =>
-                          setDialogState(() => selectedRating = star),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Icon(
-                          star <= selectedRating
-                              ? Icons.star
-                              : Icons.star_border,
-                          color: star <= selectedRating
-                              ? AppColors.ratingGold
-                              : Colors.white38,
-                          size: 36,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: commentController,
-                  style: const TextStyle(color: Colors.white),
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    hintText: 'Un commentaire ? (optionnel)',
-                    hintStyle: const TextStyle(
-                        color: Colors.white38, fontSize: 13),
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.1),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      setState(() => _rated = true);
-                      Navigator.of(ctx).pop();
-                      final comment =
-                          commentController.text.trim().isEmpty
-                              ? null
-                              : commentController.text.trim();
-                      try {
-                        await ref
-                            .read(ordersRepositoryProvider)
-                            .rateDriver(
-                              orderId: widget.orderId,
-                              driverId: widget.driverId,
-                              score: selectedRating,
-                              comment: comment,
-                            );
-                      } catch (_) {}
-                      if (mounted) context.go('/client/home');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                      elevation: 0,
-                    ),
-                    child: const Text('Envoyer & Retour',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () {
-                    setState(() => _rated = true);
-                    Navigator.of(ctx).pop();
-                    if (mounted) context.go('/client/home');
-                  },
-                  child: const Text('Passer',
-                      style:
-                          TextStyle(color: Colors.white54, fontSize: 13)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    setState(() => _rated = true);
+    showDriverRatingDialog(
+      context,
+      orderId: widget.orderId,
+      driverId: widget.driverId,
+      amount: (_s.orderData?['price'] as num?)?.toDouble(),
+      onDone: () {
+        if (mounted) context.go('/client/home');
+      },
     );
   }
 
   Future<void> _callDriver() async {
-    final phone = (_s.orderData?['driver'] as Map<String, dynamic>?)?['phone']
-        as String?;
+    final phone =
+        (_s.orderData?['driver'] as Map<String, dynamic>?)?['phone'] as String?;
     if (phone == null || phone.isEmpty) return;
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) await launchUrl(uri);
@@ -567,46 +473,55 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
   }
 
   String get _statusLabel => switch (_s.phase) {
-        'ACCEPTED' => _isDelivery
-            ? 'Livreur en route pour récupérer votre colis'
-            : 'Chauffeur en route vers vous',
-        'PICKED_UP' => _isDelivery
-            ? 'Colis pris en charge — en route'
-            : 'En route vers la destination',
-        'DELIVERED' => _isDelivery ? 'Colis livré ✓' : 'Arrivée effectuée ✓',
-        _ => 'Commande en cours',
-      };
+    'ACCEPTED' =>
+      _isDelivery
+          ? 'Livreur en route pour récupérer votre colis'
+          : 'Chauffeur en route vers vous',
+    'PICKED_UP' =>
+      _isDelivery
+          ? 'Colis pris en charge — en route'
+          : 'En route vers la destination',
+    'DELIVERED' => _isDelivery ? 'Colis livré ✓' : 'Arrivée effectuée ✓',
+    _ => 'Commande en cours',
+  };
 
   IconData get _statusIcon => switch (_s.phase) {
-        'ACCEPTED' => _isDelivery ? Icons.inventory_2_outlined : Icons.directions_bike,
-        'PICKED_UP' => Icons.two_wheeler,
-        'DELIVERED' => Icons.check_circle,
-        _ => Icons.access_time,
-      };
+    'ACCEPTED' =>
+      _isDelivery ? Icons.inventory_2_outlined : Icons.directions_bike,
+    'PICKED_UP' => Icons.two_wheeler,
+    'DELIVERED' => Icons.check_circle,
+    _ => Icons.access_time,
+  };
 
   Color get _statusColor => switch (_s.phase) {
-        'ACCEPTED' => AppColors.surge,
-        'PICKED_UP' => AppColors.primary,
-        'DELIVERED' => AppColors.success,
-        _ => AppColors.textSecondary,
-      };
+    'ACCEPTED' => AppColors.surge,
+    'PICKED_UP' => AppColors.primary,
+    'DELIVERED' => AppColors.success,
+    _ => AppColors.textSecondary,
+  };
 
-  void _fitBounds(double pickupLat, double pickupLng, double deliveryLat,
-      double deliveryLng) {
+  void _fitBounds(
+    double pickupLat,
+    double pickupLng,
+    double deliveryLat,
+    double deliveryLng,
+  ) {
     _beginProgrammaticMove();
-    _mapController?.animateCamera(CameraUpdate.newLatLngBounds(
-      LatLngBounds(
-        southwest: LatLng(
-          pickupLat < deliveryLat ? pickupLat : deliveryLat,
-          pickupLng < deliveryLng ? pickupLng : deliveryLng,
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(
+            pickupLat < deliveryLat ? pickupLat : deliveryLat,
+            pickupLng < deliveryLng ? pickupLng : deliveryLng,
+          ),
+          northeast: LatLng(
+            pickupLat > deliveryLat ? pickupLat : deliveryLat,
+            pickupLng > deliveryLng ? pickupLng : deliveryLng,
+          ),
         ),
-        northeast: LatLng(
-          pickupLat > deliveryLat ? pickupLat : deliveryLat,
-          pickupLng > deliveryLng ? pickupLng : deliveryLng,
-        ),
+        80,
       ),
-      80,
-    ));
+    );
   }
 
   Widget _buildArrivalBanner() {
@@ -619,7 +534,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
           ),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -630,18 +549,32 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
             const Expanded(
               child: Text(
                 'Le livreur est arrivé !',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
             ),
             GestureDetector(
               onTap: _callDriver,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('Appeler', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                child: const Text(
+                  'Appeler',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -668,7 +601,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: const [
-                Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.sos),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 14,
+                  color: AppColors.sos,
+                ),
                 SizedBox(width: 6),
                 Flexible(
                   child: Text(
@@ -683,21 +620,36 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
               onTap: _showReportSheet,
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 14,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.sos.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.sos.withValues(alpha: 0.45)),
+                  border: Border.all(
+                    color: AppColors.sos.withValues(alpha: 0.45),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.support_agent, color: AppColors.sos, size: 16),
+                    const Icon(
+                      Icons.support_agent,
+                      color: AppColors.sos,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text('Contacter le support',
-                          style: ClientText.body.copyWith(color: AppColors.sos)),
+                      child: Text(
+                        'Contacter le support',
+                        style: ClientText.body.copyWith(color: AppColors.sos),
+                      ),
                     ),
-                    Icon(Icons.chevron_right, color: AppColors.sos.withValues(alpha: 0.7), size: 18),
+                    Icon(
+                      Icons.chevron_right,
+                      color: AppColors.sos.withValues(alpha: 0.7),
+                      size: 18,
+                    ),
                   ],
                 ),
               ),
@@ -715,8 +667,12 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 10, height: 10,
-              child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.warning),
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: AppColors.warning,
+              ),
             ),
             SizedBox(width: 8),
             Flexible(
@@ -732,8 +688,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
     if (driverStatus == DriverStatus.offline) {
       final diff = since != null ? DateTime.now().difference(since) : null;
-      final mins  = diff?.inMinutes ?? 0;
-      final timeLabel = (diff == null || mins < 1) ? 'À l\'instant' : 'Il y a $mins min';
+      final mins = diff?.inMinutes ?? 0;
+      final timeLabel = (diff == null || mins < 1)
+          ? 'À l\'instant'
+          : 'Il y a $mins min';
       // ACCEPTED + offline : re-dispatch automatique après 5 min
       final isAccepted = _s.phase == 'ACCEPTED';
       final minsUntilRedispatch = isAccepted ? (5 - mins).clamp(0, 5) : null;
@@ -747,11 +705,18 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.wifi_off_outlined, size: 12, color: AppColors.warning),
+                const Icon(
+                  Icons.wifi_off_outlined,
+                  size: 12,
+                  color: AppColors.warning,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   'Le livreur est hors ligne · $timeLabel',
-                  style: const TextStyle(color: AppColors.warning, fontSize: 11),
+                  style: const TextStyle(
+                    color: AppColors.warning,
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
@@ -762,7 +727,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                 minsUntilRedispatch > 0
                     ? 'Un nouveau livreur sera cherché automatiquement dans ~$minsUntilRedispatch min'
                     : 'Recherche d\'un nouveau livreur en cours…',
-                style: TextStyle(color: AppColors.warning.withValues(alpha: 0.70), fontSize: 10),
+                style: TextStyle(
+                  color: AppColors.warning.withValues(alpha: 0.70),
+                  fontSize: 10,
+                ),
               ),
             ],
           ],
@@ -776,12 +744,18 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 10, height: 10,
-              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white38),
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: Colors.white38,
+              ),
             ),
             SizedBox(width: 8),
-            Text('Localisation du livreur en cours…',
-                style: TextStyle(color: Colors.white38, fontSize: 11)),
+            Text(
+              'Localisation du livreur en cours…',
+              style: TextStyle(color: Colors.white38, fontSize: 11),
+            ),
           ],
         ),
       );
@@ -791,9 +765,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
   void _showReportSheet() {
     final orderId = widget.orderId;
-    final since   = _s.driverOfflineSince;
-    final mins    = since != null ? DateTime.now().difference(since).inMinutes : 0;
-    final msg     = Uri.encodeComponent(
+    final since = _s.driverOfflineSince;
+    final mins = since != null ? DateTime.now().difference(since).inMinutes : 0;
+    final msg = Uri.encodeComponent(
       'Bonjour, j\'ai un problème avec ma livraison #$orderId. '
       'Le livreur est hors ligne depuis $mins min.',
     );
@@ -806,7 +780,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
         decoration: BoxDecoration(
           gradient: AppColors.gradientSplash,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 24, offset: const Offset(0, -4))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
+            ),
+          ],
         ),
         child: SafeArea(
           top: false,
@@ -818,7 +798,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                 // Drag handle
                 Center(
                   child: Container(
-                    width: 36, height: 3,
+                    width: 36,
+                    height: 3,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(2),
@@ -829,23 +810,40 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
                 // Icône warning
                 Container(
-                  width: 60, height: 60,
+                  width: 60,
+                  height: 60,
                   decoration: BoxDecoration(
                     color: AppColors.warning.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
+                    border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.4),
+                    ),
                   ),
-                  child: const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 30),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppColors.warning,
+                    size: 30,
+                  ),
                 ),
                 const SizedBox(height: 14),
 
-                const Text('Signaler un problème',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Signaler un problème',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Text(
                   'Le livreur est hors ligne depuis $mins min.\nNotre équipe est disponible pour vous aider.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13, height: 1.5),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
                 ),
                 const SizedBox(height: 28),
 
@@ -871,9 +869,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                   subtitle: 'Message direct avec le texte pré-rempli',
                   onTap: () async {
                     Navigator.pop(context);
-                    final uri = Uri.parse('https://wa.me/${AppConfig.supportWhatsapp}?text=$msg');
+                    final uri = Uri.parse(
+                      'https://wa.me/${AppConfig.supportWhatsapp}?text=$msg',
+                    );
                     if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
                     }
                   },
                 ),
@@ -881,7 +884,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Fermer', style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 14)),
+                  child: Text(
+                    'Fermer',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -899,14 +908,16 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     // l'orientation du téléphone — le "fit bounds" ignore le bearing, donc
     // pas pertinent ici (voir mode suivi ci-dessous pour ce cas).
     if (_locationModeCtrl.isCompass) {
-      _mapController!.moveCamera(CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: driverLoc,
-          zoom: 17,
-          tilt: 55,
-          bearing: _locationModeCtrl.compassBearing,
+      _mapController!.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: driverLoc,
+            zoom: 17,
+            tilt: 55,
+            bearing: _locationModeCtrl.compassBearing,
+          ),
         ),
-      ));
+      );
       return;
     }
 
@@ -914,32 +925,44 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     final order = s.orderData;
     LatLng? destination;
     if (s.phase == 'ACCEPTED') {
-      final pLat = (order?['pickupLatitude']  as num?)?.toDouble();
+      final pLat = (order?['pickupLatitude'] as num?)?.toDouble();
       final pLng = (order?['pickupLongitude'] as num?)?.toDouble();
       if (pLat != null && pLng != null) destination = LatLng(pLat, pLng);
     } else if (s.phase == 'PICKED_UP' || s.phase == 'IN_TRANSIT') {
-      final dLat = (order?['deliveryLatitude']  as num?)?.toDouble();
+      final dLat = (order?['deliveryLatitude'] as num?)?.toDouble();
       final dLng = (order?['deliveryLongitude'] as num?)?.toDouble();
       if (dLat != null && dLng != null) destination = LatLng(dLat, dLng);
     }
     if (destination != null) {
-      _mapController!.animateCamera(CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(
-            driverLoc.latitude  < destination.latitude  ? driverLoc.latitude  : destination.latitude,
-            driverLoc.longitude < destination.longitude ? driverLoc.longitude : destination.longitude,
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(
+              driverLoc.latitude < destination.latitude
+                  ? driverLoc.latitude
+                  : destination.latitude,
+              driverLoc.longitude < destination.longitude
+                  ? driverLoc.longitude
+                  : destination.longitude,
+            ),
+            northeast: LatLng(
+              driverLoc.latitude > destination.latitude
+                  ? driverLoc.latitude
+                  : destination.latitude,
+              driverLoc.longitude > destination.longitude
+                  ? driverLoc.longitude
+                  : destination.longitude,
+            ),
           ),
-          northeast: LatLng(
-            driverLoc.latitude  > destination.latitude  ? driverLoc.latitude  : destination.latitude,
-            driverLoc.longitude > destination.longitude ? driverLoc.longitude : destination.longitude,
-          ),
+          90,
         ),
-        90,
-      ));
+      );
     } else {
-      _mapController!.animateCamera(CameraUpdate.newCameraPosition(
-        CameraPosition(target: driverLoc, zoom: 17, tilt: 55),
-      ));
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: driverLoc, zoom: 17, tilt: 55),
+        ),
+      );
     }
   }
 
@@ -949,16 +972,22 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     final orderState = ref.watch(clientOrderStateProvider(widget.orderId));
 
     // Init timer annulation si pas encore démarré
-    if (_clientCancelTimer == null && _clientCancelSecondsLeft == 120 && orderState.orderData != null) {
+    if (_clientCancelTimer == null &&
+        _clientCancelSecondsLeft == 120 &&
+        orderState.orderData != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _startClientCancelWindow(orderState.orderData);
       });
     }
 
     // ── Side effects (carte, haptic, dialog) réagissant aux changements ─────
-    ref.listen<ClientOrderState>(clientOrderStateProvider(widget.orderId),
-        (prev, next) {
-      if (prev?.orderData == null && next.orderData != null && _clientCancelTimer == null) {
+    ref.listen<ClientOrderState>(clientOrderStateProvider(widget.orderId), (
+      prev,
+      next,
+    ) {
+      if (prev?.orderData == null &&
+          next.orderData != null &&
+          _clientCancelTimer == null) {
         _startClientCancelWindow(next.orderData);
       }
       if (next.phase == 'PICKED_UP' && _clientCancelTimer != null) {
@@ -997,7 +1026,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
           _nearbyAlerted = true;
           HapticFeedback.mediumImpact();
         }
-        if (next.etaMin != null && next.etaMin == 0 && !_arrivedOverlayVisible) {
+        if (next.etaMin != null &&
+            next.etaMin == 0 &&
+            !_arrivedOverlayVisible) {
           setState(() => _arrivedOverlayVisible = true);
           HapticFeedback.heavyImpact();
         }
@@ -1051,22 +1082,28 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
     // Fallback : position DB si socket pas encore reçu
     final socketLoc = orderState.driverLocation;
-    final driverLat = socketLoc?.latitude
-        ?? (driverMap?['latitude'] as num?)?.toDouble()
-        ?? (order?['driverLatitude'] as num?)?.toDouble();
-    final driverLng = socketLoc?.longitude
-        ?? (driverMap?['longitude'] as num?)?.toDouble()
-        ?? (order?['driverLongitude'] as num?)?.toDouble();
+    final driverLat =
+        socketLoc?.latitude ??
+        (driverMap?['latitude'] as num?)?.toDouble() ??
+        (order?['driverLatitude'] as num?)?.toDouble();
+    final driverLng =
+        socketLoc?.longitude ??
+        (driverMap?['longitude'] as num?)?.toDouble() ??
+        (order?['driverLongitude'] as num?)?.toDouble();
     final effectiveDriverLoc = (driverLat != null && driverLng != null)
         ? LatLng(driverLat, driverLng)
         : null;
 
     final markers = <Marker>{
-      if (pickupLat != null && pickupLng != null && orderState.phase == 'ACCEPTED')
+      if (pickupLat != null &&
+          pickupLng != null &&
+          orderState.phase == 'ACCEPTED')
         Marker(
           markerId: const MarkerId('pickup'),
           position: LatLng(pickupLat, pickupLng),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
           infoWindow: const InfoWindow(title: 'Point de collecte'),
         ),
       // Destination : toujours visible
@@ -1082,7 +1119,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
         Marker(
           markerId: const MarkerId('driver'),
           position: effectiveDriverLoc,
-          icon: _driverMarkerIcon ??
+          icon:
+              _driverMarkerIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
           rotation: _driverHeading,
           anchor: const Offset(0.5, 0.5),
@@ -1114,15 +1152,20 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
             ),
           ),
           child: const Center(
-              child: CircularProgressIndicator(color: Colors.white)),
+            child: CircularProgressIndicator(color: Colors.white),
+          ),
         ),
       );
     }
 
     // ── Commande annulée par l'admin ─────────────────────────────────────────
     if (orderState.phase == 'CANCELLED') {
-      final notifier = ref.read(clientOrderStateProvider(widget.orderId).notifier);
-      final reason   = notifier.cancelReason ?? 'Votre commande a été annulée. Contactez notre support pour plus d\'informations.';
+      final notifier = ref.read(
+        clientOrderStateProvider(widget.orderId).notifier,
+      );
+      final reason =
+          notifier.cancelReason ??
+          'Votre commande a été annulée. Contactez notre support pour plus d\'informations.';
       return Scaffold(
         body: Container(
           decoration: const BoxDecoration(
@@ -1139,13 +1182,21 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 80, height: 80,
+                    width: 80,
+                    height: 80,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.40), width: 2),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.40),
+                        width: 2,
+                      ),
                     ),
-                    child: const Icon(Icons.cancel_outlined, color: Colors.white, size: 40),
+                    child: const Icon(
+                      Icons.cancel_outlined,
+                      color: Colors.white,
+                      size: 40,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Text(
@@ -1156,7 +1207,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                   const SizedBox(height: 12),
                   Text(
                     reason,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.80), fontSize: 14, height: 1.5),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.80),
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 36),
@@ -1168,11 +1223,15 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                         backgroundColor: Colors.white,
                         foregroundColor: AppColors.primaryMid,
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                         elevation: 0,
                       ),
-                      child: const Text('Retour à l\'accueil',
-                          style: ClientText.button),
+                      child: const Text(
+                        'Retour à l\'accueil',
+                        style: ClientText.button,
+                      ),
                     ),
                   ),
                 ],
@@ -1188,8 +1247,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
         children: [
           SizedBox.expand(
             child: GoogleMap(
-              initialCameraPosition:
-                  CameraPosition(target: initialTarget, zoom: 17, tilt: 55),
+              initialCameraPosition: CameraPosition(
+                target: initialTarget,
+                zoom: 17,
+                tilt: 55,
+              ),
               style: _mapStyle,
               markers: markers,
               polylines: polylines,
@@ -1209,8 +1271,12 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                 _mapController = c;
                 if (pickupLat != null && deliveryLat != null) {
                   Future.delayed(const Duration(milliseconds: 400), () {
-                    _fitBounds(pickupLat, pickupLng!, deliveryLat,
-                        deliveryLng!);
+                    _fitBounds(
+                      pickupLat,
+                      pickupLng!,
+                      deliveryLat,
+                      deliveryLng!,
+                    );
                   });
                 }
               },
@@ -1224,14 +1290,20 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
             right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     // Bouton retour
                     GestureDetector(
                       onTap: () {
-                        ref.read(trackingMinimizedProvider.notifier).state = true;
-                        context.canPop() ? context.pop() : context.go('/client/home');
+                        ref.read(trackingMinimizedProvider.notifier).state =
+                            true;
+                        context.canPop()
+                            ? context.pop()
+                            : context.go('/client/home');
                       },
                       child: Container(
                         width: 40,
@@ -1239,9 +1311,18 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 8)],
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 8,
+                            ),
+                          ],
                         ),
-                        child: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.black87),
+                        child: const Icon(
+                          Icons.arrow_back_ios_new,
+                          size: 18,
+                          color: Colors.black87,
+                        ),
                       ),
                     ),
                     // Chips des autres commandes actives
@@ -1252,30 +1333,46 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: orderState.otherActiveOrders.map((o) {
-                              final idx = orderState.otherActiveOrders.indexOf(o) + 2;
-                              final dId = (o['driver'] as Map?)?['id'] as String?
-                                  ?? o['driverId'] as String?;
+                              final idx =
+                                  orderState.otherActiveOrders.indexOf(o) + 2;
+                              final dId =
+                                  (o['driver'] as Map?)?['id'] as String? ??
+                                  o['driverId'] as String?;
                               final oId = o['id'] as String?;
                               return Padding(
                                 padding: const EdgeInsets.only(right: 6),
                                 child: GestureDetector(
                                   onTap: () {
                                     if (oId == null || dId == null) return;
-                                    context.pushReplacement('/orders/tracking', extra: {
-                                      'orderId': oId,
-                                      'driverId': dId,
-                                    });
+                                    context.pushReplacement(
+                                      '/orders/tracking',
+                                      extra: {'orderId': oId, 'driverId': dId},
+                                    );
                                   },
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: AppColors.primary,
                                       borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6)],
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.15,
+                                          ),
+                                          blurRadius: 6,
+                                        ),
+                                      ],
                                     ),
                                     child: Text(
                                       'Commande $idx',
-                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1314,7 +1411,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
             left: 0,
             right: 0,
             child: AnimatedSlide(
-              offset: _arrivedOverlayVisible ? Offset.zero : const Offset(0, -2),
+              offset: _arrivedOverlayVisible
+                  ? Offset.zero
+                  : const Offset(0, -2),
               duration: const Duration(milliseconds: 450),
               curve: Curves.easeOutCubic,
               child: AnimatedOpacity(
@@ -1323,7 +1422,12 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                 child: SafeArea(
                   bottom: false,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 60, left: 16, right: 16, bottom: 8),
+                    padding: const EdgeInsets.only(
+                      top: 60,
+                      left: 16,
+                      right: 16,
+                      bottom: 8,
+                    ),
                     child: _buildArrivalBanner(),
                   ),
                 ),
@@ -1337,20 +1441,21 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
             child: Container(
               decoration: BoxDecoration(
                 gradient: AppColors.gradientSplash,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      blurRadius: 20,
-                      offset: const Offset(0, -4))
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
+                  ),
                 ],
               ),
               child: SafeArea(
                 top: false,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1360,9 +1465,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                           width: 36,
                           height: 3,
                           decoration: BoxDecoration(
-                              color:
-                                  Colors.white.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(2)),
+                            color: Colors.white.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -1380,23 +1485,33 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               decoration: BoxDecoration(
-                                color: AppColors.success.withValues(alpha: 0.12),
+                                color: AppColors.success.withValues(
+                                  alpha: 0.12,
+                                ),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: AppColors.success.withValues(alpha: 0.5),
+                                  color: AppColors.success.withValues(
+                                    alpha: 0.5,
+                                  ),
                                   width: 1.5,
                                 ),
                               ),
                               child: const Column(
                                 children: [
-                                  Icon(Icons.check_circle_rounded,
-                                      color: AppColors.success, size: 46),
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: AppColors.success,
+                                    size: 46,
+                                  ),
                                   SizedBox(height: 6),
-                                  Text('Livraison effectuée !',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 15)),
+                                  Text(
+                                    'Livraison effectuée !',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -1404,7 +1519,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                         )
                       else ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: _statusColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
@@ -1414,8 +1532,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                             children: [
                               Icon(_statusIcon, color: _statusColor, size: 16),
                               const SizedBox(width: 8),
-                              Flexible(child: Text(_statusLabel,
-                                  style: ClientText.body.copyWith(color: _statusColor))),
+                              Flexible(
+                                child: Text(
+                                  _statusLabel,
+                                  style: ClientText.body.copyWith(
+                                    color: _statusColor,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -1433,46 +1557,71 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                             width: 42,
                             height: 42,
                             decoration: BoxDecoration(
-                                color: Colors.white
-                                    .withValues(alpha: 0.15),
-                                shape: BoxShape.circle),
-                            child: const Icon(Icons.person,
-                                color: Colors.white, size: 24),
+                              color: Colors.white.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(driverName,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold)),
+                                Text(
+                                  driverName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 const SizedBox(height: 3),
                                 Row(
                                   children: [
                                     if (driverRating != null) ...[
-                                      const Icon(Icons.star_rounded,
-                                          color: AppColors.ratingGold, size: 14),
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        color: AppColors.ratingGold,
+                                        size: 14,
+                                      ),
                                       const SizedBox(width: 3),
-                                      Text(driverRating.toStringAsFixed(1),
-                                          style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 12)),
+                                      Text(
+                                        driverRating.toStringAsFixed(1),
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                        ),
+                                      ),
                                       if (_etaText != null)
-                                        const Text(' · ', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                                        const Text(
+                                          ' · ',
+                                          style: TextStyle(
+                                            color: Colors.white38,
+                                            fontSize: 12,
+                                          ),
+                                        ),
                                     ],
                                     if (_etaText != null)
-                                      Text(_etaText!,
-                                          style: TextStyle(
-                                              color: (orderState.etaMin != null && orderState.etaMin! <= 3)
-                                                  ? AppColors.successBright
-                                                  : Colors.white70,
-                                              fontSize: 12,
-                                              fontWeight: (orderState.etaMin != null && orderState.etaMin! <= 3)
-                                                  ? FontWeight.w700 : FontWeight.normal)),
+                                      Text(
+                                        _etaText!,
+                                        style: TextStyle(
+                                          color:
+                                              (orderState.etaMin != null &&
+                                                  orderState.etaMin! <= 3)
+                                              ? AppColors.successBright
+                                              : Colors.white70,
+                                          fontSize: 12,
+                                          fontWeight:
+                                              (orderState.etaMin != null &&
+                                                  orderState.etaMin! <= 3)
+                                              ? FontWeight.w700
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ],
@@ -1494,23 +1643,25 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                         child: Column(
                           children: [
                             AddressRow(
-                                icon: Icons.circle,
-                                iconColor: AppColors.successBright,
-                                address: pickupAddress,
-                                dark: true),
+                              icon: Icons.circle,
+                              iconColor: AppColors.successBright,
+                              address: pickupAddress,
+                              dark: true,
+                            ),
                             Padding(
                               padding: const EdgeInsets.only(left: 6),
                               child: Container(
-                                  width: 2,
-                                  height: 12,
-                                  color: Colors.white
-                                      .withValues(alpha: 0.25)),
+                                width: 2,
+                                height: 12,
+                                color: Colors.white.withValues(alpha: 0.25),
+                              ),
                             ),
                             AddressRow(
-                                icon: Icons.location_on,
-                                iconColor: AppColors.error,
-                                address: deliveryAddress,
-                                dark: true),
+                              icon: Icons.location_on,
+                              iconColor: AppColors.error,
+                              address: deliveryAddress,
+                              dark: true,
+                            ),
                           ],
                         ),
                       ),
@@ -1519,61 +1670,104 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                       // Price — si une promo s'applique, le client ne doit
                       // voir/payer que le montant réduit (le prix plein reste
                       // en interne pour le livreur, voir clientChargeFor).
-                      Row(children: [
-                        const Icon(Icons.payments_outlined,
-                            size: 16, color: Colors.white70),
-                        const SizedBox(width: 6),
-                        Builder(builder: (context) {
-                          final charge = clientChargeFor(order ?? const {});
-                          final hasDiscount = charge < price;
-                          if (!hasDiscount) {
-                            return Text(formatFcfa(price),
-                                style: const TextStyle(
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.payments_outlined,
+                            size: 16,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 6),
+                          Builder(
+                            builder: (context) {
+                              final charge = clientChargeFor(order ?? const {});
+                              final hasDiscount = charge < price;
+                              if (!hasDiscount) {
+                                return Text(
+                                  formatFcfa(price),
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,
-                                    fontWeight: FontWeight.w600));
-                          }
-                          return Row(mainAxisSize: MainAxisSize.min, children: [
-                            Text(formatFcfa(price),
-                                style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.55),
-                                    fontSize: 12,
-                                    decoration: TextDecoration.lineThrough)),
-                            const SizedBox(width: 6),
-                            Text(formatFcfa(charge),
-                                style: const TextStyle(
-                                    color: AppColors.successLight,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700)),
-                          ]);
-                        }),
-                        const Spacer(),
-                        // Bouton signaler un problème (visible pendant la course)
-                        if (!['DELIVERED', 'CANCELLED'].contains(orderState.phase))
-                          GestureDetector(
-                            onTap: () => SupportReportSheet.show(
-                              context,
-                              orderId: widget.orderId,
-                              role: 'CLIENT',
-                              repo: ref.read(ordersRepositoryProvider),
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                              ),
-                              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                Icon(Icons.flag_outlined,
-                                    size: 13, color: Colors.white.withValues(alpha: 0.70)),
-                                const SizedBox(width: 5),
-                                Text('Signaler',
-                                    style: ClientText.label.copyWith(color: Colors.white.withValues(alpha: 0.80))),
-                              ]),
-                            ),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              }
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    formatFcfa(price),
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.55,
+                                      ),
+                                      fontSize: 12,
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    formatFcfa(charge),
+                                    style: const TextStyle(
+                                      color: AppColors.successLight,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                      ]),
+                          const Spacer(),
+                          // Bouton signaler un problème (visible pendant la course)
+                          if (![
+                            'DELIVERED',
+                            'CANCELLED',
+                          ].contains(orderState.phase))
+                            GestureDetector(
+                              onTap: () => SupportReportSheet.show(
+                                context,
+                                orderId: widget.orderId,
+                                role: 'CLIENT',
+                                repo: ref.read(ordersRepositoryProvider),
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.10),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.flag_outlined,
+                                      size: 13,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.70,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'Signaler',
+                                      style: ClientText.label.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.80,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
 
                       // Bouton Payer en ligne (SamirPay) — le client est
                       // l'expéditeur/payeur de sa propre commande, il peut
@@ -1581,7 +1775,8 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                       // un QR. Reste visible tant que le paiement n'est pas
                       // confirmé (paymentStatus repassé à PENDING → PAID par
                       // le webhook, voir clientOrderStateProvider).
-                      if (paymentStatus == 'PENDING' && orderState.phase != 'CANCELLED') ...[
+                      if (paymentStatus == 'PENDING' &&
+                          orderState.phase != 'CANCELLED') ...[
                         const SizedBox(height: 14),
                         PrimaryButton(
                           label: 'Payer en ligne',
@@ -1592,7 +1787,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                       ],
 
                       // Bouton Partager le suivi
-                      if (!['DELIVERED', 'CANCELLED'].contains(orderState.phase)) ...[
+                      if (![
+                        'DELIVERED',
+                        'CANCELLED',
+                      ].contains(orderState.phase)) ...[
                         const SizedBox(height: 14),
                         PrimaryButton(
                           label: 'Partager le suivi',
@@ -1600,12 +1798,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                           color: AppColors.primary,
                           onTap: () => _showShareSheet(context),
                         ),
-                        if (orderState.phase == 'ACCEPTED' && _clientCancelSecondsLeft > 0)
+                        if (orderState.phase == 'ACCEPTED' &&
+                            _clientCancelSecondsLeft > 0)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: SwipeToConfirm(
                               key: ValueKey('cancel-$_clientCancelSwipeTick'),
-                              label: 'Glissez pour annuler (${_clientCancelSecondsLeft}s)',
+                              label:
+                                  'Glissez pour annuler (${_clientCancelSecondsLeft}s)',
                               onConfirmed: _clientCancelOrder,
                               loading: _clientCancelling,
                               trackColor: Colors.white,
@@ -1637,4 +1837,3 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     );
   }
 }
-

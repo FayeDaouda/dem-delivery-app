@@ -22,6 +22,7 @@ import '../../shared/widgets/contact_mini_field.dart';
 import '../../shared/widgets/contact_picker.dart';
 import '../../shared/widgets/favorite_address_chips.dart';
 import '../../shared/widgets/floating_map_button.dart';
+import '../../shared/widgets/map_placement_pin.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
@@ -123,6 +124,11 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   double? _pickupLng;
   bool _loadingGps = false;
   bool _pickupManualEntry = false;
+
+  // ── Mode "pointer sur la carte" ──────────────────────────────────────────
+  bool _isMapPlacementMode = false;
+  bool _isMapMoving = false;
+  LatLng _currentCameraPos = _dakar;
 
   final _favRepo = FavoriteAddressesRepository();
   List<Map<String, dynamic>> _favorites = [];
@@ -296,13 +302,11 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   }
 
   // Menu ouvert au tap sur la bulle collecte/arrêt — voir
-  // address_options_sheet.dart. "Pointer sur la carte" masqué : cet écran
-  // n'a pas (encore) de mode de placement sur carte.
+  // address_options_sheet.dart.
   Future<void> _showAddressMenu(Object field) async {
     final choice = await showAddressOptionsSheet(
       context,
       forPickup: field == 'pickup',
-      showMapOption: false,
     );
     if (choice == null || !mounted) return;
     switch (choice) {
@@ -311,7 +315,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
       case AddressOptionChoice.favorites:
         setState(() => _activeField = field);
       case AddressOptionChoice.map:
-        break; // masqué (showMapOption: false), jamais atteint
+        _enterMapPlacement(field);
       case AddressOptionChoice.manual:
         setState(() {
           _activeField = field;
@@ -327,6 +331,65 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
           _stops[field].focusNode.requestFocus();
         }
     }
+  }
+
+  // ── Mode "pointer sur la carte" ──────────────────────────────────────────
+  // N'existait pas du tout sur cet écran (contrairement à Livraison
+  // simple/Express) — même mécanique : un curseur fixe au centre de la
+  // carte, le client déplace la carte en dessous, "Valider" lit la position
+  // du centre au moment de la confirmation.
+  void _enterMapPlacement(Object field) {
+    FocusScope.of(context).unfocus();
+    // Centre la caméra sur la position actuelle du champ visé si elle est
+    // déjà connue, pour ne pas repartir de zéro si le client veut juste
+    // affiner un point déjà posé.
+    double? lat, lng;
+    if (field == 'pickup') {
+      lat = _pickupLat;
+      lng = _pickupLng;
+    } else if (field is int) {
+      lat = _stops[field].lat;
+      lng = _stops[field].lng;
+    }
+    if (lat != null && lng != null) {
+      final target = LatLng(lat, lng);
+      _currentCameraPos = target;
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+    }
+    setState(() {
+      _activeField = field;
+      _isMapPlacementMode = true;
+    });
+  }
+
+  void _cancelMapPlacement() {
+    setState(() => _isMapPlacementMode = false);
+  }
+
+  Future<void> _confirmMapPlacement() async {
+    final field = _activeField;
+    final pos = _currentCameraPos;
+    setState(() {
+      _isMapPlacementMode = false;
+      if (field == 'pickup') {
+        _pickupLat = pos.latitude;
+        _pickupLng = pos.longitude;
+      } else if (field is int) {
+        _stops[field].lat = pos.latitude;
+        _stops[field].lng = pos.longitude;
+      }
+    });
+    final label = await _reverseGeocodeLabel(pos);
+    if (!mounted) return;
+    setState(() {
+      if (field == 'pickup') {
+        _pickupCtrl.text = label;
+      } else if (field is int) {
+        _stops[field].addressCtrl.text = label;
+      }
+    });
+    _updateEstimate();
+    _fitMapToMarkers();
   }
 
   Future<void> _loadUser() async {
@@ -608,6 +671,9 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
               onMapCreated: (c) => _mapController = c,
               style: _mapStyle,
               markers: markers,
+              onCameraMoveStarted: () => setState(() => _isMapMoving = true),
+              onCameraMove: (p) => _currentCameraPos = p.target,
+              onCameraIdle: () => setState(() => _isMapMoving = false),
               myLocationEnabled: false,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -615,6 +681,22 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
               mapToolbarEnabled: false,
             ),
           ),
+          // ── Curseur central (mode placement uniquement) ──────────────────
+          if (_isMapPlacementMode)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 35),
+                child: AnimatedScale(
+                  scale: _isMapMoving ? 1.15 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: MapPlacementPin(
+                    color: _activeField == 'pickup'
+                        ? AppColors.success
+                        : AppColors.error,
+                  ),
+                ),
+              ),
+            ),
           // Voile dégradé en haut — même correctif que Livraison simple :
           // un libellé de lieu Google Maps un peu long peut sinon déborder
           // dans l'interstice entre le bandeau et le reste de l'écran.
@@ -704,94 +786,106 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
                       ),
                     ),
                     Flexible(
-                      child: PageView(
-                        controller: _pageCtrl,
-                        physics: const NeverScrollableScrollPhysics(),
-                        onPageChanged: (i) => setState(() => _step = i),
-                        children: [
-                          _TrajetStep(
-                            pickupCtrl: _pickupCtrl,
-                            pickupFocus: _pickupFocus,
-                            pickupConfirmed: _pickupLat != null,
-                            pickupManualEntry: _pickupManualEntry,
-                            stops: _stops,
-                            activeField: _activeField,
-                            suggestions: _suggestions,
-                            searching: _searching,
-                            favorites: _favorites,
-                            onSelectFavorite: _applyFavorite,
-                            onPickupTap: () {
-                              if (!_pickupManualEntry) {
-                                _showAddressMenu('pickup');
-                                return;
-                              }
-                              setState(() => _activeField = 'pickup');
-                              _pickupFocus.requestFocus();
-                            },
-                            onStopTap: (i) {
-                              if (!_stops[i].manualEntry) {
-                                _showAddressMenu(i);
-                                return;
-                              }
-                              setState(() => _activeField = i);
-                              _stops[i].focusNode.requestFocus();
-                            },
-                            onQueryChanged: _onQueryChanged,
-                            onSelectSuggestion: _selectSuggestion,
-                            onPickupClear: () {
-                              setState(() {
-                                _pickupCtrl.clear();
-                                _pickupLat = null;
-                                _pickupLng = null;
-                                _estimate = null;
-                                _pickupManualEntry = false;
-                              });
-                            },
-                            onAddStop: _addStop,
-                            onRemoveStop: _removeStop,
-                            onNext: () => _goStep(1),
-                            canNext: _readyForEstimate,
-                          ),
-                          _ExpediteurStep(
-                            nameCtrl: _senderNameCtrl,
-                            phoneCtrl: _senderPhoneCtrl,
-                            onPickContact: () => pickContact(
-                              context,
-                              nameCtrl: _senderNameCtrl,
-                              phoneCtrl: _senderPhoneCtrl,
+                      child: _isMapPlacementMode
+                          ? MapPlacementConfirmPanel(
+                              color: _activeField == 'pickup'
+                                  ? AppColors.success
+                                  : AppColors.error,
+                              label: _activeField == 'pickup'
+                                  ? 'Valider ce point de collecte'
+                                  : 'Valider ce point de destination',
+                              onConfirm: _confirmMapPlacement,
+                              onCancel: _cancelMapPlacement,
+                            )
+                          : PageView(
+                              controller: _pageCtrl,
+                              physics: const NeverScrollableScrollPhysics(),
+                              onPageChanged: (i) => setState(() => _step = i),
+                              children: [
+                                _TrajetStep(
+                                  pickupCtrl: _pickupCtrl,
+                                  pickupFocus: _pickupFocus,
+                                  pickupConfirmed: _pickupLat != null,
+                                  pickupManualEntry: _pickupManualEntry,
+                                  stops: _stops,
+                                  activeField: _activeField,
+                                  suggestions: _suggestions,
+                                  searching: _searching,
+                                  favorites: _favorites,
+                                  onSelectFavorite: _applyFavorite,
+                                  onPickupTap: () {
+                                    if (!_pickupManualEntry) {
+                                      _showAddressMenu('pickup');
+                                      return;
+                                    }
+                                    setState(() => _activeField = 'pickup');
+                                    _pickupFocus.requestFocus();
+                                  },
+                                  onStopTap: (i) {
+                                    if (!_stops[i].manualEntry) {
+                                      _showAddressMenu(i);
+                                      return;
+                                    }
+                                    setState(() => _activeField = i);
+                                    _stops[i].focusNode.requestFocus();
+                                  },
+                                  onQueryChanged: _onQueryChanged,
+                                  onSelectSuggestion: _selectSuggestion,
+                                  onPickupClear: () {
+                                    setState(() {
+                                      _pickupCtrl.clear();
+                                      _pickupLat = null;
+                                      _pickupLng = null;
+                                      _estimate = null;
+                                      _pickupManualEntry = false;
+                                    });
+                                  },
+                                  onAddStop: _addStop,
+                                  onRemoveStop: _removeStop,
+                                  onNext: () => _goStep(1),
+                                  canNext: _readyForEstimate,
+                                ),
+                                _ExpediteurStep(
+                                  nameCtrl: _senderNameCtrl,
+                                  phoneCtrl: _senderPhoneCtrl,
+                                  onPickContact: () => pickContact(
+                                    context,
+                                    nameCtrl: _senderNameCtrl,
+                                    phoneCtrl: _senderPhoneCtrl,
+                                  ),
+                                  onPickMe: () {
+                                    _fillMe(_senderNameCtrl, _senderPhoneCtrl);
+                                    if (_senderPhoneCtrl.text.length >= 9)
+                                      _goStep(2);
+                                  },
+                                  onNext: () {
+                                    if (!_validatePhone(
+                                      context,
+                                      _senderPhoneCtrl,
+                                      'expéditeur',
+                                    )) {
+                                      return;
+                                    }
+                                    _goStep(2);
+                                  },
+                                ),
+                                _DestinatairesStep(
+                                  stops: _stops,
+                                  onNext: () => _goStep(3),
+                                ),
+                                _ResumeStep(
+                                  pickupLabel: _pickupCtrl.text,
+                                  stops: _stops,
+                                  estimate: _estimate,
+                                  estimating: _estimating,
+                                  error: _estimateError,
+                                  ready: _readyForEstimate,
+                                  submitting: _submitting,
+                                  onEditTrajet: () => _goStep(0),
+                                  onSubmit: _submit,
+                                ),
+                              ],
                             ),
-                            onPickMe: () {
-                              _fillMe(_senderNameCtrl, _senderPhoneCtrl);
-                              if (_senderPhoneCtrl.text.length >= 9) _goStep(2);
-                            },
-                            onNext: () {
-                              if (!_validatePhone(
-                                context,
-                                _senderPhoneCtrl,
-                                'expéditeur',
-                              )) {
-                                return;
-                              }
-                              _goStep(2);
-                            },
-                          ),
-                          _DestinatairesStep(
-                            stops: _stops,
-                            onNext: () => _goStep(3),
-                          ),
-                          _ResumeStep(
-                            pickupLabel: _pickupCtrl.text,
-                            stops: _stops,
-                            estimate: _estimate,
-                            estimating: _estimating,
-                            error: _estimateError,
-                            ready: _readyForEstimate,
-                            submitting: _submitting,
-                            onEditTrajet: () => _goStep(0),
-                            onSubmit: _submit,
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),

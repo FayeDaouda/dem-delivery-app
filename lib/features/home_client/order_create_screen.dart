@@ -29,6 +29,7 @@ import '../../shared/widgets/contact_picker.dart';
 import '../../shared/widgets/favorite_address_chips.dart';
 import '../../shared/widgets/floating_map_button.dart';
 import '../../shared/widgets/gradient_dialog.dart';
+import '../../shared/widgets/map_placement_pin.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
@@ -1293,7 +1294,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                 child: AnimatedScale(
                   scale: _isMapMoving ? 1.15 : 1.0,
                   duration: const Duration(milliseconds: 200),
-                  child: _FloatingPin(
+                  child: MapPlacementPin(
                     color: _isSelectingPickup
                         ? AppColors.success
                         : AppColors.error,
@@ -1414,8 +1415,13 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                           child: SizedBox(
                             height: panelH - 20,
                             child: _isMapPlacementMode
-                                ? _PlacementConfirmPanel(
-                                    isPickup: _isSelectingPickup,
+                                ? MapPlacementConfirmPanel(
+                                    color: _isSelectingPickup
+                                        ? AppColors.success
+                                        : AppColors.error,
+                                    label: _isSelectingPickup
+                                        ? 'Valider ce point de départ'
+                                        : 'Valider cette destination',
                                     onConfirm: _confirmPlacement,
                                   )
                                 : PageView(
@@ -1808,139 +1814,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
 // Sub-widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Pin flottant (mode placement carte) ───────────────────────────────────────
-class _FloatingPin extends StatefulWidget {
-  final Color color;
-  const _FloatingPin({required this.color});
-
-  @override
-  State<_FloatingPin> createState() => _FloatingPinState();
-}
-
-class _FloatingPinState extends State<_FloatingPin>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _floatAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..repeat(reverse: true);
-    _floatAnim = Tween<double>(
-      begin: 0,
-      end: -6,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _floatAnim,
-      builder: (_, _) => Transform.translate(
-        offset: Offset(0, _floatAnim.value),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Transform.rotate(
-              angle: -pi / 4,
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: widget.color,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    topRight: Radius.circular(18),
-                    bottomRight: Radius.circular(18),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.color.withValues(alpha: 0.5),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Transform.rotate(
-                    angle: pi / 4,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF080D1A),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            AnimatedBuilder(
-              animation: _ctrl,
-              builder: (_, _) => Container(
-                width: 18,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: widget.color.withValues(
-                    alpha: 0.25 + 0.15 * _ctrl.value,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Panels de chaque step
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _PlacementConfirmPanel extends StatelessWidget {
-  final bool isPickup;
-  final VoidCallback onConfirm;
-  const _PlacementConfirmPanel({
-    required this.isPickup,
-    required this.onConfirm,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isPickup ? AppColors.success : AppColors.error;
-    final label = isPickup
-        ? 'Valider ce point de départ'
-        : 'Valider cette destination';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: onConfirm,
-          icon: const Icon(Icons.check_circle_outline, size: 20),
-          label: Text(label),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // Rappel du type de livraison choisi (Simple/Express) — répété en haut de
 // chaque étape du tunnel pour que ce soit visible sans avoir à remonter à

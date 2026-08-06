@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/client_text.dart';
 import '../../core/utils/dem_toast.dart';
 import '../../core/utils/price_format.dart';
+import '../../shared/widgets/driver_rating_dialog.dart';
 import '../../shared/widgets/pressable.dart';
 import '../deliveries/data/orders_repository.dart';
 
@@ -315,6 +316,16 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
     final driver = batch?['driver'] as Map<String, dynamic>?;
     final stops =
         (batch?['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    // La tournée n'était jamais notable côté client — contrairement à une
+    // course simple/Express — alors que le livreur, lui, note déjà le
+    // client à la fin. On note sur le dernier arrêt (une note par tournée,
+    // contrainte unique en base sur Rating.orderId).
+    final lastStop = stops.isNotEmpty ? stops.last : null;
+    final canRate =
+        status == 'COMPLETED' &&
+        driver != null &&
+        lastStop != null &&
+        lastStop['rating'] == null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -481,6 +492,34 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                               ],
                             ),
                           ),
+                          if (canRate) ...[
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => showDriverRatingDialog(
+                                  context,
+                                  orderId: lastStop['id'] as String,
+                                  driverId: driver['id'] as String,
+                                  amount: (batch?['totalPrice'] as num?)
+                                      ?.toDouble(),
+                                  onDone: _load,
+                                ),
+                                icon: const Icon(Icons.star_outline, size: 18),
+                                label: const Text('Noter le livreur'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _kBatchAccent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 13,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                           if (cancellable) ...[
                             const SizedBox(height: 20),
                             TextButton(
