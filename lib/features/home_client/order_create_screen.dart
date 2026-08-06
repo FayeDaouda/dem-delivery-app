@@ -21,6 +21,7 @@ import '../../core/storage/promo_code_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
+import '../../shared/widgets/address_options_sheet.dart';
 import '../../shared/widgets/address_row.dart';
 import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/contact_mini_field.dart';
@@ -137,6 +138,13 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
   bool _priceTimedOut = false;
   bool _loadingGps = false;
   bool _submitting = false;
+
+  // Tant que false, la bulle départ/destination affiche son texte mais
+  // s'ouvre sur le menu de choix (position actuelle / favoris / carte /
+  // écrire) au tap plutôt que le clavier — jusqu'à ce que le client
+  // choisisse explicitement "Écrire l'adresse".
+  bool _pickupManualEntry = false;
+  bool _deliveryManualEntry = false;
   Timer? _surgeDebounce;
   Timer? _priceTimeoutTimer;
   List<LatLng> _routePoints = [];
@@ -429,6 +437,78 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     });
   }
 
+  // Récupère la position GPS actuelle pour le champ départ OU destination —
+  // seul le départ en bénéficiait jusqu'ici (auto-rempli à l'ouverture).
+  Future<void> _useCurrentLocationFor({required bool forPickup}) async {
+    if (forPickup) setState(() => _loadingGps = true);
+    try {
+      final pos = await NavigationService.requestAndGetPosition();
+      if (pos == null || !mounted) return;
+      final ll = LatLng(pos.latitude, pos.longitude);
+      setState(() {
+        if (forPickup) {
+          _pickupLat = ll.latitude;
+          _pickupLng = ll.longitude;
+          _pickupManualEntry = false;
+          _isSelectingPickup = true;
+        } else {
+          _deliveryLat = ll.latitude;
+          _deliveryLng = ll.longitude;
+          _deliveryManualEntry = false;
+          _isSelectingPickup = false;
+        }
+        _isMapPlacementMode = false;
+      });
+      _centerMap(ll);
+      await _reverseGeocode(ll, forPickup: forPickup);
+      _updateEstimate();
+    } catch (_) {
+      if (mounted) {
+        showDemToast(
+          context,
+          'Impossible de récupérer la position.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (forPickup && mounted) setState(() => _loadingGps = false);
+    }
+  }
+
+  // Menu ouvert au tap sur la bulle départ/destination — voir
+  // address_options_sheet.dart. Remplace le tap direct par un choix
+  // explicite entre les façons de renseigner l'adresse.
+  Future<void> _showAddressMenu({required bool forPickup}) async {
+    final choice = await showAddressOptionsSheet(context, forPickup: forPickup);
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case AddressOptionChoice.currentLocation:
+        await _useCurrentLocationFor(forPickup: forPickup);
+      case AddressOptionChoice.favorites:
+        setState(() {
+          _isSelectingPickup = forPickup;
+          _isMapPlacementMode = false;
+        });
+      case AddressOptionChoice.map:
+        FocusScope.of(context).unfocus();
+        setState(() {
+          _isSelectingPickup = forPickup;
+          _isMapPlacementMode = true;
+        });
+      case AddressOptionChoice.manual:
+        setState(() {
+          _isSelectingPickup = forPickup;
+          _isMapPlacementMode = false;
+          if (forPickup) {
+            _pickupManualEntry = true;
+          } else {
+            _deliveryManualEntry = true;
+          }
+        });
+        (forPickup ? _pickupFocus : _deliveryFocus).requestFocus();
+    }
+  }
+
   // ── Confirm map placement ─────────────────────────────────────────────────
   Future<void> _confirmPlacement() async {
     setState(() {
@@ -556,6 +636,9 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
       _deliveryCtrl.text = tmpText;
       _deliveryLat = tmpLat;
       _deliveryLng = tmpLng;
+      final tmpManual = _pickupManualEntry;
+      _pickupManualEntry = _deliveryManualEntry;
+      _deliveryManualEntry = tmpManual;
       _isSelectingPickup = true;
     });
     if (_pickupLat != null || _deliveryLat != null) _updateEstimate();
@@ -1389,13 +1472,19 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                     AddressField(
                       controller: _pickupCtrl,
                       focusNode: _pickupFocus,
-                      hint: 'Point de départ...',
+                      hint: 'Localisation actuelle',
                       dotColor: AppColors.success,
                       active: _isSelectingPickup && !_isMapPlacementMode,
                       confirmed: _pickupLat != null,
+                      readOnly: !_pickupManualEntry,
                       onTap: () {
-                        // Toujours focus son propre champ — un tap sur départ
-                        // doit permettre de le corriger, pas sauter ailleurs.
+                        if (!_pickupManualEntry) {
+                          _showAddressMenu(forPickup: true);
+                          return;
+                        }
+                        // Déjà en saisie libre — toujours focus son propre
+                        // champ, un tap sur départ doit permettre de le
+                        // corriger, pas sauter ailleurs.
                         setState(() {
                           _isSelectingPickup = true;
                           _isMapPlacementMode = false;
@@ -1414,8 +1503,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                           _suggestions = [];
                           _isSelectingPickup = true;
                           _isMapPlacementMode = false;
+                          // Revient à l'état par défaut — un tap rouvrira le
+                          // menu de choix plutôt que le clavier.
+                          _pickupManualEntry = false;
                         });
-                        _pickupFocus.requestFocus();
                       },
                       onMapTap: () {
                         FocusScope.of(context).unfocus();
@@ -1493,13 +1584,18 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                     AddressField(
                       controller: _deliveryCtrl,
                       focusNode: _deliveryFocus,
-                      hint: 'Destination...',
+                      hint: "Choisir l'adresse de destination",
                       dotColor: AppColors.error,
                       active: !_isSelectingPickup && !_isMapPlacementMode,
                       confirmed: _deliveryLat != null,
+                      readOnly: !_deliveryManualEntry,
                       onTap: () {
-                        // Toujours focus son propre champ — même correctif que
-                        // pour le champ départ, cf. commentaire ci-dessus.
+                        if (!_deliveryManualEntry) {
+                          _showAddressMenu(forPickup: false);
+                          return;
+                        }
+                        // Déjà en saisie libre — même correctif que pour le
+                        // champ départ, cf. commentaire ci-dessus.
                         setState(() {
                           _isSelectingPickup = false;
                           _isMapPlacementMode = false;
@@ -1518,8 +1614,8 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                           _suggestions = [];
                           _isSelectingPickup = false;
                           _isMapPlacementMode = false;
+                          _deliveryManualEntry = false;
                         });
-                        _deliveryFocus.requestFocus();
                       },
                       onMapTap: () {
                         FocusScope.of(context).unfocus();
@@ -1855,35 +1951,15 @@ class _Step0Panel extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              RichText(
+                              Text(
+                                "Appuie sur la barre de recherche pour choisir "
+                                'comment renseigner tes adresses.',
                                 maxLines: 3,
-                                text: TextSpan(
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.70),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.normal,
-                                    height: 1.4,
-                                  ),
-                                  children: [
-                                    const TextSpan(
-                                      text:
-                                          'Utiliser les champs de recherche ou le bouton ',
-                                    ),
-                                    WidgetSpan(
-                                      alignment: PlaceholderAlignment.middle,
-                                      child: Icon(
-                                        Icons.location_on,
-                                        color: Colors.white.withValues(
-                                          alpha: 0.70,
-                                        ),
-                                        size: 13,
-                                      ),
-                                    ),
-                                    const TextSpan(
-                                      text:
-                                          ' pour placer un point sur la carte.',
-                                    ),
-                                  ],
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.70),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.normal,
+                                  height: 1.4,
                                 ),
                               ),
                             ],

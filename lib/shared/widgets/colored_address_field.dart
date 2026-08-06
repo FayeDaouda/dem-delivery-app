@@ -24,6 +24,11 @@ class AddressField extends StatelessWidget {
   final VoidCallback? onDotLongPress;
   final VoidCallback? onClear;
   final FocusNode? focusNode;
+  // Tant que true, le champ affiche son texte mais ne s'ouvre pas au
+  // clavier au tap direct — sert quand la saisie passe d'abord par un menu
+  // de choix (position actuelle / favoris / carte / écrire) plutôt que par
+  // la frappe immédiate. `onTap` continue de se déclencher normalement.
+  final bool readOnly;
 
   static const _unconfirmedColor = Color(0xFFF59E0B);
 
@@ -40,6 +45,7 @@ class AddressField extends StatelessWidget {
     this.onDotLongPress,
     this.onClear,
     this.focusNode,
+    this.readOnly = false,
   });
 
   @override
@@ -97,6 +103,8 @@ class AddressField extends StatelessWidget {
                 focusNode: focusNode,
                 onChanged: onChanged,
                 onTap: onTap,
+                readOnly: readOnly,
+                showCursor: !readOnly,
                 textInputAction: TextInputAction.search,
                 style: const TextStyle(
                   color: AppColors.textDark,
