@@ -1049,6 +1049,18 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   String? get _senderPhone => _order['senderPhone'] as String?;
   String? get _receiverPhone => _order['receiverPhone'] as String?;
 
+  // Compte DEM Pro à l'origine de la commande (null hors DEM Pro).
+  String? get _proBusinessName =>
+      (_order['client'] as Map<String, dynamic>?)?['proBusinessName']
+          as String?;
+
+  // Type de colis, "Fragile", instructions libres et repère saisis par le
+  // Pro à la création — n'était affiché nulle part côté livreur jusqu'ici.
+  String? get _orderNote {
+    final d = _order['description'] as String?;
+    return (d != null && d.trim().isNotEmpty) ? d.trim() : null;
+  }
+
   // Avant récupération : appeler l'EXPÉDITEUR saisi sur la commande (peut
   // différer du numéro du compte client) — pas le compte, sinon un client
   // qui commande pour quelqu'un d'autre ferait appeler le mauvais numéro.
@@ -1534,6 +1546,72 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                       address: _order['deliveryAddress'] ?? '',
                       dark: true,
                     ),
+
+                  // Nom de l'entreprise DEM Pro — absent (null) hors DEM Pro.
+                  if (_proBusinessName != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.store_outlined,
+                          size: 13,
+                          color: Colors.white70,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            _proBusinessName!,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  // Type de colis / instructions / repère saisis par le
+                  // client (Pro ou particulier) — n'était affiché nulle part
+                  // côté livreur, alors que le repère notamment change la
+                  // façon de trouver l'adresse.
+                  if (_orderNote != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: Colors.white70,
+                            size: 15,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _orderNote!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
 
                   // Commande DEM Pro : le livreur doit savoir qui règle —
                   // sinon il pourrait redemander du cash sur une commande déjà

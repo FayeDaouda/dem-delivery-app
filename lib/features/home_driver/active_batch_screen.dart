@@ -1199,6 +1199,14 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     final price = (stop['price'] as num?)?.toInt() ?? 0;
     final address = stop['deliveryAddress'] as String? ?? '';
     final landmark = stop['landmark'] as String?;
+    // Type de colis / "Fragile" / instructions saisis par le client (Pro ou
+    // particulier) pour cet arrêt — n'était affiché nulle part côté
+    // livreur pour une tournée, alors qu'il l'est déjà pour une course
+    // simple/Express.
+    final noteRaw = stop['description'] as String?;
+    final note = (noteRaw != null && noteRaw.trim().isNotEmpty)
+        ? noteRaw.trim()
+        : null;
 
     return [
       Row(
@@ -1266,6 +1274,30 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
         sub: landmark,
         receiverName: receiverName,
       ),
+      if (note != null) ...[
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white70, size: 15),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  note,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
       if (receiverPhone != null && receiverPhone.isNotEmpty)
         Padding(
           padding: const EdgeInsets.only(top: 8),

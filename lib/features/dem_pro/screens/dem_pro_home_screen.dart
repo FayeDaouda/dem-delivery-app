@@ -1,15 +1,21 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/router/app_startup_notifier.dart';
+import '../../../core/services/places_autocomplete_service.dart';
 import '../../../core/storage/auth_storage.dart';
+import '../../home_driver/navigation/navigation_service.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../deliveries/data/orders_repository.dart';
 import '../data/dem_pro_repository.dart';
+import '../../../shared/widgets/place_suggestions_list.dart';
 import '../../../shared/widgets/promo_highlight_popup.dart';
 import '../theme/dem_pro_colors.dart';
 import '../theme/dem_pro_text.dart';
@@ -685,6 +691,12 @@ class _AccueilTab extends StatelessWidget {
                     if (activeOrders.isEmpty)
                       _EnCoursEmpty(
                         onOrder: () => context.push('/dem-pro/orders/create'),
+                        // "Passez votre première commande" n'a de sens que
+                        // si le compte n'a strictement jamais commandé —
+                        // sinon ça réapparaît à chaque fois qu'aucune
+                        // livraison n'est en cours, ce qui est l'état
+                        // normal entre deux commandes.
+                        isFirstOrder: allOrders.isEmpty,
                         t: t,
                       )
                     else
@@ -1969,8 +1981,13 @@ class _SectionLabel extends StatelessWidget {
 // Empty state "EN COURS" avec micro CTA
 class _EnCoursEmpty extends StatelessWidget {
   final VoidCallback onOrder;
+  final bool isFirstOrder;
   final _T t;
-  const _EnCoursEmpty({required this.onOrder, required this.t});
+  const _EnCoursEmpty({
+    required this.onOrder,
+    required this.isFirstOrder,
+    required this.t,
+  });
 
   @override
   Widget build(BuildContext context) => Container(
@@ -2009,7 +2026,9 @@ class _EnCoursEmpty extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Passez votre première commande',
+                  isFirstOrder
+                      ? 'Passez votre première commande'
+                      : 'Nouvelle commande',
                   style: DemProText.caption.copyWith(
                     color: DemProColors.accent,
                   ),
@@ -4158,6 +4177,17 @@ class _AddressFormSheet extends StatefulWidget {
   State<_AddressFormSheet> createState() => _AddressFormSheetState();
 }
 
+const _addressSheetSuggestionColors = PlaceSuggestionsColors(
+  background: DemProColors.bg3,
+  border: DemProColors.bg4,
+  divider: DemProColors.bg4,
+  iconBg: DemProColors.bg4,
+  icon: DemProColors.accent,
+  mainText: DemProColors.text,
+  secondaryText: DemProColors.muted,
+  accent: DemProColors.accent,
+);
+
 class _AddressFormSheetState extends State<_AddressFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _label;
@@ -4166,6 +4196,19 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
   String _icon = 'other';
   bool _isDefault = false;
   bool _saving = false;
+
+  // ── Autocomplétion — jusqu'ici ce champ était un simple TextFormField
+  // sans recherche Google Places ni coordonnées GPS capturées (lat/lng
+  // toujours absents du payload malgré leur support côté backend/repo).
+  double? _lat, _lng;
+  List<Map<String, dynamic>> _suggestions = [];
+  bool _searching = false;
+  String? _searchError;
+  String? _sessionToken;
+  bool _locating = false;
+  Timer? _debounce;
+  final _dio = Dio();
+  late final _placesService = PlacesAutocompleteService(_dio);
 
   bool get _isEdit =>
       widget.existing != null && widget.existing!.containsKey('id');
@@ -4180,18 +4223,149 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
     _landmark = TextEditingController(text: e?['landmark'] as String? ?? '');
     _icon = e?['icon'] as String? ?? 'other';
     _isDefault = e?['isDefault'] as bool? ?? false;
+    _lat = (e?['lat'] as num?)?.toDouble();
+    _lng = (e?['lng'] as num?)?.toDouble();
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _label.dispose();
     _address.dispose();
     _landmark.dispose();
     super.dispose();
   }
 
+  void _onAddressChanged(String q) {
+    setState(() {
+      _lat = null;
+      _lng = null;
+    });
+    _debounce?.cancel();
+    if (q.trim().length < 3) {
+      if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
+      return;
+    }
+    _sessionToken ??= PlacesAutocompleteService.newSessionToken();
+    _debounce = Timer(const Duration(milliseconds: 450), () async {
+      if (!mounted) return;
+      setState(() {
+        _searching = true;
+        _searchError = null;
+      });
+      try {
+        final preds = await _placesService.autocomplete(
+          query: q,
+          sessionToken: _sessionToken!,
+        );
+        if (mounted) {
+          setState(() {
+            _suggestions = preds;
+            _searching = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _searching = false;
+            _searchError = e.toString();
+          });
+        }
+      }
+    });
+  }
+
+  void _retryAddressSearch() => _onAddressChanged(_address.text);
+
+  Future<void> _selectSuggestion(Map<String, dynamic> place) async {
+    FocusScope.of(context).unfocus();
+    setState(() => _suggestions = []);
+    final placeId = place['place_id'] as String?;
+    if (placeId == null) return;
+    final token = _sessionToken ?? PlacesAutocompleteService.newSessionToken();
+    try {
+      final result = await _placesService.details(
+        placeId: placeId,
+        sessionToken: token,
+      );
+      if (result != null) {
+        final loc = result['geometry']['location'];
+        final addr =
+            result['formatted_address'] as String? ??
+            (place['structured_formatting']?['main_text'] as String? ?? '');
+        setState(() {
+          _lat = (loc['lat'] as num).toDouble();
+          _lng = (loc['lng'] as num).toDouble();
+          _address.text = addr;
+        });
+      }
+    } catch (_) {
+    } finally {
+      _sessionToken = null;
+    }
+  }
+
+  Future<void> _useCurrentLocation() async {
+    setState(() {
+      _locating = true;
+      _suggestions = [];
+    });
+    try {
+      final pos = await NavigationService.requestAndGetPosition();
+      if (pos == null || !mounted) return;
+      String? addr = await _placesService.reverseGeocode(
+        pos.latitude,
+        pos.longitude,
+      );
+      if (addr == null || addr.isEmpty) {
+        try {
+          final marks = await geo
+              .placemarkFromCoordinates(pos.latitude, pos.longitude)
+              .timeout(const Duration(seconds: 5));
+          if (marks.isNotEmpty) {
+            final p = marks.first;
+            final street = p.street ?? p.name ?? '';
+            final local = p.subLocality ?? p.locality ?? '';
+            final built = street.isNotEmpty ? '$street, $local' : local;
+            if (built.isNotEmpty) addr = built;
+          }
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      setState(() {
+        _lat = pos.latitude;
+        _lng = pos.longitude;
+        _address.text = (addr != null && addr.isNotEmpty)
+            ? addr
+            : 'Position sélectionnée';
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Impossible de récupérer la position.'),
+            backgroundColor: DemProColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (_lat == null || _lng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Sélectionnez l'adresse dans la liste ou utilisez votre position actuelle.",
+          ),
+          backgroundColor: DemProColors.danger,
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final data = {
@@ -4202,6 +4376,8 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
             : _landmark.text.trim(),
         'icon': _icon,
         'isDefault': _isDefault,
+        'lat': _lat,
+        'lng': _lng,
       };
       if (_isEdit) {
         await widget.repo.updateAddress(widget.existing!['id'] as String, data);
@@ -4333,7 +4509,102 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                 validator: (v) => (v == null || v.trim().length < 4)
                     ? 'Adresse trop courte'
                     : null,
+                onChanged: _onAddressChanged,
+                suffixIcon: _lat != null
+                    ? const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 20,
+                      )
+                    : _searching
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: DemProColors.accent,
+                          ),
+                        ),
+                      )
+                    : _address.text.trim().isNotEmpty
+                    ? Icon(
+                        Icons.error_outline,
+                        color: Colors.orange.shade700,
+                        size: 20,
+                      )
+                    : null,
               ),
+              if (_address.text.trim().isNotEmpty &&
+                  _lat == null &&
+                  !_searching) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Sélectionnez une adresse dans la liste ou utilisez votre position actuelle.',
+                  style: DemProText.caption.copyWith(
+                    color: Colors.orange.shade800,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: _locating ? null : _useCurrentLocation,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: DemProColors.accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: DemProColors.accent.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _locating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: DemProColors.accent,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.my_location,
+                              color: DemProColors.accent,
+                              size: 16,
+                            ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _locating
+                            ? 'Localisation en cours…'
+                            : 'Utiliser ma position actuelle',
+                        style: DemProText.body.copyWith(
+                          color: DemProColors.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_suggestions.isNotEmpty ||
+                  _searching ||
+                  _searchError != null) ...[
+                const SizedBox(height: 4),
+                PlaceSuggestionsList(
+                  suggestions: _suggestions,
+                  loading: _searching,
+                  error: _searchError,
+                  onRetry: _retryAddressSearch,
+                  onSelect: _selectSuggestion,
+                  colors: _addressSheetSuggestionColors,
+                  maxHeight: 200,
+                ),
+              ],
               const SizedBox(height: 14),
 
               // ── Repère ─────────────────────────────────────────────────────
@@ -4442,21 +4713,27 @@ class _FormField extends StatelessWidget {
   final _T t;
   final String hint;
   final String? Function(String?)? validator;
+  final ValueChanged<String>? onChanged;
+  final Widget? suffixIcon;
   const _FormField({
     required this.controller,
     required this.t,
     required this.hint,
     required this.validator,
+    this.onChanged,
+    this.suffixIcon,
   });
 
   @override
   Widget build(BuildContext context) => TextFormField(
     controller: controller,
     validator: validator,
+    onChanged: onChanged,
     style: DemProText.body.copyWith(color: t.text, fontSize: 14),
     decoration: InputDecoration(
       hintText: hint,
       hintStyle: DemProText.body.copyWith(color: t.muted),
+      suffixIcon: suffixIcon,
       filled: true,
       fillColor: t.cardBg2,
       border: OutlineInputBorder(
