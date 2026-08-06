@@ -16,6 +16,7 @@ import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../core/utils/dem_toast.dart';
 import '../../core/utils/price_format.dart';
+import '../../shared/widgets/address_options_sheet.dart';
 import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/contact_mini_field.dart';
 import '../../shared/widgets/contact_picker.dart';
@@ -55,6 +56,9 @@ class _StopEntry {
   final focusNode = FocusNode();
   double? lat;
   double? lng;
+  // Tant que false, la bulle s'ouvre sur le menu de choix au tap plutôt que
+  // le clavier — même logique que order_create_screen.dart.
+  bool manualEntry = false;
 
   void dispose() {
     addressCtrl.dispose();
@@ -118,6 +122,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   double? _pickupLat;
   double? _pickupLng;
   bool _loadingGps = false;
+  bool _pickupManualEntry = false;
 
   final _favRepo = FavoriteAddressesRepository();
   List<Map<String, dynamic>> _favorites = [];
@@ -224,6 +229,12 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   }
 
   Future<void> _reverseGeocodePickup(LatLng pos) async {
+    final addr = await _reverseGeocodeLabel(pos);
+    if (!mounted) return;
+    setState(() => _pickupCtrl.text = addr);
+  }
+
+  Future<String> _reverseGeocodeLabel(LatLng pos) async {
     String? addr = await _placesService.reverseGeocode(
       pos.latitude,
       pos.longitude,
@@ -242,12 +253,80 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
         }
       } catch (_) {}
     }
-    if (!mounted) return;
-    setState(() {
-      _pickupCtrl.text = (addr != null && addr.isNotEmpty)
-          ? addr
-          : 'Position sélectionnée';
-    });
+    return (addr != null && addr.isNotEmpty) ? addr : 'Position sélectionnée';
+  }
+
+  // Position actuelle pour la collecte OU un arrêt donné — même geste que
+  // order_create_screen.dart, généralisé au-delà de la seule collecte pour
+  // la parité Simple/Express ↔ Groupée.
+  Future<void> _useCurrentLocationFor(Object field) async {
+    if (field == 'pickup') setState(() => _loadingGps = true);
+    try {
+      final pos = await NavigationService.requestAndGetPosition();
+      if (pos == null || !mounted) return;
+      final ll = LatLng(pos.latitude, pos.longitude);
+      final label = await _reverseGeocodeLabel(ll);
+      if (!mounted) return;
+      setState(() {
+        if (field == 'pickup') {
+          _pickupLat = ll.latitude;
+          _pickupLng = ll.longitude;
+          _pickupCtrl.text = label;
+          _pickupManualEntry = false;
+        } else if (field is int) {
+          _stops[field].lat = ll.latitude;
+          _stops[field].lng = ll.longitude;
+          _stops[field].addressCtrl.text = label;
+          _stops[field].manualEntry = false;
+        }
+      });
+      _updateEstimate();
+      _fitMapToMarkers();
+    } catch (_) {
+      if (mounted) {
+        showDemToast(
+          context,
+          'Impossible de récupérer la position.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (field == 'pickup' && mounted) setState(() => _loadingGps = false);
+    }
+  }
+
+  // Menu ouvert au tap sur la bulle collecte/arrêt — voir
+  // address_options_sheet.dart. "Pointer sur la carte" masqué : cet écran
+  // n'a pas (encore) de mode de placement sur carte.
+  Future<void> _showAddressMenu(Object field) async {
+    final choice = await showAddressOptionsSheet(
+      context,
+      forPickup: field == 'pickup',
+      showMapOption: false,
+    );
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case AddressOptionChoice.currentLocation:
+        await _useCurrentLocationFor(field);
+      case AddressOptionChoice.favorites:
+        setState(() => _activeField = field);
+      case AddressOptionChoice.map:
+        break; // masqué (showMapOption: false), jamais atteint
+      case AddressOptionChoice.manual:
+        setState(() {
+          _activeField = field;
+          if (field == 'pickup') {
+            _pickupManualEntry = true;
+          } else if (field is int) {
+            _stops[field].manualEntry = true;
+          }
+        });
+        if (field == 'pickup') {
+          _pickupFocus.requestFocus();
+        } else if (field is int) {
+          _stops[field].focusNode.requestFocus();
+        }
+    }
   }
 
   Future<void> _loadUser() async {
@@ -634,6 +713,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
                             pickupCtrl: _pickupCtrl,
                             pickupFocus: _pickupFocus,
                             pickupConfirmed: _pickupLat != null,
+                            pickupManualEntry: _pickupManualEntry,
                             stops: _stops,
                             activeField: _activeField,
                             suggestions: _suggestions,
@@ -641,8 +721,20 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
                             favorites: _favorites,
                             onSelectFavorite: _applyFavorite,
                             onPickupTap: () {
+                              if (!_pickupManualEntry) {
+                                _showAddressMenu('pickup');
+                                return;
+                              }
                               setState(() => _activeField = 'pickup');
                               _pickupFocus.requestFocus();
+                            },
+                            onStopTap: (i) {
+                              if (!_stops[i].manualEntry) {
+                                _showAddressMenu(i);
+                                return;
+                              }
+                              setState(() => _activeField = i);
+                              _stops[i].focusNode.requestFocus();
                             },
                             onQueryChanged: _onQueryChanged,
                             onSelectSuggestion: _selectSuggestion,
@@ -652,6 +744,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
                                 _pickupLat = null;
                                 _pickupLng = null;
                                 _estimate = null;
+                                _pickupManualEntry = false;
                               });
                             },
                             onAddStop: _addStop,
@@ -716,6 +809,7 @@ class _TrajetStep extends StatelessWidget {
   final TextEditingController pickupCtrl;
   final FocusNode pickupFocus;
   final bool pickupConfirmed;
+  final bool pickupManualEntry;
   final List<_StopEntry> stops;
   final Object? activeField;
   final List<Map<String, dynamic>> suggestions;
@@ -723,6 +817,7 @@ class _TrajetStep extends StatelessWidget {
   final List<Map<String, dynamic>> favorites;
   final ValueChanged<Map<String, dynamic>> onSelectFavorite;
   final VoidCallback onPickupTap;
+  final ValueChanged<int> onStopTap;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<Map<String, dynamic>> onSelectSuggestion;
   final VoidCallback onPickupClear;
@@ -735,6 +830,7 @@ class _TrajetStep extends StatelessWidget {
     required this.pickupCtrl,
     required this.pickupFocus,
     required this.pickupConfirmed,
+    required this.pickupManualEntry,
     required this.stops,
     required this.activeField,
     required this.suggestions,
@@ -742,6 +838,7 @@ class _TrajetStep extends StatelessWidget {
     required this.favorites,
     required this.onSelectFavorite,
     required this.onPickupTap,
+    required this.onStopTap,
     required this.onQueryChanged,
     required this.onSelectSuggestion,
     required this.onPickupClear,
@@ -774,6 +871,7 @@ class _TrajetStep extends StatelessWidget {
                     dotColor: AppColors.success,
                     active: activeField == 'pickup',
                     confirmed: pickupConfirmed,
+                    readOnly: !pickupManualEntry,
                     onTap: onPickupTap,
                     onChanged: onQueryChanged,
                     onClear: onPickupClear,
@@ -810,6 +908,7 @@ class _TrajetStep extends StatelessWidget {
                       canRemove: stops.length > _kMinStops,
                       onRemove: () => onRemoveStop(i),
                       onQueryChanged: onQueryChanged,
+                      onTap: () => onStopTap(i),
                       active: activeField == i,
                     ),
                     if (activeField == i &&
@@ -888,6 +987,7 @@ class _StopCard extends StatelessWidget {
   final bool active;
   final VoidCallback onRemove;
   final ValueChanged<String> onQueryChanged;
+  final VoidCallback onTap;
   const _StopCard({
     required this.index,
     required this.entry,
@@ -895,6 +995,7 @@ class _StopCard extends StatelessWidget {
     required this.active,
     required this.onRemove,
     required this.onQueryChanged,
+    required this.onTap,
   });
 
   @override
@@ -950,9 +1051,15 @@ class _StopCard extends StatelessWidget {
             dotColor: AppColors.error,
             active: active,
             confirmed: entry.lat != null,
-            onTap: entry.focusNode.requestFocus,
+            readOnly: !entry.manualEntry,
+            onTap: onTap,
             onChanged: onQueryChanged,
-            onClear: () => entry.addressCtrl.clear(),
+            onClear: () {
+              entry.addressCtrl.clear();
+              entry.lat = null;
+              entry.lng = null;
+              entry.manualEntry = false;
+            },
           ),
         ],
       ),
@@ -1196,6 +1303,29 @@ class _ResumeStep extends StatelessWidget {
                     estimating: estimating,
                     error: error,
                     ready: ready,
+                  ),
+                  // Même rappel que Simple/Express : le mode de paiement par
+                  // défaut n'était jamais annoncé avant validation.
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.payments_outlined,
+                        size: 14,
+                        color: Colors.white.withValues(alpha: 0.60),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Paiement en espèces à la livraison par défaut — le paiement en ligne sera aussi proposé une fois un livreur trouvé.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.60),
+                            fontSize: 11,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

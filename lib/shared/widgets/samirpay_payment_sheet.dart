@@ -36,7 +36,8 @@ class SamirpayPaymentSheet extends StatefulWidget {
   /// [initPayment]. Si null, tout événement du flux confirme (les flux déjà
   /// filtrés en amont par orderId, comme le paiement de commande, n'en ont
   /// pas besoin).
-  final bool Function(Map<String, dynamic> event, Map<String, dynamic> payment)? matchesConfirmation;
+  final bool Function(Map<String, dynamic> event, Map<String, dynamic> payment)?
+  matchesConfirmation;
 
   const SamirpayPaymentSheet({
     super.key,
@@ -57,7 +58,8 @@ class SamirpayPaymentSheet extends StatefulWidget {
     required Stream<Map<String, dynamic>> confirmationStream,
     required VoidCallback onSuccess,
     bool displayOnly = false,
-    bool Function(Map<String, dynamic> event, Map<String, dynamic> payment)? matchesConfirmation,
+    bool Function(Map<String, dynamic> event, Map<String, dynamic> payment)?
+    matchesConfirmation,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -92,7 +94,8 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
     _init();
     _sub = widget.confirmationStream.listen((event) {
       if (widget.matchesConfirmation != null) {
-        if (_payment == null || !widget.matchesConfirmation!(event, _payment!)) return;
+        if (_payment == null || !widget.matchesConfirmation!(event, _payment!))
+          return;
       }
       _handleConfirmed();
     });
@@ -129,6 +132,17 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
     }
   }
 
+  // Relance simplement _init() — l'erreur est souvent transitoire (timeout,
+  // réseau) ; sans ça, le client devait tout refermer et recommencer le
+  // choix d'opérateur pour retenter.
+  void _retry() {
+    setState(() {
+      _error = null;
+      _loading = true;
+    });
+    _init();
+  }
+
   void _handleConfirmed() {
     if (_confirmed || !mounted) return;
     setState(() => _confirmed = true);
@@ -145,7 +159,11 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
     if (uri == null) return;
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      showDemToast(context, "Impossible d'ouvrir l'application.", isError: true);
+      showDemToast(
+        context,
+        "Impossible d'ouvrir l'application.",
+        isError: true,
+      );
     }
   }
 
@@ -174,7 +192,10 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
           children: [
             CircularProgressIndicator(color: Colors.white),
             SizedBox(height: 16),
-            Text('Préparation du paiement…', style: TextStyle(color: Colors.white70, fontSize: 13)),
+            Text(
+              'Préparation du paiement…',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
           ],
         ),
       ),
@@ -189,13 +210,34 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
         const SizedBox(height: 20),
         Icon(Icons.error_outline, color: Colors.red.shade200, size: 40),
         const SizedBox(height: 12),
-        Text(_error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 14)),
+        Text(
+          _error!,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+        ),
         const SizedBox(height: 20),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Fermer', style: TextStyle(color: Colors.white70)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Fermer',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: _retry,
+              child: const Text(
+                'Réessayer',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -213,13 +255,25 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
             decoration: BoxDecoration(
               color: const Color(0xFF22C55E).withValues(alpha: 0.20),
               shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.50)),
+              border: Border.all(
+                color: const Color(0xFF22C55E).withValues(alpha: 0.50),
+              ),
             ),
-            child: const Icon(Icons.check_circle_outline, color: Color(0xFF22C55E), size: 34),
+            child: const Icon(
+              Icons.check_circle_outline,
+              color: Color(0xFF22C55E),
+              size: 34,
+            ),
           ),
           const SizedBox(height: 14),
-          const Text('Paiement confirmé',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+          const Text(
+            'Paiement confirmé',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );
@@ -233,14 +287,16 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
     // téléphone), on privilégie l'ouverture directe de l'app, déjà lancée
     // automatiquement dans _init() — pas de QR à faire scanner sur son
     // propre écran.
-    final qrCode      = widget.displayOnly ? payment['qrCode'] as String? : null;
-    final paymentUrl  = payment['paymentUrl'] as String?;
+    final qrCode = widget.displayOnly ? payment['qrCode'] as String? : null;
+    final paymentUrl = payment['paymentUrl'] as String?;
     // Orange Money renvoie une image QR toute faite ; Wave ne renvoie qu'un
     // lien (voir samirpay.service.js). Wave comme Orange Money ont tous les
     // deux un scanner intégré capable de lire un QR encodant ce type de lien
     // de paiement — on le génère donc nous-mêmes pour Wave, plutôt que de
     // se limiter à Orange Money côté "montrer un QR à quelqu'un d'autre".
-    final generatedQrData = (widget.displayOnly && qrCode == null) ? paymentUrl : null;
+    final generatedQrData = (widget.displayOnly && qrCode == null)
+        ? paymentUrl
+        : null;
     final operatorName = payment['operatorName'] as String?;
     final isWave = operatorName == 'WAVE';
     // Préfère le montant confirmé par le serveur (calculé à partir de la
@@ -253,24 +309,49 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
       children: [
         const _Handle(),
         const SizedBox(height: 16),
-        Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+        Text(
+          widget.title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         const SizedBox(height: 4),
-        Text('$amount FCFA',
-            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
+        Text(
+          '$amount FCFA',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         const SizedBox(height: 20),
-        if (qrCode != null) _buildQrCode(qrCode, size: widget.displayOnly ? 240 : 180),
-        if (generatedQrData != null) _buildGeneratedQr(generatedQrData, size: 240),
+        if (qrCode != null)
+          _buildQrCode(qrCode, size: widget.displayOnly ? 240 : 180),
+        if (generatedQrData != null)
+          _buildGeneratedQr(generatedQrData, size: 240),
         if (widget.displayOnly) ...[
           const SizedBox(height: 16),
-          Text('Faites scanner ce code par Wave ou Orange Money',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
+          Text(
+            'Faites scanner ce code par Wave ou Orange Money',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.70),
+              fontSize: 13,
+            ),
+          ),
         ],
         const SizedBox(height: 20),
         if (!widget.displayOnly && paymentUrl != null) ...[
-          Text('Redirection vers ${isWave ? 'Wave' : 'Orange Money'}…',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
+          Text(
+            'Redirection vers ${isWave ? 'Wave' : 'Orange Money'}…',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.70),
+              fontSize: 13,
+            ),
+          ),
           const SizedBox(height: 14),
           _PaymentAppButton(
             operatorName: operatorName ?? 'ORANGE_MONEY',
@@ -282,11 +363,18 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: const [
             SizedBox(
-              width: 14, height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white54,
+              ),
             ),
             SizedBox(width: 10),
-            Text('En attente de confirmation…', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            Text(
+              'En attente de confirmation…',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -304,8 +392,16 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
       final bytes = base64Decode(base64Data);
       return Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-        child: Image.memory(bytes, width: size, height: size, fit: BoxFit.contain),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Image.memory(
+          bytes,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+        ),
       );
     } catch (_) {
       return const SizedBox.shrink();
@@ -315,7 +411,10 @@ class _SamirpayPaymentSheetState extends State<SamirpayPaymentSheet> {
   Widget _buildGeneratedQr(String data, {required double size}) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: QrImageView(data: data, size: size, backgroundColor: Colors.white),
     );
   }
@@ -336,15 +435,19 @@ class _PaymentAppButton extends StatelessWidget {
           backgroundColor: PaymentOperatorBadge.colorFor(operatorName),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             PaymentOperatorBadge(operatorName: operatorName, size: 26),
             const SizedBox(width: 10),
-            Text('Ouvrir ${PaymentOperatorBadge.labelFor(operatorName)}',
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            Text(
+              'Ouvrir ${PaymentOperatorBadge.labelFor(operatorName)}',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
           ],
         ),
       ),

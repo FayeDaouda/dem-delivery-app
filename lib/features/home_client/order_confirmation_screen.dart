@@ -33,10 +33,12 @@ class OrderConfirmationScreen extends ConsumerStatefulWidget {
   const OrderConfirmationScreen({super.key, required this.order});
 
   @override
-  ConsumerState<OrderConfirmationScreen> createState() => _OrderConfirmationScreenState();
+  ConsumerState<OrderConfirmationScreen> createState() =>
+      _OrderConfirmationScreenState();
 }
 
-class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScreen>
+class _OrderConfirmationScreenState
+    extends ConsumerState<OrderConfirmationScreen>
     with SingleTickerProviderStateMixin {
   String? _mapStyle;
   List<LatLng> _routePoints = [];
@@ -121,16 +123,19 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
       final driverId = data['driverId'] as String?;
       if (driverId == null) return;
       _pollTimer?.cancel();
-      context.pushReplacement('/orders/tracking', extra: {
-        'orderId': data['orderId'] as String,
-        'driverId': driverId,
-        'etaPickupMin': data['etaPickupMin'] as int?,
-        'initialOrder': {
-          ...widget.order,
-          'status': 'ACCEPTED',
+      context.pushReplacement(
+        '/orders/tracking',
+        extra: {
+          'orderId': data['orderId'] as String,
           'driverId': driverId,
+          'etaPickupMin': data['etaPickupMin'] as int?,
+          'initialOrder': {
+            ...widget.order,
+            'status': 'ACCEPTED',
+            'driverId': driverId,
+          },
         },
-      });
+      );
     });
   }
 
@@ -142,22 +147,37 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
     _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       if (!mounted) return;
       try {
-        final order = await ref.read(ordersRepositoryProvider).getOrderById(orderId);
+        final order = await ref
+            .read(ordersRepositoryProvider)
+            .getOrderById(orderId);
         final status = (order['status'] as String? ?? '').toUpperCase();
         if (!mounted) return;
 
         if (status == 'ACCEPTED') {
           _pollTimer?.cancel();
-          final driverId = (order['driver'] as Map?)?['id'] as String?
-              ?? order['driverId'] as String?;
+          final driverId =
+              (order['driver'] as Map?)?['id'] as String? ??
+              order['driverId'] as String?;
           if (driverId == null) return;
-          context.pushReplacement('/orders/tracking', extra: {
-            'orderId': orderId,
-            'driverId': driverId,
-            'initialOrder': {...order, 'status': 'ACCEPTED'},
-          });
+          context.pushReplacement(
+            '/orders/tracking',
+            extra: {
+              'orderId': orderId,
+              'driverId': driverId,
+              'initialOrder': {...order, 'status': 'ACCEPTED'},
+            },
+          );
         } else if (status == 'CANCELLED') {
           _pollTimer?.cancel();
+          // Annulation décidée côté serveur (délai dépassé, etc.) — sans ce
+          // toast, le client se retrouve renvoyé en arrière sans comprendre
+          // pourquoi sa commande a disparu (contrairement à l'annulation
+          // manuelle, qui affiche bien une confirmation).
+          showDemToast(
+            context,
+            'Votre commande a été annulée — aucun livreur n\'a pu être trouvé à temps.',
+            isError: true,
+          );
           context.pop();
         }
       } catch (_) {
@@ -167,7 +187,10 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
   }
 
   // ── Timeout 5 min — le client choisit de continuer d'attendre ───────────────
-  void _continueWaiting() => setState(() { _waitTimedOut = false; _waitSeconds = 0; });
+  void _continueWaiting() => setState(() {
+    _waitTimedOut = false;
+    _waitSeconds = 0;
+  });
 
   Future<void> _loadMapStyle() async {
     final isNight = ref.read(mapNightProvider);
@@ -187,24 +210,37 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
     final deliveryLat = order['deliveryLatitude'] as num?;
     final deliveryLng = order['deliveryLongitude'] as num?;
 
-    if (pickupLat == null || pickupLng == null || deliveryLat == null || deliveryLng == null) {
+    if (pickupLat == null ||
+        pickupLng == null ||
+        deliveryLat == null ||
+        deliveryLng == null) {
       return;
     }
 
     if (mounted) {
-      setState(() => _routePoints = [
-        LatLng(pickupLat.toDouble(), pickupLng.toDouble()),
-        LatLng(deliveryLat.toDouble(), deliveryLng.toDouble()),
-      ]);
+      setState(
+        () => _routePoints = [
+          LatLng(pickupLat.toDouble(), pickupLng.toDouble()),
+          LatLng(deliveryLat.toDouble(), deliveryLng.toDouble()),
+        ],
+      );
     }
 
     try {
       final dio = Dio(BaseOptions(headers: {'User-Agent': 'com.dem.app/1.0'}));
-      final res = await dio.get('https://router.project-osrm.org/route/v1/driving/$pickupLng,$pickupLat;$deliveryLng,$deliveryLat?overview=full&geometries=geojson');
-      if (res.statusCode == 200 && res.data['routes'] != null && (res.data['routes'] as List).isNotEmpty) {
+      final res = await dio.get(
+        'https://router.project-osrm.org/route/v1/driving/$pickupLng,$pickupLat;$deliveryLng,$deliveryLat?overview=full&geometries=geojson',
+      );
+      if (res.statusCode == 200 &&
+          res.data['routes'] != null &&
+          (res.data['routes'] as List).isNotEmpty) {
         final route = res.data['routes'][0];
         final coords = route['geometry']['coordinates'] as List;
-        final points = coords.map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())).toList();
+        final points = coords
+            .map(
+              (c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
+            )
+            .toList();
         if (mounted) setState(() => _routePoints = points);
       }
     } catch (_) {}
@@ -229,17 +265,34 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
           decoration: BoxDecoration(
             gradient: AppColors.gradientSplash,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 8))],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Annuler la commande ?',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
+              const Text(
+                'Annuler la commande ?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
               const SizedBox(height: 10),
-              Text('Voulez-vous vraiment annuler cette commande en attente ?',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 14)),
+              Text(
+                'Voulez-vous vraiment annuler cette commande en attente ?',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 24),
               SwipeToConfirm(
                 label: 'Glissez pour annuler',
@@ -253,7 +306,12 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.pop(ctx, false),
-                  child: Text('Non', style: TextStyle(color: Colors.white.withValues(alpha: 0.65))),
+                  child: Text(
+                    'Non',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.65),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -281,13 +339,13 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
 
   @override
   Widget build(BuildContext context) {
-    final order           = widget.order;
-    final price           = (order['price'] as num?)?.toDouble();
-    final demFee          = (order['demFee'] as num?)?.toDouble() ?? 0.0;
-    final discountAmount  = (order['discountAmount'] as num?)?.toDouble() ?? 0.0;
-    final promoCode       = order['promoCode'] as String?;
-    final surge           = (order['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
-    final pickupAddress   = order['pickupAddress'] as String? ?? 'Départ';
+    final order = widget.order;
+    final price = (order['price'] as num?)?.toDouble();
+    final demFee = (order['demFee'] as num?)?.toDouble() ?? 0.0;
+    final discountAmount = (order['discountAmount'] as num?)?.toDouble() ?? 0.0;
+    final promoCode = order['promoCode'] as String?;
+    final surge = (order['surgeMultiplier'] as num?)?.toDouble() ?? 1.0;
+    final pickupAddress = order['pickupAddress'] as String? ?? 'Départ';
     final deliveryAddress = order['deliveryAddress'] as String? ?? 'Arrivée';
 
     final pickupLat = order['pickupLatitude'] as num?;
@@ -299,31 +357,39 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
     Set<Polyline> polylines = {};
 
     if (pickupLat != null && pickupLng != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('pickup'),
-        position: LatLng(pickupLat.toDouble(), pickupLng.toDouble()),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      ));
+      markers.add(
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: LatLng(pickupLat.toDouble(), pickupLng.toDouble()),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
+        ),
+      );
     }
     if (deliveryLat != null && deliveryLng != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('delivery'),
-        position: LatLng(deliveryLat.toDouble(), deliveryLng.toDouble()),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      ));
+      markers.add(
+        Marker(
+          markerId: const MarkerId('delivery'),
+          position: LatLng(deliveryLat.toDouble(), deliveryLng.toDouble()),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
     }
 
     if (_routePoints.isNotEmpty) {
-      polylines.add(Polyline(
-        polylineId: const PolylineId('route'),
-        points: _routePoints,
-        color: AppColors.primary,
-        width: 4,
-      ));
+      polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: _routePoints,
+          color: AppColors.primary,
+          width: 4,
+        ),
+      );
     }
 
-    final initialTarget = pickupLat != null && pickupLng != null 
-        ? LatLng(pickupLat.toDouble(), pickupLng.toDouble()) 
+    final initialTarget = pickupLat != null && pickupLng != null
+        ? LatLng(pickupLat.toDouble(), pickupLng.toDouble())
         : const LatLng(14.6937, -17.4441);
 
     return Scaffold(
@@ -332,7 +398,11 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
           // ── Map Background ──
           SizedBox.expand(
             child: GoogleMap(
-              initialCameraPosition: CameraPosition(target: initialTarget, zoom: 14, tilt: 40),
+              initialCameraPosition: CameraPosition(
+                target: initialTarget,
+                zoom: 14,
+                tilt: 40,
+              ),
               style: _mapStyle,
               markers: markers,
               polylines: polylines,
@@ -345,22 +415,36 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
               onMapCreated: (controller) {
                 _mapController = controller;
                 // Zoom pour montrer les deux points dès l'ouverture
-                if (pickupLat != null && pickupLng != null &&
-                    deliveryLat != null && deliveryLng != null) {
+                if (pickupLat != null &&
+                    pickupLng != null &&
+                    deliveryLat != null &&
+                    deliveryLng != null) {
                   Future.delayed(const Duration(milliseconds: 400), () {
                     _mapController?.animateCamera(
                       CameraUpdate.newLatLngBounds(
                         LatLngBounds(
                           southwest: LatLng(
-                            pickupLat.toDouble() < deliveryLat.toDouble() ? pickupLat.toDouble() : deliveryLat.toDouble(),
-                            pickupLng.toDouble() < deliveryLng.toDouble() ? pickupLng.toDouble() : deliveryLng.toDouble(),
+                            pickupLat.toDouble() < deliveryLat.toDouble()
+                                ? pickupLat.toDouble()
+                                : deliveryLat.toDouble(),
+                            pickupLng.toDouble() < deliveryLng.toDouble()
+                                ? pickupLng.toDouble()
+                                : deliveryLng.toDouble(),
                           ),
                           northeast: LatLng(
-                            pickupLat.toDouble() > deliveryLat.toDouble() ? pickupLat.toDouble() : deliveryLat.toDouble(),
-                            pickupLng.toDouble() > deliveryLng.toDouble() ? pickupLng.toDouble() : deliveryLng.toDouble(),
+                            pickupLat.toDouble() > deliveryLat.toDouble()
+                                ? pickupLat.toDouble()
+                                : deliveryLat.toDouble(),
+                            pickupLng.toDouble() > deliveryLng.toDouble()
+                                ? pickupLng.toDouble()
+                                : deliveryLng.toDouble(),
                           ),
                         ),
-                        90, // padding en pixels
+                        // Padding uniforme basé sur la hauteur réelle du panneau
+                        // bas (jusqu'à 370px + zone de sécurité) — un padding
+                        // fixe de 90px laissait le point de départ ou d'arrivée
+                        // se faire cacher sous le panneau après le zoom auto.
+                        _kMaxContent + 40,
                       ),
                     );
                   });
@@ -372,9 +456,13 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
           // ── MAP THEME TOGGLE ──────────────────────────────────────────────
           Positioned(
             right: 16,
-            bottom: max(_kMinContent + 22.0, _kMaxContent - _panelDragOffset + 22.0)
-                + 60
-                + MediaQuery.of(context).viewPadding.bottom,
+            bottom:
+                max(
+                  _kMinContent + 22.0,
+                  _kMaxContent - _panelDragOffset + 22.0,
+                ) +
+                60 +
+                MediaQuery.of(context).viewPadding.bottom,
             child: MapThemeToggleButton(onTap: _toggleMapTheme),
           ),
 
@@ -384,8 +472,16 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
             child: Container(
               decoration: BoxDecoration(
                 gradient: AppColors.gradientSplash,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, -4))],
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
               ),
               child: SafeArea(
                 top: false,
@@ -397,11 +493,13 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                       // Drag handle
                       GestureDetector(
                         behavior: HitTestBehavior.translucent,
-                        onVerticalDragStart: (_) => setState(() => _isDragging = true),
+                        onVerticalDragStart: (_) =>
+                            setState(() => _isDragging = true),
                         onVerticalDragUpdate: (d) {
                           final maxOffset = _kMaxContent - _kMinContent;
                           setState(() {
-                            _panelDragOffset = (_panelDragOffset + d.delta.dy).clamp(0.0, maxOffset);
+                            _panelDragOffset = (_panelDragOffset + d.delta.dy)
+                                .clamp(0.0, maxOffset);
                           });
                         },
                         onVerticalDragEnd: (d) {
@@ -409,27 +507,46 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                           final maxOffset = _kMaxContent - _kMinContent;
                           setState(() {
                             _isDragging = false;
-                            _panelDragOffset = (v > 200 || _panelDragOffset > maxOffset / 2) ? maxOffset : 0.0;
+                            _panelDragOffset =
+                                (v > 200 || _panelDragOffset > maxOffset / 2)
+                                ? maxOffset
+                                : 0.0;
                           });
                         },
                         onTap: () {
                           final maxOffset = _kMaxContent - _kMinContent;
                           setState(() {
                             _isDragging = false;
-                            _panelDragOffset = _panelDragOffset == 0 ? maxOffset : 0.0;
+                            _panelDragOffset = _panelDragOffset == 0
+                                ? maxOffset
+                                : 0.0;
                           });
                         },
                         child: SizedBox(
                           width: double.infinity,
                           height: 22,
-                          child: Center(child: Container(width: 36, height: 3, decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(2)))),
+                          child: Center(
+                            child: Container(
+                              width: 36,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
 
                       AnimatedContainer(
-                        duration: _isDragging ? Duration.zero : const Duration(milliseconds: 280),
+                        duration: _isDragging
+                            ? Duration.zero
+                            : const Duration(milliseconds: 280),
                         curve: Curves.easeInOut,
-                        height: (_kMaxContent - _panelDragOffset).clamp(_kMinContent, _kMaxContent),
+                        height: (_kMaxContent - _panelDragOffset).clamp(
+                          _kMinContent,
+                          _kMaxContent,
+                        ),
                         child: ClipRect(
                           child: OverflowBox(
                             alignment: Alignment.bottomCenter,
@@ -437,186 +554,376 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
                             child: SizedBox(
                               height: _kMaxContent,
                               child: Padding(
-                        padding: EdgeInsets.fromLTRB(16, 4, 16, 12 + _bottomInset),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            // ── Header : radar normal OU timeout 5 min ──
-                            if (_waitTimedOut)
-                              _TimeoutBanner(onContinue: _continueWaiting, onCancel: _cancelOrder)
-                            else
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  AnimatedBuilder(
-                                    animation: _radarAnim,
-                                    builder: (ctx, child) => SizedBox(
-                                      width: 36, height: 36,
-                                      child: Stack(
-                                        alignment: Alignment.center,
+                                padding: EdgeInsets.fromLTRB(
+                                  16,
+                                  4,
+                                  16,
+                                  12 + _bottomInset,
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    // ── Header : radar normal OU timeout 5 min ──
+                                    if (_waitTimedOut)
+                                      _TimeoutBanner(
+                                        onContinue: _continueWaiting,
+                                        onCancel: _cancelOrder,
+                                      )
+                                    else
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
-                                          Opacity(
-                                            opacity: (1 - _radarAnim.value).clamp(0.0, 1.0),
-                                            child: Container(
-                                              width: 36 * _radarAnim.value,
-                                              height: 36 * _radarAnim.value,
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: AppColors.primary, width: 1.5),
+                                          AnimatedBuilder(
+                                            animation: _radarAnim,
+                                            builder: (ctx, child) => SizedBox(
+                                              width: 36,
+                                              height: 36,
+                                              child: Stack(
+                                                alignment: Alignment.center,
+                                                children: [
+                                                  Opacity(
+                                                    opacity:
+                                                        (1 - _radarAnim.value)
+                                                            .clamp(0.0, 1.0),
+                                                    child: Container(
+                                                      width:
+                                                          36 * _radarAnim.value,
+                                                      height:
+                                                          36 * _radarAnim.value,
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color:
+                                                              AppColors.primary,
+                                                          width: 1.5,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    width: 10,
+                                                    height: 10,
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                          color:
+                                                              AppColors.primary,
+                                                          shape:
+                                                              BoxShape.circle,
+                                                        ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ),
-                                          Container(
-                                            width: 10, height: 10,
-                                            decoration: const BoxDecoration(
-                                              color: AppColors.primary,
-                                              shape: BoxShape.circle,
+                                          const SizedBox(width: 12),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Recherche d\'un livreur…',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              Text(
+                                                'Attente : $_waitLabel',
+                                                style: TextStyle(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.5),
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    const SizedBox(height: 16),
+
+                                    // ── Route recap ──
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          AddressRow(
+                                            icon: Icons.circle,
+                                            iconColor: AppColors.successBright,
+                                            address: pickupAddress,
+                                            dark: true,
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              left: 6,
                                             ),
+                                            child: Container(
+                                              width: 2,
+                                              height: 14,
+                                              color: Colors.white.withValues(
+                                                alpha: 0.25,
+                                              ),
+                                            ),
+                                          ),
+                                          AddressRow(
+                                            icon: Icons.location_on,
+                                            iconColor: AppColors.error,
+                                            address: deliveryAddress,
+                                            dark: true,
                                           ),
                                         ],
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Recherche d\'un livreur…',
-                                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                                      Text('Attente : $_waitLabel',
-                                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            const SizedBox(height: 16),
+                                    const SizedBox(height: 16),
 
-                            // ── Route recap ──
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  AddressRow(icon: Icons.circle, iconColor: AppColors.successBright, address: pickupAddress, dark: true),
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 6),
-                                    child: Container(width: 2, height: 14, color: Colors.white.withValues(alpha: 0.25)),
-                                  ),
-                                  AddressRow(icon: Icons.location_on, iconColor: AppColors.error, address: deliveryAddress, dark: true),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
+                                    // ── Price breakdown ──
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                'Course',
+                                                style: TextStyle(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.70),
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              const Spacer(),
+                                              if (surge > 1.0) ...[
+                                                const Icon(
+                                                  Icons.flash_on,
+                                                  color: AppColors.surge,
+                                                  size: 13,
+                                                ),
+                                                const SizedBox(width: 3),
+                                              ],
+                                              Text(
+                                                price != null
+                                                    ? formatFcfa(price)
+                                                    : '—',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          if (demFee > 0) ...[
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  'Frais DEM',
+                                                  style: TextStyle(
+                                                    color: Colors.white
+                                                        .withValues(
+                                                          alpha: 0.70,
+                                                        ),
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                Text(
+                                                  '+${formatFcfa(demFee)}',
+                                                  style: TextStyle(
+                                                    color: Colors.white
+                                                        .withValues(
+                                                          alpha: 0.70,
+                                                        ),
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                          if (discountAmount > 0) ...[
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  promoCode != null
+                                                      ? 'Réduction ($promoCode)'
+                                                      : 'Réduction',
+                                                  style: const TextStyle(
+                                                    color:
+                                                        AppColors.successLight,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                Text(
+                                                  '-${formatFcfa(discountAmount)}',
+                                                  style: const TextStyle(
+                                                    color:
+                                                        AppColors.successLight,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                          // Total — toujours affiché dès qu'un prix existe (frais et/ou
+                                          // réduction ou non) : le client ne doit jamais avoir à
+                                          // additionner Course + Frais DEM lui-même. Même règle que
+                                          // order_create_screen.dart.
+                                          if (price != null) ...[
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 6,
+                                                  ),
+                                              child: Divider(
+                                                height: 1,
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.15,
+                                                ),
+                                              ),
+                                            ),
+                                            Row(
+                                              children: [
+                                                const Text(
+                                                  'Total à payer',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                Text(
+                                                  formatFcfa(
+                                                    (((price) +
+                                                            demFee -
+                                                            discountAmount))
+                                                        .clamp(
+                                                          0,
+                                                          double.infinity,
+                                                        ),
+                                                  ),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
 
-                            // ── Price breakdown ──
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(children: [
-                                Row(children: [
-                                  Text('Course', style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
-                                  const Spacer(),
-                                  if (surge > 1.0) ...[
-                                    const Icon(Icons.flash_on, color: AppColors.surge, size: 13),
-                                    const SizedBox(width: 3),
+                                    // ── Boutons Action ──
+                                    Row(
+                                      children: [
+                                        GestureDetector(
+                                          onTap: _cancelling
+                                              ? null
+                                              : _cancelOrder,
+                                          child: Container(
+                                            height: 50,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 20,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: AppColors.error
+                                                    .withValues(alpha: 0.6),
+                                              ),
+                                            ),
+                                            child: Center(
+                                              child: _cancelling
+                                                  ? const SizedBox(
+                                                      width: 20,
+                                                      height: 20,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color:
+                                                                AppColors.error,
+                                                          ),
+                                                    )
+                                                  : const Text(
+                                                      'Annuler',
+                                                      style: TextStyle(
+                                                        color: AppColors.error,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        fontSize: 14,
+                                                      ),
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: PrimaryButton(
+                                            label: 'Retour à l\'accueil',
+                                            height: 50,
+                                            onTap: _cancelling
+                                                ? null
+                                                : () {
+                                                    context.go(
+                                                      appStartupNotifier
+                                                          .homeForRole,
+                                                    );
+                                                    Future.microtask(() {
+                                                      if (context.mounted) {
+                                                        showDemToast(
+                                                          context,
+                                                          'Votre commande est en attente — vous serez notifié dès qu\'un livreur est trouvé.',
+                                                        );
+                                                      }
+                                                    });
+                                                  },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ],
-                                  Text(price != null ? formatFcfa(price) : '—',
-                                      style: const TextStyle(color: Colors.white, fontSize: 13)),
-                                ]),
-                                if (demFee > 0) ...[
-                                  const SizedBox(height: 4),
-                                  Row(children: [
-                                    Text('Frais DEM', style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
-                                    const Spacer(),
-                                    Text('+${formatFcfa(demFee)}',
-                                        style: TextStyle(color: Colors.white.withValues(alpha: 0.70), fontSize: 13)),
-                                  ]),
-                                ],
-                                if (discountAmount > 0) ...[
-                                  const SizedBox(height: 4),
-                                  Row(children: [
-                                    Text(promoCode != null ? 'Réduction ($promoCode)' : 'Réduction',
-                                        style: const TextStyle(color: AppColors.successLight, fontSize: 13, fontWeight: FontWeight.w600)),
-                                    const Spacer(),
-                                    Text('-${formatFcfa(discountAmount)}',
-                                        style: const TextStyle(color: AppColors.successLight, fontSize: 13, fontWeight: FontWeight.w600)),
-                                  ]),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
-                                    child: Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
-                                  ),
-                                  Row(children: [
-                                    const Text('Total à payer',
-                                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
-                                    const Spacer(),
-                                    Text(
-                                      formatFcfa((((price ?? 0) + demFee - discountAmount)).clamp(0, double.infinity)),
-                                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800),
-                                    ),
-                                  ]),
-                                ],
-                              ]),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // ── Boutons Action ──
-                            Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: _cancelling ? null : _cancelOrder,
-                                  child: Container(
-                                    height: 50,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(color: AppColors.error.withValues(alpha: 0.6)),
-                                    ),
-                                    child: Center(
-                                      child: _cancelling
-                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error))
-                                          : const Text('Annuler', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w600, fontSize: 14)),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: PrimaryButton(
-                                    label: 'Retour à l\'accueil',
-                                    height: 50,
-                                    onTap: _cancelling ? null : () {
-                                      context.go(appStartupNotifier.homeForRole);
-                                      Future.microtask(() {
-                                        if (context.mounted) {
-                                          showDemToast(context, 'Votre commande est en attente — vous serez notifié dès qu\'un livreur est trouvé.');
-                                        }
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),       // Column
-                      ),         // Padding
-                    ),           // SizedBox
-                  ),             // OverflowBox
-                ),               // ClipRect
-              ),                 // AnimatedContainer
-            ],                   // outer Column children
-          ),                     // outer Column
-        ),                       // Padding(top:8)
-      ),                         // SafeArea
-    ),                           // Container
-  ),                             // Align
-],
+                                ), // Column
+                              ), // Padding
+                            ), // SizedBox
+                          ), // OverflowBox
+                        ), // ClipRect
+                      ), // AnimatedContainer
+                    ], // outer Column children
+                  ), // outer Column
+                ), // Padding(top:8)
+              ), // SafeArea
+            ), // Container
+          ), // Align
+        ],
       ),
     );
   }
@@ -637,13 +944,20 @@ class _TimeoutBanner extends StatelessWidget {
         const SizedBox(height: 8),
         const Text(
           'Aucun livreur disponible pour le moment',
-          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 4),
         Text(
           'Nous continuons de chercher en arrière-plan.',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 11),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.60),
+            fontSize: 11,
+          ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),
@@ -653,28 +967,42 @@ class _TimeoutBanner extends StatelessWidget {
             GestureDetector(
               onTap: onCancel,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.error.withValues(alpha: 0.20),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.error.withValues(alpha: 0.60)),
+                  border: Border.all(
+                    color: AppColors.error.withValues(alpha: 0.60),
+                  ),
                 ),
-                child: Text('Annuler',
-                    style: ClientText.body.copyWith(color: AppColors.error)),
+                child: Text(
+                  'Annuler',
+                  style: ClientText.body.copyWith(color: AppColors.error),
+                ),
               ),
             ),
             const SizedBox(width: 12),
             GestureDetector(
               onTap: onContinue,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.20),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.60)),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.60),
+                  ),
                 ),
-                child: Text('Continuer d\'attendre',
-                    style: ClientText.body.copyWith(color: AppColors.primary)),
+                child: Text(
+                  'Continuer d\'attendre',
+                  style: ClientText.body.copyWith(color: AppColors.primary),
+                ),
               ),
             ),
           ],

@@ -306,6 +306,19 @@ class OrdersRepository {
     }
   }
 
+  /// Promos auto-appliquées actuellement actives — écran "Code promo".
+  /// Liste vide si aucune (jamais bloquant).
+  Future<List<Map<String, dynamic>>> getAvailablePromos() async {
+    try {
+      final res = await _dio.get('/promo/available');
+      final data = res.data;
+      if (data is List) return data.cast<Map<String, dynamic>>();
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
   // ── Tournée groupée (1 collecte, 2-3 destinations, -20%) ──────────────────
   // Même moteur que les tournées DEM Pro côté serveur (voir
   // dem_pro/batch.service.js), exposé ici sous /orders/batch pour un client

@@ -13,18 +13,29 @@ enum AddressOptionChoice { currentLocation, favorites, map, manual }
 Future<AddressOptionChoice?> showAddressOptionsSheet(
   BuildContext context, {
   required bool forPickup,
+  // Masqué tant que l'écran appelant n'a pas de mode "pointer sur la
+  // carte" implémenté (ex: Livraison groupée, pas encore construit) — un
+  // choix menant à une fonctionnalité absente serait pire que son absence.
+  bool showMapOption = true,
 }) {
   return showModalBottomSheet<AddressOptionChoice>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (_) => _AddressOptionsSheet(forPickup: forPickup),
+    builder: (_) => _AddressOptionsSheet(
+      forPickup: forPickup,
+      showMapOption: showMapOption,
+    ),
   );
 }
 
 class _AddressOptionsSheet extends StatelessWidget {
   final bool forPickup;
-  const _AddressOptionsSheet({required this.forPickup});
+  final bool showMapOption;
+  const _AddressOptionsSheet({
+    required this.forPickup,
+    required this.showMapOption,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -70,11 +81,12 @@ class _AddressOptionsSheet extends StatelessWidget {
             label: 'Adresses préenregistrées',
             onTap: () => Navigator.pop(context, AddressOptionChoice.favorites),
           ),
-          _OptionRow(
-            icon: Icons.map_outlined,
-            label: 'Pointer sur la carte',
-            onTap: () => Navigator.pop(context, AddressOptionChoice.map),
-          ),
+          if (showMapOption)
+            _OptionRow(
+              icon: Icons.map_outlined,
+              label: 'Pointer sur la carte',
+              onTap: () => Navigator.pop(context, AddressOptionChoice.map),
+            ),
           _OptionRow(
             icon: Icons.edit_outlined,
             label: "Écrire l'adresse",

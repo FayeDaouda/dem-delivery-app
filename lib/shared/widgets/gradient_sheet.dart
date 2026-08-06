@@ -2,6 +2,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
+
 /// Feuille de bas d'écran au dégradé bleu DEM (fond flouté en verre dépoli en
 /// option) — partagée entre les notifications livreur, la tournée batch et
 /// les feuilles du profil, qui dessinaient chacune leur propre variante du
@@ -29,13 +31,15 @@ class GradientSheet extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         borderRadius: borderRadius,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0CB8DE), Color(0xFF0671BA), Color(0xFF04317C)],
-        ),
+        // Mêmes 3 couleurs que AppColors.gradientDialog — dupliquées en dur
+        // ici jusqu'ici, avec le risque qu'une modification de l'une ne soit
+        // pas répercutée sur l'autre.
+        gradient: AppColors.gradientDialog,
         border: bordered
-            ? Border.all(color: Colors.white.withValues(alpha: 0.20), width: 0.8)
+            ? Border.all(
+                color: Colors.white.withValues(alpha: 0.20),
+                width: 0.8,
+              )
             : null,
         boxShadow: [
           BoxShadow(
