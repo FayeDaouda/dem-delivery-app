@@ -95,8 +95,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     final data = notif['data'] as Map<String, dynamic>?;
     final orderId = data?['orderId'] as String?;
+    final screen = data?['screen'] as String?;
     if (orderId != null && mounted) {
       context.push('/orders/detail', extra: {'orderId': orderId});
+    } else if (screen == 'documents' && mounted) {
+      context.push('/driver/documents');
     }
   }
 

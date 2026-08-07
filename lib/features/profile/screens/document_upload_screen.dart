@@ -60,6 +60,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   final Map<String, File?>   _files     = { for (final d in _kDocs) d.field: null };
   final Map<String, String?> _urls      = { for (final d in _kDocs) d.field: null };
   final Map<String, bool>    _uploading = { for (final d in _kDocs) d.field: false };
+  Map<String, Map<String, dynamic>> _rejections = {};
   bool _loadingExisting = true;
 
   final _picker = ImagePicker();
@@ -80,6 +81,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           for (final d in _kDocs) {
             _urls[d.field] = user[d.field] as String?;
           }
+          final rej = user['rejectedDocuments'] as Map<String, dynamic>?;
+          _rejections = rej?.map(
+                (k, v) => MapEntry(k, v as Map<String, dynamic>),
+              ) ??
+              {};
         });
       }
     } catch (_) {}
@@ -105,7 +111,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       final res  = await ApiClient.dio.post('/users/driver/documents', data: form);
       final user = res.data['user'] as Map<String, dynamic>?;
       if (user != null && mounted) {
-        setState(() => _urls[field] = user[field] as String?);
+        setState(() {
+          _urls[field] = user[field] as String?;
+          _rejections.remove(field);
+        });
         showDemToast(context, 'Document enregistré ✓');
       }
     } catch (e) {
@@ -153,7 +162,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     );
   }
 
-  int get _uploadedCount => _urls.values.where((v) => v != null).length;
+  int get _uploadedCount => _urls.entries
+      .where((e) => e.value != null && !_rejections.containsKey(e.key))
+      .length;
 
   @override
   Widget build(BuildContext context) {
@@ -278,6 +289,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                                   file:      _files[group.slots[0].field],
                                   url:       _urls[group.slots[0].field],
                                   uploading: _uploading[group.slots[0].field]!,
+                                  rejection: _rejections[group.slots[0].field],
                                   onTap:     () => _showSourcePicker(group.slots[0].field),
                                 )
                               else
@@ -292,6 +304,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                                         file:      _files[doc.field],
                                         url:       _urls[doc.field],
                                         uploading: _uploading[doc.field]!,
+                                        rejection: _rejections[doc.field],
                                         onTap:     () => _showSourcePicker(doc.field),
                                         compact:   true,
                                       ),
@@ -318,14 +331,17 @@ class _DocCard extends StatelessWidget {
   final String?   url;
   final bool      uploading;
   final bool      compact;
+  final Map<String, dynamic>? rejection;
   final VoidCallback onTap;
 
   const _DocCard({
     required this.doc, required this.file, required this.url,
     required this.uploading, required this.onTap, this.compact = false,
+    this.rejection,
   });
 
-  bool get _isDone => url != null;
+  bool get _isRejected => rejection != null;
+  bool get _isDone => url != null && !_isRejected;
 
   @override
   Widget build(BuildContext context) {
@@ -368,8 +384,12 @@ class _DocCard extends StatelessWidget {
     color: Colors.white,
     borderRadius: BorderRadius.circular(14),
     border: Border.all(
-      color: _isDone ? AppColors.successLight : AppColors.primary.withValues(alpha: 0.25),
-      width: _isDone ? 1.5 : 1,
+      color: _isRejected
+          ? AppColors.error
+          : _isDone
+              ? AppColors.successLight
+              : AppColors.primary.withValues(alpha: 0.25),
+      width: _isRejected || _isDone ? 1.5 : 1,
     ),
     boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2))],
   );
@@ -386,10 +406,22 @@ class _DocCard extends StatelessWidget {
           : file != null
               ? Image.file(file!, fit: BoxFit.cover)
               : Container(
-                  color: _isDone ? AppColors.successLightBg : AppColors.primary.withValues(alpha: 0.07),
+                  color: _isRejected
+                      ? AppColors.error.withValues(alpha: 0.08)
+                      : _isDone
+                          ? AppColors.successLightBg
+                          : AppColors.primary.withValues(alpha: 0.07),
                   child: Icon(
-                    _isDone ? Icons.check_circle_outline : doc.icon,
-                    color: _isDone ? AppColors.successLight : AppColors.primary,
+                    _isRejected
+                        ? Icons.error_outline
+                        : _isDone
+                            ? Icons.check_circle_outline
+                            : doc.icon,
+                    color: _isRejected
+                        ? AppColors.error
+                        : _isDone
+                            ? AppColors.successLight
+                            : AppColors.primary,
                     size: size * 0.42,
                   ),
                 ),
@@ -401,25 +433,49 @@ class _DocCard extends StatelessWidget {
     children: [
       Text(doc.label,
           style: TextStyle(fontSize: fs, fontWeight: FontWeight.w700,
-              color: _isDone ? const Color(0xFF1B5E20) : AppColors.textDark)),
+              color: _isRejected
+                  ? AppColors.error
+                  : _isDone
+                      ? const Color(0xFF1B5E20)
+                      : AppColors.textDark)),
       const SizedBox(height: 2),
-      Text(_isDone ? 'Uploadé ✓' : doc.hint,
-          style: TextStyle(fontSize: fs - 2,
-              color: _isDone ? AppColors.successLight : AppColors.textMuted)),
+      Text(
+        _isRejected
+            ? 'Refusé : ${rejection!['reason']}'
+            : _isDone
+                ? 'Uploadé ✓'
+                : doc.hint,
+        maxLines: _isRejected ? 3 : 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: fs - 2,
+            color: _isRejected
+                ? AppColors.error
+                : _isDone
+                    ? AppColors.successLight
+                    : AppColors.textMuted),
+      ),
     ],
   );
 
   Widget _actionBtn({bool small = false}) => Container(
     padding: EdgeInsets.symmetric(horizontal: small ? 8 : 12, vertical: small ? 4 : 6),
     decoration: BoxDecoration(
-      color: _isDone ? AppColors.successLightBg : AppColors.primary.withValues(alpha: 0.10),
+      color: _isRejected
+          ? AppColors.error.withValues(alpha: 0.10)
+          : _isDone
+              ? AppColors.successLightBg
+              : AppColors.primary.withValues(alpha: 0.10),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Text(
-      _isDone ? 'Modifier' : 'Ajouter',
+      _isRejected ? 'Corriger' : (_isDone ? 'Modifier' : 'Ajouter'),
       style: TextStyle(
         fontSize: small ? 10 : 11, fontWeight: FontWeight.w700,
-        color: _isDone ? AppColors.successLight : AppColors.primary,
+        color: _isRejected
+            ? AppColors.error
+            : _isDone
+                ? AppColors.successLight
+                : AppColors.primary,
       ),
     ),
   );

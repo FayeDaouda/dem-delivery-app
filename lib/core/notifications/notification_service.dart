@@ -254,6 +254,11 @@ class NotificationService {
     'DRIVER_VALIDATED'          => '/driver/home',
     'DRIVER_REJECTED'           => '/phone',
     'DRIVER_SUSPENDED'          => '/driver/suspended',
+    // ── Vérification documents (KYC) — driver ──────────────────────────────
+    'DOCUMENT_REJECTED'         => '/driver/documents',
+    'DOCUMENT_REQUIRED'         => '/driver/documents',
+    'DOCUMENTS_SUBMITTED'       => '/driver/home',
+    'ACCOUNT_SUSPENDED_DOCS'    => '/driver/suspended',
     // ── Orders — driver ─────────────────────────────────────────────────────
     'ORDER_OFFER'               => '/driver/home',     // socket affiche le modal d'offre
     'ORDER_CANCELLED'           => '/driver/home',     // client a annulé avant acceptation

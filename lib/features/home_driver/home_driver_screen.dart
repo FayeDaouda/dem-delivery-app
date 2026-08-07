@@ -27,6 +27,7 @@ import '../../shared/widgets/swipe_to_confirm.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/profile/providers/profile_provider.dart';
+import '../../features/profile/screens/document_upload_screen.dart';
 import '../../features/profile/screens/driver_wallet_screen.dart';
 import 'navigation/directions_service.dart';
 import 'navigation/driver_marker_icon.dart';
@@ -1471,6 +1472,18 @@ class _NormalSheet extends StatelessWidget {
   // Si le blocage dispatch est désactivé (comportement actuel par défaut),
   // aucun bandeau n'a de sens : rien n'empêche réellement de recevoir des
   // courses, donc rien à signaler.
+  // Compte à rebours de vérification documents (KYC) — le backend passe le
+  // driver en 'PENDING_DOCUMENTS' avec un délai de 72h après 3 courses sans
+  // dossier complet, puis suspend automatiquement le compte à l'échéance
+  // (driver-verification.service.js). Ce délai était déjà renvoyé par
+  // /users/me mais n'était affiché nulle part — le livreur ne découvrait la
+  // suspension qu'après coup.
+  DateTime? get _kycDeadline {
+    if (profile.user?['driverStatus'] != 'PENDING_DOCUMENTS') return null;
+    final raw = profile.user?['verificationDeadline'] as String?;
+    return raw != null ? DateTime.tryParse(raw) : null;
+  }
+
   String? get _forfaitBannerKind {
     if (forfaitStatus?['dispatchGatingActive'] != true) return null;
     if (forfaitStatus?['todayCharged'] != true) return 'required';
@@ -1548,6 +1561,10 @@ class _NormalSheet extends StatelessWidget {
                   ),
               ],
             ),
+            if (_kycDeadline != null) ...[
+              const SizedBox(height: 14),
+              _KycDeadlineBanner(deadline: _kycDeadline!),
+            ],
             if (_forfaitBannerKind != null) ...[
               const SizedBox(height: 14),
               Builder(
@@ -1690,6 +1707,103 @@ class _NormalSheet extends StatelessWidget {
                 ],
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Bandeau : délai de vérification documents (KYC) ────────────────────────
+class _KycDeadlineBanner extends StatefulWidget {
+  final DateTime deadline;
+  const _KycDeadlineBanner({required this.deadline});
+
+  @override
+  State<_KycDeadlineBanner> createState() => _KycDeadlineBannerState();
+}
+
+class _KycDeadlineBannerState extends State<_KycDeadlineBanner> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = widget.deadline.difference(DateTime.now());
+    final expired = remaining.isNegative;
+
+    final Color color = expired
+        ? AppColors.error
+        : remaining.inHours < 12
+        ? AppColors.error
+        : remaining.inHours < 24
+        ? AppColors.warning
+        : AppColors.surge;
+
+    final String timeLabel = expired
+        ? 'Délai dépassé'
+        : remaining.inHours > 0
+        ? '${remaining.inHours}h restantes'
+        : '${remaining.inMinutes} min restantes';
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const DocumentUploadScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: color, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Documents manquants — compte suspendu si non complété',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    timeLabel,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white.withValues(alpha: 0.6),
+              size: 12,
+            ),
           ],
         ),
       ),

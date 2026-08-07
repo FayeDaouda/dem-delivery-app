@@ -1375,6 +1375,15 @@ class _CashoutSheetState extends State<_CashoutSheet> {
       setState(() => _swipeKey = UniqueKey());
       return;
     }
+    if (amount > widget.withdrawableBalance) {
+      showDemToast(
+        context,
+        'Montant supérieur à votre solde retirable (${widget.withdrawableBalance.toStringAsFixed(0)} FCFA).',
+        isError: true,
+      );
+      setState(() => _swipeKey = UniqueKey());
+      return;
+    }
     if (_thirdParty &&
         (_destNameCtrl.text.trim().isEmpty ||
             _destPhoneCtrl.text.trim().isEmpty)) {
