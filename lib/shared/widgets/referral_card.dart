@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
@@ -68,27 +69,47 @@ class ReferralCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // En-tête cyan
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              gradient: AppColors.gradientSplash,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.people_alt_outlined, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Text(
-                  'Mon code parrainage',
-                  style: TextStyle(
+          // En-tête cyan — tap pour voir la liste des filleuls et les
+          // récompenses gagnées (auparavant introuvable, seul le code
+          // était affiché ici sans jamais montrer qui l'a utilisé).
+          GestureDetector(
+            onTap: () => context.push('/client/referrals'),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
+                gradient: AppColors.gradientSplash,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.people_alt_outlined,
                     color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    size: 18,
                   ),
-                ),
-              ],
+                  SizedBox(width: 8),
+                  Text(
+                    'Mon code parrainage',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Spacer(),
+                  Text(
+                    'Mes filleuls',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(Icons.chevron_right, color: Colors.white70, size: 16),
+                ],
+              ),
             ),
           ),
 

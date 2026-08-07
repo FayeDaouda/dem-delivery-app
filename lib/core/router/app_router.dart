@@ -19,6 +19,7 @@ import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
 import '../../features/client_profile/client_profile_screen.dart';
 import '../../features/client_profile/favorite_addresses_screen.dart';
 import '../../features/client_profile/promo_code_screen.dart';
+import '../../features/client_profile/referrals_screen.dart';
 import '../../features/client_profile/settings_screen.dart';
 import '../../features/home_client/orders_history_screen.dart';
 import '../../features/home_client/order_tracking_screen.dart';
@@ -191,6 +192,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/client/settings',
       builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/client/referrals',
+      builder: (context, state) => const ReferralsScreen(),
     ),
     GoRoute(
       path: '/orders/create',
