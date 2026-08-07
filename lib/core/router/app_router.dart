@@ -22,6 +22,7 @@ import '../../features/client_profile/promo_code_screen.dart';
 import '../../features/home_client/orders_history_screen.dart';
 import '../../features/home_client/order_tracking_screen.dart';
 import '../../features/home_client/order_detail_screen.dart';
+import '../../features/notifications/notifications_screen.dart';
 
 import '../../features/splash/screens/splash_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
@@ -322,6 +323,10 @@ final appRouter = GoRouter(
           initialOrder: extra['initialOrder'] as Map<String, dynamic>?,
         );
       },
+    ),
+    GoRoute(
+      path: '/client/notifications',
+      builder: (context, state) => const NotificationsScreen(),
     ),
 
     // ── Driver Livraison (moto) ──

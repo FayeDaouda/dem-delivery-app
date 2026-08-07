@@ -24,6 +24,7 @@ import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../core/utils/price_format.dart';
 import '../../core/utils/dem_toast.dart';
+import '../notifications/data/notifications_repository.dart';
 import '../../shared/widgets/map_location_mode_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/pressable.dart';
@@ -103,6 +104,17 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   // silence sans aucun feedback visible.
   bool _isOffline = false;
 
+  // ── Centre de notifications ──────────────────────────────────────────────
+  int _unreadNotifCount = 0;
+  final _notifRepo = NotificationsRepository();
+
+  Future<void> _loadUnreadNotifCount() async {
+    try {
+      final count = await _notifRepo.getUnreadCount();
+      if (mounted) setState(() => _unreadNotifCount = count);
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -127,6 +139,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     });
     _startGPS();
     _loadUser();
+    _loadUnreadNotifCount();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPendingOrder();
       _connectSocket();
@@ -161,6 +174,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   void didPopNext() {
     // Appelée lorsque l'écran courant redevient le premier plan (au dessus est poppé)
     _checkPendingOrder();
+    _loadUnreadNotifCount();
   }
 
   StreamSubscription<void>? _reconnectSub;
@@ -1034,6 +1048,77 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     AppColors.background.withValues(alpha: 0.55),
                     AppColors.background.withValues(alpha: 0.0),
                   ],
+                ),
+              ),
+            ),
+          ),
+
+          // ── Cloche notifications — aucun point d'accès n'existait pour
+          // consulter l'historique des notifs après la disparition de la
+          // bannière éphémère de 6s.
+          Positioned(
+            top: 0,
+            right: 12,
+            child: SafeArea(
+              bottom: false,
+              child: GestureDetector(
+                onTap: () async {
+                  await context.push('/client/notifications');
+                  _loadUnreadNotifCount();
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  margin: const EdgeInsets.only(top: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Center(
+                        child: Icon(
+                          Icons.notifications_outlined,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                      ),
+                      if (_unreadNotifCount > 0)
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            decoration: const BoxDecoration(
+                              color: AppColors.error,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              _unreadNotifCount > 9
+                                  ? '9+'
+                                  : '$_unreadNotifCount',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
