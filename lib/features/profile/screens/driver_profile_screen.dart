@@ -23,6 +23,7 @@ import '../../../shared/widgets/swipe_to_confirm.dart';
 import '../data/profile_repository.dart';
 import 'document_upload_screen.dart';
 import 'driver_order_history_screen.dart';
+import 'driver_settings_screen.dart';
 import 'driver_wallet_screen.dart';
 
 class DriverProfileScreen extends StatefulWidget {
@@ -943,6 +944,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     _divider(),
                     _ActionRow(icon: Icons.support_agent_outlined, label: s.support, onTap: _showSupportSheet),
                     _divider(),
+                    _ActionRow(icon: Icons.help_outline, label: 'Questions fréquentes',
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverSettingsScreen()))),
+                    _divider(),
                     _ActionRow(icon: Icons.privacy_tip_outlined, label: s.privacyPolicy,
                         onTap: () => _launch(AppConfig.privacyPolicyUrl)),
                     _divider(),
@@ -1271,7 +1275,6 @@ class _BadgeCard extends StatelessWidget {
 
     final badge     = BadgeService.compute(courses: courses, referrals: referrals, rating: rating, remoteConfig: badgesConfig);
     final nextBadge = BadgeService.next(badge.tier);
-    final progress  = BadgeService.progressToNext(courses: courses, referrals: referrals, rating: rating, current: badge.tier);
     final objective = nextBadge != null
         ? BadgeService.objectiveLabel(
             BadgeService.closestCriteria(nextBadge, courses: courses, referrals: referrals, rating: rating),
@@ -1334,52 +1337,156 @@ class _BadgeCard extends StatelessWidget {
               ],
             ),
 
-            // Barre de progression vers le prochain badge
+            // Prochain badge : détail par critère (courses/parrainages/note)
+            // plutôt qu'une seule barre mêlant plusieurs critères — jusqu'ici
+            // impossible de savoir LEQUEL des critères manquait encore.
             if (nextBadge != null) ...[
+              const SizedBox(height: 14),
+              Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
               const SizedBox(height: 12),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // GAUCHE : courses actuelles + objectif
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('$courses courses',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-                      Text('Objectif : $objective',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.60), fontSize: 10)),
-                    ],
-                  ),
+                  Text('Prochain niveau',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11)),
                   const Spacer(),
-                  // DROITE : icon + nom du prochain badge
-                  Container(
-                    width: 22, height: 22,
-                    decoration: BoxDecoration(
-                      color: nextBadge.color.withValues(alpha: 0.25),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(nextBadge.icon, color: nextBadge.color, size: 13),
-                  ),
-                  const SizedBox(width: 6),
+                  Icon(nextBadge.icon, size: 14, color: nextBadge.color),
+                  const SizedBox(width: 5),
                   Text(nextBadge.name,
-                      style: TextStyle(color: nextBadge.color, fontSize: 11, fontWeight: FontWeight.w700)),
+                      style: TextStyle(color: nextBadge.color, fontSize: 13, fontWeight: FontWeight.w800)),
                 ],
               ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 5,
-                  backgroundColor: Colors.white.withValues(alpha: 0.15),
-                  valueColor: AlwaysStoppedAnimation<Color>(nextBadge.color),
+              const SizedBox(height: 12),
+              if (_closestRow.coursesRequired > 0)
+                _DriverCriterionBar(
+                  icon: Icons.two_wheeler, label: 'Courses',
+                  current: courses, needed: _closestRow.coursesRequired,
+                  color: nextBadge.color,
                 ),
+              if (_closestRow.referralsRequired > 0) ...[
+                const SizedBox(height: 10),
+                _DriverCriterionBar(
+                  icon: Icons.person_add_outlined, label: 'Parrainages',
+                  current: referrals, needed: _closestRow.referralsRequired,
+                  color: nextBadge.color,
+                ),
+              ],
+              if (_closestRow.ratingRequired > 0) ...[
+                const SizedBox(height: 10),
+                _DriverRatingLine(
+                  current: rating, needed: _closestRow.ratingRequired,
+                  color: nextBadge.color,
+                ),
+              ],
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: nextBadge.color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(children: [
+                  Icon(Icons.track_changes_rounded, size: 14, color: nextBadge.color),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Objectif le plus proche : $objective',
+                        style: TextStyle(color: nextBadge.color, fontSize: 11, fontWeight: FontWeight.w700)),
+                  ),
+                ]),
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: badge.color.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.auto_awesome_rounded, size: 15, color: badge.color),
+                  const SizedBox(width: 6),
+                  Text('Niveau maximum atteint !',
+                      style: TextStyle(color: badge.color, fontSize: 13, fontWeight: FontWeight.w700)),
+                ]),
               ),
             ],
           ],
         ),
       ),
     );
+  }
+
+  BadgeCriteria get _closestRow {
+    final courses   = (user['completedCourses'] as num?)?.toInt() ?? 0;
+    final referrals = (user['referralCount']    as num?)?.toInt() ?? 0;
+    final rating    = (user['averageRating']    as num?)?.toDouble() ?? 0.0;
+    final badge     = BadgeService.compute(courses: courses, referrals: referrals, rating: rating, remoteConfig: badgesConfig);
+    final nextBadge = BadgeService.next(badge.tier)!;
+    return BadgeService.closestCriteria(nextBadge, courses: courses, referrals: referrals, rating: rating);
+  }
+}
+
+// ── Barre de progression individuelle (thème sombre driver) ──────────────────
+class _DriverCriterionBar extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int current, needed;
+  final Color color;
+  const _DriverCriterionBar({required this.icon, required this.label, required this.current, required this.needed, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = needed > 0 ? (current / needed).clamp(0.0, 1.0) : 1.0;
+    final done  = current >= needed;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(icon, size: 13, color: done ? AppColors.successLight : Colors.white.withValues(alpha: 0.75)),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(fontSize: 11, color: done ? AppColors.successLight : Colors.white.withValues(alpha: 0.75))),
+        const Spacer(),
+        if (done)
+          Row(children: [
+            Icon(Icons.check_circle, size: 13, color: AppColors.successLight),
+            const SizedBox(width: 4),
+            Text('Complété !', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.successLight)),
+          ])
+        else
+          Text('$current / $needed', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+      ]),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: LinearProgressIndicator(
+          value: ratio,
+          minHeight: 5,
+          backgroundColor: Colors.white.withValues(alpha: 0.15),
+          valueColor: AlwaysStoppedAnimation<Color>(done ? AppColors.successLight : color),
+        ),
+      ),
+    ]);
+  }
+}
+
+// ── Ligne note (thème sombre driver) ──────────────────────────────────────────
+class _DriverRatingLine extends StatelessWidget {
+  final double current, needed;
+  final Color color;
+  const _DriverRatingLine({required this.current, required this.needed, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final ok = current >= needed;
+    return Row(children: [
+      Icon(ok ? Icons.star_rounded : Icons.star_outline_rounded,
+          size: 14, color: ok ? AppColors.ratingGold : Colors.white.withValues(alpha: 0.75)),
+      const SizedBox(width: 5),
+      Text('Note moyenne', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.75))),
+      const Spacer(),
+      Text(current.toStringAsFixed(1), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: ok ? AppColors.ratingGold : color)),
+      Text(' / ${needed.toStringAsFixed(1)}', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.55))),
+    ]);
   }
 }
 

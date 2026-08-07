@@ -80,15 +80,20 @@ class ProfileNotifier extends Notifier<ProfileState> {
   }
 
   Future<bool> toggleAvailability() async {
+    // Ignore un appel concurrent (double-tap) plutôt que de laisser deux
+    // requêtes de toggle se chevaucher et désynchroniser l'état réel côté
+    // serveur de ce que l'app affiche.
+    if (state.isLoading) return state.isAvailable;
+    state = state.copyWith(isLoading: true, error: null);
     try {
       final isAvailable = await _repo.toggleAvailability();
       final updatedUser = Map<String, dynamic>.from(state.user ?? {})
         ..['isAvailable'] = isAvailable;
       await AuthStorage.saveUser(updatedUser);
-      state = state.copyWith(user: updatedUser);
+      state = state.copyWith(user: updatedUser, isLoading: false);
       return isAvailable;
     } catch (e) {
-      state = state.copyWith(error: friendlyError(e));
+      state = state.copyWith(isLoading: false, error: friendlyError(e));
       rethrow;
     }
   }

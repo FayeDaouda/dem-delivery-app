@@ -25,6 +25,7 @@ import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/payment_collection_dialog.dart';
 import '../../shared/widgets/swipe_to_confirm.dart';
 import '../../features/deliveries/providers/orders_provider.dart';
+import '../../features/notifications/data/notifications_repository.dart';
 import '../../features/profile/data/profile_repository.dart';
 import '../../features/profile/providers/profile_provider.dart';
 import '../../features/profile/screens/document_upload_screen.dart';
@@ -128,6 +129,19 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
   final _profileRepo = ProfileRepository();
   Map<String, dynamic>? _forfaitStatus;
 
+  // ── Centre de notifications — aucun point d'accès n'existait côté livreur
+  // (contrairement au client), alors que le backend persiste déjà tout
+  // (rejet de document, statut KYC, etc.) via l'utilitaire notify().
+  int _unreadNotifCount = 0;
+  final _notifRepo = NotificationsRepository();
+
+  Future<void> _loadUnreadNotifCount() async {
+    try {
+      final count = await _notifRepo.getUnreadCount();
+      if (mounted) setState(() => _unreadNotifCount = count);
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -157,6 +171,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _loadTodayStats();
     _loadForfaitStatus();
     _loadHeatmap();
+    _loadUnreadNotifCount();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(profileProvider.notifier).fetchProfile(goOnlineIfOffline: true);
       _connectSocket();
@@ -178,6 +193,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     // Rechargement auto des stats et des commandes disponibles au retour de la livraison
     _loadTodayStats();
     _loadHeatmap();
+    _loadUnreadNotifCount();
     _refreshAfterReturn();
   }
 
@@ -1014,6 +1030,12 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       if (!(prev?.isAvailable ?? false) && next.isAvailable) {
         ref.read(availableOrdersProvider.notifier).refresh();
       }
+      // Un échec de fetchProfile()/toggleAvailability() ne laissait jusqu'ici
+      // aucune trace visible — l'écran restait figé sur son dernier état
+      // connu sans que le livreur sache qu'une requête a échoué.
+      if (next.error != null && next.error != prev?.error) {
+        showDemToast(context, next.error!, isError: true);
+      }
     });
 
     // Détecte l'arrivée d'une nouvelle course → route + fit bounds + countdown
@@ -1166,6 +1188,66 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                     ),
                   ),
                   const Spacer(),
+                  GestureDetector(
+                    onTap: () async {
+                      await context.push('/driver/notifications');
+                      _loadUnreadNotifCount();
+                    },
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Center(
+                            child: Icon(
+                              Icons.notifications_outlined,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          if (_unreadNotifCount > 0)
+                            Positioned(
+                              top: -2,
+                              right: -2,
+                              child: Container(
+                                padding: const EdgeInsets.all(3),
+                                constraints: const BoxConstraints(
+                                  minWidth: 16,
+                                  minHeight: 16,
+                                ),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.error,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  _unreadNotifCount > 9
+                                      ? '9+'
+                                      : '$_unreadNotifCount',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                   GestureDetector(
                     onTap: () => context.push('/driver/profile'),
                     child: Container(

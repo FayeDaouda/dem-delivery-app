@@ -30,6 +30,7 @@ import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/onboarding/screens/location_disclosure_screen.dart';
 import '../../features/profile/screens/document_upload_screen.dart';
 import '../../features/profile/screens/driver_profile_screen.dart';
+import '../../features/profile/screens/driver_settings_screen.dart';
 import '../../features/home_driver/active_order_screen.dart';
 import '../../features/home_driver/active_batch_screen.dart';
 import '../../features/admin/screens/admin_login_screen.dart';
@@ -338,6 +339,10 @@ final appRouter = GoRouter(
       path: '/client/notifications',
       builder: (context, state) => const NotificationsScreen(),
     ),
+    GoRoute(
+      path: '/driver/notifications',
+      builder: (context, state) => const NotificationsScreen(),
+    ),
 
     // ── Driver Livraison (moto) ──
     GoRoute(
@@ -373,6 +378,12 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/driver/documents',
       builder: (context, state) => const DocumentUploadScreen(),
+    ),
+
+    // ── Paramètres & aide driver ──
+    GoRoute(
+      path: '/driver/settings',
+      builder: (context, state) => const DriverSettingsScreen(),
     ),
 
     // ── Chef de flotte ──
