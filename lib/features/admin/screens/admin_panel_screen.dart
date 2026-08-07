@@ -315,7 +315,7 @@ class _RequestCardState extends State<_RequestCard> {
                           style: const TextStyle(
                               color: AppColors.textPrimary,
                               fontSize: 15, fontWeight: FontWeight.w700)),
-                      Text(isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
+                      Text('DEM Livraison',
                           style: const TextStyle(
                               color: AppColors.textSecondary, fontSize: 12)),
                     ],

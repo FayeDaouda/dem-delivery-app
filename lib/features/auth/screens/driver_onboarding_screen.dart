@@ -61,7 +61,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
           );
       await ref.read(profileProvider.notifier).fetchProfile();
       if (!mounted) return;
-      _isMoto ? context.go('/driver/home') : context.go('/driver/thiak/home');
+      context.go('/driver/home');
     } catch (e) {
       if (mounted) {
         showDemToast(context, friendlyError(e), isError: true);
@@ -122,7 +122,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                     Builder(builder: (ctx) {
                       final t = MediaQuery.of(ctx).size.width > 600;
                       return Text(
-                        _isMoto ? 'DEM Livraison' : 'DEM Thiak Thiak',
+                        'DEM Livraison',
                         style: TextStyle(
                           color: Colors.white, fontSize: t ? 19.0 : 16.0,
                           fontWeight: FontWeight.w700, letterSpacing: 1,

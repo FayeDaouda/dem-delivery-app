@@ -702,7 +702,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
               ),
               const SizedBox(height: 16),
               Text(
-                _isRide ? 'Course payée' : 'Livraison payée',
+                'Livraison payée',
                 style: ClientText.title.copyWith(color: Colors.white),
               ),
               const SizedBox(height: 6),
@@ -721,10 +721,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                   height: 48,
                   onTap: () {
                     Navigator.of(dialogCtx).pop();
-                    showDemToast(
-                      context,
-                      _isRide ? 'Course effectuée !' : 'Livraison effectuée !',
-                    );
+                    showDemToast(context, 'Livraison effectuée !');
                     Future.delayed(const Duration(milliseconds: 300), () {
                       if (mounted) context.go(_homeRoute);
                     });
@@ -747,11 +744,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       ref,
       orderId: orderId,
       price: clientChargeFor(_order),
-      isRide: _isRide,
       simulate: _isDevOrder,
-      successMessage: _isRide
-          ? 'Course effectuée — paiement confirmé !'
-          : 'Livraison effectuée — paiement confirmé !',
+      successMessage: 'Livraison effectuée — paiement confirmé !',
       onDispute: _showDisputeDialog,
       onPaid: () {
         if (mounted) context.go(_homeRoute);
@@ -942,7 +936,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  _isRide ? 'Course effectuée !' : 'Livraison effectuée !',
+                  'Livraison effectuée !',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -965,7 +959,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                 const SizedBox(height: 24),
                 // ── Notation ──
                 Text(
-                  _isRide ? 'Notez votre course' : 'Notez votre livraison',
+                  'Notez votre livraison',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -1036,7 +1030,6 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     );
   }
 
-  bool get _isRide => _order['orderType'] == 'RIDE';
   bool get _isExpress => _order['priority'] == 'EXPRESS';
 
   /// Numéro du client — compatible format plat (dev) et imbriqué (API réelle)
@@ -1077,7 +1070,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
-  String get _homeRoute => _isRide ? '/driver/thiak/home' : '/driver/home';
+  String get _homeRoute => '/driver/home';
 
   // ── Carte : marqueurs ─────────────────────────────────────────────────────
   Set<Marker> get _markers {
@@ -1086,10 +1079,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
         markerId: const MarkerId('pickup'),
         position: _pickupLatLng,
         icon: BitmapDescriptor.defaultMarkerWithHue(
-          _isRide ? BitmapDescriptor.hueAzure : BitmapDescriptor.hueGreen,
+          BitmapDescriptor.hueGreen,
         ),
         infoWindow: InfoWindow(
-          title: _isRide ? 'Prise en charge' : 'Collecte',
+          title: 'Collecte',
           snippet: _order['pickupAddress'],
         ),
       ),
@@ -1440,7 +1433,6 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                             _PhaseChip(
                               isPickedUp: _isPickedUp,
                               isDelivered: _isDelivered,
-                              isRide: _isRide,
                             ),
                             const SizedBox(height: 6),
                             // Distance en gros (style Waze)
@@ -1502,7 +1494,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                   AddressRow(
                     icon: Icons.circle,
                     iconColor: AppColors.success,
-                    label: _isRide ? 'Prise en charge' : 'Collecte',
+                    label: 'Collecte',
                     address: _order['pickupAddress'] ?? '',
                     dark: true,
                   ),
@@ -1516,36 +1508,13 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                       ),
                     ),
                   ),
-                  // Pour Thiak Thiak : destination masquée avant prise en charge
-                  if (_isRide && !_isPickedUp)
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.lock_outline,
-                          color: Colors.white.withValues(alpha: 0.40),
-                          size: 16,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Destination révélée après prise en charge',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.45),
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    AddressRow(
-                      icon: Icons.location_on,
-                      iconColor: AppColors.error,
-                      label: _isRide ? 'Destination' : 'Livraison',
-                      address: _order['deliveryAddress'] ?? '',
-                      dark: true,
-                    ),
+                  AddressRow(
+                    icon: Icons.location_on,
+                    iconColor: AppColors.error,
+                    label: 'Livraison',
+                    address: _order['deliveryAddress'] ?? '',
+                    dark: true,
+                  ),
 
                   // Nom de l'entreprise DEM Pro — absent (null) hors DEM Pro.
                   if (_proBusinessName != null) ...[
@@ -1832,9 +1801,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                             ),
                             child: Center(
                               child: Text(
-                                _isRide
-                                    ? 'Course effectuée avec succès !'
-                                    : 'Commande livrée avec succès !',
+                                'Commande livrée avec succès !',
                                 style: const TextStyle(
                                   color: AppColors.success,
                                   fontSize: 15,
@@ -1852,7 +1819,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                                     'action-$_isPickedUp-$_swipeTick',
                                   ),
                                   label:
-                                      'Glissez : ${_isPickedUp ? (_isRide ? 'course terminée' : 'livraison effectuée') : (_isRide ? 'passager à bord' : "colis récupéré")}',
+                                      'Glissez : ${_isPickedUp ? 'livraison effectuée' : "colis récupéré"}',
                                   lockedLabel: _distanceToTarget != null
                                       ? 'Trop loin (${NavigationService.formatDistance(_distanceToTarget!)})'
                                       : 'Localisation requise',
@@ -1945,34 +1912,16 @@ class _PaymentModeBadge extends StatelessWidget {
 class _PhaseChip extends StatelessWidget {
   final bool isPickedUp;
   final bool isDelivered;
-  final bool isRide;
 
-  const _PhaseChip({
-    required this.isPickedUp,
-    required this.isDelivered,
-    required this.isRide,
-  });
+  const _PhaseChip({required this.isPickedUp, required this.isDelivered});
 
   @override
   Widget build(BuildContext context) {
     final (label, color) = isDelivered
-        ? (
-            isRide ? 'Course effectuée ✓' : 'Livraison effectuée ✓',
-            AppColors.success,
-          )
+        ? ('Livraison effectuée ✓', AppColors.success)
         : isPickedUp
-        ? (
-            isRide
-                ? 'En route vers la destination'
-                : 'En route vers la livraison',
-            Colors.white,
-          )
-        : (
-            isRide
-                ? 'En route vers le passager'
-                : 'En route pour récupérer le colis',
-            AppColors.surge,
-          );
+        ? ('En route vers la livraison', Colors.white)
+        : ('En route pour récupérer le colis', AppColors.surge);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

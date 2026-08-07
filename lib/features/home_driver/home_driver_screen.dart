@@ -742,7 +742,6 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       ref,
       orderId: orderId,
       price: clientChargeFor(order),
-      isRide: order['orderType'] == 'RIDE',
       onPaid: () {
         if (mounted) setState(() => _unpaidOrder = null);
       },

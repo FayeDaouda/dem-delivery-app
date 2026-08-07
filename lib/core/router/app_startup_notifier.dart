@@ -108,8 +108,7 @@ class AppStartupNotifier extends ChangeNotifier {
   // ── Destination pour utilisateur connecté ───────────────────────────────────
   String get homeForRole {
     if (role == 'DRIVER') {
-      if (!isActive)             return '/driver/suspended';
-      if (vehicleType == 'TAXI') return '/driver/thiak/home';
+      if (!isActive) return '/driver/suspended';
       return '/driver/home';
     }
     if (role == 'CLIENT') return '/client/home';

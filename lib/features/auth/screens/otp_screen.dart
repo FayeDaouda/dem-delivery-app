@@ -101,7 +101,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
     if (role == 'DRIVER') {
       if (!isActive) { context.go('/driver/suspended'); return; }
-      context.go(vehicleType == 'TAXI' ? '/driver/thiak/home' : '/driver/home');
+      context.go('/driver/home');
     } else if (role == 'CHEF_DE_FLOTTE') {
       if (!isActive) { context.go('/chef-de-flotte/suspended'); return; }
       if (chefStatus == 'ACTIVE')        { context.go('/chef-de-flotte/dashboard'); }

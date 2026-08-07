@@ -837,7 +837,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                           color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(_isMoto ? 'Livreur-DEM' : 'DEM Thiak Thiak',
+                        child: Text('Livreur-DEM',
                             style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
                       ),
                       if (_user != null)

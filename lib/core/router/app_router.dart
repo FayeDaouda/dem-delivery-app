@@ -14,7 +14,6 @@ import '../../features/home_client/batch_create_screen.dart';
 import '../../features/home_client/batch_tracking_screen.dart';
 import '../../features/home_client/order_confirmation_screen.dart';
 import '../../features/home_driver/home_driver_screen.dart';
-import '../../features/home_driver_thiak/home_driver_thiak_screen.dart';
 
 import '../../features/client_profile/client_profile_screen.dart';
 import '../../features/client_profile/favorite_addresses_screen.dart';
@@ -343,12 +342,6 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/driver/home',
       builder: (context, state) => const HomeDriverScreen(),
-    ),
-
-    // ── Driver Thiak Thiak (taxi) ──
-    GoRoute(
-      path: '/driver/thiak/home',
-      builder: (context, state) => const HomeDriverThiakScreen(),
     ),
 
     // ── Active order (driver) ──

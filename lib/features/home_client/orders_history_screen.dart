@@ -877,10 +877,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
     );
   }
 
-  IconData _typeIcon(String type) => switch (type) {
-    'RIDE' => Icons.two_wheeler,
-    _ => Icons.motorcycle,
-  };
+  IconData _typeIcon(String type) => Icons.motorcycle;
 
   String _formatDate(DateTime? dt) {
     if (dt == null) return '—';

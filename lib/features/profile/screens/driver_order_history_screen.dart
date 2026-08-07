@@ -412,7 +412,6 @@ class _OrderCard extends ConsumerWidget {
     // Livrée mais jamais réglée (driver parti sans conclure le paiement) —
     // seul cas où on propose d'encaisser depuis l'historique.
     final isUnpaid = status == 'DELIVERED' && paymentStatus == 'PENDING' && orderId != null;
-    final isRide   = order['orderType'] == 'RIDE';
     final rawDate  = order['createdAt'] as String?;
     final date     = rawDate != null ? _formatDate(DateTime.tryParse(rawDate)) : '—';
     final pickup   = order['pickupAddress'] as String? ?? '—';
@@ -484,7 +483,6 @@ class _OrderCard extends ConsumerWidget {
                     context, ref,
                     orderId: orderId,
                     price: clientChargeFor(order),
-                    isRide: isRide,
                     onPaid: onPaid,
                   ),
                   icon: const Icon(Icons.payments_outlined, size: 16),

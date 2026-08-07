@@ -31,7 +31,6 @@ Future<void> showPaymentCollectionDialog(
   WidgetRef ref, {
   required String orderId,
   required int price,
-  required bool isRide,
   required VoidCallback onPaid,
   String? successMessage,
   VoidCallback? onDispute,
@@ -39,7 +38,7 @@ Future<void> showPaymentCollectionDialog(
 }) {
   return _showChooseModeSheet(
     context, ref,
-    orderId: orderId, price: price, isRide: isRide,
+    orderId: orderId, price: price,
     onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
   );
 }
@@ -49,7 +48,6 @@ Future<void> _showChooseModeSheet(
   WidgetRef ref, {
   required String orderId,
   required int price,
-  required bool isRide,
   required VoidCallback onPaid,
   String? successMessage,
   VoidCallback? onDispute,
@@ -92,7 +90,7 @@ Future<void> _showChooseModeSheet(
               Navigator.of(sheetCtx).pop();
               _showCashConfirmSheet(
                 context, ref,
-                orderId: orderId, price: price, isRide: isRide,
+                orderId: orderId, price: price,
                 onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
               );
             },
@@ -107,7 +105,7 @@ Future<void> _showChooseModeSheet(
               Navigator.of(sheetCtx).pop();
               _payOnline(
                 context, ref,
-                orderId: orderId, price: price, isRide: isRide,
+                orderId: orderId, price: price,
                 onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
               );
             },
@@ -123,7 +121,6 @@ void _showCashConfirmSheet(
   WidgetRef ref, {
   required String orderId,
   required int price,
-  required bool isRide,
   required VoidCallback onPaid,
   String? successMessage,
   VoidCallback? onDispute,
@@ -160,7 +157,7 @@ void _showCashConfirmSheet(
           if (ok) {
             nav.pop();
             if (context.mounted) {
-              showDemToast(context, successMessage ?? (isRide ? 'Course encaissée !' : 'Livraison encaissée !'));
+              showDemToast(context, successMessage ?? 'Livraison encaissée !');
             }
             onPaid();
           } else {
@@ -197,7 +194,7 @@ void _showCashConfirmSheet(
                     Navigator.of(sheetCtx).pop();
                     _showChooseModeSheet(
                       context, ref,
-                      orderId: orderId, price: price, isRide: isRide,
+                      orderId: orderId, price: price,
                       onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
                     );
                   },
@@ -249,7 +246,6 @@ Future<void> _payOnline(
   WidgetRef ref, {
   required String orderId,
   required int price,
-  required bool isRide,
   required VoidCallback onPaid,
   String? successMessage,
   VoidCallback? onDispute,
@@ -262,7 +258,7 @@ Future<void> _payOnline(
     if (context.mounted) {
       _showChooseModeSheet(
         context, ref,
-        orderId: orderId, price: price, isRide: isRide,
+        orderId: orderId, price: price,
         onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
       );
     }
@@ -278,13 +274,13 @@ Future<void> _payOnline(
   await SamirpayPaymentSheet.show(
     context,
     amount: price,
-    title: isRide ? 'Paiement de la course' : 'Paiement de la livraison',
+    title: 'Paiement de la livraison',
     initPayment: () => ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
     confirmationStream: SocketService.instance.onOrderPaymentConfirmed
         .where((event) => event['orderId'] == orderId),
     onSuccess: () {
       succeeded = true;
-      showDemToast(context, successMessage ?? (isRide ? 'Course encaissée !' : 'Livraison encaissée !'));
+      showDemToast(context, successMessage ?? 'Livraison encaissée !');
       onPaid();
     },
     displayOnly: true,
@@ -295,7 +291,7 @@ Future<void> _payOnline(
   if (!succeeded && context.mounted) {
     _showChooseModeSheet(
       context, ref,
-      orderId: orderId, price: price, isRide: isRide,
+      orderId: orderId, price: price,
       onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
     );
   }

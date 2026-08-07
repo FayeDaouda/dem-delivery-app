@@ -1590,8 +1590,6 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                   WizardTopBar(
                     title: widget.priority == 'EXPRESS'
                         ? 'Livraison Express ⚡'
-                        : widget.orderType == 'RIDE'
-                        ? 'Transport'
                         : 'Livraison Simple',
                     step: _step,
                     onBack: () {
@@ -2491,7 +2489,7 @@ class _Step1Panel extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   ContactMiniField(
-                    label: orderType == 'RIDE' ? 'Passager' : 'Expéditeur',
+                    label: 'Expéditeur',
                     dotColor: AppColors.success,
                     nameCtrl: nameCtrl,
                     phoneCtrl: phoneCtrl,
@@ -2562,7 +2560,7 @@ class _Step2Panel extends StatelessWidget {
               child: Column(
                 children: [
                   ContactMiniField(
-                    label: orderType == 'RIDE' ? 'Destination' : 'Destinataire',
+                    label: 'Destinataire',
                     dotColor: AppColors.error,
                     nameCtrl: nameCtrl,
                     phoneCtrl: phoneCtrl,
