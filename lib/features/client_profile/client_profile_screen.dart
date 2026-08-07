@@ -1038,6 +1038,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     _MenuGroup(
                       items: [
                         _MenuItemData(
+                          icon: Icons.help_outline,
+                          title: 'Paramètres & aide (FAQ)',
+                          onTap: () => context.push('/client/settings'),
+                        ),
+                        _MenuItemData(
                           icon: Icons.privacy_tip_outlined,
                           title: 'Politique de confidentialité',
                           onTap: () => _launch(AppConfig.privacyPolicyUrl),
