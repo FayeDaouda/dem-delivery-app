@@ -200,9 +200,43 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
     return result;
   }
 
+  // Texte d'état vide contextualisé au(x) filtre(s) actif(s) — auparavant
+  // "Aucune commande trouvée" identique quel que soit le filtre.
+  String get _emptyStateMessage {
+    final statusLabel = _statusFilters.firstWhere(
+      (f) => f['key'] == _statusFilter,
+      orElse: () => const {'label': ''},
+    )['label'];
+    final periodLabel = _periodFilters.firstWhere(
+      (f) => f['key'] == _periodFilter,
+      orElse: () => const {'label': ''},
+    )['label'];
+    if (_statusFilter == 'all' && _periodFilter == 'all') {
+      return 'Aucune commande trouvée';
+    }
+    if (_statusFilter != 'all' && _periodFilter != 'all') {
+      return 'Aucune commande "$statusLabel" pour "$periodLabel"';
+    }
+    if (_statusFilter != 'all') return 'Aucune commande "$statusLabel"';
+    return 'Aucune commande pour "$periodLabel"';
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _applyFilters(_orders);
+    final hasActiveFilter = _statusFilter != 'all' || _periodFilter != 'all';
+    // Le filtrage est local (voir _applyFilters) — tant que l'auto-chargement
+    // déclenché par un filtre actif tourne encore, une liste filtrée vide
+    // ne veut pas dire "aucun résultat" mais "pas encore assez de pages
+    // chargées". Sans cette distinction, l'utilisateur voyait un flash
+    // "Aucune commande trouvée" avant que la liste se peuple.
+    final isAutoLoadingForFilter =
+        hasActiveFilter && _loadingMore && filtered.isEmpty;
+    // Le plafond d'auto-chargement (_kMaxAutoLoadPage) peut laisser des
+    // résultats filtrés incomplets sur un gros historique — sans ce
+    // message, rien ne le signalait.
+    final resultsMayBeTruncated =
+        hasActiveFilter && _hasMore && _page >= _kMaxAutoLoadPage;
 
     return Scaffold(
       backgroundColor: AppColors.lightBg,
@@ -389,6 +423,47 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
                   ),
                 ),
 
+                // Le filtrage étant local (voir _applyFilters), un filtre
+                // très restrictif sur un gros historique peut plafonner
+                // l'auto-chargement avant d'avoir tout parcouru — sans ce
+                // message, les résultats affichés pouvaient sembler
+                // complets alors qu'ils ne le sont pas forcément.
+                if (resultsMayBeTruncated)
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.warning.withValues(alpha: 0.30),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline,
+                          size: 15,
+                          color: AppColors.warning,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Résultats limités aux commandes les plus récentes pour ce filtre — affinez la période pour une recherche plus précise.',
+                            style: TextStyle(
+                              color: AppColors.warning.withValues(alpha: 0.95),
+                              fontSize: 11.5,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // ── Liste ──
                 Expanded(
                   child: Container(
@@ -429,6 +504,12 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
                               ],
                             ),
                           )
+                        : isAutoLoadingForFilter
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          )
                         : filtered.isEmpty
                         ? Center(
                             child: Column(
@@ -440,9 +521,10 @@ class _State extends ConsumerState<OrdersHistoryScreen> {
                                   size: 64,
                                 ),
                                 const SizedBox(height: 12),
-                                const Text(
-                                  'Aucune commande trouvée',
-                                  style: TextStyle(
+                                Text(
+                                  _emptyStateMessage,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
                                     color: AppColors.textMuted,
                                     fontSize: 15,
                                   ),
@@ -566,7 +648,16 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
       final driverId =
           (widget.order['driver'] as Map?)?['id'] as String? ??
           widget.order['driverId'] as String?;
-      if (driverId == null) return;
+      if (driverId == null) {
+        // Même anomalie que sur l'accueil (home_client_screen.dart) — un tap
+        // sans feedback laissait croire à un bouton mort.
+        showDemToast(
+          context,
+          'Impossible d\'ouvrir le suivi pour le moment — réessayez dans un instant.',
+          isError: true,
+        );
+        return;
+      }
       context.push(
         '/orders/tracking',
         extra: {

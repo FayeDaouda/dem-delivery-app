@@ -999,7 +999,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                               ? 'Changement de numéro en cours…'
                               : 'Demander un changement de numéro',
                           onTap: phoneStatus == 'PENDING'
-                              ? () {}
+                              ? () => showDemToast(
+                                  context,
+                                  'Votre demande est en cours de traitement — un admin doit encore la valider.',
+                                )
                               : _requestPhoneChange,
                           titleColor: phoneStatus == 'PENDING'
                               ? Colors.grey

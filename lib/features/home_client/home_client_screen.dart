@@ -23,6 +23,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/client_text.dart';
 import '../../core/theme/map_theme_provider.dart';
 import '../../core/utils/price_format.dart';
+import '../../core/utils/dem_toast.dart';
 import '../../shared/widgets/map_location_mode_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/pressable.dart';
@@ -96,6 +97,11 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
   // ── Polling timer pour s'assurer que le badge est à jour ───────────────────
   Timer? _pollTimer;
   bool _checkingOrders = false;
+  // Signale une seule fois par transition (pas à chaque tick du polling
+  // 10s, ce qui serait un flot ininterrompu de toasts pendant une coupure
+  // prolongée) — auparavant, toute erreur réseau ici était avalée en
+  // silence sans aucun feedback visible.
+  bool _isOffline = false;
 
   @override
   void initState() {
@@ -134,6 +140,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
       maybeShowPromoHighlight(
         context,
         fetch: OrdersRepository().getHighlightPromo,
+        // Sans ça, la popup utilisait sa couleur par défaut codée en dur
+        // (#0077B6), hors de la palette de marque — la version DEM Pro,
+        // elle, passait bien accentColor explicitement.
+        accentColor: AppColors.primaryMid,
       );
     });
   }
@@ -415,6 +425,10 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     _checkingOrders = true;
     try {
       final orders = await ref.read(ordersRepositoryProvider).getMyOrders();
+      if (_isOffline && mounted) {
+        setState(() => _isOffline = false);
+        showDemToast(context, 'Connexion rétablie.');
+      }
 
       // Priorité 1 : course active (driver en route)
       const activeStatuses = ['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'];
@@ -512,6 +526,14 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         });
       }
     } catch (_) {
+      if (!_isOffline && mounted) {
+        setState(() => _isOffline = true);
+        showDemToast(
+          context,
+          'Connexion perdue — nouvelle tentative en cours…',
+          isError: true,
+        );
+      }
     } finally {
       _checkingOrders = false;
     }
@@ -742,7 +764,17 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     final driverId =
         (order['driver'] as Map?)?['id'] as String? ??
         order['driverId'] as String?;
-    if (driverId == null) return;
+    if (driverId == null) {
+      // Commande active sans livreur associé — anomalie de données plutôt
+      // qu'un cas normal (ces statuts impliquent qu'un livreur a accepté).
+      // Un tap silencieux sans feedback laissait croire à un bouton mort.
+      showDemToast(
+        context,
+        'Impossible d\'ouvrir le suivi pour le moment — réessayez dans un instant.',
+        isError: true,
+      );
+      return;
+    }
     context.push(
       '/orders/tracking',
       extra: {
