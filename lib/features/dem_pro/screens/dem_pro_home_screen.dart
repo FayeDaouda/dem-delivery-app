@@ -97,8 +97,13 @@ Color _batchStatusColor(String s) => switch (s) {
 };
 
 // ── Helpers statut ────────────────────────────────────────────────────────────
-bool _isActiveStatus(String s) =>
-    const {'PENDING', 'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'}.contains(s);
+bool _isActiveStatus(String s) => const {
+  'PENDING',
+  'ACCEPTED',
+  'PICKED_UP',
+  'IN_TRANSIT',
+  'SCHEDULED',
+}.contains(s);
 
 String _statusLabel(String s) => switch (s) {
   'PENDING' => 'En attente',
@@ -107,6 +112,7 @@ String _statusLabel(String s) => switch (s) {
   'IN_TRANSIT' => 'En route',
   'DELIVERED' => 'Livré',
   'CANCELLED' => 'Annulé',
+  'SCHEDULED' => 'Programmée',
   _ => s,
 };
 
@@ -117,6 +123,7 @@ Color _statusColor(String s) => switch (s) {
   'IN_TRANSIT' => AppColors.primary,
   'DELIVERED' => AppColors.successLight,
   'CANCELLED' => AppColors.error,
+  'SCHEDULED' => AppColors.textMuted,
   _ => AppColors.textMuted,
 };
 
@@ -139,7 +146,9 @@ void _navigateToOrder(BuildContext context, Map<String, dynamic> order) {
         'initialOrder': order,
       },
     );
-  } else if (status == 'DELIVERED' || status == 'CANCELLED') {
+  } else if (status == 'DELIVERED' ||
+      status == 'CANCELLED' ||
+      status == 'SCHEDULED') {
     context.push('/dem-pro/orders/receipt', extra: order);
   }
 }
@@ -2458,9 +2467,15 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
   bool get wantKeepAlive => true;
 
   // ── Livraisons ─────────────────────────────────────────────────────────────
+  static const _ordersPageSize = 50;
   List<Map<String, dynamic>> _orders = [];
   bool _loadingOrders = true;
+  int _ordersPage = 1;
+  bool _loadingMoreOrders = false;
+  bool _hasMoreOrders = true;
   _OrderFilter _filter = _OrderFilter.all;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   // ── Tournées ───────────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _batches = [];
@@ -2475,17 +2490,43 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
     _loadOrders();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadOrders() async {
     if (!_loadingOrders) setState(() => _loadingOrders = true);
     try {
-      final orders = await _repo.getMyOrders();
+      final orders = await _repo.getMyOrders(page: 1, limit: _ordersPageSize);
       if (!mounted) return;
       setState(() {
         _orders = orders;
+        _ordersPage = 1;
+        _hasMoreOrders = orders.length >= _ordersPageSize;
         _loadingOrders = false;
       });
     } catch (_) {
       if (mounted) setState(() => _loadingOrders = false);
+    }
+  }
+
+  Future<void> _loadMoreOrders() async {
+    if (_loadingMoreOrders || !_hasMoreOrders) return;
+    setState(() => _loadingMoreOrders = true);
+    try {
+      final next = _ordersPage + 1;
+      final more = await _repo.getMyOrders(page: next, limit: _ordersPageSize);
+      if (!mounted) return;
+      setState(() {
+        _orders = [..._orders, ...more];
+        _ordersPage = next;
+        _hasMoreOrders = more.length >= _ordersPageSize;
+        _loadingMoreOrders = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMoreOrders = false);
     }
   }
 
@@ -2510,19 +2551,34 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
     }
   }
 
-  List<Map<String, dynamic>> get _activeOrders =>
-      _orders.where((o) => _isActiveStatus(o['status'] as String)).toList();
+  bool _matchesSearch(Map<String, dynamic> o) {
+    if (_searchQuery.isEmpty) return true;
+    final q = _searchQuery.toLowerCase();
+    final pickup = (o['pickupAddress'] as String? ?? '').toLowerCase();
+    final delivery = (o['deliveryAddress'] as String? ?? '').toLowerCase();
+    final receiver = (o['receiverName'] as String? ?? '').toLowerCase();
+    final id = (o['id'] as String? ?? '').toLowerCase();
+    return pickup.contains(q) ||
+        delivery.contains(q) ||
+        receiver.contains(q) ||
+        id.contains(q);
+  }
+
+  List<Map<String, dynamic>> get _activeOrders => _orders
+      .where((o) => _isActiveStatus(o['status'] as String))
+      .where(_matchesSearch)
+      .toList();
 
   List<Map<String, dynamic>> get _historyOrders {
+    Iterable<Map<String, dynamic>> base;
     if (_filter == _OrderFilter.delivered) {
-      return _orders.where((o) => o['status'] == 'DELIVERED').toList();
+      base = _orders.where((o) => o['status'] == 'DELIVERED');
+    } else if (_filter == _OrderFilter.cancelled) {
+      base = _orders.where((o) => o['status'] == 'CANCELLED');
+    } else {
+      base = _orders.where((o) => !_isActiveStatus(o['status'] as String));
     }
-    if (_filter == _OrderFilter.cancelled) {
-      return _orders.where((o) => o['status'] == 'CANCELLED').toList();
-    }
-    return _orders
-        .where((o) => !_isActiveStatus(o['status'] as String))
-        .toList();
+    return base.where(_matchesSearch).toList();
   }
 
   int get _activeCount => _activeOrders.length;
@@ -2536,50 +2592,104 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
     super.build(context);
     final t = widget.t;
 
-    return SafeArea(
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          // ── Toggle Livraisons / Tournées — jusqu'ici jamais affiché, la
-          // création de tournée n'était atteignable qu'en tapant une push
-          // notification pour une tournée déjà existante.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: t.cardBg2,
-                borderRadius: BorderRadius.circular(12),
-              ),
+    return Column(
+      children: [
+        // ── Header dégradé cyan — même pattern que l'Accueil, plein-bleed
+        // jusqu'en haut de l'écran (Container hors SafeArea) ────────────────
+        Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
               child: Row(
                 children: [
-                  _ViewToggleBtn(
-                    label: 'Livraisons',
-                    icon: Icons.two_wheeler,
-                    active: _viewType == _ViewType.orders,
-                    onTap: () => _switchView(_ViewType.orders),
-                    t: t,
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.20),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.two_wheeler_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
-                  _ViewToggleBtn(
-                    label: 'Tournées',
-                    icon: Icons.route_outlined,
-                    active: _viewType == _ViewType.batches,
-                    onTap: () => _switchView(_ViewType.batches),
-                    t: t,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Livraisons',
+                      style: ClientText.headline.copyWith(
+                        color: Colors.white,
+                        fontSize: 21,
+                      ),
+                    ),
                   ),
+                  if (_activeCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.20),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$_activeCount en cours',
+                        style: ClientText.micro.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          // ── Contenu ──────────────────────────────────────────────────────
-          Expanded(
-            child: _viewType == _ViewType.orders
-                ? _buildOrdersView(t)
-                : _buildBatchesView(t),
+        ),
+        const SizedBox(height: 16),
+        // ── Toggle Livraisons / Tournées ────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: t.cardBg2,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                _ViewToggleBtn(
+                  label: 'Livraisons',
+                  icon: Icons.two_wheeler,
+                  active: _viewType == _ViewType.orders,
+                  onTap: () => _switchView(_ViewType.orders),
+                  t: t,
+                ),
+                _ViewToggleBtn(
+                  label: 'Tournées',
+                  icon: Icons.route_outlined,
+                  active: _viewType == _ViewType.batches,
+                  onTap: () => _switchView(_ViewType.batches),
+                  t: t,
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        // ── Contenu ──────────────────────────────────────────────────────
+        Expanded(
+          child: _viewType == _ViewType.orders
+              ? _buildOrdersView(t)
+              : _buildBatchesView(t),
+        ),
+      ],
     );
   }
 
@@ -2603,80 +2713,108 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
         ? _historyOrders
         : <Map<String, dynamic>>[];
     final isEmpty = activeToShow.isEmpty && historyToShow.isEmpty;
+    final isSearchEmpty = isEmpty && _searchQuery.isNotEmpty;
+    final canLoadMore =
+        _hasMoreOrders && _filter != _OrderFilter.active && _searchQuery.isEmpty;
 
-    return RefreshIndicator(
-      color: AppColors.primary,
-      backgroundColor: t.cardBg,
-      onRefresh: _loadOrders,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _FilterTabs(
-              filter: _filter,
-              totalCount: _orders.length,
-              activeCount: _activeCount,
-              deliveredCount: _deliveredCount,
-              cancelledCount: _cancelledCount,
+    return Column(
+      children: [
+        if (_orders.isNotEmpty || _searchQuery.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: _OrderSearchField(
+              controller: _searchCtrl,
               t: t,
-              onFilterChanged: (f) => setState(() => _filter = f),
+              onChanged: (v) => setState(() => _searchQuery = v.trim()),
             ),
-            if (isEmpty)
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.55,
-                child: _EmptyOrdersState(
-                  t: t,
-                  globallyEmpty: _orders.isEmpty,
-                  onOrder: () => context.push('/dem-pro/orders/create'),
-                ),
-              )
-            else ...[
-              if (activeToShow.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                  child: _SectionLabel(label: 'EN COURS', t: t),
-                ),
-                for (int i = 0; i < activeToShow.length; i++)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      0,
-                      20,
-                      i < activeToShow.length - 1 ? 12 : 0,
-                    ),
-                    child: _ActiveOrderCard(order: activeToShow[i], t: t),
+          ),
+        Expanded(
+          child: RefreshIndicator(
+            color: AppColors.primary,
+            backgroundColor: t.cardBg,
+            onRefresh: _loadOrders,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _FilterTabs(
+                    filter: _filter,
+                    totalCount: _orders.length,
+                    activeCount: _activeCount,
+                    deliveredCount: _deliveredCount,
+                    cancelledCount: _cancelledCount,
+                    t: t,
+                    onFilterChanged: (f) => setState(() => _filter = f),
                   ),
-              ],
-              if (historyToShow.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-                  child: _SectionLabel(label: 'HISTORIQUE', t: t),
-                ),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: t.cardBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: t.border),
-                  ),
-                  child: Column(
-                    children: [
-                      for (int i = 0; i < historyToShow.length; i++)
-                        _HistoriqueRow(
-                          order: historyToShow[i],
-                          t: t,
-                          isLast: i == historyToShow.length - 1,
+                  if (isEmpty)
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.45,
+                      child: _EmptyOrdersState(
+                        t: t,
+                        globallyEmpty: _orders.isEmpty,
+                        searching: isSearchEmpty,
+                        onOrder: () => context.push('/dem-pro/orders/create'),
+                      ),
+                    )
+                  else ...[
+                    if (activeToShow.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                        child: _SectionLabel(label: 'EN COURS', t: t),
+                      ),
+                      for (int i = 0; i < activeToShow.length; i++)
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            20,
+                            0,
+                            20,
+                            i < activeToShow.length - 1 ? 12 : 0,
+                          ),
+                          child: _ActiveOrderCard(order: activeToShow[i], t: t),
                         ),
                     ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 90),
-            ],
-          ],
+                    if (historyToShow.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                        child: _SectionLabel(label: 'HISTORIQUE', t: t),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: t.cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: t.border),
+                        ),
+                        child: Column(
+                          children: [
+                            for (int i = 0; i < historyToShow.length; i++)
+                              _HistoriqueRow(
+                                order: historyToShow[i],
+                                t: t,
+                                isLast: i == historyToShow.length - 1,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (canLoadMore)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: _LoadMoreButton(
+                          loading: _loadingMoreOrders,
+                          onTap: _loadMoreOrders,
+                          t: t,
+                        ),
+                      ),
+                    const SizedBox(height: 90),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -2831,6 +2969,93 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
   }
 }
 
+// ── Recherche livraisons ──────────────────────────────────────────────────────
+
+class _OrderSearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final _T t;
+  const _OrderSearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.t,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 42,
+    decoration: BoxDecoration(
+      color: t.cardBg2,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: TextField(
+      controller: controller,
+      onChanged: onChanged,
+      style: ClientText.body.copyWith(color: t.text),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Rechercher une adresse, un destinataire…',
+        hintStyle: ClientText.body.copyWith(color: t.muted),
+        prefixIcon: Icon(Icons.search, color: t.muted, size: 20),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                icon: Icon(Icons.close, color: t.muted, size: 18),
+                onPressed: () {
+                  controller.clear();
+                  onChanged('');
+                },
+              ),
+        border: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+      ),
+    ),
+  );
+}
+
+// ── Charger plus ──────────────────────────────────────────────────────────────
+
+class _LoadMoreButton extends StatelessWidget {
+  final bool loading;
+  final VoidCallback onTap;
+  final _T t;
+  const _LoadMoreButton({
+    required this.loading,
+    required this.onTap,
+    required this.t,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: loading ? null : onTap,
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: t.cardBg2,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: loading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
+              )
+            : Text(
+                'Charger plus',
+                style: ClientText.bodyStrong.copyWith(
+                  color: AppColors.primary,
+                ),
+              ),
+      ),
+    ),
+  );
+}
+
 // ── Filtres ───────────────────────────────────────────────────────────────────
 
 class _FilterTabs extends StatelessWidget {
@@ -2964,6 +3189,9 @@ class _ActiveOrderCard extends StatelessWidget {
     final delivery = _shortAddress(order['deliveryAddress'] as String? ?? '');
     final price = order['price'] as num? ?? 0;
     final createdAt = order['createdAt'] as String?;
+    final scheduledAt = order['scheduledAt'] as String?;
+    final isScheduled = status == 'SCHEDULED';
+    final isExpress = order['priority'] == 'EXPRESS';
     final driver = order['driver'] as Map<String, dynamic>?;
     final driverName = driver?['name'] as String?;
     final hasDriver = driver != null;
@@ -3031,6 +3259,37 @@ class _ActiveOrderCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (isExpress) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.bolt_rounded,
+                        color: AppColors.warning,
+                        size: 12,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Express',
+                        style: ClientText.label.copyWith(
+                          color: AppColors.warning,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -3078,10 +3337,16 @@ class _ActiveOrderCard extends StatelessWidget {
                 style: ClientText.bodyStrong.copyWith(color: t.text),
               ),
               const SizedBox(width: 14),
-              Icon(Icons.schedule_outlined, color: t.muted, size: 14),
+              Icon(
+                isScheduled ? Icons.event_outlined : Icons.schedule_outlined,
+                color: t.muted,
+                size: 14,
+              ),
               const SizedBox(width: 4),
               Text(
-                _timeAgo(createdAt),
+                isScheduled
+                    ? 'Prévue ${_formatDateTime(scheduledAt)}'
+                    : _timeAgo(createdAt),
                 style: ClientText.label.copyWith(color: t.muted),
               ),
               const Spacer(),
@@ -3181,8 +3446,12 @@ class _HistoriqueRow extends StatelessWidget {
     final pickup = _shortAddress(order['pickupAddress'] as String? ?? '');
     final delivery = _shortAddress(order['deliveryAddress'] as String? ?? '');
     final price = order['price'] as num? ?? 0;
+    final isScheduled = status == 'SCHEDULED';
+    final isExpress = order['priority'] == 'EXPRESS';
     final date = _formatDateTime(
-      order['deliveredAt'] as String? ?? order['createdAt'] as String?,
+      isScheduled
+          ? order['scheduledAt'] as String?
+          : order['deliveredAt'] as String? ?? order['createdAt'] as String?,
     );
     final statusColor = _statusColor(status);
     final statusLbl = _statusLabel(status);
@@ -3230,9 +3499,22 @@ class _HistoriqueRow extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  formatFcfa(price),
-                  style: ClientText.bodyStrong.copyWith(color: t.text),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isExpress) ...[
+                      const Icon(
+                        Icons.bolt_rounded,
+                        color: AppColors.warning,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 2),
+                    ],
+                    Text(
+                      formatFcfa(price),
+                      style: ClientText.bodyStrong.copyWith(color: t.text),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 3),
                 Container(
@@ -3377,6 +3659,8 @@ class _BatchCard extends StatelessWidget {
                             ? 'Livreur : ${driver['name'] as String? ?? 'DEM'}'
                             : 'En recherche de livreur…',
                         style: ClientText.label.copyWith(color: t.muted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -3597,10 +3881,12 @@ class _BatchHistoryRow extends StatelessWidget {
 class _EmptyOrdersState extends StatelessWidget {
   final _T t;
   final bool globallyEmpty;
+  final bool searching;
   final VoidCallback onOrder;
   const _EmptyOrdersState({
     required this.t,
     required this.globallyEmpty,
+    this.searching = false,
     required this.onOrder,
   });
 
@@ -3618,26 +3904,32 @@ class _EmptyOrdersState extends StatelessWidget {
               color: AppColors.primary.withValues(alpha: 0.10),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.two_wheeler,
+            child: Icon(
+              searching ? Icons.search_off_rounded : Icons.two_wheeler,
               color: AppColors.primary,
               size: 40,
             ),
           ),
           const SizedBox(height: 20),
           Text(
-            globallyEmpty ? 'Aucune livraison encore' : 'Aucune livraison ici',
+            searching
+                ? 'Aucun résultat'
+                : globallyEmpty
+                ? 'Aucune livraison encore'
+                : 'Aucune livraison ici',
             style: ClientText.title.copyWith(color: t.text, fontSize: 17),
           ),
           const SizedBox(height: 8),
           Text(
-            globallyEmpty
+            searching
+                ? 'Aucune livraison ne correspond à votre recherche.'
+                : globallyEmpty
                 ? 'Passez votre première commande et suivez-la ici en temps réel'
                 : 'Aucune livraison dans cette catégorie pour le moment.',
             style: ClientText.body.copyWith(color: t.muted, height: 1.5),
             textAlign: TextAlign.center,
           ),
-          if (globallyEmpty) ...[
+          if (globallyEmpty && !searching) ...[
             const SizedBox(height: 24),
             GestureDetector(
               onTap: onOrder,

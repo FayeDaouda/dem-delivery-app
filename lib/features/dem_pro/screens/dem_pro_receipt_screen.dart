@@ -49,7 +49,24 @@ class DemProReceiptScreen extends StatelessWidget {
     final vehiclePlate = driver?['vehiclePlate'] as String?;
     final createdAt = order['createdAt'] as String?;
     final deliveredAt = order['deliveredAt'] as String?;
+    final scheduledAt = order['scheduledAt'] as String?;
     final isDelivered = status == 'DELIVERED';
+    final isScheduled = status == 'SCHEDULED';
+    final statusAccent = isDelivered
+        ? AppColors.successLight
+        : isScheduled
+        ? AppColors.primary
+        : AppColors.error;
+    final statusIcon = isDelivered
+        ? Icons.check_circle
+        : isScheduled
+        ? Icons.event_available
+        : Icons.cancel;
+    final statusTitle = isDelivered
+        ? 'Livraison effectuée'
+        : isScheduled
+        ? 'Livraison programmée'
+        : 'Commande annulée';
 
 
     return Scaffold(
@@ -78,23 +95,24 @@ class DemProReceiptScreen extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 20),
             decoration: BoxDecoration(
-              color: (isDelivered ? AppColors.successLight : AppColors.error).withValues(alpha: 0.08),
+              color: statusAccent.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: (isDelivered ? AppColors.successLight : AppColors.error).withValues(alpha: 0.2)),
+              border: Border.all(color: statusAccent.withValues(alpha: 0.2)),
             ),
             child: Column(children: [
-              Icon(
-                isDelivered ? Icons.check_circle : Icons.cancel,
-                color: isDelivered ? AppColors.successLight : AppColors.error,
-                size: 40,
-              ),
+              Icon(statusIcon, color: statusAccent, size: 40),
               const SizedBox(height: 8),
               Text(
-                isDelivered ? 'Livraison effectuée' : 'Commande annulée',
-                style: ClientText.title.copyWith(color: isDelivered ? AppColors.successLight : AppColors.error),
+                statusTitle,
+                style: ClientText.title.copyWith(color: statusAccent),
               ),
               const SizedBox(height: 4),
-              Text(_fmtDate(deliveredAt ?? createdAt), style: ClientText.label.copyWith(color: AppColors.textMuted)),
+              Text(
+                isScheduled
+                    ? 'Prévue le ${_fmtDate(scheduledAt)}'
+                    : _fmtDate(deliveredAt ?? createdAt),
+                style: ClientText.label.copyWith(color: AppColors.textMuted),
+              ),
             ]),
           ),
           const SizedBox(height: 20),
@@ -227,6 +245,8 @@ class DemProReceiptScreen extends StatelessWidget {
             const SizedBox(height: 8),
             _DetailRow(label: 'N° commande', value: '#$orderId'),
             _DetailRow(label: 'Créée le', value: _fmtDate(createdAt)),
+            if (isScheduled && scheduledAt != null)
+              _DetailRow(label: 'Programmée pour', value: _fmtDate(scheduledAt)),
             if (deliveredAt != null)
               _DetailRow(label: 'Livrée le', value: _fmtDate(deliveredAt)),
             if (deliveredAt != null)
