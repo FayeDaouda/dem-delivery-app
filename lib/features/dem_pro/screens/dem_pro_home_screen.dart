@@ -5840,30 +5840,91 @@ class _FinancesTabState extends State<_FinancesTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return SafeArea(
-      child: Column(
-        children: [
-          // ── Header ────────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Finances',
-                    style: ClientText.headline.copyWith(
-                      color: t.text,
-                      fontSize: 22,
+
+    final headerValue = switch (_view) {
+      _FinanceView.sales => formatFcfa(_totalSales),
+      _FinanceView.deliveries => formatFcfa(
+        ((_financeData?['summary'] as Map?)?['totalSpent'] as num?)
+                ?.toInt() ??
+            _totalDelivery,
+      ),
+      _FinanceView.insights => formatFcfa(
+        ((_insightsData?['trend'] as Map?)?['currentTotal'] as num?)
+                ?.toInt() ??
+            0,
+      ),
+    };
+    final headerLabel = switch (_view) {
+      _FinanceView.sales => 'Chiffre d\'affaires',
+      _FinanceView.deliveries => 'Total dépensé',
+      _FinanceView.insights => 'Dépensé cette période',
+    };
+
+    return Column(
+      children: [
+        // ── Header dégradé cyan — même pattern que le reste du module ──────
+        Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.20),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      color: Colors.white,
+                      size: 22,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Finances',
+                          style: ClientText.headline.copyWith(
+                            color: Colors.white,
+                            fontSize: 21,
+                          ),
+                        ),
+                        Text(
+                          headerLabel,
+                          style: ClientText.micro.copyWith(
+                            color: Colors.white.withValues(alpha: 0.75),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!_loading)
+                    Text(
+                      headerValue,
+                      style: ClientText.title.copyWith(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
+        ),
+        const SizedBox(height: 4),
 
-          // ── Filtre 1 — Période ───────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+        // ── Filtre 1 — Période ───────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
             child: Row(
               children: _periodOptions.map((opt) {
                 final selected = _period == opt.$1;
@@ -5900,42 +5961,13 @@ class _FinancesTabState extends State<_FinancesTab>
             ),
           ),
 
-          // ── Filtre 2 — Ventes / Livraisons ──────────────────────────────
+          // ── Filtre 2 — Ventes / Livraisons / Pilotage ────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-            child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: t.cardBg2,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  _FinanceToggle(
-                    label: 'Ventes',
-                    icon: Icons.shopping_bag_outlined,
-                    active: _view == _FinanceView.sales,
-                    onTap: () => setState(() => _view = _FinanceView.sales),
-                    t: t,
-                  ),
-                  _FinanceToggle(
-                    label: 'Livraisons',
-                    icon: Icons.two_wheeler,
-                    active: _view == _FinanceView.deliveries,
-                    onTap: () =>
-                        setState(() => _view = _FinanceView.deliveries),
-                    t: t,
-                  ),
-                  _FinanceToggle(
-                    label: 'Pilotage',
-                    icon: Icons.insights_rounded,
-                    active: _view == _FinanceView.insights,
-                    onTap: () =>
-                        setState(() => _view = _FinanceView.insights),
-                    t: t,
-                  ),
-                ],
-              ),
+            child: _FinanceToggleBar(
+              view: _view,
+              onChanged: (v) => setState(() => _view = v),
+              t: t,
             ),
           ),
 
@@ -5966,8 +5998,7 @@ class _FinancesTabState extends State<_FinancesTab>
                   ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   Widget _buildError() => Center(
@@ -6014,13 +6045,9 @@ class _FinancesTabState extends State<_FinancesTab>
       Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, AppColors.lightBg],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: AppColors.primary.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: t.border),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -6133,13 +6160,9 @@ class _FinancesTabState extends State<_FinancesTab>
       Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, AppColors.lightBg],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: AppColors.primary.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: t.border),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -6281,9 +6304,9 @@ class _FinancesTabState extends State<_FinancesTab>
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.primary.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: t.border),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
           ),
           child: Row(
             children: [
@@ -6321,13 +6344,9 @@ class _FinancesTabState extends State<_FinancesTab>
       Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, AppColors.lightBg],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: AppColors.primary.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: t.border),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -6651,13 +6670,95 @@ class _FinancesTabState extends State<_FinancesTab>
 
 // ── Toggle Ventes / Livraisons ──────────────────────────────────────────────
 
-class _FinanceToggle extends StatelessWidget {
+// ── Toggle Ventes / Livraisons / Pilotage — pastille glissante animée,
+// même famille que le toggle Livraisons/Tournées, généralisée à 3
+// segments via LayoutBuilder plutôt qu'un partage strict de code (le
+// découpage à 2 segments de _ViewToggleBar ne se généralise pas
+// proprement à N segments sans complexifier son API).
+class _FinanceToggleBar extends StatelessWidget {
+  final _FinanceView view;
+  final ValueChanged<_FinanceView> onChanged;
+  final _T t;
+  const _FinanceToggleBar({
+    required this.view,
+    required this.onChanged,
+    required this.t,
+  });
+
+  static const _gap = 6.0;
+  static const _items = [
+    (_FinanceView.sales, 'Ventes', Icons.shopping_bag_outlined),
+    (_FinanceView.deliveries, 'Livraisons', Icons.two_wheeler),
+    (_FinanceView.insights, 'Pilotage', Icons.insights_rounded),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 46,
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: t.cardBg2,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final btnWidth = (constraints.maxWidth - _gap * 2) / 3;
+        final index = _items.indexWhere((e) => e.$1 == view);
+        final left = index * (btnWidth + _gap);
+        return Stack(
+          children: [
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              left: left,
+              top: 0,
+              bottom: 0,
+              width: btnWidth,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.30),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                for (int i = 0; i < _items.length; i++) ...[
+                  if (i > 0) const SizedBox(width: _gap),
+                  SizedBox(
+                    width: btnWidth,
+                    child: _FinanceToggleTapZone(
+                      label: _items[i].$2,
+                      icon: _items[i].$3,
+                      active: view == _items[i].$1,
+                      onTap: () => onChanged(_items[i].$1),
+                      t: t,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+class _FinanceToggleTapZone extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool active;
   final VoidCallback onTap;
   final _T t;
-  const _FinanceToggle({
+  const _FinanceToggleTapZone({
     required this.label,
     required this.icon,
     required this.active,
@@ -6666,30 +6767,27 @@ class _FinanceToggle extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(
-          color: active ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 14, color: active ? Colors.white : t.muted),
-            const SizedBox(width: 6),
-            Text(
-              label,
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    behavior: HitTestBehavior.opaque,
+    child: Center(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 14, color: active ? Colors.white : t.muted),
+          const SizedBox(width: 5),
+          Flexible(
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
               style: ClientText.label.copyWith(
                 color: active ? Colors.white : t.muted,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
               ),
+              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     ),
   );
