@@ -492,7 +492,7 @@ class _CreateOrderSheet extends StatelessWidget {
       MediaQuery.of(context).viewPadding.bottom + 20,
     ),
     decoration: const BoxDecoration(
-      color: Colors.white,
+      gradient: AppColors.gradientSplash,
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     child: Column(
@@ -505,38 +505,37 @@ class _CreateOrderSheet extends StatelessWidget {
             height: 4,
             margin: const EdgeInsets.only(bottom: 18),
             decoration: BoxDecoration(
-              color: AppColors.lightBorder,
+              color: Colors.white.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
         ),
         Text(
           'Nouvelle livraison',
-          style: ClientText.title.copyWith(
-            color: AppColors.textDark,
-            fontSize: 18,
-          ),
+          style: ClientText.title.copyWith(color: Colors.white, fontSize: 18),
         ),
         const SizedBox(height: 4),
         Text(
           'Choisissez le type de course',
-          style: ClientText.body.copyWith(color: AppColors.textMuted),
+          style: ClientText.body.copyWith(
+            color: Colors.white.withValues(alpha: 0.75),
+          ),
         ),
         const SizedBox(height: 20),
-        _CreateOrderOption(
-          icon: Icons.two_wheeler_rounded,
-          color: AppColors.primary,
-          title: 'Simple',
-          subtitle: 'Livraison standard, un point à l\'autre',
-          onTap: onSimple,
-        ),
-        const SizedBox(height: 10),
         _CreateOrderOption(
           icon: Icons.bolt_rounded,
           color: AppColors.warning,
           title: 'Express',
           subtitle: 'Prioritaire, prise en charge plus rapide',
           onTap: onExpress,
+        ),
+        const SizedBox(height: 10),
+        _CreateOrderOption(
+          icon: Icons.two_wheeler_rounded,
+          color: AppColors.primary,
+          title: 'Simple',
+          subtitle: 'Livraison standard, un point à l\'autre',
+          onTap: onSimple,
         ),
         const SizedBox(height: 10),
         _CreateOrderOption(
@@ -571,9 +570,9 @@ class _CreateOrderOption extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
       ),
       child: Row(
         children: [
@@ -598,21 +597,23 @@ class _CreateOrderOption extends StatelessWidget {
                 Text(
                   title,
                   style: ClientText.bodyStrong.copyWith(
-                    color: AppColors.textDark,
+                    color: Colors.white,
                     fontSize: 15,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: ClientText.label.copyWith(color: AppColors.textMuted),
+                  style: ClientText.label.copyWith(
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
                 ),
               ],
             ),
           ),
-          const Icon(
+          Icon(
             Icons.chevron_right_rounded,
-            color: AppColors.textMuted,
+            color: Colors.white.withValues(alpha: 0.6),
             size: 20,
           ),
         ],
