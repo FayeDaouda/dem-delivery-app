@@ -1606,30 +1606,21 @@ class _CompteTabState extends State<_CompteTab>
     final sector = user?['proSector'] as String?;
     final volume = user?['proWeeklyVolume'] as String?;
 
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Carte entreprise ──────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: t.headerCardGradient,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                ),
-              ),
+    return Column(
+      children: [
+        // ── Header dégradé cyan — la carte entreprise fait maintenant
+        // office de vrai header de page, plein-bleed, comme les autres
+        // onglets (Container hors SafeArea, SafeArea côté contenu).
+        Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
               child: Row(
                 children: [
-                  GestureDetector(
+                  _PressScale(
                     onTap: _uploading ? null : _pickAndUploadAvatar,
                     child: Stack(
                       children: [
@@ -1647,7 +1638,7 @@ class _CompteTabState extends State<_CompteTab>
                             decoration: BoxDecoration(
                               color: AppColors.primary,
                               shape: BoxShape.circle,
-                              border: Border.all(color: t.cardBg, width: 2),
+                              border: Border.all(color: Colors.white, width: 2),
                             ),
                             child: _uploading
                                 ? const Padding(
@@ -1686,7 +1677,7 @@ class _CompteTabState extends State<_CompteTab>
                                       ? businessName!
                                       : 'Mon entreprise',
                                   style: ClientText.title.copyWith(
-                                    color: t.text,
+                                    color: Colors.white,
                                     fontSize: 17,
                                   ),
                                   maxLines: 1,
@@ -1695,7 +1686,7 @@ class _CompteTabState extends State<_CompteTab>
                               ),
                               Icon(
                                 Icons.edit_outlined,
-                                color: t.muted,
+                                color: Colors.white.withValues(alpha: 0.75),
                                 size: 14,
                               ),
                             ],
@@ -1709,8 +1700,16 @@ class _CompteTabState extends State<_CompteTab>
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+          ),
+        ),
 
+        // ── Contenu ──────────────────────────────────────────────────────
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             _SectionLabel(label: 'INFORMATIONS', t: t),
             const SizedBox(height: 12),
             _InfoCard(
@@ -1986,9 +1985,11 @@ class _CompteTabState extends State<_CompteTab>
                 ),
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -1997,19 +1998,54 @@ class _CompteTabState extends State<_CompteTab>
 // Widgets locaux
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Léger rebond au tap pour un widget quelconque — utilisé sur l'avatar
+// éditable de l'en-tête Compte.
+class _PressScale extends StatefulWidget {
+  final VoidCallback? onTap;
+  final Widget child;
+  const _PressScale({required this.onTap, required this.child});
+
+  @override
+  State<_PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<_PressScale> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTapDown: widget.onTap == null
+        ? null
+        : (_) => setState(() => _pressed = true),
+    onTapUp: widget.onTap == null
+        ? null
+        : (_) => setState(() => _pressed = false),
+    onTapCancel: widget.onTap == null
+        ? null
+        : () => setState(() => _pressed = false),
+    onTap: widget.onTap,
+    child: AnimatedScale(
+      scale: _pressed ? 0.90 : 1.0,
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+      child: widget.child,
+    ),
+  );
+}
+
 class _ProBadge extends StatelessWidget {
   const _ProBadge();
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: AppColors.primary.withValues(alpha: 0.15),
+      color: Colors.white.withValues(alpha: 0.20),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Text(
       'DEM PRO',
       style: ClientText.micro.copyWith(
-        color: AppColors.primary,
+        color: Colors.white,
         fontWeight: FontWeight.w800,
         letterSpacing: 0.5,
       ),
