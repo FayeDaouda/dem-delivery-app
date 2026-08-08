@@ -5371,7 +5371,9 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: selected ? AppColors.primary : Colors.white,
+                          color: selected
+                              ? AppColors.primary
+                              : Colors.white.withValues(alpha: 0.88),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: selected
@@ -5476,7 +5478,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Colors.white.withValues(alpha: 0.88),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: AppColors.primary.withValues(alpha: 0.25),
@@ -5549,7 +5551,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               // ── Adresse par défaut ─────────────────────────────────────────
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withValues(alpha: 0.88),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: SwitchListTile(
@@ -5669,7 +5671,7 @@ class _FormField extends StatelessWidget {
       hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: Colors.white.withValues(alpha: 0.88),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,
