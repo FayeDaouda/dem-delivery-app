@@ -269,6 +269,17 @@ class DemProRepository {
     }
   }
 
+  Future<void> cancelBatch(String id) async {
+    try {
+      await _dio.delete('/dem-pro/batch/$id');
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'annuler la tournée.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getMyBatches() async {
     try {
       final res = await _dio.get('/dem-pro/batch');

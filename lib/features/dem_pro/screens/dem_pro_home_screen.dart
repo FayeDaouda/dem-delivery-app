@@ -310,7 +310,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
           ),
           _LivraisonsTab(key: _livraisonsKey, t: t),
           _AdressesTab(t: t),
-          _FinancesTab(key: _financesKey, t: t),
+          _FinancesTab(key: _financesKey, t: t, user: _user),
           _CompteTab(
             user: _user,
             onLogout: _handleLogout,
@@ -328,9 +328,13 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
             borderRadius: BorderRadius.circular(16),
           ),
           onPressed: () async {
+            final isBatchView =
+                _livraisonsKey.currentState?._viewType == _ViewType.batches;
             if (!await ensureLocationEnabled(context)) return;
             if (!context.mounted) return;
-            context.push('/dem-pro/orders/create');
+            context.push(
+              isBatchView ? '/dem-pro/batch/create' : '/dem-pro/orders/create',
+            );
           },
           child: const Icon(Icons.add, size: 28),
         ),
@@ -2394,8 +2398,44 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
       child: Column(
         children: [
           const SizedBox(height: 16),
+          // ── Toggle Livraisons / Tournées — jusqu'ici jamais affiché, la
+          // création de tournée n'était atteignable qu'en tapant une push
+          // notification pour une tournée déjà existante.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: t.cardBg2,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  _ViewToggleBtn(
+                    label: 'Livraisons',
+                    icon: Icons.two_wheeler,
+                    active: _viewType == _ViewType.orders,
+                    onTap: () => _switchView(_ViewType.orders),
+                    t: t,
+                  ),
+                  _ViewToggleBtn(
+                    label: 'Tournées',
+                    icon: Icons.route_outlined,
+                    active: _viewType == _ViewType.batches,
+                    onTap: () => _switchView(_ViewType.batches),
+                    t: t,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           // ── Contenu ──────────────────────────────────────────────────────
-          Expanded(child: _buildOrdersView(t)),
+          Expanded(
+            child: _viewType == _ViewType.orders
+                ? _buildOrdersView(t)
+                : _buildBatchesView(t),
+          ),
         ],
       ),
     );
@@ -4719,6 +4759,7 @@ const _periodOptions = [
   ('today', 'Jour'),
   ('this_week', 'Semaine'),
   ('this_month', 'Mois'),
+  ('prev_month', 'Mois -1'),
   ('3months', '3 mois'),
 ];
 
@@ -4726,7 +4767,8 @@ enum _FinanceView { sales, deliveries, insights }
 
 class _FinancesTab extends StatefulWidget {
   final _T t;
-  const _FinancesTab({super.key, required this.t});
+  final Map<String, dynamic>? user;
+  const _FinancesTab({super.key, required this.t, this.user});
   @override
   State<_FinancesTab> createState() => _FinancesTabState();
 }
@@ -4785,16 +4827,19 @@ class _FinancesTabState extends State<_FinancesTab> {
   }
 
   // ── Filtrage des commandes par période ────────────────────────────────────
+  // Filtre et trie sur deliveredAt (pas createdAt) — c'est la date que
+  // getMyFinances()/getBusinessInsights() utilisent côté serveur pour ces
+  // mêmes indicateurs. Avant ce correctif, une commande créée un jour et
+  // livrée le lendemain pouvait apparaître dans une période différente
+  // selon la vue (Ventes vs Livraisons/Pilotage), pour un même total
+  // affiché deux fois différemment — gênant pour la compta du commerçant.
   List<Map<String, dynamic>> get _filteredOrders {
     final now = DateTime.now();
     final delivered = _orders
-        .where((o) {
-          final s = (o['status'] as String? ?? '').toUpperCase();
-          return s == 'DELIVERED' || s == 'PAYMENT_CONFIRMED';
-        })
+        .where((o) => (o['status'] as String? ?? '').toUpperCase() == 'DELIVERED')
         .where((o) {
           final dt = DateTime.tryParse(
-            o['createdAt'] as String? ?? '',
+            o['deliveredAt'] as String? ?? '',
           )?.toLocal();
           if (dt == null) return false;
           return switch (_period) {
@@ -4802,14 +4847,18 @@ class _FinancesTabState extends State<_FinancesTab> {
               dt.year == now.year && dt.month == now.month && dt.day == now.day,
             'this_week' => now.difference(dt).inDays < 7,
             'this_month' => dt.year == now.year && dt.month == now.month,
+            'prev_month' => switch (now.month) {
+              1 => dt.year == now.year - 1 && dt.month == 12,
+              _ => dt.year == now.year && dt.month == now.month - 1,
+            },
             '3months' => now.difference(dt).inDays < 90,
             _ => true,
           };
         })
         .toList();
     delivered.sort(
-      (a, b) => (b['createdAt'] as String? ?? '').compareTo(
-        a['createdAt'] as String? ?? '',
+      (a, b) => (b['deliveredAt'] as String? ?? '').compareTo(
+        a['deliveredAt'] as String? ?? '',
       ),
     );
     return delivered;
@@ -5266,8 +5315,57 @@ class _FinancesTabState extends State<_FinancesTab> {
     final trend = data['trend'] as Map<String, dynamic>? ?? {};
     final spendTrendPct = (trend['spendTrendPct'] as num?)?.toDouble();
     final currentTotal = (trend['currentTotal'] as num?)?.toInt() ?? 0;
+    final currentCount = (trend['currentCount'] as num?)?.toInt() ?? 0;
+
+    // Volume hebdomadaire déclaré à l'inscription — jusqu'ici jamais
+    // réutilisé nulle part après l'onboarding, une donnée purement
+    // déclarative. Comparé au nombre réel de livraisons de la semaine
+    // uniquement quand ce filtre est sélectionné (sinon la comparaison
+    // n'a pas de sens).
+    final weeklyVolume = widget.user?['proWeeklyVolume'] as String?;
+    const weeklyMin = {'low': 1, 'medium': 5, 'high': 9};
 
     return [
+      if (_period == 'this_week' && weeklyVolume != null) ...[
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: t.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.flag_outlined,
+                    color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Objectif : ${_volumeLabels[weeklyVolume] ?? weeklyVolume}',
+                        style: ClientText.bodyStrong.copyWith(color: t.text)),
+                    Text('$currentCount livraison(s) cette semaine',
+                        style: ClientText.label.copyWith(color: t.muted)),
+                  ],
+                ),
+              ),
+              if ((weeklyMin[weeklyVolume] ?? 0) <= currentCount)
+                const Icon(Icons.check_circle, color: AppColors.successLight, size: 22),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+
       // ── Tendance ──────────────────────────────────────────────────────────
       Container(
         padding: const EdgeInsets.all(18),

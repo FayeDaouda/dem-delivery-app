@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/router/app_startup_notifier.dart';
+import '../../../core/utils/dem_toast.dart';
 import '../../deliveries/data/orders_repository.dart';
 import '../data/dem_pro_repository.dart';
 import '../../../core/theme/app_theme.dart';
@@ -97,6 +99,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
 
   Map<String, dynamic>? _batch;
   bool _loading = true;
+  bool _cancelling = false;
   Timer? _pollTimer;
 
   @override
@@ -135,6 +138,47 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
     }
   }
 
+
+  // Annulation — l'endpoint backend existait déjà (DELETE /dem-pro/batch/:id)
+  // mais rien ne l'appelait côté app, contrairement à la commande simple qui
+  // propose bien "Annuler" (dem_pro_order_confirmation_screen.dart).
+  Future<void> _cancelBatch() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Annuler cette tournée ?',
+            style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)),
+        content: Text(
+          'Toutes les livraisons non encore effectuées de cette tournée seront annulées.',
+          style: ClientText.body.copyWith(color: AppColors.textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Continuer',
+                style: ClientText.body.copyWith(color: AppColors.primary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Annuler la tournée',
+                style: ClientText.body.copyWith(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _cancelling = true);
+    try {
+      await _repo.cancelBatch(widget.batchId);
+      if (mounted) await _load(silent: true);
+    } catch (e) {
+      if (mounted) showDemToast(context, friendlyError(e), isError: true);
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
 
   // Notation du livreur — existait déjà pour une commande DEM Pro seule
   // (dem_pro_order_tracking_screen.dart:_showCompletionDialog) mais pas pour
@@ -770,6 +814,36 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     elevation: 0,
+                  ),
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton.icon(
+                  onPressed: _cancelling ? null : _cancelBatch,
+                  icon: _cancelling
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.error,
+                          ),
+                        )
+                      : const Icon(Icons.close, size: 18),
+                  label: Text(
+                    'Annuler la tournée',
+                    style: ClientText.subtitle.copyWith(color: AppColors.error),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                 ),
               ),
