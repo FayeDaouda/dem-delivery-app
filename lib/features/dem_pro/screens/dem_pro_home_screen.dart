@@ -3204,10 +3204,12 @@ class _OrderSearchField extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final _T t;
+  final String hintText;
   const _OrderSearchField({
     required this.controller,
     required this.onChanged,
     required this.t,
+    this.hintText = 'Rechercher une adresse, un destinataire…',
   });
 
   @override
@@ -3227,7 +3229,7 @@ class _OrderSearchField extends StatelessWidget {
         isDense: true,
         isCollapsed: true,
         filled: false,
-        hintText: 'Rechercher une adresse, un destinataire…',
+        hintText: hintText,
         hintStyle: ClientText.body.copyWith(color: t.muted),
         prefixIcon: Icon(Icons.search, color: AppColors.primary, size: 20),
         prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 20),
@@ -4318,6 +4320,153 @@ const _iconMeta = {
   'other': (Icons.place_outlined, 'Autre'),
 };
 
+// ── Bouton d'action dans un header dégradé — cercle blanc translucide avec
+// un léger rebond au tap (même famille que les autres micro-animations du
+// module, sans avoir besoin d'un AnimationController).
+class _HeaderIconButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _HeaderIconButton({required this.icon, required this.onTap});
+
+  @override
+  State<_HeaderIconButton> createState() => _HeaderIconButtonState();
+}
+
+class _HeaderIconButtonState extends State<_HeaderIconButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTapDown: (_) => setState(() => _pressed = true),
+    onTapUp: (_) => setState(() => _pressed = false),
+    onTapCancel: () => setState(() => _pressed = false),
+    onTap: widget.onTap,
+    child: AnimatedScale(
+      scale: _pressed ? 0.86 : 1.0,
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.20),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(widget.icon, color: Colors.white, size: 22),
+      ),
+    ),
+  );
+}
+
+// ── Menu d'actions sur une adresse — feuille modale stylée au lieu du
+// PopupMenuButton Material par défaut, pour rester cohérent avec le reste
+// du module (mêmes codes couleur que les autres feuilles : primary/warning/
+// error selon la gravité de l'action).
+void _showAddressActions(
+  BuildContext context, {
+  required bool isDefault,
+  required VoidCallback onEdit,
+  required VoidCallback onSetDefault,
+  required VoidCallback onDelete,
+}) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (sheetCtx) => Container(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        12,
+        20,
+        MediaQuery.of(sheetCtx).viewPadding.bottom + 20,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 18),
+              decoration: BoxDecoration(
+                color: AppColors.lightBorder,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          _AddressActionTile(
+            icon: Icons.edit_outlined,
+            color: AppColors.primary,
+            label: 'Modifier',
+            onTap: () {
+              Navigator.pop(sheetCtx);
+              onEdit();
+            },
+          ),
+          if (!isDefault) ...[
+            const SizedBox(height: 8),
+            _AddressActionTile(
+              icon: Icons.star_outline_rounded,
+              color: AppColors.warning,
+              label: 'Définir par défaut',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                onSetDefault();
+              },
+            ),
+          ],
+          const SizedBox(height: 8),
+          _AddressActionTile(
+            icon: Icons.delete_outline_rounded,
+            color: AppColors.error,
+            label: 'Supprimer',
+            onTap: () {
+              Navigator.pop(sheetCtx);
+              onDelete();
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _AddressActionTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final VoidCallback onTap;
+  const _AddressActionTile({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Text(label, style: ClientText.bodyStrong.copyWith(color: color)),
+        ],
+      ),
+    ),
+  );
+}
+
 class _AdressesTab extends StatefulWidget {
   final _T t;
   const _AdressesTab({required this.t});
@@ -4344,9 +4493,6 @@ class _AdressesTabState extends State<_AdressesTab>
   void initState() {
     super.initState();
     _load();
-    _search.addListener(
-      () => setState(() => _query = _search.text.toLowerCase()),
-    );
   }
 
   @override
@@ -4451,86 +4597,99 @@ class _AdressesTabState extends State<_AdressesTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return SafeArea(
+    // ── Tap en dehors de la barre de recherche → referme le clavier ────────
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent,
       child: Column(
         children: [
-          // ── Header ────────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Mes adresses',
-                        style: ClientText.headline.copyWith(
-                          color: t.text,
-                          fontSize: 22,
+          // ── Header dégradé cyan — même pattern que Livraisons/Accueil ────
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.20),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.place_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Mes adresses',
+                            style: ClientText.headline.copyWith(
+                              color: Colors.white,
+                              fontSize: 21,
+                            ),
+                          ),
+                          Text(
+                            'Points de départ favoris',
+                            style: ClientText.micro.copyWith(
+                              color: Colors.white.withValues(alpha: 0.75),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_addresses.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.20),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${_addresses.length} adresse${_addresses.length > 1 ? 's' : ''}',
+                          style: ClientText.micro.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
                         ),
                       ),
-                      Text(
-                        'Points de départ favoris',
-                        style: ClientText.label.copyWith(color: t.muted),
-                      ),
+                      const SizedBox(width: 8),
                     ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => _showForm(),
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
+                    _HeaderIconButton(
+                      icon: Icons.add_rounded,
+                      onTap: () => _showForm(),
                     ),
-                    child: const Icon(
-                      Icons.add,
-                      color: AppColors.primary,
-                      size: 22,
-                    ),
-                  ),
-                  tooltip: 'Ajouter une adresse',
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
+          const SizedBox(height: 16),
 
           // ── Barre de recherche ────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: t.cardBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: t.border),
-              ),
-              child: TextField(
-                controller: _search,
-                style: ClientText.body.copyWith(color: t.text, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Rechercher une adresse…',
-                  hintStyle: ClientText.body.copyWith(
-                    color: t.muted,
-                    fontSize: 14,
-                  ),
-                  prefixIcon: Icon(Icons.search, color: t.muted, size: 20),
-                  suffixIcon: _query.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.close, color: t.muted, size: 18),
-                          onPressed: () {
-                            _search.clear();
-                            setState(() => _query = '');
-                          },
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _OrderSearchField(
+              controller: _search,
+              t: t,
+              hintText: 'Rechercher une adresse…',
+              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
             ),
           ),
+          const SizedBox(height: 4),
 
           // ── Contenu ───────────────────────────────────────────────────────
           Expanded(
@@ -4825,40 +4984,15 @@ class _AddressCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert, color: t.muted, size: 20),
-                  color: t.cardBg,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                GestureDetector(
+                  onTap: () => _showAddressActions(
+                    context,
+                    isDefault: isDefault,
+                    onEdit: onEdit,
+                    onSetDefault: onSetDefault,
+                    onDelete: onDelete,
                   ),
-                  onSelected: (v) {
-                    if (v == 'edit') onEdit();
-                    if (v == 'default') onSetDefault();
-                    if (v == 'delete') onDelete();
-                  },
-                  itemBuilder: (_) => [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: _menuItem(Icons.edit_outlined, 'Modifier', t.text),
-                    ),
-                    if (!isDefault)
-                      PopupMenuItem(
-                        value: 'default',
-                        child: _menuItem(
-                          Icons.star_outline,
-                          'Définir par défaut',
-                          t.text,
-                        ),
-                      ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: _menuItem(
-                        Icons.delete_outline,
-                        'Supprimer',
-                        AppColors.error,
-                      ),
-                    ),
-                  ],
+                  child: Icon(Icons.more_vert, color: t.muted, size: 20),
                 ),
               ],
             ),
@@ -4867,14 +5001,6 @@ class _AddressCard extends StatelessWidget {
       ),
     );
   }
-
-  Widget _menuItem(IconData icon, String label, Color color) => Row(
-    children: [
-      Icon(icon, color: color, size: 18),
-      const SizedBox(width: 10),
-      Text(label, style: ClientText.body.copyWith(color: color)),
-    ],
-  );
 }
 
 // ── Ligne adresse récente (depuis commandes) ──────────────────────────────────
@@ -4896,9 +5022,9 @@ class _RecentPickupRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: t.cardBg,
+        color: AppColors.primary.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: t.border),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.10)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
@@ -4906,10 +5032,10 @@ class _RecentPickupRow extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: t.cardBg2,
+            color: AppColors.primary.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(Icons.history, color: t.muted, size: 18),
+          child: const Icon(Icons.history, color: AppColors.primary, size: 18),
         ),
         title: Text(
           address,
