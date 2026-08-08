@@ -4528,6 +4528,16 @@ class _AdressesTabState extends State<_AdressesTab>
     }).toList();
   }
 
+  // ── Adresses récentes déjà enregistrées comme favori — le bouton
+  // "Sauvegarder" restait affiché après l'ajout (getRecentPickups() ne sait
+  // rien des favoris), ce qui permettait de recréer un doublon en le
+  // retapant. On masque celles déjà présentes dans les favoris.
+  List<Map<String, dynamic>> get _recentFiltered => _recent
+      .where(
+        (r) => !_addresses.any((a) => a['address'] == r['address']),
+      )
+      .toList();
+
   Future<void> _showForm({Map<String, dynamic>? existing}) async {
     final refreshed = await showModalBottomSheet<bool>(
       context: context,
@@ -4710,7 +4720,8 @@ class _AdressesTabState extends State<_AdressesTab>
                       children: [
                         if (_filtered.isEmpty && _query.isNotEmpty) ...[
                           _buildEmptySearch(),
-                        ] else if (_filtered.isEmpty && _recent.isEmpty) ...[
+                        ] else if (_filtered.isEmpty &&
+                            _recentFiltered.isEmpty) ...[
                           _buildEmptyState(),
                         ] else ...[
                           if (_filtered.isNotEmpty) ...[
@@ -4730,7 +4741,8 @@ class _AdressesTabState extends State<_AdressesTab>
                             ),
                             const SizedBox(height: 20),
                           ],
-                          if (_recent.isNotEmpty && _query.isEmpty) ...[
+                          if (_recentFiltered.isNotEmpty &&
+                              _query.isEmpty) ...[
                             _buildSectionHeader('Depuis vos commandes', null),
                             const SizedBox(height: 4),
                             Text(
@@ -4740,7 +4752,7 @@ class _AdressesTabState extends State<_AdressesTab>
                               ),
                             ),
                             const SizedBox(height: 10),
-                            ..._recent.map(
+                            ..._recentFiltered.map(
                               (r) => _RecentPickupRow(
                                 addr: r,
                                 t: t,
@@ -5077,14 +5089,14 @@ class _AddressFormSheet extends StatefulWidget {
 }
 
 const _addressSheetSuggestionColors = PlaceSuggestionsColors(
-  background: AppColors.lightFill,
-  border: AppColors.lightBorder,
-  divider: AppColors.lightBorder,
-  iconBg: AppColors.lightBorder,
-  icon: AppColors.primary,
-  mainText: AppColors.textDark,
-  secondaryText: AppColors.textMuted,
-  accent: AppColors.primary,
+  background: Colors.transparent,
+  border: Colors.transparent,
+  divider: Colors.white24,
+  iconBg: Colors.white24,
+  icon: Colors.white,
+  mainText: Colors.white,
+  secondaryText: Colors.white70,
+  accent: Colors.white,
 );
 
 class _AddressFormSheetState extends State<_AddressFormSheet> {
@@ -5300,9 +5312,9 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
     return Container(
-      decoration: BoxDecoration(
-        color: t.cardBg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: const BoxDecoration(
+        gradient: AppColors.gradientSplash,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomPadding),
       child: Form(
@@ -5320,7 +5332,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: t.border,
+                      color: Colors.white.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -5328,14 +5340,19 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               ),
               Text(
                 _isEdit ? 'Modifier l\'adresse' : 'Nouvelle adresse',
-                style: ClientText.title.copyWith(color: t.text, fontSize: 18),
+                style: ClientText.title.copyWith(
+                  color: Colors.white,
+                  fontSize: 18,
+                ),
               ),
               const SizedBox(height: 20),
 
               // ── Sélecteur d'icône ──────────────────────────────────────────
               Text(
                 'Type de lieu',
-                style: ClientText.label.copyWith(color: t.muted),
+                style: ClientText.label.copyWith(
+                  color: Colors.white.withValues(alpha: 0.75),
+                ),
               ),
               const SizedBox(height: 8),
               SizedBox(
@@ -5354,11 +5371,13 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: selected ? AppColors.primary : t.cardBg2,
+                          color: selected ? AppColors.primary : Colors.white,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: selected ? AppColors.primary : t.border,
-                            width: selected ? 1.5 : 1,
+                            color: selected
+                                ? AppColors.primary
+                                : Colors.transparent,
+                            width: 1.5,
                           ),
                         ),
                         child: Column(
@@ -5366,14 +5385,18 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                           children: [
                             Icon(
                               e.value.$1,
-                              color: selected ? Colors.white : t.muted,
+                              color: selected
+                                  ? Colors.white
+                                  : AppColors.textMuted,
                               size: 20,
                             ),
                             const SizedBox(height: 3),
                             Text(
                               e.value.$2,
                               style: ClientText.micro.copyWith(
-                                color: selected ? Colors.white : t.muted,
+                                color: selected
+                                    ? Colors.white
+                                    : AppColors.textMuted,
                               ),
                             ),
                           ],
@@ -5386,11 +5409,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               const SizedBox(height: 16),
 
               // ── Libellé ────────────────────────────────────────────────────
-              _FieldLabel('Libellé', t),
+              const _FieldLabel('Libellé'),
               const SizedBox(height: 6),
               _FormField(
                 controller: _label,
-                t: t,
                 hint: 'ex: Boutique Médina, Entrepôt Pikine…',
                 validator: (v) => (v == null || v.trim().length < 2)
                     ? 'Minimum 2 caractères'
@@ -5399,11 +5421,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               const SizedBox(height: 14),
 
               // ── Adresse ────────────────────────────────────────────────────
-              _FieldLabel('Adresse', t),
+              const _FieldLabel('Adresse'),
               const SizedBox(height: 6),
               _FormField(
                 controller: _address,
-                t: t,
                 hint: 'ex: Rue 10 x Gueule Tapée, Médina, Dakar',
                 validator: (v) => (v == null || v.trim().length < 4)
                     ? 'Adresse trop courte'
@@ -5442,7 +5463,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                 Text(
                   'Sélectionnez une adresse dans la liste ou utilisez votre position actuelle.',
                   style: ClientText.label.copyWith(
-                    color: Colors.orange.shade800,
+                    color: Colors.orangeAccent.shade100,
                   ),
                 ),
               ],
@@ -5455,7 +5476,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.08),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: AppColors.primary.withValues(alpha: 0.25),
@@ -5494,24 +5515,32 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                   _searching ||
                   _searchError != null) ...[
                 const SizedBox(height: 4),
-                PlaceSuggestionsList(
-                  suggestions: _suggestions,
-                  loading: _searching,
-                  error: _searchError,
-                  onRetry: _retryAddressSearch,
-                  onSelect: _selectSuggestion,
-                  colors: _addressSheetSuggestionColors,
-                  maxHeight: 200,
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.gradientSplash,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: PlaceSuggestionsList(
+                    suggestions: _suggestions,
+                    loading: _searching,
+                    error: _searchError,
+                    onRetry: _retryAddressSearch,
+                    onSelect: _selectSuggestion,
+                    colors: _addressSheetSuggestionColors,
+                    maxHeight: 200,
+                  ),
                 ),
               ],
               const SizedBox(height: 14),
 
               // ── Repère ─────────────────────────────────────────────────────
-              _FieldLabel('Repère (optionnel)', t),
+              const _FieldLabel('Repère (optionnel)'),
               const SizedBox(height: 6),
               _FormField(
                 controller: _landmark,
-                t: t,
                 hint: 'ex: Face à la mosquée, derrière la station Total…',
                 validator: null,
               ),
@@ -5520,9 +5549,8 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               // ── Adresse par défaut ─────────────────────────────────────────
               Container(
                 decoration: BoxDecoration(
-                  color: t.cardBg2,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: t.border),
                 ),
                 child: SwitchListTile(
                   value: _isDefault,
@@ -5530,14 +5558,18 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                   activeTrackColor: AppColors.primary,
                   activeThumbColor: Colors.white,
                   inactiveThumbColor: Colors.white,
-                  inactiveTrackColor: t.border,
+                  inactiveTrackColor: AppColors.lightBorder,
                   title: Text(
                     'Adresse par défaut',
-                    style: ClientText.subtitle.copyWith(color: t.text),
+                    style: ClientText.subtitle.copyWith(
+                      color: AppColors.textDark,
+                    ),
                   ),
                   subtitle: Text(
                     'Pré-sélectionnée lors d\'une nouvelle commande',
-                    style: ClientText.label.copyWith(color: t.muted),
+                    style: ClientText.label.copyWith(
+                      color: AppColors.textMuted,
+                    ),
                   ),
                   dense: true,
                   contentPadding: const EdgeInsets.symmetric(
@@ -5598,25 +5630,28 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
   }
 }
 
+// ── Libellé de champ + champ de formulaire — toujours utilisés sur un fond
+// dégradé cyan (feuille "Nouvelle adresse") : texte blanc + champs blancs
+// opaques en "cutout" pour rester lisibles quelle que soit la position du
+// dégradé derrière eux.
 class _FieldLabel extends StatelessWidget {
   final String text;
-  final _T t;
-  const _FieldLabel(this.text, this.t);
+  const _FieldLabel(this.text);
   @override
-  Widget build(BuildContext context) =>
-      Text(text, style: ClientText.label.copyWith(color: t.muted));
+  Widget build(BuildContext context) => Text(
+    text,
+    style: ClientText.label.copyWith(color: Colors.white.withValues(alpha: 0.8)),
+  );
 }
 
 class _FormField extends StatelessWidget {
   final TextEditingController controller;
-  final _T t;
   final String hint;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
   final Widget? suffixIcon;
   const _FormField({
     required this.controller,
-    required this.t,
     required this.hint,
     required this.validator,
     this.onChanged,
@@ -5628,20 +5663,20 @@ class _FormField extends StatelessWidget {
     controller: controller,
     validator: validator,
     onChanged: onChanged,
-    style: ClientText.body.copyWith(color: t.text, fontSize: 14),
+    style: ClientText.body.copyWith(color: AppColors.textDark, fontSize: 14),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: ClientText.body.copyWith(color: t.muted),
+      hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: t.cardBg2,
+      fillColor: Colors.white,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: t.border),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: t.border),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
