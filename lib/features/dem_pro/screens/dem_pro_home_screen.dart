@@ -495,14 +495,16 @@ class _AccueilTab extends StatelessWidget {
         ),
 
         Expanded(
-            child: RefreshIndicator(
-              color: AppColors.primary,
-              backgroundColor: t.cardBg,
-              onRefresh: onRefresh,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                child: Column(
+          child: RefreshIndicator(
+            color: AppColors.primary,
+            backgroundColor: t.cardBg,
+            onRefresh: onRefresh,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // ── Carte résumé — tableau de bord ────────────────────
@@ -757,13 +759,22 @@ class _AccueilTab extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    const _ProductsPreviewSection(),
                   ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                // ── Catalogue produits — s'étend jusqu'au navbar, défile en
+                // interne (tous les produits, pas juste un aperçu de 3).
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: _ProductsPreviewSection(),
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
       ],
     );
   }
@@ -2043,13 +2054,10 @@ class _ProductsPreviewSectionState extends State<_ProductsPreviewSection> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.primary,
-            strokeWidth: 2,
-          ),
+      return const Center(
+        child: CircularProgressIndicator(
+          color: AppColors.primary,
+          strokeWidth: 2,
         ),
       );
     }
@@ -2057,6 +2065,7 @@ class _ProductsPreviewSectionState extends State<_ProductsPreviewSection> {
     if (_products.isEmpty) {
       return Container(
         width: double.infinity,
+        height: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
         decoration: BoxDecoration(
           color: AppColors.primary.withValues(alpha: 0.06),
@@ -2065,6 +2074,7 @@ class _ProductsPreviewSectionState extends State<_ProductsPreviewSection> {
           boxShadow: AppShadows.card,
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               width: 64,
@@ -2123,10 +2133,12 @@ class _ProductsPreviewSectionState extends State<_ProductsPreviewSection> {
       );
     }
 
-    // Même habillage que la carte tableau de bord — seule cette carte
-    // défile (hauteur bornée) quand le catalogue est long, le reste de
-    // l'Accueil (dashboard, raccourcis) reste stable.
+    // Même habillage que la carte tableau de bord — s'étend jusqu'au
+    // navbar (contrainte de hauteur héritée du parent Expanded) et
+    // défile en interne pour montrer tout le catalogue, pas juste un
+    // aperçu, sans faire grandir le reste de l'Accueil.
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.06),
@@ -2134,17 +2146,14 @@ class _ProductsPreviewSectionState extends State<_ProductsPreviewSection> {
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
         boxShadow: AppShadows.card,
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 320),
-        child: ListView.separated(
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          itemCount: _products.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 10),
-          itemBuilder: (_, i) => _ProductPreviewCard(
-            product: _products[i],
-            onTap: _goToProducts,
-          ),
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        itemCount: _products.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (_, i) => _ProductPreviewCard(
+          product: _products[i],
+          onTap: _goToProducts,
         ),
       ),
     );

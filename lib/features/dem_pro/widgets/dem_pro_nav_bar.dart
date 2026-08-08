@@ -29,14 +29,20 @@ class DemProNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(top: BorderSide(color: AppColors.lightBorder)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 64,
+          height: 68,
           child: Row(
             children: List.generate(_items.length, (i) {
               final item     = _items[i];
@@ -47,18 +53,38 @@ class DemProNavBar extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        selected ? item.filled : item.outline,
-                        color: selected ? AppColors.primary : AppColors.lightIconMuted,
-                        size: 24,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.label,
-                        style: ClientText.label.copyWith(
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected ? AppColors.primary : AppColors.lightIconMuted,
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
                         ),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppColors.primary.withValues(alpha: 0.12)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Icon(
+                          selected ? item.filled : item.outline,
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.lightIconMuted,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        style: ClientText.micro.copyWith(
+                          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.lightIconMuted,
+                        ),
+                        child: Text(item.label),
                       ),
                     ],
                   ),
