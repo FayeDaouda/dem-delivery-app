@@ -3740,37 +3740,65 @@ class _HistoriqueRow extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                Text(
+                  formatFcfa(price),
+                  style: ClientText.bodyStrong.copyWith(color: t.text),
+                ),
+                const SizedBox(height: 4),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (isExpress) ...[
-                      const Icon(
-                        Icons.bolt_rounded,
-                        color: AppColors.warning,
-                        size: 13,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
                       ),
-                      const SizedBox(width: 2),
-                    ],
-                    Text(
-                      formatFcfa(price),
-                      style: ClientText.bodyStrong.copyWith(color: t.text),
+                      decoration: BoxDecoration(
+                        color: (isExpress ? AppColors.warning : AppColors.primary)
+                            .withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isExpress
+                                ? Icons.bolt_rounded
+                                : Icons.two_wheeler_rounded,
+                            size: 10,
+                            color: isExpress
+                                ? AppColors.warning
+                                : AppColors.primary,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            isExpress ? 'Express' : 'Simple',
+                            style: ClientText.micro.copyWith(
+                              color: isExpress
+                                  ? AppColors.warning
+                                  : AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        statusLbl,
+                        style: ClientText.micro.copyWith(color: statusColor),
+                      ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 3),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    statusLbl,
-                    style: ClientText.micro.copyWith(color: statusColor),
-                  ),
                 ),
               ],
             ),
