@@ -334,6 +334,30 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _showCreateOrderSheet() async {
+    if (!await ensureLocationEnabled(context)) return;
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) => _CreateOrderSheet(
+        onSimple: () {
+          Navigator.pop(sheetCtx);
+          context.push('/dem-pro/orders/create');
+        },
+        onExpress: () {
+          Navigator.pop(sheetCtx);
+          context.push('/dem-pro/orders/create?priority=EXPRESS');
+        },
+        onBatch: () {
+          Navigator.pop(sheetCtx);
+          context.push('/dem-pro/batch/create');
+        },
+      ),
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _load();
@@ -434,15 +458,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          onPressed: () async {
-            final isBatchView =
-                _livraisonsKey.currentState?._viewType == _ViewType.batches;
-            if (!await ensureLocationEnabled(context)) return;
-            if (!context.mounted) return;
-            context.push(
-              isBatchView ? '/dem-pro/batch/create' : '/dem-pro/orders/create',
-            );
-          },
+          onPressed: _showCreateOrderSheet,
           child: const Icon(Icons.add, size: 28),
         ),
         _ => null,
@@ -453,6 +469,156 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+// ── Choix du type de course — feuille modale ouverte par le "+" ─────────────
+
+class _CreateOrderSheet extends StatelessWidget {
+  final VoidCallback onSimple;
+  final VoidCallback onExpress;
+  final VoidCallback onBatch;
+  const _CreateOrderSheet({
+    required this.onSimple,
+    required this.onExpress,
+    required this.onBatch,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: EdgeInsets.fromLTRB(
+      20,
+      12,
+      20,
+      MediaQuery.of(context).viewPadding.bottom + 20,
+    ),
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 18),
+            decoration: BoxDecoration(
+              color: AppColors.lightBorder,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+        Text(
+          'Nouvelle livraison',
+          style: ClientText.title.copyWith(
+            color: AppColors.textDark,
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Choisissez le type de course',
+          style: ClientText.body.copyWith(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 20),
+        _CreateOrderOption(
+          icon: Icons.two_wheeler_rounded,
+          color: AppColors.primary,
+          title: 'Simple',
+          subtitle: 'Livraison standard, un point à l\'autre',
+          onTap: onSimple,
+        ),
+        const SizedBox(height: 10),
+        _CreateOrderOption(
+          icon: Icons.bolt_rounded,
+          color: AppColors.warning,
+          title: 'Express',
+          subtitle: 'Prioritaire, prise en charge plus rapide',
+          onTap: onExpress,
+        ),
+        const SizedBox(height: 10),
+        _CreateOrderOption(
+          icon: Icons.route_rounded,
+          color: AppColors.accentIndigo,
+          title: 'Groupée',
+          subtitle: 'Plusieurs arrêts avec un seul livreur',
+          onTap: onBatch,
+        ),
+      ],
+    ),
+  );
+}
+
+class _CreateOrderOption extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _CreateOrderOption({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [color, color.withValues(alpha: 0.7)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.textDark,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: ClientText.label.copyWith(color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.textMuted,
+            size: 20,
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2669,7 +2835,11 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
     super.build(context);
     final t = widget.t;
 
-    return Column(
+    // ── Tap en dehors de la barre de recherche → referme le clavier ────────
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Column(
       children: [
         // ── Header dégradé cyan — même pattern que l'Accueil, plein-bleed
         // jusqu'en haut de l'écran (Container hors SafeArea) ────────────────
@@ -2747,6 +2917,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
               : _buildBatchesView(t),
         ),
       ],
+      ),
     );
   }
 
@@ -3049,12 +3220,16 @@ class _OrderSearchField extends StatelessWidget {
     child: TextField(
       controller: controller,
       onChanged: onChanged,
+      cursorColor: AppColors.primary,
       style: ClientText.body.copyWith(color: t.text),
       decoration: InputDecoration(
         isDense: true,
+        isCollapsed: true,
+        filled: false,
         hintText: 'Rechercher une adresse, un destinataire…',
         hintStyle: ClientText.body.copyWith(color: t.muted),
         prefixIcon: Icon(Icons.search, color: AppColors.primary, size: 20),
+        prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 20),
         suffixIcon: controller.text.isEmpty
             ? null
             : IconButton(
@@ -3064,8 +3239,16 @@ class _OrderSearchField extends StatelessWidget {
                   onChanged('');
                 },
               ),
+        // ── Neutralise l'InputDecorationTheme ambiant (fond + bordure carrée
+        // qui apparaissait au focus) : ce champ ne doit tenir son style QUE de
+        // son Container parent, quel que soit l'état focus/enabled/error.
         border: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(vertical: 11),
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        errorBorder: InputBorder.none,
+        focusedErrorBorder: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
       ),
     ),
   );
