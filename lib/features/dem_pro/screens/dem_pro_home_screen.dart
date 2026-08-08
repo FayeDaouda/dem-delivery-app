@@ -17,9 +17,9 @@ import '../../deliveries/data/orders_repository.dart';
 import '../data/dem_pro_repository.dart';
 import '../../../shared/widgets/place_suggestions_list.dart';
 import '../../../shared/widgets/promo_highlight_popup.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
-import '../utils/dem_pro_format.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
+import '../../../core/utils/price_format.dart';
 import '../widgets/dem_pro_nav_bar.dart';
 import '../../../core/utils/location_gate.dart';
 import '../../../shared/widgets/swipe_to_confirm.dart';
@@ -87,13 +87,13 @@ String _batchStatusLabel(String s) => switch (s) {
 };
 
 Color _batchStatusColor(String s) => switch (s) {
-  'PENDING' => DemProColors.warning,
-  'ACCEPTED' => DemProColors.accent,
-  'IN_PROGRESS' => DemProColors.accent,
-  'COMPLETED' => DemProColors.success,
-  'CANCELLED' => DemProColors.danger,
-  'SCHEDULED' => DemProColors.muted,
-  _ => DemProColors.muted,
+  'PENDING' => AppColors.warning,
+  'ACCEPTED' => AppColors.primary,
+  'IN_PROGRESS' => AppColors.primary,
+  'COMPLETED' => AppColors.successLight,
+  'CANCELLED' => AppColors.error,
+  'SCHEDULED' => AppColors.textMuted,
+  _ => AppColors.textMuted,
 };
 
 // ── Helpers statut ────────────────────────────────────────────────────────────
@@ -111,13 +111,13 @@ String _statusLabel(String s) => switch (s) {
 };
 
 Color _statusColor(String s) => switch (s) {
-  'PENDING' => DemProColors.warning,
-  'ACCEPTED' => DemProColors.accent,
-  'PICKED_UP' => DemProColors.accent,
-  'IN_TRANSIT' => DemProColors.accent,
-  'DELIVERED' => DemProColors.success,
-  'CANCELLED' => DemProColors.danger,
-  _ => DemProColors.muted,
+  'PENDING' => AppColors.warning,
+  'ACCEPTED' => AppColors.primary,
+  'PICKED_UP' => AppColors.primary,
+  'IN_TRANSIT' => AppColors.primary,
+  'DELIVERED' => AppColors.successLight,
+  'CANCELLED' => AppColors.error,
+  _ => AppColors.textMuted,
 };
 
 String _shortAddress(String addr) => addr.split(',').first.trim();
@@ -186,27 +186,24 @@ String _formatDateTime(String? iso) {
   return '${d[dt.weekday - 1]} ${dt.day} ${m[dt.month - 1]} · $h:$mn';
 }
 
-// ── Palette adaptative clair/sombre ──────────────────────────────────────────
-
+// ── Palette — alignée sur le thème Client (AppColors), toujours claire ───────
+// Anciennement adaptative clair/sombre (jamais persistée, jamais propagée aux
+// écrans poussés depuis l'accueil — voir audit). DEM Pro adopte maintenant le
+// même thème que le rôle Client : conservé comme sac de constantes pratique
+// (déjà threadé dans ~40 widgets de ce fichier) plutôt que de tout retirer.
 class _T {
-  final bool dark;
-  const _T(this.dark);
+  const _T();
 
-  Color get scaffoldBg => dark ? DemProColors.bg : DemProColors.lightBg;
-  Color get cardBg => dark ? DemProColors.bg2 : Colors.white;
-  Color get cardBg2 => dark ? DemProColors.bg3 : DemProColors.lightCardBg2;
-  Color get cardBg3 => dark ? DemProColors.bg4 : DemProColors.lightCardBg3;
-  Color get border => dark ? DemProColors.bg3 : DemProColors.lightBorder;
-  Color get text => dark ? DemProColors.text : DemProColors.lightText;
-  Color get muted => dark ? DemProColors.muted : DemProColors.lightMuted;
+  Color get scaffoldBg => AppColors.lightBg;
+  Color get cardBg => Colors.white;
+  Color get cardBg2 => AppColors.lightFill;
+  Color get cardBg3 => AppColors.lightFill;
+  Color get border => AppColors.lightBorder;
+  Color get text => AppColors.textDark;
+  Color get muted => AppColors.textMuted;
 
-  List<Color> get statGradient => dark
-      ? [DemProColors.bg3, DemProColors.bg4]
-      : DemProColors.lightGradientBlue;
-
-  List<Color> get headerCardGradient => dark
-      ? [DemProColors.bg3, DemProColors.bg4]
-      : DemProColors.lightGradientHeader;
+  List<Color> get statGradient => [Colors.white, AppColors.lightBg];
+  List<Color> get headerCardGradient => [Colors.white, AppColors.lightBg];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +216,6 @@ class DemProHomeScreen extends StatefulWidget {
 
 class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
-  bool _darkMode = true;
 
   final _demProRepo = DemProRepository(ApiClient.dio);
   final _livraisonsKey = GlobalKey<_LivraisonsTabState>();
@@ -243,7 +239,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
       maybeShowPromoHighlight(
         context,
         fetch: OrdersRepository().getHighlightPromo,
-        accentColor: DemProColors.accent,
+        accentColor: AppColors.primary,
       );
     });
   }
@@ -297,7 +293,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final t = _T(_darkMode);
+    const t = _T();
     return Scaffold(
       backgroundColor: t.scaffoldBg,
       body: IndexedStack(
@@ -319,15 +315,13 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
             user: _user,
             onLogout: _handleLogout,
             t: t,
-            darkMode: _darkMode,
-            onThemeToggle: () => setState(() => _darkMode = !_darkMode),
             onRefresh: _load,
           ),
         ],
       ),
       floatingActionButton: switch (_currentIndex) {
         1 => FloatingActionButton(
-          backgroundColor: DemProColors.accent,
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 4,
           shape: RoundedRectangleBorder(
@@ -350,7 +344,6 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
           if (i == 1) _livraisonsKey.currentState?._loadOrders();
           if (i == 3) _financesKey.currentState?._load();
         },
-        darkMode: _darkMode,
       ),
     );
   }
@@ -451,7 +444,7 @@ class _AccueilTab extends StatelessWidget {
                     children: [
                       Text(
                         'Tableau de bord',
-                        style: DemProText.caption.copyWith(color: t.muted),
+                        style: ClientText.label.copyWith(color: t.muted),
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -467,7 +460,7 @@ class _AccueilTab extends StatelessWidget {
                               businessName?.isNotEmpty == true
                                   ? businessName!
                                   : 'Mon entreprise',
-                              style: DemProText.headline.copyWith(
+                              style: ClientText.headline.copyWith(
                                 color: t.text,
                                 fontSize: 22,
                               ),
@@ -500,7 +493,7 @@ class _AccueilTab extends StatelessWidget {
 
           Expanded(
             child: RefreshIndicator(
-              color: DemProColors.accent,
+              color: AppColors.primary,
               backgroundColor: t.cardBg,
               onRefresh: onRefresh,
               child: SingleChildScrollView(
@@ -515,7 +508,7 @@ class _AccueilTab extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 40),
                         child: Center(
                           child: CircularProgressIndicator(
-                            color: DemProColors.accent,
+                            color: AppColors.primary,
                           ),
                         ),
                       )
@@ -531,7 +524,7 @@ class _AccueilTab extends StatelessWidget {
                           ),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: DemProColors.accent.withValues(alpha: 0.15),
+                            color: AppColors.primary.withValues(alpha: 0.15),
                           ),
                         ),
                         child: Column(
@@ -542,13 +535,13 @@ class _AccueilTab extends StatelessWidget {
                               children: [
                                 const Icon(
                                   Icons.two_wheeler,
-                                  color: DemProColors.accent,
+                                  color: AppColors.primary,
                                   size: 16,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Livraisons — $dateStr',
-                                  style: DemProText.caption.copyWith(
+                                  style: ClientText.label.copyWith(
                                     color: t.muted,
                                   ),
                                 ),
@@ -563,7 +556,7 @@ class _AccueilTab extends StatelessWidget {
                                   child: _BigStatBox(
                                     value: '$delivered',
                                     label: 'Livrées',
-                                    color: DemProColors.success,
+                                    color: AppColors.successLight,
                                     t: t,
                                   ),
                                 ),
@@ -572,7 +565,7 @@ class _AccueilTab extends StatelessWidget {
                                   child: _BigStatBox(
                                     value: '$inProgress',
                                     label: 'En cours',
-                                    color: DemProColors.warning,
+                                    color: AppColors.warning,
                                     t: t,
                                   ),
                                 ),
@@ -596,15 +589,15 @@ class _AccueilTab extends StatelessWidget {
                                       children: [
                                         Text(
                                           'Ventes aujourd\'hui',
-                                          style: DemProText.micro.copyWith(
+                                          style: ClientText.micro.copyWith(
                                             color: t.muted,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          DemProFormat.fcfa(salesToday),
-                                          style: DemProText.subtitle.copyWith(
-                                            color: DemProColors.success,
+                                          formatFcfa(salesToday),
+                                          style: ClientText.subtitle.copyWith(
+                                            color: AppColors.successLight,
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
@@ -626,15 +619,15 @@ class _AccueilTab extends StatelessWidget {
                                       children: [
                                         Text(
                                           'Ventes ce mois',
-                                          style: DemProText.micro.copyWith(
+                                          style: ClientText.micro.copyWith(
                                             color: t.muted,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          DemProFormat.fcfa(salesMonth),
-                                          style: DemProText.subtitle.copyWith(
-                                            color: DemProColors.success,
+                                          formatFcfa(salesMonth),
+                                          style: ClientText.subtitle.copyWith(
+                                            color: AppColors.successLight,
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
@@ -746,15 +739,11 @@ class _AccueilTab extends StatelessWidget {
 class _CompteTab extends StatefulWidget {
   final Map<String, dynamic>? user;
   final VoidCallback onLogout;
-  final VoidCallback onThemeToggle;
-  final bool darkMode;
   final _T t;
   final Future<void> Function() onRefresh;
   const _CompteTab({
     required this.user,
     required this.onLogout,
-    required this.onThemeToggle,
-    required this.darkMode,
     required this.t,
     required this.onRefresh,
   });
@@ -867,34 +856,34 @@ class _CompteTabState extends State<_CompteTab> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.12),
+                  color: AppColors.primary.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.logout_rounded,
-                  color: DemProColors.accent,
+                  color: AppColors.primary,
                   size: 26,
                 ),
               ),
               const SizedBox(height: 14),
               Text(
                 'Se déconnecter ?',
-                style: DemProText.title.copyWith(color: t.text, fontSize: 16),
+                style: ClientText.title.copyWith(color: t.text, fontSize: 16),
               ),
               const SizedBox(height: 6),
               Text(
                 'Vous devrez vous reconnecter avec votre numéro de téléphone pour retrouver votre espace DEM Pro.',
                 textAlign: TextAlign.center,
-                style: DemProText.body.copyWith(color: t.muted, height: 1.4),
+                style: ClientText.body.copyWith(color: t.muted, height: 1.4),
               ),
               const SizedBox(height: 24),
               SwipeToConfirm(
                 key: ValueKey('dem-pro-logout-$_logoutSwipeTick'),
                 label: 'Glissez pour se déconnecter',
                 loading: _logoutLoading,
-                trackColor: DemProColors.accent,
+                trackColor: AppColors.primary,
                 thumbColor: Colors.white,
-                iconColor: DemProColors.accent,
+                iconColor: AppColors.primary,
                 labelColor: Colors.white,
                 onConfirmed: () {
                   setSheetState(() => _logoutLoading = true);
@@ -909,7 +898,7 @@ class _CompteTabState extends State<_CompteTab> {
                     : () => Navigator.pop(sheetCtx),
                 child: Text(
                   'Annuler',
-                  style: DemProText.body.copyWith(color: t.muted),
+                  style: ClientText.body.copyWith(color: t.muted),
                 ),
               ),
             ],
@@ -954,34 +943,34 @@ class _CompteTabState extends State<_CompteTab> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: DemProColors.danger.withValues(alpha: 0.12),
+                  color: AppColors.error.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.delete_forever_outlined,
-                  color: DemProColors.danger,
+                  color: AppColors.error,
                   size: 28,
                 ),
               ),
               const SizedBox(height: 14),
               Text(
                 'Supprimer mon compte ?',
-                style: DemProText.title.copyWith(color: t.text, fontSize: 16),
+                style: ClientText.title.copyWith(color: t.text, fontSize: 16),
               ),
               const SizedBox(height: 6),
               Text(
                 'Cette action est irréversible. Toutes vos données, livraisons et adresses seront définitivement supprimées.',
                 textAlign: TextAlign.center,
-                style: DemProText.body.copyWith(color: t.muted, height: 1.4),
+                style: ClientText.body.copyWith(color: t.muted, height: 1.4),
               ),
               const SizedBox(height: 24),
               SwipeToConfirm(
                 key: ValueKey('dem-pro-delete-$_deleteSwipeTick'),
                 label: 'Glissez pour supprimer',
                 loading: _deleteLoading,
-                trackColor: DemProColors.danger,
+                trackColor: AppColors.error,
                 thumbColor: Colors.white,
-                iconColor: DemProColors.danger,
+                iconColor: AppColors.error,
                 labelColor: Colors.white,
                 onConfirmed: () async {
                   setSheetState(() => _deleteLoading = true);
@@ -1013,7 +1002,7 @@ class _CompteTabState extends State<_CompteTab> {
                     : () => Navigator.pop(sheetCtx),
                 child: Text(
                   'Annuler',
-                  style: DemProText.body.copyWith(color: t.muted),
+                  style: ClientText.body.copyWith(color: t.muted),
                 ),
               ),
             ],
@@ -1031,7 +1020,7 @@ class _CompteTabState extends State<_CompteTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Domaine d\'activité',
-          style: DemProText.title.copyWith(color: widget.t.text),
+          style: ClientText.title.copyWith(color: widget.t.text),
         ),
         children: _sectorLabels.entries
             .map(
@@ -1044,14 +1033,14 @@ class _CompteTabState extends State<_CompteTab> {
                           ? Icons.radio_button_checked
                           : Icons.radio_button_off,
                       color: e.key == current
-                          ? DemProColors.accent
+                          ? AppColors.primary
                           : widget.t.muted,
                       size: 20,
                     ),
                     const SizedBox(width: 12),
                     Text(
                       e.value,
-                      style: DemProText.body.copyWith(
+                      style: ClientText.body.copyWith(
                         color: widget.t.text,
                         fontSize: 14,
                       ),
@@ -1086,7 +1075,7 @@ class _CompteTabState extends State<_CompteTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Volume hebdomadaire',
-          style: DemProText.title.copyWith(color: widget.t.text),
+          style: ClientText.title.copyWith(color: widget.t.text),
         ),
         children: _volumeLabels.entries
             .map(
@@ -1099,14 +1088,14 @@ class _CompteTabState extends State<_CompteTab> {
                           ? Icons.radio_button_checked
                           : Icons.radio_button_off,
                       color: e.key == current
-                          ? DemProColors.accent
+                          ? AppColors.primary
                           : widget.t.muted,
                       size: 20,
                     ),
                     const SizedBox(width: 12),
                     Text(
                       e.value,
-                      style: DemProText.body.copyWith(
+                      style: ClientText.body.copyWith(
                         color: widget.t.text,
                         fontSize: 14,
                       ),
@@ -1142,26 +1131,26 @@ class _CompteTabState extends State<_CompteTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Changer de numéro',
-          style: DemProText.title.copyWith(color: widget.t.text),
+          style: ClientText.title.copyWith(color: widget.t.text),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Numéro actuel : $currentPhone',
-              style: DemProText.body.copyWith(color: widget.t.muted),
+              style: ClientText.body.copyWith(color: widget.t.muted),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
               autofocus: true,
               keyboardType: TextInputType.phone,
-              style: DemProText.body.copyWith(color: widget.t.text),
+              style: ClientText.body.copyWith(color: widget.t.text),
               decoration: InputDecoration(
                 hintText: '77 000 00 00',
                 prefixText: '+221 ',
-                prefixStyle: DemProText.body.copyWith(color: widget.t.muted),
-                hintStyle: DemProText.body.copyWith(color: widget.t.muted),
+                prefixStyle: ClientText.body.copyWith(color: widget.t.muted),
+                hintStyle: ClientText.body.copyWith(color: widget.t.muted),
                 filled: true,
                 fillColor: widget.t.cardBg2,
                 border: OutlineInputBorder(
@@ -1173,7 +1162,7 @@ class _CompteTabState extends State<_CompteTab> {
             const SizedBox(height: 8),
             Text(
               'La demande sera validée par l\'équipe DEM.',
-              style: DemProText.caption.copyWith(color: widget.t.muted),
+              style: ClientText.label.copyWith(color: widget.t.muted),
             ),
           ],
         ),
@@ -1182,14 +1171,14 @@ class _CompteTabState extends State<_CompteTab> {
             onPressed: () => Navigator.pop(context),
             child: Text(
               'Annuler',
-              style: DemProText.body.copyWith(color: widget.t.muted),
+              style: ClientText.body.copyWith(color: widget.t.muted),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, ctrl.text.trim()),
             child: Text(
               'Envoyer',
-              style: DemProText.bodyStrong.copyWith(color: DemProColors.accent),
+              style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
             ),
           ),
         ],
@@ -1236,15 +1225,15 @@ class _CompteTabState extends State<_CompteTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Modifier $label',
-          style: DemProText.title.copyWith(color: widget.t.text),
+          style: ClientText.title.copyWith(color: widget.t.text),
         ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: DemProText.body.copyWith(color: widget.t.text),
+          style: ClientText.body.copyWith(color: widget.t.text),
           decoration: InputDecoration(
             hintText: label,
-            hintStyle: DemProText.body.copyWith(color: widget.t.muted),
+            hintStyle: ClientText.body.copyWith(color: widget.t.muted),
             filled: true,
             fillColor: widget.t.cardBg2,
             border: OutlineInputBorder(
@@ -1258,14 +1247,14 @@ class _CompteTabState extends State<_CompteTab> {
             onPressed: () => Navigator.pop(context),
             child: Text(
               'Annuler',
-              style: DemProText.body.copyWith(color: widget.t.muted),
+              style: ClientText.body.copyWith(color: widget.t.muted),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, ctrl.text.trim()),
             child: Text(
               'Enregistrer',
-              style: DemProText.bodyStrong.copyWith(color: DemProColors.accent),
+              style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
             ),
           ),
         ],
@@ -1313,7 +1302,7 @@ class _CompteTabState extends State<_CompteTab> {
                 ),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: DemProColors.accent.withValues(alpha: 0.15),
+                  color: AppColors.primary.withValues(alpha: 0.15),
                 ),
               ),
               child: Row(
@@ -1334,7 +1323,7 @@ class _CompteTabState extends State<_CompteTab> {
                             width: 22,
                             height: 22,
                             decoration: BoxDecoration(
-                              color: DemProColors.accent,
+                              color: AppColors.primary,
                               shape: BoxShape.circle,
                               border: Border.all(color: t.cardBg, width: 2),
                             ),
@@ -1374,7 +1363,7 @@ class _CompteTabState extends State<_CompteTab> {
                                   businessName?.isNotEmpty == true
                                       ? businessName!
                                       : 'Mon entreprise',
-                                  style: DemProText.title.copyWith(
+                                  style: ClientText.title.copyWith(
                                     color: t.text,
                                     fontSize: 17,
                                   ),
@@ -1494,13 +1483,13 @@ class _CompteTabState extends State<_CompteTab> {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: DemProColors.warning.withValues(alpha: 0.15),
+                            color: AppColors.warning.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             '$_pendingRequestCount',
-                            style: DemProText.caption.copyWith(
-                              color: DemProColors.warning,
+                            style: ClientText.label.copyWith(
+                              color: AppColors.warning,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -1540,10 +1529,10 @@ class _CompteTabState extends State<_CompteTab> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: DemProColors.accent.withValues(alpha: 0.06),
+                color: AppColors.primary.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: DemProColors.accent.withValues(alpha: 0.2),
+                  color: AppColors.primary.withValues(alpha: 0.2),
                 ),
               ),
               child: Row(
@@ -1552,12 +1541,12 @@ class _CompteTabState extends State<_CompteTab> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: DemProColors.accent.withValues(alpha: 0.12),
+                      color: AppColors.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
                       Icons.workspace_premium,
-                      color: DemProColors.accent,
+                      color: AppColors.primary,
                       size: 22,
                     ),
                   ),
@@ -1568,56 +1557,17 @@ class _CompteTabState extends State<_CompteTab> {
                       children: [
                         Text(
                           'DEM Pro',
-                          style: DemProText.subtitle.copyWith(color: t.text),
+                          style: ClientText.subtitle.copyWith(color: t.text),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Plan gratuit — lancement',
-                          style: DemProText.caption.copyWith(
-                            color: DemProColors.accent,
+                          style: ClientText.label.copyWith(
+                            color: AppColors.primary,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ── Préférences ───────────────────────────────────────────────
-            _SectionLabel(label: 'PRÉFÉRENCES', t: t),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: t.cardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: t.border),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    widget.darkMode
-                        ? Icons.dark_mode_outlined
-                        : Icons.wb_sunny_outlined,
-                    color: DemProColors.accent,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      widget.darkMode ? 'Mode sombre' : 'Mode clair',
-                      style: DemProText.subtitle.copyWith(color: t.text),
-                    ),
-                  ),
-                  Switch(
-                    value: widget.darkMode,
-                    onChanged: (_) => widget.onThemeToggle(),
-                    activeThumbColor: Colors.white,
-                    activeTrackColor: DemProColors.accent,
-                    inactiveThumbColor: Colors.white,
-                    inactiveTrackColor: t.border,
                   ),
                 ],
               ),
@@ -1682,7 +1632,7 @@ class _CompteTabState extends State<_CompteTab> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: DemProColors.danger.withValues(alpha: 0.3),
+                    color: AppColors.error.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
@@ -1690,14 +1640,14 @@ class _CompteTabState extends State<_CompteTab> {
                   children: [
                     const Icon(
                       Icons.delete_outline,
-                      color: DemProColors.danger,
+                      color: AppColors.error,
                       size: 18,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'Supprimer mon compte',
-                      style: DemProText.bodyStrong.copyWith(
-                        color: DemProColors.danger,
+                      style: ClientText.bodyStrong.copyWith(
+                        color: AppColors.error,
                       ),
                     ),
                   ],
@@ -1709,7 +1659,7 @@ class _CompteTabState extends State<_CompteTab> {
             Center(
               child: Text(
                 'DEM v1.1.1',
-                style: DemProText.caption.copyWith(
+                style: ClientText.label.copyWith(
                   color: t.muted.withValues(alpha: 0.5),
                 ),
               ),
@@ -1731,13 +1681,13 @@ class _ProBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: DemProColors.accent.withValues(alpha: 0.15),
+      color: AppColors.primary.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Text(
       'DEM PRO',
-      style: DemProText.micro.copyWith(
-        color: DemProColors.accent,
+      style: ClientText.micro.copyWith(
+        color: AppColors.primary,
         fontWeight: FontWeight.w800,
         letterSpacing: 0.5,
       ),
@@ -1781,12 +1731,12 @@ class _ActiveOrderIconState extends State<_ActiveOrderIcon>
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: DemProColors.accent.withValues(
+          color: AppColors.primary.withValues(
             alpha: 0.12 + _ctrl.value * 0.08,
           ),
           shape: BoxShape.circle,
           border: Border.all(
-            color: DemProColors.accent.withValues(
+            color: AppColors.primary.withValues(
               alpha: 0.4 + _ctrl.value * 0.3,
             ),
             width: 1.5,
@@ -1797,7 +1747,7 @@ class _ActiveOrderIconState extends State<_ActiveOrderIcon>
       child: Stack(
         alignment: Alignment.center,
         children: [
-          const Icon(Icons.two_wheeler, color: DemProColors.accent, size: 20),
+          const Icon(Icons.two_wheeler, color: AppColors.primary, size: 20),
           if (widget.count > 1)
             Positioned(
               top: 2,
@@ -1806,13 +1756,13 @@ class _ActiveOrderIconState extends State<_ActiveOrderIcon>
                 width: 14,
                 height: 14,
                 decoration: const BoxDecoration(
-                  color: DemProColors.accent,
+                  color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: Text(
                     '${widget.count}',
-                    style: DemProText.micro.copyWith(
+                    style: ClientText.micro.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1848,9 +1798,9 @@ class _ProAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: DemProColors.accent.withValues(alpha: 0.15),
+        color: AppColors.primary.withValues(alpha: 0.15),
         border: Border.all(
-          color: DemProColors.accent.withValues(alpha: 0.3),
+          color: AppColors.primary.withValues(alpha: 0.3),
           width: 1.5,
         ),
       ),
@@ -1862,8 +1812,8 @@ class _ProAvatar extends StatelessWidget {
               errorBuilder: (_, __, ___) => Center(
                 child: Text(
                   _initials,
-                  style: DemProText.bodyStrong.copyWith(
-                    color: DemProColors.accent,
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.primary,
                     fontWeight: FontWeight.w800,
                     fontSize: size * 0.38,
                   ),
@@ -1873,8 +1823,8 @@ class _ProAvatar extends StatelessWidget {
           : Center(
               child: Text(
                 _initials,
-                style: DemProText.bodyStrong.copyWith(
-                  color: DemProColors.accent,
+                style: ClientText.bodyStrong.copyWith(
+                  color: AppColors.primary,
                   fontWeight: FontWeight.w800,
                   fontSize: size * 0.38,
                 ),
@@ -1905,9 +1855,9 @@ class _BigStatBox extends StatelessWidget {
     ),
     child: Column(
       children: [
-        Text(value, style: DemProText.hero.copyWith(color: color, height: 1)),
+        Text(value, style: ClientText.hero.copyWith(color: color, height: 1)),
         const SizedBox(height: 4),
-        Text(label, style: DemProText.caption.copyWith(color: t.muted)),
+        Text(label, style: ClientText.label.copyWith(color: t.muted)),
       ],
     ),
   );
@@ -1929,7 +1879,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: filled ? DemProColors.accent : Colors.transparent,
+    color: filled ? AppColors.primary : Colors.transparent,
     borderRadius: BorderRadius.circular(14),
     child: InkWell(
       borderRadius: BorderRadius.circular(14),
@@ -1944,14 +1894,14 @@ class _ActionButton extends StatelessWidget {
           children: [
             Icon(
               icon,
-              color: filled ? Colors.white : DemProColors.accent,
+              color: filled ? Colors.white : AppColors.primary,
               size: 22,
             ),
             const SizedBox(height: 6),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: DemProText.caption.copyWith(
+              style: ClientText.label.copyWith(
                 color: filled ? Colors.white : t.text,
                 fontWeight: FontWeight.w700,
               ),
@@ -1970,7 +1920,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: DemProText.caption.copyWith(
+    style: ClientText.label.copyWith(
       color: t.muted,
       fontWeight: FontWeight.w700,
       letterSpacing: 1,
@@ -1996,19 +1946,19 @@ class _EnCoursEmpty extends StatelessWidget {
     decoration: BoxDecoration(
       color: t.cardBg,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: DemProColors.accent.withValues(alpha: 0.20)),
+      border: Border.all(color: AppColors.primary.withValues(alpha: 0.20)),
     ),
     child: Column(
       children: [
         Icon(
           Icons.two_wheeler,
-          color: DemProColors.accent.withValues(alpha: 0.55),
+          color: AppColors.primary.withValues(alpha: 0.55),
           size: 30,
         ),
         const SizedBox(height: 10),
         Text(
           'Aucune livraison en cours',
-          style: DemProText.body.copyWith(color: t.muted),
+          style: ClientText.body.copyWith(color: t.muted),
         ),
         const SizedBox(height: 14),
         GestureDetector(
@@ -2016,10 +1966,10 @@ class _EnCoursEmpty extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: DemProColors.accent.withValues(alpha: 0.10),
+              color: AppColors.primary.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: DemProColors.accent.withValues(alpha: 0.30),
+                color: AppColors.primary.withValues(alpha: 0.30),
               ),
             ),
             child: Row(
@@ -2029,14 +1979,14 @@ class _EnCoursEmpty extends StatelessWidget {
                   isFirstOrder
                       ? 'Passez votre première commande'
                       : 'Nouvelle commande',
-                  style: DemProText.caption.copyWith(
-                    color: DemProColors.accent,
+                  style: ClientText.label.copyWith(
+                    color: AppColors.primary,
                   ),
                 ),
                 const SizedBox(width: 4),
                 const Icon(
                   Icons.arrow_forward,
-                  color: DemProColors.accent,
+                  color: AppColors.primary,
                   size: 14,
                 ),
               ],
@@ -2072,12 +2022,12 @@ class _HistoriqueEmpty extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           'Aucune livraison récente',
-          style: DemProText.body.copyWith(color: t.muted),
+          style: ClientText.body.copyWith(color: t.muted),
         ),
         const SizedBox(height: 4),
         Text(
           'Votre historique apparaîtra ici',
-          style: DemProText.caption.copyWith(
+          style: ClientText.label.copyWith(
             color: t.muted.withValues(alpha: 0.55),
           ),
         ),
@@ -2140,7 +2090,7 @@ class _OrderMiniCard extends StatelessWidget {
                 children: [
                   Text(
                     _shortAddress(dropoff),
-                    style: DemProText.bodyStrong.copyWith(color: t.text),
+                    style: ClientText.bodyStrong.copyWith(color: t.text),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -2149,16 +2099,16 @@ class _OrderMiniCard extends StatelessWidget {
                     children: [
                       Text(
                         _statusLabel(status),
-                        style: DemProText.caption.copyWith(color: color),
+                        style: ClientText.label.copyWith(color: color),
                       ),
                       if (driverName != null) ...[
                         Text(
                           ' · ',
-                          style: DemProText.caption.copyWith(color: t.muted),
+                          style: ClientText.label.copyWith(color: t.muted),
                         ),
                         Text(
                           driverName,
-                          style: DemProText.caption.copyWith(color: t.muted),
+                          style: ClientText.label.copyWith(color: t.muted),
                         ),
                       ],
                     ],
@@ -2171,8 +2121,8 @@ class _OrderMiniCard extends StatelessWidget {
               children: [
                 if (price != null)
                   Text(
-                    DemProFormat.fcfa(price),
-                    style: DemProText.caption.copyWith(
+                    formatFcfa(price),
+                    style: ClientText.label.copyWith(
                       color: t.text,
                       fontWeight: FontWeight.w700,
                     ),
@@ -2180,7 +2130,7 @@ class _OrderMiniCard extends StatelessWidget {
                 if (createdAt.isNotEmpty)
                   Text(
                     createdAt,
-                    style: DemProText.micro.copyWith(color: t.muted),
+                    style: ClientText.micro.copyWith(color: t.muted),
                   ),
               ],
             ),
@@ -2234,16 +2184,16 @@ class _EditableInfoRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: DemProColors.accent, size: 18),
+          Icon(icon, color: AppColors.primary, size: 18),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(label, style: DemProText.body.copyWith(color: t.muted)),
+            child: Text(label, style: ClientText.body.copyWith(color: t.muted)),
           ),
           Text(
             value,
-            style: DemProText.body.copyWith(
+            style: ClientText.body.copyWith(
               color: isPlaceholder
-                  ? DemProColors.accent.withValues(alpha: 0.6)
+                  ? AppColors.primary.withValues(alpha: 0.6)
                   : t.text,
               fontWeight: isPlaceholder ? FontWeight.w500 : FontWeight.w600,
               fontStyle: isPlaceholder ? FontStyle.italic : FontStyle.normal,
@@ -2284,7 +2234,7 @@ class _TapRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: DemProColors.accent, size: 18),
+          Icon(icon, color: AppColors.primary, size: 18),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -2292,12 +2242,12 @@ class _TapRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: DemProText.bodyStrong.copyWith(color: t.text),
+                  style: ClientText.bodyStrong.copyWith(color: t.text),
                 ),
                 if (subtitle != null)
                   Text(
                     subtitle!,
-                    style: DemProText.caption.copyWith(color: t.muted),
+                    style: ClientText.label.copyWith(color: t.muted),
                   ),
               ],
             ),
@@ -2333,13 +2283,13 @@ class _LogoutButton extends StatelessWidget {
           children: [
             const Icon(
               Icons.logout_outlined,
-              color: DemProColors.danger,
+              color: AppColors.error,
               size: 18,
             ),
             const SizedBox(width: 10),
             Text(
               'Se déconnecter',
-              style: DemProText.subtitle.copyWith(color: DemProColors.danger),
+              style: ClientText.subtitle.copyWith(color: AppColors.error),
             ),
           ],
         ),
@@ -2458,7 +2408,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
       return Container(
         color: t.scaffoldBg,
         child: const Center(
-          child: CircularProgressIndicator(color: DemProColors.accent),
+          child: CircularProgressIndicator(color: AppColors.primary),
         ),
       );
     }
@@ -2473,7 +2423,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
     final isEmpty = activeToShow.isEmpty && historyToShow.isEmpty;
 
     return RefreshIndicator(
-      color: DemProColors.accent,
+      color: AppColors.primary,
       backgroundColor: t.cardBg,
       onRefresh: _loadOrders,
       child: SingleChildScrollView(
@@ -2554,7 +2504,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
     if (_loadingBatches && _batches.isEmpty) {
       return Center(
         child: CircularProgressIndicator(
-          color: DemProColors.accent,
+          color: AppColors.primary,
           strokeWidth: 2,
         ),
       );
@@ -2562,7 +2512,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
 
     if (_batches.isEmpty) {
       return RefreshIndicator(
-        color: DemProColors.accent,
+        color: AppColors.primary,
         backgroundColor: t.cardBg,
         onRefresh: _loadBatches,
         child: SingleChildScrollView(
@@ -2579,19 +2529,19 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
-                        color: DemProColors.accent.withValues(alpha: 0.08),
+                        color: AppColors.primary.withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.route_outlined,
-                        color: DemProColors.accent,
+                        color: AppColors.primary,
                         size: 34,
                       ),
                     ),
                     const SizedBox(height: 16),
                     Text(
                       'Aucune tournée',
-                      style: DemProText.title.copyWith(
+                      style: ClientText.title.copyWith(
                         color: t.text,
                         fontSize: 17,
                       ),
@@ -2599,7 +2549,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
                     const SizedBox(height: 8),
                     Text(
                       'Créez une tournée pour regrouper plusieurs livraisons avec un seul livreur.',
-                      style: DemProText.body.copyWith(
+                      style: ClientText.body.copyWith(
                         color: t.muted,
                         height: 1.5,
                       ),
@@ -2614,7 +2564,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: DemProColors.accent,
+                          color: AppColors.primary,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -2628,7 +2578,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
                             const SizedBox(width: 8),
                             Text(
                               'Créer une tournée',
-                              style: DemProText.button.copyWith(fontSize: 14),
+                              style: ClientText.button.copyWith(fontSize: 14),
                             ),
                           ],
                         ),
@@ -2656,7 +2606,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
     }).toList();
 
     return RefreshIndicator(
-      color: DemProColors.accent,
+      color: AppColors.primary,
       backgroundColor: t.cardBg,
       onRefresh: _loadBatches,
       child: ListView(
@@ -2779,16 +2729,16 @@ class _FilterChip extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: active ? DemProColors.accent : t.cardBg,
+        color: active ? AppColors.primary : t.cardBg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: active ? DemProColors.accent : t.border),
+        border: Border.all(color: active ? AppColors.primary : t.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
-            style: DemProText.body.copyWith(
+            style: ClientText.body.copyWith(
               color: active ? Colors.white : t.muted,
               fontWeight: active ? FontWeight.w700 : FontWeight.w500,
             ),
@@ -2800,13 +2750,13 @@ class _FilterChip extends StatelessWidget {
               decoration: BoxDecoration(
                 color: active
                     ? Colors.white.withValues(alpha: 0.25)
-                    : DemProColors.accent.withValues(alpha: 0.15),
+                    : AppColors.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '$count',
-                style: DemProText.caption.copyWith(
-                  color: active ? Colors.white : DemProColors.accent,
+                style: ClientText.label.copyWith(
+                  color: active ? Colors.white : AppColors.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2847,7 +2797,7 @@ class _ActiveOrderCard extends StatelessWidget {
         border: Border.all(color: t.border),
         boxShadow: [
           BoxShadow(
-            color: DemProColors.accent.withValues(alpha: 0.07),
+            color: AppColors.primary.withValues(alpha: 0.07),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -2864,7 +2814,7 @@ class _ActiveOrderCard extends StatelessWidget {
                 height: 38,
                 decoration: BoxDecoration(
                   color: hasDriver
-                      ? DemProColors.accent.withValues(alpha: 0.15)
+                      ? AppColors.primary.withValues(alpha: 0.15)
                       : t.cardBg2,
                   shape: BoxShape.circle,
                 ),
@@ -2872,8 +2822,8 @@ class _ActiveOrderCard extends StatelessWidget {
                   child: hasDriver
                       ? Text(
                           _driverInitials(driverName),
-                          style: DemProText.bodyStrong.copyWith(
-                            color: DemProColors.accent,
+                          style: ClientText.bodyStrong.copyWith(
+                            color: AppColors.primary,
                             fontWeight: FontWeight.w800,
                           ),
                         )
@@ -2889,12 +2839,12 @@ class _ActiveOrderCard extends StatelessWidget {
                       hasDriver
                           ? (driverName ?? 'Livreur')
                           : 'En attente d\'un livreur…',
-                      style: DemProText.bodyStrong.copyWith(color: t.text),
+                      style: ClientText.bodyStrong.copyWith(color: t.text),
                     ),
                     if (hasDriver)
                       Text(
                         'Moto · DEM',
-                        style: DemProText.caption.copyWith(color: t.muted),
+                        style: ClientText.label.copyWith(color: t.muted),
                       ),
                   ],
                 ),
@@ -2907,7 +2857,7 @@ class _ActiveOrderCard extends StatelessWidget {
                 ),
                 child: Text(
                   statusLbl,
-                  style: DemProText.caption.copyWith(
+                  style: ClientText.label.copyWith(
                     color: statusColor,
                     fontWeight: FontWeight.w700,
                   ),
@@ -2920,7 +2870,7 @@ class _ActiveOrderCard extends StatelessWidget {
           // ── Adresses ─────────────────────────────────────────────────────
           _AddressRow(
             icon: Icons.radio_button_on,
-            color: DemProColors.success,
+            color: AppColors.successLight,
             label: pickup,
             t: t,
           ),
@@ -2930,7 +2880,7 @@ class _ActiveOrderCard extends StatelessWidget {
           ),
           _AddressRow(
             icon: Icons.location_on,
-            color: DemProColors.danger,
+            color: AppColors.error,
             label: delivery,
             t: t,
           ),
@@ -2942,15 +2892,15 @@ class _ActiveOrderCard extends StatelessWidget {
               Icon(Icons.payments_outlined, color: t.muted, size: 14),
               const SizedBox(width: 4),
               Text(
-                DemProFormat.fcfa(price),
-                style: DemProText.bodyStrong.copyWith(color: t.text),
+                formatFcfa(price),
+                style: ClientText.bodyStrong.copyWith(color: t.text),
               ),
               const SizedBox(width: 14),
               Icon(Icons.schedule_outlined, color: t.muted, size: 14),
               const SizedBox(width: 4),
               Text(
                 _timeAgo(createdAt),
-                style: DemProText.caption.copyWith(color: t.muted),
+                style: ClientText.label.copyWith(color: t.muted),
               ),
               const Spacer(),
               GestureDetector(
@@ -2970,10 +2920,10 @@ class _ActiveOrderCard extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.10),
+                    color: AppColors.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: DemProColors.accent.withValues(alpha: 0.25),
+                      color: AppColors.primary.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Row(
@@ -2981,14 +2931,14 @@ class _ActiveOrderCard extends StatelessWidget {
                     children: [
                       const Icon(
                         Icons.map_outlined,
-                        color: DemProColors.accent,
+                        color: AppColors.primary,
                         size: 13,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         'Suivre',
-                        style: DemProText.caption.copyWith(
-                          color: DemProColors.accent,
+                        style: ClientText.label.copyWith(
+                          color: AppColors.primary,
                         ),
                       ),
                     ],
@@ -3023,7 +2973,7 @@ class _AddressRow extends StatelessWidget {
       Expanded(
         child: Text(
           label,
-          style: DemProText.body.copyWith(color: t.text),
+          style: ClientText.body.copyWith(color: t.text),
           overflow: TextOverflow.ellipsis,
         ),
       ),
@@ -3083,13 +3033,13 @@ class _HistoriqueRow extends StatelessWidget {
                 children: [
                   Text(
                     '$pickup → $delivery',
-                    style: DemProText.bodyStrong.copyWith(color: t.text),
+                    style: ClientText.bodyStrong.copyWith(color: t.text),
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     date,
-                    style: DemProText.caption.copyWith(color: t.muted),
+                    style: ClientText.label.copyWith(color: t.muted),
                   ),
                 ],
               ),
@@ -3099,8 +3049,8 @@ class _HistoriqueRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  DemProFormat.fcfa(price),
-                  style: DemProText.bodyStrong.copyWith(color: t.text),
+                  formatFcfa(price),
+                  style: ClientText.bodyStrong.copyWith(color: t.text),
                 ),
                 const SizedBox(height: 3),
                 Container(
@@ -3114,7 +3064,7 @@ class _HistoriqueRow extends StatelessWidget {
                   ),
                   child: Text(
                     statusLbl,
-                    style: DemProText.micro.copyWith(color: statusColor),
+                    style: ClientText.micro.copyWith(color: statusColor),
                   ),
                 ),
               ],
@@ -3150,7 +3100,7 @@ class _ViewToggleBtn extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: active ? DemProColors.accent : Colors.transparent,
+          color: active ? AppColors.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -3160,7 +3110,7 @@ class _ViewToggleBtn extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: DemProText.body.copyWith(
+              style: ClientText.body.copyWith(
                 color: active ? Colors.white : t.muted,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
               ),
@@ -3206,7 +3156,7 @@ class _BatchCard extends StatelessWidget {
           border: Border.all(color: t.border),
           boxShadow: [
             BoxShadow(
-              color: DemProColors.accent.withValues(alpha: 0.06),
+              color: AppColors.primary.withValues(alpha: 0.06),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -3222,12 +3172,12 @@ class _BatchCard extends StatelessWidget {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.10),
+                    color: AppColors.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.route_outlined,
-                    color: DemProColors.accent,
+                    color: AppColors.primary,
                     size: 20,
                   ),
                 ),
@@ -3238,13 +3188,13 @@ class _BatchCard extends StatelessWidget {
                     children: [
                       Text(
                         '${orders.length} arrêt${orders.length > 1 ? 's' : ''}',
-                        style: DemProText.subtitle.copyWith(color: t.text),
+                        style: ClientText.subtitle.copyWith(color: t.text),
                       ),
                       Text(
                         driver != null
                             ? 'Livreur : ${driver['name'] as String? ?? 'DEM'}'
                             : 'En recherche de livreur…',
-                        style: DemProText.caption.copyWith(color: t.muted),
+                        style: ClientText.label.copyWith(color: t.muted),
                       ),
                     ],
                   ),
@@ -3260,7 +3210,7 @@ class _BatchCard extends StatelessWidget {
                   ),
                   child: Text(
                     statusLbl,
-                    style: DemProText.caption.copyWith(
+                    style: ClientText.label.copyWith(
                       color: statusColor,
                       fontWeight: FontWeight.w700,
                     ),
@@ -3275,14 +3225,14 @@ class _BatchCard extends StatelessWidget {
               children: [
                 const Icon(
                   Icons.radio_button_on,
-                  color: DemProColors.accent,
+                  color: AppColors.primary,
                   size: 13,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     pickup.split(',').first.trim(),
-                    style: DemProText.caption.copyWith(color: t.muted),
+                    style: ClientText.label.copyWith(color: t.muted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -3298,14 +3248,14 @@ class _BatchCard extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: delivered / orders.length,
                   backgroundColor: t.cardBg2,
-                  color: DemProColors.success,
+                  color: AppColors.successLight,
                   minHeight: 5,
                 ),
               ),
               const SizedBox(height: 5),
               Text(
                 '$delivered / ${orders.length} livrés',
-                style: DemProText.caption.copyWith(color: t.muted),
+                style: ClientText.label.copyWith(color: t.muted),
               ),
               const SizedBox(height: 10),
             ],
@@ -3316,15 +3266,15 @@ class _BatchCard extends StatelessWidget {
                 Icon(Icons.payments_outlined, color: t.muted, size: 13),
                 const SizedBox(width: 4),
                 Text(
-                  DemProFormat.fcfa(total),
-                  style: DemProText.bodyStrong.copyWith(color: t.text),
+                  formatFcfa(total),
+                  style: ClientText.bodyStrong.copyWith(color: t.text),
                 ),
                 const SizedBox(width: 12),
                 Icon(Icons.schedule_outlined, color: t.muted, size: 13),
                 const SizedBox(width: 4),
                 Text(
                   _timeAgo(createdAt),
-                  style: DemProText.caption.copyWith(color: t.muted),
+                  style: ClientText.label.copyWith(color: t.muted),
                 ),
                 const Spacer(),
                 Container(
@@ -3333,10 +3283,10 @@ class _BatchCard extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.10),
+                    color: AppColors.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: DemProColors.accent.withValues(alpha: 0.25),
+                      color: AppColors.primary.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Row(
@@ -3344,14 +3294,14 @@ class _BatchCard extends StatelessWidget {
                     children: [
                       const Icon(
                         Icons.map_outlined,
-                        color: DemProColors.accent,
+                        color: AppColors.primary,
                         size: 13,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         'Suivi',
-                        style: DemProText.caption.copyWith(
-                          color: DemProColors.accent,
+                        style: ClientText.label.copyWith(
+                          color: AppColors.primary,
                         ),
                       ),
                     ],
@@ -3418,12 +3368,12 @@ class _BatchHistoryRow extends StatelessWidget {
                 children: [
                   Text(
                     '$orders arrêt${orders > 1 ? 's' : ''}',
-                    style: DemProText.bodyStrong.copyWith(color: t.text),
+                    style: ClientText.bodyStrong.copyWith(color: t.text),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     _formatDateTime(createdAt),
-                    style: DemProText.caption.copyWith(color: t.muted),
+                    style: ClientText.label.copyWith(color: t.muted),
                   ),
                 ],
               ),
@@ -3433,8 +3383,8 @@ class _BatchHistoryRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  DemProFormat.fcfa(total),
-                  style: DemProText.bodyStrong.copyWith(color: t.text),
+                  formatFcfa(total),
+                  style: ClientText.bodyStrong.copyWith(color: t.text),
                 ),
                 const SizedBox(height: 3),
                 Container(
@@ -3448,7 +3398,7 @@ class _BatchHistoryRow extends StatelessWidget {
                   ),
                   child: Text(
                     statusLbl,
-                    style: DemProText.micro.copyWith(color: statusColor),
+                    style: ClientText.micro.copyWith(color: statusColor),
                   ),
                 ),
               ],
@@ -3483,26 +3433,26 @@ class _EmptyOrdersState extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: DemProColors.accent.withValues(alpha: 0.10),
+              color: AppColors.primary.withValues(alpha: 0.10),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.two_wheeler,
-              color: DemProColors.accent,
+              color: AppColors.primary,
               size: 40,
             ),
           ),
           const SizedBox(height: 20),
           Text(
             globallyEmpty ? 'Aucune livraison encore' : 'Aucune livraison ici',
-            style: DemProText.title.copyWith(color: t.text, fontSize: 17),
+            style: ClientText.title.copyWith(color: t.text, fontSize: 17),
           ),
           const SizedBox(height: 8),
           Text(
             globallyEmpty
                 ? 'Passez votre première commande et suivez-la ici en temps réel'
                 : 'Aucune livraison dans cette catégorie pour le moment.',
-            style: DemProText.body.copyWith(color: t.muted, height: 1.5),
+            style: ClientText.body.copyWith(color: t.muted, height: 1.5),
             textAlign: TextAlign.center,
           ),
           if (globallyEmpty) ...[
@@ -3515,7 +3465,7 @@ class _EmptyOrdersState extends StatelessWidget {
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: DemProColors.accent,
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -3525,7 +3475,7 @@ class _EmptyOrdersState extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       'Commander maintenant',
-                      style: DemProText.button.copyWith(fontSize: 14),
+                      style: ClientText.button.copyWith(fontSize: 14),
                     ),
                   ],
                 ),
@@ -3628,25 +3578,25 @@ class _AdressesTabState extends State<_AdressesTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Supprimer ?',
-          style: DemProText.title.copyWith(color: t.text),
+          style: ClientText.title.copyWith(color: t.text),
         ),
         content: Text(
           'Voulez-vous supprimer "${addr['label']}" ?',
-          style: DemProText.body.copyWith(color: t.muted),
+          style: ClientText.body.copyWith(color: t.muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
               'Annuler',
-              style: DemProText.body.copyWith(color: t.muted),
+              style: ClientText.body.copyWith(color: t.muted),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
               'Supprimer',
-              style: DemProText.body.copyWith(color: DemProColors.danger),
+              style: ClientText.body.copyWith(color: AppColors.error),
             ),
           ),
         ],
@@ -3692,14 +3642,14 @@ class _AdressesTabState extends State<_AdressesTab> {
                     children: [
                       Text(
                         'Mes adresses',
-                        style: DemProText.headline.copyWith(
+                        style: ClientText.headline.copyWith(
                           color: t.text,
                           fontSize: 22,
                         ),
                       ),
                       Text(
                         'Points de départ favoris',
-                        style: DemProText.caption.copyWith(color: t.muted),
+                        style: ClientText.label.copyWith(color: t.muted),
                       ),
                     ],
                   ),
@@ -3709,12 +3659,12 @@ class _AdressesTabState extends State<_AdressesTab> {
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: DemProColors.accent.withValues(alpha: 0.12),
+                      color: AppColors.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
                       Icons.add,
-                      color: DemProColors.accent,
+                      color: AppColors.primary,
                       size: 22,
                     ),
                   ),
@@ -3735,10 +3685,10 @@ class _AdressesTabState extends State<_AdressesTab> {
               ),
               child: TextField(
                 controller: _search,
-                style: DemProText.body.copyWith(color: t.text, fontSize: 14),
+                style: ClientText.body.copyWith(color: t.text, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Rechercher une adresse…',
-                  hintStyle: DemProText.body.copyWith(
+                  hintStyle: ClientText.body.copyWith(
                     color: t.muted,
                     fontSize: 14,
                   ),
@@ -3764,12 +3714,12 @@ class _AdressesTabState extends State<_AdressesTab> {
             child: _loading
                 ? Center(
                     child: CircularProgressIndicator(
-                      color: DemProColors.accent,
+                      color: AppColors.primary,
                       strokeWidth: 2,
                     ),
                   )
                 : RefreshIndicator(
-                    color: DemProColors.accent,
+                    color: AppColors.primary,
                     backgroundColor: t.cardBg,
                     onRefresh: _load,
                     child: ListView(
@@ -3803,7 +3753,7 @@ class _AdressesTabState extends State<_AdressesTab> {
                             const SizedBox(height: 4),
                             Text(
                               'Adresses utilisées récemment comme point de départ',
-                              style: DemProText.caption.copyWith(
+                              style: ClientText.label.copyWith(
                                 color: t.muted,
                               ),
                             ),
@@ -3834,19 +3784,19 @@ class _AdressesTabState extends State<_AdressesTab> {
 
   Widget _buildSectionHeader(String title, String? count) => Row(
     children: [
-      Text(title, style: DemProText.bodyStrong.copyWith(color: t.text)),
+      Text(title, style: ClientText.bodyStrong.copyWith(color: t.text)),
       if (count != null) ...[
         const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           decoration: BoxDecoration(
-            color: DemProColors.accent.withValues(alpha: 0.12),
+            color: AppColors.primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
             count,
-            style: DemProText.caption.copyWith(
-              color: DemProColors.accent,
+            style: ClientText.label.copyWith(
+              color: AppColors.primary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -3863,12 +3813,12 @@ class _AdressesTabState extends State<_AdressesTab> {
         const SizedBox(height: 12),
         Text(
           'Aucun résultat pour "$_query"',
-          style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15),
+          style: ClientText.subtitle.copyWith(color: t.text, fontSize: 15),
         ),
         const SizedBox(height: 6),
         Text(
           'Essayez avec un autre terme.',
-          style: DemProText.body.copyWith(color: t.muted),
+          style: ClientText.body.copyWith(color: t.muted),
         ),
       ],
     ),
@@ -3882,28 +3832,28 @@ class _AdressesTabState extends State<_AdressesTab> {
           width: 72,
           height: 72,
           decoration: BoxDecoration(
-            color: DemProColors.accent.withValues(alpha: 0.08),
+            color: AppColors.primary.withValues(alpha: 0.08),
             shape: BoxShape.circle,
             border: Border.all(
-              color: DemProColors.accent.withValues(alpha: 0.20),
+              color: AppColors.primary.withValues(alpha: 0.20),
               width: 1.5,
             ),
           ),
           child: const Icon(
             Icons.place_outlined,
-            color: DemProColors.accent,
+            color: AppColors.primary,
             size: 32,
           ),
         ),
         const SizedBox(height: 16),
         Text(
           'Aucune adresse enregistrée',
-          style: DemProText.title.copyWith(color: t.text, fontSize: 17),
+          style: ClientText.title.copyWith(color: t.text, fontSize: 17),
         ),
         const SizedBox(height: 8),
         Text(
           'Ajoutez vos points de départ favoris\n(boutique, entrepôt, bureau…)',
-          style: DemProText.body.copyWith(color: t.muted, height: 1.5),
+          style: ClientText.body.copyWith(color: t.muted, height: 1.5),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -3912,7 +3862,7 @@ class _AdressesTabState extends State<_AdressesTab> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
-              color: DemProColors.accent,
+              color: AppColors.primary,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -3922,7 +3872,7 @@ class _AdressesTabState extends State<_AdressesTab> {
                 const SizedBox(width: 8),
                 Text(
                   'Ajouter une adresse',
-                  style: DemProText.button.copyWith(fontSize: 14),
+                  style: ClientText.button.copyWith(fontSize: 14),
                 ),
               ],
             ),
@@ -3966,7 +3916,7 @@ class _AddressCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDefault
-              ? DemProColors.accent.withValues(alpha: 0.5)
+              ? AppColors.primary.withValues(alpha: 0.5)
               : t.border,
           width: isDefault ? 1.5 : 1,
         ),
@@ -3984,10 +3934,10 @@ class _AddressCard extends StatelessWidget {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.10),
+                    color: AppColors.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(meta.$1, color: DemProColors.accent, size: 22),
+                  child: Icon(meta.$1, color: AppColors.primary, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -3998,7 +3948,7 @@ class _AddressCard extends StatelessWidget {
                         children: [
                           Text(
                             label,
-                            style: DemProText.subtitle.copyWith(color: t.text),
+                            style: ClientText.subtitle.copyWith(color: t.text),
                           ),
                           if (isDefault) ...[
                             const SizedBox(width: 8),
@@ -4008,15 +3958,15 @@ class _AddressCard extends StatelessWidget {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: DemProColors.accent.withValues(
+                                color: AppColors.primary.withValues(
                                   alpha: 0.12,
                                 ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 'Par défaut',
-                                style: DemProText.micro.copyWith(
-                                  color: DemProColors.accent,
+                                style: ClientText.micro.copyWith(
+                                  color: AppColors.primary,
                                 ),
                               ),
                             ),
@@ -4026,7 +3976,7 @@ class _AddressCard extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         address,
-                        style: DemProText.caption.copyWith(color: t.muted),
+                        style: ClientText.label.copyWith(color: t.muted),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -4039,7 +3989,7 @@ class _AddressCard extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 landmark,
-                                style: DemProText.caption.copyWith(
+                                style: ClientText.label.copyWith(
                                   color: t.muted,
                                 ),
                                 maxLines: 1,
@@ -4082,7 +4032,7 @@ class _AddressCard extends StatelessWidget {
                       child: _menuItem(
                         Icons.delete_outline,
                         'Supprimer',
-                        DemProColors.danger,
+                        AppColors.error,
                       ),
                     ),
                   ],
@@ -4099,7 +4049,7 @@ class _AddressCard extends StatelessWidget {
     children: [
       Icon(icon, color: color, size: 18),
       const SizedBox(width: 10),
-      Text(label, style: DemProText.body.copyWith(color: color)),
+      Text(label, style: ClientText.body.copyWith(color: color)),
     ],
   );
 }
@@ -4140,7 +4090,7 @@ class _RecentPickupRow extends StatelessWidget {
         ),
         title: Text(
           address,
-          style: DemProText.bodyStrong.copyWith(color: t.text),
+          style: ClientText.bodyStrong.copyWith(color: t.text),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -4149,13 +4099,13 @@ class _RecentPickupRow extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: DemProColors.accent.withValues(alpha: 0.10),
+              color: AppColors.primary.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               'Sauvegarder',
-              style: DemProText.caption.copyWith(
-                color: DemProColors.accent,
+              style: ClientText.label.copyWith(
+                color: AppColors.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -4178,14 +4128,14 @@ class _AddressFormSheet extends StatefulWidget {
 }
 
 const _addressSheetSuggestionColors = PlaceSuggestionsColors(
-  background: DemProColors.bg3,
-  border: DemProColors.bg4,
-  divider: DemProColors.bg4,
-  iconBg: DemProColors.bg4,
-  icon: DemProColors.accent,
-  mainText: DemProColors.text,
-  secondaryText: DemProColors.muted,
-  accent: DemProColors.accent,
+  background: AppColors.lightFill,
+  border: AppColors.lightBorder,
+  divider: AppColors.lightBorder,
+  iconBg: AppColors.lightBorder,
+  icon: AppColors.primary,
+  mainText: AppColors.textDark,
+  secondaryText: AppColors.textMuted,
+  accent: AppColors.primary,
 );
 
 class _AddressFormSheetState extends State<_AddressFormSheet> {
@@ -4344,7 +4294,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Impossible de récupérer la position.'),
-            backgroundColor: DemProColors.danger,
+            backgroundColor: AppColors.error,
           ),
         );
       }
@@ -4361,7 +4311,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
           content: Text(
             "Sélectionnez l'adresse dans la liste ou utilisez votre position actuelle.",
           ),
-          backgroundColor: DemProColors.danger,
+          backgroundColor: AppColors.error,
         ),
       );
       return;
@@ -4391,7 +4341,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString()),
-          backgroundColor: DemProColors.danger,
+          backgroundColor: AppColors.error,
         ),
       );
     }
@@ -4429,14 +4379,14 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               ),
               Text(
                 _isEdit ? 'Modifier l\'adresse' : 'Nouvelle adresse',
-                style: DemProText.title.copyWith(color: t.text, fontSize: 18),
+                style: ClientText.title.copyWith(color: t.text, fontSize: 18),
               ),
               const SizedBox(height: 20),
 
               // ── Sélecteur d'icône ──────────────────────────────────────────
               Text(
                 'Type de lieu',
-                style: DemProText.caption.copyWith(color: t.muted),
+                style: ClientText.label.copyWith(color: t.muted),
               ),
               const SizedBox(height: 8),
               SizedBox(
@@ -4455,10 +4405,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: selected ? DemProColors.accent : t.cardBg2,
+                          color: selected ? AppColors.primary : t.cardBg2,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: selected ? DemProColors.accent : t.border,
+                            color: selected ? AppColors.primary : t.border,
                             width: selected ? 1.5 : 1,
                           ),
                         ),
@@ -4473,7 +4423,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                             const SizedBox(height: 3),
                             Text(
                               e.value.$2,
-                              style: DemProText.micro.copyWith(
+                              style: ClientText.micro.copyWith(
                                 color: selected ? Colors.white : t.muted,
                               ),
                             ),
@@ -4524,7 +4474,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: DemProColors.accent,
+                            color: AppColors.primary,
                           ),
                         ),
                       )
@@ -4542,7 +4492,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                 const SizedBox(height: 6),
                 Text(
                   'Sélectionnez une adresse dans la liste ou utilisez votre position actuelle.',
-                  style: DemProText.caption.copyWith(
+                  style: ClientText.label.copyWith(
                     color: Colors.orange.shade800,
                   ),
                 ),
@@ -4556,10 +4506,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.08),
+                    color: AppColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: DemProColors.accent.withValues(alpha: 0.25),
+                      color: AppColors.primary.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Row(
@@ -4570,12 +4520,12 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                               height: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: DemProColors.accent,
+                                color: AppColors.primary,
                               ),
                             )
                           : const Icon(
                               Icons.my_location,
-                              color: DemProColors.accent,
+                              color: AppColors.primary,
                               size: 16,
                             ),
                       const SizedBox(width: 8),
@@ -4583,8 +4533,8 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                         _locating
                             ? 'Localisation en cours…'
                             : 'Utiliser ma position actuelle',
-                        style: DemProText.body.copyWith(
-                          color: DemProColors.accent,
+                        style: ClientText.body.copyWith(
+                          color: AppColors.primary,
                         ),
                       ),
                     ],
@@ -4628,17 +4578,17 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                 child: SwitchListTile(
                   value: _isDefault,
                   onChanged: (v) => setState(() => _isDefault = v),
-                  activeTrackColor: DemProColors.accent,
+                  activeTrackColor: AppColors.primary,
                   activeThumbColor: Colors.white,
                   inactiveThumbColor: Colors.white,
                   inactiveTrackColor: t.border,
                   title: Text(
                     'Adresse par défaut',
-                    style: DemProText.subtitle.copyWith(color: t.text),
+                    style: ClientText.subtitle.copyWith(color: t.text),
                   ),
                   subtitle: Text(
                     'Pré-sélectionnée lors d\'une nouvelle commande',
-                    style: DemProText.caption.copyWith(color: t.muted),
+                    style: ClientText.label.copyWith(color: t.muted),
                   ),
                   dense: true,
                   contentPadding: const EdgeInsets.symmetric(
@@ -4655,11 +4605,11 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                 height: 52,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: DemProColors.accent,
+                    color: AppColors.primary,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: DemProColors.accent.withValues(alpha: 0.30),
+                        color: AppColors.primary.withValues(alpha: 0.30),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -4684,7 +4634,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                                 _isEdit
                                     ? 'Enregistrer les modifications'
                                     : 'Ajouter l\'adresse',
-                                style: DemProText.button,
+                                style: ClientText.button.copyWith(color: AppColors.textDark),
                               ),
                       ),
                     ),
@@ -4705,7 +4655,7 @@ class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.text, this.t);
   @override
   Widget build(BuildContext context) =>
-      Text(text, style: DemProText.caption.copyWith(color: t.muted));
+      Text(text, style: ClientText.label.copyWith(color: t.muted));
 }
 
 class _FormField extends StatelessWidget {
@@ -4729,10 +4679,10 @@ class _FormField extends StatelessWidget {
     controller: controller,
     validator: validator,
     onChanged: onChanged,
-    style: DemProText.body.copyWith(color: t.text, fontSize: 14),
+    style: ClientText.body.copyWith(color: t.text, fontSize: 14),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: DemProText.body.copyWith(color: t.muted),
+      hintStyle: ClientText.body.copyWith(color: t.muted),
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: t.cardBg2,
@@ -4746,15 +4696,15 @@ class _FormField extends StatelessWidget {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: DemProColors.accent, width: 1.5),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: DemProColors.danger),
+        borderSide: const BorderSide(color: AppColors.error),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: DemProColors.danger, width: 1.5),
+        borderSide: const BorderSide(color: AppColors.error, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     ),
@@ -4901,7 +4851,7 @@ class _FinancesTabState extends State<_FinancesTab> {
                 Expanded(
                   child: Text(
                     'Finances',
-                    style: DemProText.headline.copyWith(
+                    style: ClientText.headline.copyWith(
                       color: t.text,
                       fontSize: 22,
                     ),
@@ -4927,16 +4877,16 @@ class _FinancesTabState extends State<_FinancesTab> {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 9),
                       decoration: BoxDecoration(
-                        color: selected ? DemProColors.accent : t.cardBg,
+                        color: selected ? AppColors.primary : t.cardBg,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: selected ? DemProColors.accent : t.border,
+                          color: selected ? AppColors.primary : t.border,
                         ),
                       ),
                       child: Text(
                         opt.$2,
                         textAlign: TextAlign.center,
-                        style: DemProText.caption.copyWith(
+                        style: ClientText.label.copyWith(
                           color: selected ? Colors.white : t.muted,
                           fontWeight: selected
                               ? FontWeight.w700
@@ -4994,14 +4944,14 @@ class _FinancesTabState extends State<_FinancesTab> {
             child: _loading
                 ? Center(
                     child: CircularProgressIndicator(
-                      color: DemProColors.accent,
+                      color: AppColors.primary,
                       strokeWidth: 2,
                     ),
                   )
                 : _error != null
                 ? _buildError()
                 : RefreshIndicator(
-                    color: DemProColors.accent,
+                    color: AppColors.primary,
                     backgroundColor: t.cardBg,
                     onRefresh: _load,
                     child: ListView(
@@ -5028,7 +4978,7 @@ class _FinancesTabState extends State<_FinancesTab> {
         const SizedBox(height: 12),
         Text(
           'Impossible de charger les données',
-          style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15),
+          style: ClientText.subtitle.copyWith(color: t.text, fontSize: 15),
         ),
         const SizedBox(height: 16),
         GestureDetector(
@@ -5036,12 +4986,12 @@ class _FinancesTabState extends State<_FinancesTab> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
-              color: DemProColors.accent,
+              color: AppColors.primary,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
               'Réessayer',
-              style: DemProText.button.copyWith(fontSize: 14),
+              style: ClientText.button.copyWith(fontSize: 14),
             ),
           ),
         ),
@@ -5065,9 +5015,7 @@ class _FinancesTabState extends State<_FinancesTab> {
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: t.dark
-                ? [DemProColors.bg3, DemProColors.bg4]
-                : DemProColors.lightGradientBlue,
+            colors: [Colors.white, AppColors.lightBg],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -5082,30 +5030,30 @@ class _FinancesTabState extends State<_FinancesTab> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: DemProColors.success.withValues(alpha: 0.12),
+                    color: AppColors.successLight.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.trending_up,
-                    color: DemProColors.success,
+                    color: AppColors.successLight,
                     size: 16,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   'Ventes',
-                  style: DemProText.caption.copyWith(color: t.muted),
+                  style: ClientText.label.copyWith(color: t.muted),
                 ),
               ],
             ),
             const SizedBox(height: 14),
             Text(
-              DemProFormat.fcfa(_totalSales),
-              style: DemProText.hero.copyWith(color: t.text),
+              formatFcfa(_totalSales),
+              style: ClientText.hero.copyWith(color: t.text),
             ),
             Text(
               'Chiffre d\'affaires',
-              style: DemProText.caption.copyWith(color: t.muted),
+              style: ClientText.label.copyWith(color: t.muted),
             ),
             const SizedBox(height: 16),
             Row(
@@ -5114,7 +5062,7 @@ class _FinancesTabState extends State<_FinancesTab> {
                   child: _MiniStat(
                     value: orders.length.toString(),
                     label: 'Commandes',
-                    color: DemProColors.accent,
+                    color: AppColors.primary,
                     t: t,
                   ),
                 ),
@@ -5123,7 +5071,7 @@ class _FinancesTabState extends State<_FinancesTab> {
                   child: _MiniStat(
                     value: totalItems.toString(),
                     label: 'Articles vendus',
-                    color: DemProColors.success,
+                    color: AppColors.successLight,
                     t: t,
                   ),
                 ),
@@ -5139,19 +5087,19 @@ class _FinancesTabState extends State<_FinancesTab> {
         children: [
           Text(
             'Historique des ventes',
-            style: DemProText.bodyStrong.copyWith(color: t.text),
+            style: ClientText.bodyStrong.copyWith(color: t.text),
           ),
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
-              color: DemProColors.accent.withValues(alpha: 0.12),
+              color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               '${orders.length}',
-              style: DemProText.caption.copyWith(
-                color: DemProColors.accent,
+              style: ClientText.label.copyWith(
+                color: AppColors.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -5186,9 +5134,7 @@ class _FinancesTabState extends State<_FinancesTab> {
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: t.dark
-                ? [DemProColors.bg3, DemProColors.bg4]
-                : DemProColors.lightGradientBlue,
+            colors: [Colors.white, AppColors.lightBg],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -5203,30 +5149,30 @@ class _FinancesTabState extends State<_FinancesTab> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.12),
+                    color: AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.two_wheeler,
-                    color: DemProColors.accent,
+                    color: AppColors.primary,
                     size: 16,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   'Livraisons',
-                  style: DemProText.caption.copyWith(color: t.muted),
+                  style: ClientText.label.copyWith(color: t.muted),
                 ),
               ],
             ),
             const SizedBox(height: 14),
             Text(
-              DemProFormat.fcfa(total.toInt()),
-              style: DemProText.hero.copyWith(color: t.text),
+              formatFcfa(total.toInt()),
+              style: ClientText.hero.copyWith(color: t.text),
             ),
             Text(
               'Total dépensé',
-              style: DemProText.caption.copyWith(color: t.muted),
+              style: ClientText.label.copyWith(color: t.muted),
             ),
             const SizedBox(height: 16),
             Row(
@@ -5235,16 +5181,16 @@ class _FinancesTabState extends State<_FinancesTab> {
                   child: _MiniStat(
                     value: count.toInt().toString(),
                     label: 'Livraisons',
-                    color: DemProColors.accent,
+                    color: AppColors.primary,
                     t: t,
                   ),
                 ),
                 Container(width: 1, height: 40, color: t.border),
                 Expanded(
                   child: _MiniStat(
-                    value: '${DemProFormat.fcfa(avg.toInt())}',
+                    value: '${formatFcfa(avg.toInt())}',
                     label: 'Coût moyen',
-                    color: DemProColors.success,
+                    color: AppColors.successLight,
                     t: t,
                   ),
                 ),
@@ -5266,19 +5212,19 @@ class _FinancesTabState extends State<_FinancesTab> {
         children: [
           Text(
             'Transactions',
-            style: DemProText.bodyStrong.copyWith(color: t.text),
+            style: ClientText.bodyStrong.copyWith(color: t.text),
           ),
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
-              color: DemProColors.accent.withValues(alpha: 0.12),
+              color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               '${orders.length}',
-              style: DemProText.caption.copyWith(
-                color: DemProColors.accent,
+              style: ClientText.label.copyWith(
+                color: AppColors.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -5327,9 +5273,7 @@ class _FinancesTabState extends State<_FinancesTab> {
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: t.dark
-                ? [DemProColors.bg3, DemProColors.bg4]
-                : DemProColors.lightGradientBlue,
+            colors: [Colors.white, AppColors.lightBg],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -5340,13 +5284,13 @@ class _FinancesTabState extends State<_FinancesTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Dépensé cette période',
-                style: DemProText.caption.copyWith(color: t.muted)),
+                style: ClientText.label.copyWith(color: t.muted)),
             const SizedBox(height: 6),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(DemProFormat.fcfa(currentTotal),
-                    style: DemProText.hero.copyWith(color: t.text)),
+                Text(formatFcfa(currentTotal),
+                    style: ClientText.hero.copyWith(color: t.text)),
                 if (spendTrendPct != null) ...[
                   const SizedBox(width: 10),
                   Padding(
@@ -5355,8 +5299,8 @@ class _FinancesTabState extends State<_FinancesTab> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: (spendTrendPct >= 0
-                                ? DemProColors.success
-                                : DemProColors.danger)
+                                ? AppColors.successLight
+                                : AppColors.error)
                             .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
@@ -5369,15 +5313,15 @@ class _FinancesTabState extends State<_FinancesTab> {
                                 : Icons.arrow_downward_rounded,
                             size: 12,
                             color: spendTrendPct >= 0
-                                ? DemProColors.success
-                                : DemProColors.danger,
+                                ? AppColors.successLight
+                                : AppColors.error,
                           ),
                           Text(
                             '${spendTrendPct.abs().toStringAsFixed(0)}%',
-                            style: DemProText.caption.copyWith(
+                            style: ClientText.label.copyWith(
                               color: spendTrendPct >= 0
-                                  ? DemProColors.success
-                                  : DemProColors.danger,
+                                  ? AppColors.successLight
+                                  : AppColors.error,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -5389,7 +5333,7 @@ class _FinancesTabState extends State<_FinancesTab> {
               ],
             ),
             Text('vs période précédente équivalente',
-                style: DemProText.micro.copyWith(color: t.muted)),
+                style: ClientText.micro.copyWith(color: t.muted)),
           ],
         ),
       ),
@@ -5414,7 +5358,7 @@ class _FinancesTabState extends State<_FinancesTab> {
               value: totalCreated > 0
                   ? '${cancellationRate.toStringAsFixed(0)}%'
                   : '—',
-              valueColor: cancellationRate > 15 ? DemProColors.danger : null,
+              valueColor: cancellationRate > 15 ? AppColors.error : null,
               t: t,
             ),
           ),
@@ -5424,7 +5368,7 @@ class _FinancesTabState extends State<_FinancesTab> {
 
       // ── Livreur habituel ──────────────────────────────────────────────────
       Text('Livreur habituel',
-          style: DemProText.bodyStrong.copyWith(color: t.text)),
+          style: ClientText.bodyStrong.copyWith(color: t.text)),
       const SizedBox(height: 10),
       if (topDriver == null)
         _buildEmpty('Aucune livraison sur cette période')
@@ -5442,11 +5386,11 @@ class _FinancesTabState extends State<_FinancesTab> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.12),
+                  color: AppColors.primary.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.two_wheeler,
-                    color: DemProColors.accent, size: 20),
+                    color: AppColors.primary, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -5454,9 +5398,9 @@ class _FinancesTabState extends State<_FinancesTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(topDriver['name'] as String? ?? 'Livreur DEM',
-                        style: DemProText.bodyStrong.copyWith(color: t.text)),
+                        style: ClientText.bodyStrong.copyWith(color: t.text)),
                     Text('${topDriver['count']} livraison(s) sur la période',
-                        style: DemProText.caption.copyWith(color: t.muted)),
+                        style: ClientText.label.copyWith(color: t.muted)),
                   ],
                 ),
               ),
@@ -5464,11 +5408,11 @@ class _FinancesTabState extends State<_FinancesTab> {
                 Row(
                   children: [
                     const Icon(Icons.star_rounded,
-                        color: DemProColors.warning, size: 16),
+                        color: AppColors.warning, size: 16),
                     const SizedBox(width: 3),
                     Text(
                       (topDriver['avgRating'] as num).toStringAsFixed(1),
-                      style: DemProText.bodyStrong.copyWith(color: t.text),
+                      style: ClientText.bodyStrong.copyWith(color: t.text),
                     ),
                   ],
                 ),
@@ -5479,7 +5423,7 @@ class _FinancesTabState extends State<_FinancesTab> {
 
       // ── Top destinataires ────────────────────────────────────────────────
       Text('Destinataires les plus fréquents',
-          style: DemProText.bodyStrong.copyWith(color: t.text)),
+          style: ClientText.bodyStrong.copyWith(color: t.text)),
       const SizedBox(height: 10),
       if (topDestinations.isEmpty)
         _buildEmpty('Aucune livraison sur cette période')
@@ -5507,14 +5451,14 @@ class _FinancesTabState extends State<_FinancesTab> {
                                           as String?) ??
                                   (topDestinations[i]['address'] as String? ??
                                       '—'),
-                              style: DemProText.bodyStrong
+                              style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)
                                   .copyWith(color: t.text),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
                               topDestinations[i]['address'] as String? ?? '',
-                              style: DemProText.caption
+                              style: ClientText.label.copyWith(color: AppColors.textDark)
                                   .copyWith(color: t.muted),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -5527,13 +5471,13 @@ class _FinancesTabState extends State<_FinancesTab> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: DemProColors.accent.withValues(alpha: 0.12),
+                          color: AppColors.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           '${topDestinations[i]['count']}×',
-                          style: DemProText.caption.copyWith(
-                            color: DemProColors.accent,
+                          style: ClientText.label.copyWith(
+                            color: AppColors.primary,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -5567,7 +5511,7 @@ class _FinancesTabState extends State<_FinancesTab> {
         children: [
           Text(
             'Évolution',
-            style: DemProText.bodyStrong.copyWith(color: t.text),
+            style: ClientText.bodyStrong.copyWith(color: t.text),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -5591,9 +5535,9 @@ class _FinancesTabState extends State<_FinancesTab> {
                       children: [
                         if (count > 0) ...[
                           Text(
-                            DemProFormat.fcfa(amount.toInt()),
-                            style: DemProText.micro.copyWith(
-                              color: DemProColors.accent,
+                            formatFcfa(amount.toInt()),
+                            style: ClientText.micro.copyWith(
+                              color: AppColors.primary,
                             ),
                             textAlign: TextAlign.center,
                             maxLines: 1,
@@ -5608,7 +5552,7 @@ class _FinancesTabState extends State<_FinancesTab> {
                           height: barH,
                           decoration: BoxDecoration(
                             color: count > 0
-                                ? DemProColors.accent.withValues(
+                                ? AppColors.primary.withValues(
                                     alpha: 0.25 + 0.75 * ratio,
                                   )
                                 : t.border,
@@ -5620,7 +5564,7 @@ class _FinancesTabState extends State<_FinancesTab> {
                         const SizedBox(height: 6),
                         Text(
                           label,
-                          style: DemProText.micro.copyWith(
+                          style: ClientText.micro.copyWith(
                             color: t.muted,
                             fontWeight: FontWeight.w500,
                           ),
@@ -5650,7 +5594,7 @@ class _FinancesTabState extends State<_FinancesTab> {
       children: [
         Icon(Icons.receipt_long_outlined, color: t.muted, size: 36),
         const SizedBox(height: 10),
-        Text(msg, style: DemProText.subtitle.copyWith(color: t.text)),
+        Text(msg, style: ClientText.subtitle.copyWith(color: t.text)),
       ],
     ),
   );
@@ -5680,7 +5624,7 @@ class _FinanceToggle extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: active ? DemProColors.accent : Colors.transparent,
+          color: active ? AppColors.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -5690,7 +5634,7 @@ class _FinanceToggle extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: DemProText.caption.copyWith(
+              style: ClientText.label.copyWith(
                 color: active ? Colors.white : t.muted,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
               ),
@@ -5722,9 +5666,9 @@ class _MiniStat extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(value, style: DemProText.title.copyWith(color: color)),
+        Text(value, style: ClientText.title.copyWith(color: color)),
         const SizedBox(height: 2),
-        Text(label, style: DemProText.caption.copyWith(color: t.muted)),
+        Text(label, style: ClientText.label.copyWith(color: t.muted)),
       ],
     ),
   );
@@ -5756,12 +5700,12 @@ class _InsightCard extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: DemProColors.accent, size: 18),
+        Icon(icon, color: AppColors.primary, size: 18),
         const SizedBox(height: 10),
         Text(value,
-            style: DemProText.title.copyWith(color: valueColor ?? t.text)),
+            style: ClientText.title.copyWith(color: valueColor ?? t.text)),
         const SizedBox(height: 2),
-        Text(label, style: DemProText.caption.copyWith(color: t.muted)),
+        Text(label, style: ClientText.label.copyWith(color: t.muted)),
       ],
     ),
   );
@@ -5808,12 +5752,12 @@ class _SaleRow extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: DemProColors.success.withValues(alpha: 0.10),
+                  color: AppColors.successLight.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.shopping_bag_outlined,
-                  color: DemProColors.success,
+                  color: AppColors.successLight,
                   size: 17,
                 ),
               ),
@@ -5824,22 +5768,22 @@ class _SaleRow extends StatelessWidget {
                   children: [
                     Text(
                       receiver ?? address,
-                      style: DemProText.bodyStrong.copyWith(color: t.text),
+                      style: ClientText.bodyStrong.copyWith(color: t.text),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       date,
-                      style: DemProText.caption.copyWith(color: t.muted),
+                      style: ClientText.label.copyWith(color: t.muted),
                     ),
                   ],
                 ),
               ),
               if (saleTotal > 0)
                 Text(
-                  DemProFormat.fcfa(saleTotal),
-                  style: DemProText.subtitle.copyWith(
-                    color: DemProColors.success,
+                  formatFcfa(saleTotal),
+                  style: ClientText.subtitle.copyWith(
+                    color: AppColors.successLight,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -5866,17 +5810,17 @@ class _SaleRow extends StatelessWidget {
                       children: [
                         Text(
                           '$name',
-                          style: DemProText.caption.copyWith(color: t.text),
+                          style: ClientText.label.copyWith(color: t.text),
                         ),
                         Text(
                           '  × $qty',
-                          style: DemProText.caption.copyWith(color: t.muted),
+                          style: ClientText.label.copyWith(color: t.muted),
                         ),
                         const Spacer(),
                         if (price != null)
                           Text(
-                            DemProFormat.fcfa(price * qty),
-                            style: DemProText.caption.copyWith(color: t.text),
+                            formatFcfa(price * qty),
+                            style: ClientText.label.copyWith(color: t.text),
                           ),
                       ],
                     ),
@@ -5888,7 +5832,7 @@ class _SaleRow extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               desc,
-              style: DemProText.caption.copyWith(color: t.muted),
+              style: ClientText.label.copyWith(color: t.muted),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -5911,7 +5855,7 @@ class _SaleRow extends StatelessWidget {
                   payMode == 'merchant'
                       ? 'Payé par vous'
                       : 'Payé à la livraison',
-                  style: DemProText.caption.copyWith(color: t.muted),
+                  style: ClientText.label.copyWith(color: t.muted),
                 ),
               ],
             ),
@@ -5951,12 +5895,12 @@ class _DeliveryRow extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: DemProColors.accent.withValues(alpha: 0.10),
+              color: AppColors.primary.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
               Icons.two_wheeler,
-              color: DemProColors.accent,
+              color: AppColors.primary,
               size: 18,
             ),
           ),
@@ -5967,7 +5911,7 @@ class _DeliveryRow extends StatelessWidget {
               children: [
                 Text(
                   address,
-                  style: DemProText.bodyStrong.copyWith(color: t.text),
+                  style: ClientText.bodyStrong.copyWith(color: t.text),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -5976,17 +5920,17 @@ class _DeliveryRow extends StatelessWidget {
                   children: [
                     Text(
                       date,
-                      style: DemProText.caption.copyWith(color: t.muted),
+                      style: ClientText.label.copyWith(color: t.muted),
                     ),
                     if (driverName != null && driverName.isNotEmpty) ...[
                       Text(
                         '  ·  ',
-                        style: DemProText.caption.copyWith(color: t.muted),
+                        style: ClientText.label.copyWith(color: t.muted),
                       ),
                       Expanded(
                         child: Text(
                           driverName,
-                          style: DemProText.caption.copyWith(color: t.muted),
+                          style: ClientText.label.copyWith(color: t.muted),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -5999,9 +5943,9 @@ class _DeliveryRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            DemProFormat.fcfa(amount),
-            style: DemProText.bodyStrong.copyWith(
-              color: DemProColors.accent,
+            formatFcfa(amount),
+            style: ClientText.bodyStrong.copyWith(
+              color: AppColors.primary,
               fontWeight: FontWeight.w800,
             ),
           ),

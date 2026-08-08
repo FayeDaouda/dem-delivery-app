@@ -16,9 +16,9 @@ import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/map_theme_provider.dart';
 import '../../deliveries/providers/orders_provider.dart';
 import '../../home_driver/navigation/map_theme.dart';
-import '../theme/dem_pro_colors.dart';
-import '../utils/dem_pro_format.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/price_format.dart';
+import '../../../core/theme/client_text.dart';
 
 class DemProOrderConfirmationScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> order;
@@ -218,23 +218,23 @@ class _DemProOrderConfirmationScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: DemProColors.bg2,
+        backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Annuler la livraison ?',
-            style: DemProText.bodyStrong.copyWith(color: DemProColors.text)),
+            style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary)),
         content: Text(
           'La commande sera annulée et aucun montant ne sera débité.',
-          style: DemProText.body.copyWith(color: DemProColors.muted),
+          style: ClientText.body.copyWith(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text('Continuer d\'attendre',
-                style: DemProText.body.copyWith(color: DemProColors.accent)),
+                style: ClientText.body.copyWith(color: AppColors.primary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Annuler', style: DemProText.body.copyWith(color: DemProColors.danger)),
+            child: Text('Annuler', style: ClientText.body.copyWith(color: AppColors.error)),
           ),
         ],
       ),
@@ -277,7 +277,7 @@ class _DemProOrderConfirmationScreenState
     return PopScope(
       canPop: false,
       child: Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
           // ── Carte ────────────────────────────────────────────────────────
@@ -301,7 +301,7 @@ class _DemProOrderConfirmationScreenState
                       Polyline(
                         polylineId: const PolylineId('route'),
                         points: _routePoints,
-                        color: DemProColors.accent,
+                        color: AppColors.primary,
                         width: 4,
                       ),
                     }
@@ -329,7 +329,7 @@ class _DemProOrderConfirmationScreenState
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [DemProColors.bg.withValues(alpha: 0.9), Colors.transparent],
+                  colors: [AppColors.background.withValues(alpha: 0.9), Colors.transparent],
                 ),
               ),
             ),
@@ -356,15 +356,15 @@ class _DemProOrderConfirmationScreenState
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: DemProColors.bg2.withValues(alpha: 0.92),
+                  color: AppColors.surface.withValues(alpha: 0.92),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.timer_outlined, color: DemProColors.accent, size: 13),
+                  const Icon(Icons.timer_outlined, color: AppColors.primary, size: 13),
                   const SizedBox(width: 5),
                   Text(_waitLabel,
-                      style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
+                      style: ClientText.label.copyWith(color: AppColors.primary, fontWeight: FontWeight.w700)),
                 ]),
               ),
             ]),
@@ -377,7 +377,7 @@ class _DemProOrderConfirmationScreenState
               padding: EdgeInsets.fromLTRB(
                   20, 24, 20, MediaQuery.of(context).padding.bottom + 20),
               decoration: BoxDecoration(
-                color: DemProColors.bg2,
+                color: AppColors.surface,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
               ),
@@ -408,12 +408,12 @@ class _DemProOrderConfirmationScreenState
 
       Text(
         'Recherche d\'un livreur…',
-        style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 18),
+        style: ClientText.title.copyWith(color: AppColors.textPrimary, fontSize: 18),
       ),
       const SizedBox(height: 6),
       Text(
         'Nous cherchons le livreur le plus proche',
-        style: DemProText.body.copyWith(color: DemProColors.muted),
+        style: ClientText.body.copyWith(color: AppColors.textSecondary),
       ),
       const SizedBox(height: 20),
 
@@ -423,11 +423,11 @@ class _DemProOrderConfirmationScreenState
 
       // ── Prix ───────────────────────────────────────────────────────────
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.payments_outlined, color: DemProColors.muted, size: 14),
+        const Icon(Icons.payments_outlined, color: AppColors.textSecondary, size: 14),
         const SizedBox(width: 6),
         Text(
-          DemProFormat.fcfa(price.toInt()),
-          style: DemProText.subtitle.copyWith(color: DemProColors.text),
+          formatFcfa(price.toInt()),
+          style: ClientText.subtitle.copyWith(color: AppColors.textPrimary),
         ),
       ]),
       const SizedBox(height: 20),
@@ -438,20 +438,20 @@ class _DemProOrderConfirmationScreenState
         child: TextButton(
           onPressed: _cancelling ? null : _cancel,
           style: TextButton.styleFrom(
-            foregroundColor: DemProColors.danger,
+            foregroundColor: AppColors.error,
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: DemProColors.danger.withValues(alpha: 0.27)),
+              side: BorderSide(color: AppColors.error.withValues(alpha: 0.27)),
             ),
           ),
           child: _cancelling
               ? const SizedBox(
                   width: 18, height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: DemProColors.danger))
+                      strokeWidth: 2, color: AppColors.error))
               : Text('Annuler la commande',
-                  style: DemProText.body.copyWith(fontWeight: FontWeight.w600)),
+                  style: ClientText.body.copyWith(fontWeight: FontWeight.w600)),
         ),
       ),
     ]);
@@ -459,16 +459,16 @@ class _DemProOrderConfirmationScreenState
 
   Widget _buildTimedOut() {
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.hourglass_empty_rounded, color: DemProColors.warning, size: 48),
+      const Icon(Icons.hourglass_empty_rounded, color: AppColors.warning, size: 48),
       const SizedBox(height: 12),
       Text(
         'Aucun livreur disponible',
-        style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 17),
+        style: ClientText.title.copyWith(color: AppColors.textPrimary, fontSize: 17),
       ),
       const SizedBox(height: 6),
       Text(
         'La demande reste active. Continuer d\'attendre ou annuler.',
-        style: DemProText.body.copyWith(color: DemProColors.muted),
+        style: ClientText.body.copyWith(color: AppColors.textSecondary),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 20),
@@ -477,12 +477,12 @@ class _DemProOrderConfirmationScreenState
           child: OutlinedButton(
             onPressed: _cancel,
             style: OutlinedButton.styleFrom(
-              foregroundColor: DemProColors.danger,
-              side: BorderSide(color: DemProColors.danger.withValues(alpha: 0.27)),
+              foregroundColor: AppColors.error,
+              side: BorderSide(color: AppColors.error.withValues(alpha: 0.27)),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text('Annuler', style: DemProText.body.copyWith(fontWeight: FontWeight.w600)),
+            child: Text('Annuler', style: ClientText.body.copyWith(fontWeight: FontWeight.w600)),
           ),
         ),
         const SizedBox(width: 12),
@@ -490,12 +490,12 @@ class _DemProOrderConfirmationScreenState
           child: ElevatedButton(
             onPressed: () => setState(() { _timedOut = false; _waitSec = 0; }),
             style: ElevatedButton.styleFrom(
-              backgroundColor: DemProColors.accent,
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text('Continuer', style: DemProText.body.copyWith(fontWeight: FontWeight.w600)),
+            child: Text('Continuer', style: ClientText.body.copyWith(fontWeight: FontWeight.w600)),
           ),
         ),
       ]),
@@ -516,11 +516,11 @@ class _MapBtn extends StatelessWidget {
     child: Container(
       width: 40, height: 40,
       decoration: BoxDecoration(
-        color: DemProColors.bg2.withValues(alpha: 0.9),
+        color: AppColors.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Icon(icon, color: DemProColors.text, size: 20),
+      child: Icon(icon, color: AppColors.textPrimary, size: 20),
     ),
   );
 }
@@ -534,16 +534,16 @@ class _RouteRow extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
-      color: DemProColors.bg3,
+      color: AppColors.card,
       borderRadius: BorderRadius.circular(12),
     ),
     child: Column(children: [
       Row(children: [
-        const Icon(Icons.radio_button_on, color: DemProColors.success, size: 13),
+        const Icon(Icons.radio_button_on, color: AppColors.success, size: 13),
         const SizedBox(width: 10),
         Expanded(
           child: Text(pickup,
-              style: DemProText.body.copyWith(color: DemProColors.text),
+              style: ClientText.body.copyWith(color: AppColors.textPrimary),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ]),
@@ -551,15 +551,15 @@ class _RouteRow extends StatelessWidget {
         padding: const EdgeInsets.only(left: 6, top: 3, bottom: 3),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Container(width: 1.5, height: 10, color: DemProColors.divider),
+          child: Container(width: 1.5, height: 10, color: AppColors.card),
         ),
       ),
       Row(children: [
-        const Icon(Icons.location_on, color: DemProColors.danger, size: 13),
+        const Icon(Icons.location_on, color: AppColors.error, size: 13),
         const SizedBox(width: 10),
         Expanded(
           child: Text(delivery,
-              style: DemProText.body.copyWith(color: DemProColors.text),
+              style: ClientText.body.copyWith(color: AppColors.textPrimary),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ]),
@@ -584,7 +584,7 @@ class _RadarPainter extends CustomPainter {
       canvas.drawCircle(
         center, r,
         Paint()
-          ..color = DemProColors.accent.withValues(alpha: alpha)
+          ..color = AppColors.primary.withValues(alpha: alpha)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.5,
       );
@@ -592,16 +592,16 @@ class _RadarPainter extends CustomPainter {
 
     canvas.drawCircle(
       center, 14,
-      Paint()..color = DemProColors.accent.withValues(alpha: 0.2),
+      Paint()..color = AppColors.primary.withValues(alpha: 0.2),
     );
     canvas.drawCircle(
       center, 14,
       Paint()
-        ..color = DemProColors.accent
+        ..color = AppColors.primary
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
-    canvas.drawCircle(center, 5, Paint()..color = DemProColors.accent);
+    canvas.drawCircle(center, 5, Paint()..color = AppColors.primary);
   }
 
   @override

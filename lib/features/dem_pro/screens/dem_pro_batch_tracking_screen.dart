@@ -7,9 +7,9 @@ import '../../../core/api/api_client.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../deliveries/data/orders_repository.dart';
 import '../data/dem_pro_repository.dart';
-import '../theme/dem_pro_colors.dart';
-import '../utils/dem_pro_format.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/price_format.dart';
+import '../../../core/theme/client_text.dart';
 
 // ── Helpers statut batch ──────────────────────────────────────────────────────
 
@@ -24,13 +24,13 @@ String _batchStatusLabel(String s) => switch (s) {
 };
 
 Color _batchStatusColor(String s) => switch (s) {
-  'PENDING' => DemProColors.warning,
-  'ACCEPTED' => DemProColors.accent,
-  'IN_PROGRESS' => DemProColors.accent,
-  'COMPLETED' => DemProColors.success,
-  'CANCELLED' => DemProColors.danger,
-  'SCHEDULED' => DemProColors.muted,
-  _ => DemProColors.muted,
+  'PENDING' => AppColors.warning,
+  'ACCEPTED' => AppColors.primary,
+  'IN_PROGRESS' => AppColors.primary,
+  'COMPLETED' => AppColors.successLight,
+  'CANCELLED' => AppColors.error,
+  'SCHEDULED' => AppColors.textMuted,
+  _ => AppColors.textMuted,
 };
 
 String _stopStatusLabel(String s) => switch (s) {
@@ -44,11 +44,11 @@ String _stopStatusLabel(String s) => switch (s) {
 };
 
 Color _stopStatusColor(String s) => switch (s) {
-  'DELIVERED' => DemProColors.success,
-  'CANCELLED' => DemProColors.danger,
-  'IN_TRANSIT' => DemProColors.accent,
-  'PICKED_UP' => DemProColors.accent,
-  _ => DemProColors.muted,
+  'DELIVERED' => AppColors.successLight,
+  'CANCELLED' => AppColors.error,
+  'IN_TRANSIT' => AppColors.primary,
+  'PICKED_UP' => AppColors.primary,
+  _ => AppColors.textMuted,
 };
 
 bool _stopDone(String s) => s == 'DELIVERED';
@@ -97,7 +97,6 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
 
   Map<String, dynamic>? _batch;
   bool _loading = true;
-  bool _dark = true;
   Timer? _pollTimer;
 
   @override
@@ -136,7 +135,6 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
     }
   }
 
-  _T get t => _T(_dark);
 
   // Notation du livreur — existait déjà pour une commande DEM Pro seule
   // (dem_pro_order_tracking_screen.dart:_showCompletionDialog) mais pas pour
@@ -151,7 +149,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
       barrierDismissible: false,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: DemProColors.bg2,
+          backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -162,27 +160,27 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: DemProColors.success.withValues(alpha: 0.15),
+                  color: AppColors.successLight.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.check_rounded,
-                  color: DemProColors.success,
+                  color: AppColors.successLight,
                   size: 36,
                 ),
               ),
               const SizedBox(height: 16),
               Text(
                 'Tournée terminée !',
-                style: DemProText.title.copyWith(
-                  color: DemProColors.text,
+                style: ClientText.title.copyWith(
+                  color: AppColors.textDark,
                   fontSize: 18,
                 ),
               ),
               const SizedBox(height: 20),
               Text(
                 'Notez le livreur',
-                style: DemProText.subtitle.copyWith(color: DemProColors.text),
+                style: ClientText.subtitle.copyWith(color: AppColors.textDark),
               ),
               const SizedBox(height: 10),
               Row(
@@ -196,8 +194,8 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                       child: Icon(
                         star <= selectedRating ? Icons.star : Icons.star_border,
                         color: star <= selectedRating
-                            ? DemProColors.ratingGold
-                            : DemProColors.muted,
+                            ? AppColors.ratingGold
+                            : AppColors.textMuted,
                         size: 32,
                       ),
                     ),
@@ -220,7 +218,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                     if (mounted) _load();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: DemProColors.accent,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -229,7 +227,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                   ),
                   child: Text(
                     'Envoyer',
-                    style: DemProText.body.copyWith(
+                    style: ClientText.body.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -242,7 +240,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                   onPressed: () => Navigator.pop(ctx),
                   child: Text(
                     'Passer',
-                    style: DemProText.body.copyWith(color: DemProColors.muted),
+                    style: ClientText.body.copyWith(color: AppColors.textMuted),
                   ),
                 ),
               ),
@@ -255,31 +253,22 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = this.t;
     return Scaffold(
-      backgroundColor: t.scaffoldBg,
+      backgroundColor: AppColors.lightBg,
       appBar: AppBar(
-        backgroundColor: t.scaffoldBg,
+        backgroundColor: AppColors.lightBg,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: t.text, size: 18),
+          icon: Icon(Icons.arrow_back_ios_new, color: AppColors.textDark, size: 18),
           onPressed: () => context.pop(),
         ),
         title: Text(
           'Suivi de tournée',
-          style: DemProText.title.copyWith(color: t.text, fontSize: 17),
+          style: ClientText.title.copyWith(color: AppColors.textDark, fontSize: 17),
         ),
         actions: [
           IconButton(
-            icon: Icon(
-              _dark ? Icons.wb_sunny_outlined : Icons.dark_mode_outlined,
-              color: t.muted,
-              size: 20,
-            ),
-            onPressed: () => setState(() => _dark = !_dark),
-          ),
-          IconButton(
-            icon: Icon(Icons.refresh, color: DemProColors.accent, size: 22),
+            icon: Icon(Icons.refresh, color: AppColors.primary, size: 22),
             tooltip: 'Rafraîchir',
             onPressed: () => _load(),
           ),
@@ -287,22 +276,22 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
         ],
       ),
       body: _loading && _batch == null
-          ? Center(child: CircularProgressIndicator(color: DemProColors.accent))
+          ? Center(child: CircularProgressIndicator(color: AppColors.primary))
           : _batch == null
-          ? _buildError(t)
-          : _buildContent(t),
+          ? _buildError()
+          : _buildContent(),
     );
   }
 
-  Widget _buildError(_T t) => Center(
+  Widget _buildError() => Center(
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.error_outline, color: t.muted, size: 44),
+        Icon(Icons.error_outline, color: AppColors.textMuted, size: 44),
         const SizedBox(height: 14),
         Text(
           'Impossible de charger la tournée.',
-          style: DemProText.subtitle.copyWith(color: t.text, fontSize: 15),
+          style: ClientText.subtitle.copyWith(color: AppColors.textDark, fontSize: 15),
         ),
         const SizedBox(height: 12),
         GestureDetector(
@@ -310,12 +299,12 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
-              color: DemProColors.accent,
+              color: AppColors.primary,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
               'Réessayer',
-              style: DemProText.bodyStrong.copyWith(color: Colors.white),
+              style: ClientText.bodyStrong.copyWith(color: Colors.white),
             ),
           ),
         ),
@@ -323,7 +312,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
     ),
   );
 
-  Widget _buildContent(_T t) {
+  Widget _buildContent() {
     final batch = _batch!;
     final status = batch['status'] as String? ?? 'PENDING';
     final orders =
@@ -345,8 +334,8 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
         lastStop['rating'] == null;
 
     return RefreshIndicator(
-      color: DemProColors.accent,
-      backgroundColor: t.cardBg,
+      color: AppColors.primary,
+      backgroundColor: Colors.white,
       onRefresh: _load,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -379,7 +368,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                       const SizedBox(width: 8),
                       Text(
                         _batchStatusLabel(status),
-                        style: DemProText.subtitle.copyWith(color: statusColor),
+                        style: ClientText.subtitle.copyWith(color: statusColor),
                       ),
                       const Spacer(),
                       if (_loading)
@@ -402,15 +391,15 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                         value: orders.isEmpty
                             ? 0
                             : deliveredCount / orders.length,
-                        backgroundColor: t.cardBg3,
-                        color: DemProColors.success,
+                        backgroundColor: AppColors.lightFill,
+                        color: AppColors.successLight,
                         minHeight: 6,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       '$deliveredCount / ${orders.length} arrêts livrés',
-                      style: DemProText.caption.copyWith(color: t.muted),
+                      style: ClientText.label.copyWith(color: AppColors.textMuted),
                     ),
                   ],
                 ],
@@ -419,15 +408,15 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
             const SizedBox(height: 16),
 
             // ── Livreur ─────────────────────────────────────────────────────
-            _SectionLabel(label: 'LIVREUR', t: t),
+            _SectionLabel(label: 'LIVREUR'),
             const SizedBox(height: 10),
             if (driver != null)
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: t.cardBg,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: t.border),
+                  border: Border.all(color: AppColors.lightBorder),
                 ),
                 child: Column(
                   children: [
@@ -437,14 +426,14 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                           width: 42,
                           height: 42,
                           decoration: BoxDecoration(
-                            color: DemProColors.accent.withValues(alpha: 0.12),
+                            color: AppColors.primary.withValues(alpha: 0.12),
                             shape: BoxShape.circle,
                           ),
                           child: Center(
                             child: Text(
                               _initials(driver['name'] as String?),
-                              style: DemProText.subtitle.copyWith(
-                                color: DemProColors.accent,
+                              style: ClientText.subtitle.copyWith(
+                                color: AppColors.primary,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
@@ -457,14 +446,14 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                             children: [
                               Text(
                                 driver['name'] as String? ?? 'Livreur DEM',
-                                style: DemProText.subtitle.copyWith(
-                                  color: t.text,
+                                style: ClientText.subtitle.copyWith(
+                                  color: AppColors.textDark,
                                 ),
                               ),
                               Text(
                                 'Moto · DEM',
-                                style: DemProText.caption.copyWith(
-                                  color: t.muted,
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.textMuted,
                                 ),
                               ),
                             ],
@@ -476,7 +465,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: DemProColors.success.withValues(alpha: 0.12),
+                            color: AppColors.successLight.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -484,14 +473,14 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                             children: [
                               const Icon(
                                 Icons.check_circle,
-                                color: DemProColors.success,
+                                color: AppColors.successLight,
                                 size: 13,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 'Assigné',
-                                style: DemProText.caption.copyWith(
-                                  color: DemProColors.success,
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.successLight,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -541,10 +530,10 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: DemProColors.warning.withValues(alpha: 0.06),
+                  color: AppColors.warning.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: DemProColors.warning.withValues(alpha: 0.2),
+                    color: AppColors.warning.withValues(alpha: 0.2),
                   ),
                 ),
                 child: Row(
@@ -560,14 +549,14 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                             height: 42,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: DemProColors.warning.withValues(
+                              color: AppColors.warning.withValues(
                                 alpha: 0.5,
                               ),
                             ),
                           ),
                           const Icon(
                             Icons.two_wheeler,
-                            color: DemProColors.warning,
+                            color: AppColors.warning,
                             size: 20,
                           ),
                         ],
@@ -580,12 +569,12 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                         children: [
                           Text(
                             'Recherche en cours…',
-                            style: DemProText.subtitle.copyWith(color: t.text),
+                            style: ClientText.subtitle.copyWith(color: AppColors.textDark),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             'Nous cherchons le livreur le plus proche pour votre tournée.',
-                            style: DemProText.caption.copyWith(color: t.muted),
+                            style: ClientText.label.copyWith(color: AppColors.textMuted),
                           ),
                         ],
                       ),
@@ -596,27 +585,27 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
             const SizedBox(height: 20),
 
             // ── Récupération ────────────────────────────────────────────────
-            _SectionLabel(label: 'RÉCUPÉRATION', t: t),
+            _SectionLabel(label: 'RÉCUPÉRATION'),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: t.cardBg,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: t.border),
+                border: Border.all(color: AppColors.lightBorder),
               ),
               child: Row(
                 children: [
                   const Icon(
                     Icons.radio_button_on,
-                    color: DemProColors.accent,
+                    color: AppColors.primary,
                     size: 16,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       pickup,
-                      style: DemProText.body.copyWith(color: t.text),
+                      style: ClientText.body.copyWith(color: AppColors.textDark),
                     ),
                   ),
                 ],
@@ -627,7 +616,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
             // ── Arrêts ──────────────────────────────────────────────────────
             Row(
               children: [
-                _SectionLabel(label: 'ARRÊTS', t: t),
+                _SectionLabel(label: 'ARRÊTS'),
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -635,13 +624,13 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.12),
+                    color: AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     '${orders.length}',
-                    style: DemProText.caption.copyWith(
-                      color: DemProColors.accent,
+                    style: ClientText.label.copyWith(
+                      color: AppColors.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -652,9 +641,9 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
 
             Container(
               decoration: BoxDecoration(
-                color: t.cardBg,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: t.border),
+                border: Border.all(color: AppColors.lightBorder),
               ),
               child: Column(
                 children: [
@@ -663,7 +652,6 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                       index: i,
                       order: orders[i],
                       isLast: i == orders.length - 1,
-                      t: t,
                     ),
                 ],
               ),
@@ -674,7 +662,7 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: t.cardBg2,
+                color: AppColors.lightFill,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
@@ -684,13 +672,13 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                     children: [
                       Text(
                         'Coût total',
-                        style: DemProText.caption.copyWith(color: t.muted),
+                        style: ClientText.label.copyWith(color: AppColors.textMuted),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        DemProFormat.fcfa(total),
-                        style: DemProText.headline.copyWith(
-                          color: t.text,
+                        formatFcfa(total),
+                        style: ClientText.headline.copyWith(
+                          color: AppColors.textDark,
                           fontSize: 20,
                           fontWeight: FontWeight.w900,
                         ),
@@ -704,12 +692,12 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                       children: [
                         Text(
                           'Créée le',
-                          style: DemProText.caption.copyWith(color: t.muted),
+                          style: ClientText.label.copyWith(color: AppColors.textMuted),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           _fmtDate(createdAt),
-                          style: DemProText.caption.copyWith(color: t.muted),
+                          style: ClientText.label.copyWith(color: AppColors.textMuted),
                         ),
                       ],
                     ),
@@ -728,9 +716,9 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                     driver['id'] as String,
                   ),
                   icon: const Icon(Icons.star_outline, size: 18),
-                  label: Text('Noter le livreur', style: DemProText.subtitle),
+                  label: Text('Noter le livreur', style: ClientText.subtitle.copyWith(color: AppColors.textDark)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: DemProColors.accent,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -751,13 +739,13 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                   onPressed: () =>
                       context.push('/dem-pro/batch/create', extra: batch),
                   icon: const Icon(Icons.replay, size: 18),
-                  label: const Text(
+                  label: Text(
                     'Recommander cette tournée',
-                    style: DemProText.subtitle,
+                    style: ClientText.subtitle.copyWith(color: AppColors.textDark),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: DemProColors.accent,
-                    side: const BorderSide(color: DemProColors.accent),
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -771,12 +759,12 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => context.go(appStartupNotifier.homeForRole),
                   icon: const Icon(Icons.home_outlined, size: 20),
-                  label: const Text(
+                  label: Text(
                     'Retour au tableau de bord',
-                    style: DemProText.subtitle,
+                    style: ClientText.subtitle.copyWith(color: AppColors.textDark),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: DemProColors.accent,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -807,12 +795,10 @@ class _StopRow extends StatelessWidget {
   final int index;
   final Map<String, dynamic> order;
   final bool isLast;
-  final _T t;
   const _StopRow({
     required this.index,
     required this.order,
     required this.isLast,
-    required this.t,
   });
 
   @override
@@ -830,7 +816,7 @@ class _StopRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: isLast
             ? null
-            : Border(bottom: BorderSide(color: t.border, width: 0.8)),
+            : Border(bottom: BorderSide(color: AppColors.lightBorder, width: 0.8)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -841,21 +827,21 @@ class _StopRow extends StatelessWidget {
             height: 28,
             decoration: BoxDecoration(
               color: done
-                  ? DemProColors.success.withValues(alpha: 0.15)
-                  : DemProColors.accent.withValues(alpha: 0.10),
+                  ? AppColors.successLight.withValues(alpha: 0.15)
+                  : AppColors.primary.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
               child: done
                   ? const Icon(
                       Icons.check,
-                      color: DemProColors.success,
+                      color: AppColors.successLight,
                       size: 14,
                     )
                   : Text(
                       '${index + 1}',
-                      style: DemProText.caption.copyWith(
-                        color: t.muted,
+                      style: ClientText.label.copyWith(
+                        color: AppColors.textMuted,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -868,10 +854,10 @@ class _StopRow extends StatelessWidget {
               children: [
                 Text(
                   address,
-                  style: DemProText.bodyStrong.copyWith(
-                    color: t.text,
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.textDark,
                     decoration: done ? TextDecoration.lineThrough : null,
-                    decorationColor: t.muted,
+                    decorationColor: AppColors.textMuted,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -880,7 +866,7 @@ class _StopRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     receiver,
-                    style: DemProText.caption.copyWith(color: t.muted),
+                    style: ClientText.label.copyWith(color: AppColors.textMuted),
                   ),
                 ],
               ],
@@ -898,14 +884,14 @@ class _StopRow extends StatelessWidget {
                 ),
                 child: Text(
                   stopLabel,
-                  style: DemProText.micro.copyWith(color: stopColor),
+                  style: ClientText.micro.copyWith(color: stopColor),
                 ),
               ),
               if (price > 0) ...[
                 const SizedBox(height: 4),
                 Text(
-                  DemProFormat.fcfa(price),
-                  style: DemProText.caption.copyWith(color: t.muted),
+                  formatFcfa(price),
+                  style: ClientText.label.copyWith(color: AppColors.textMuted),
                 ),
               ],
             ],
@@ -920,14 +906,13 @@ class _StopRow extends StatelessWidget {
 
 class _SectionLabel extends StatelessWidget {
   final String label;
-  final _T t;
-  const _SectionLabel({required this.label, required this.t});
+  const _SectionLabel({required this.label});
 
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: DemProText.caption.copyWith(
-      color: t.muted,
+    style: ClientText.label.copyWith(
+      color: AppColors.textMuted,
       fontWeight: FontWeight.w700,
       letterSpacing: 1,
     ),
@@ -950,18 +935,18 @@ class _ContactChip extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: DemProColors.accent.withValues(alpha: 0.10),
+        color: AppColors.primary.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: DemProColors.accent, size: 16),
+          Icon(icon, color: AppColors.primary, size: 16),
           const SizedBox(width: 6),
           Text(
             label,
-            style: DemProText.bodyStrong.copyWith(color: DemProColors.accent),
+            style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
           ),
         ],
       ),
@@ -969,17 +954,3 @@ class _ContactChip extends StatelessWidget {
   );
 }
 
-// ── Palette thème (calque DemProHomeScreen) ───────────────────────────────────
-
-class _T {
-  final bool dark;
-  const _T(this.dark);
-
-  Color get scaffoldBg => dark ? DemProColors.bg : DemProColors.lightBg;
-  Color get cardBg => dark ? DemProColors.bg2 : Colors.white;
-  Color get cardBg2 => dark ? DemProColors.bg3 : DemProColors.lightCardBg2;
-  Color get cardBg3 => dark ? DemProColors.bg4 : DemProColors.lightCardBg3;
-  Color get border => dark ? DemProColors.bg3 : DemProColors.lightBorder;
-  Color get text => dark ? DemProColors.text : DemProColors.lightText;
-  Color get muted => dark ? DemProColors.muted : DemProColors.lightMuted;
-}

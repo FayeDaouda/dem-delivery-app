@@ -4,8 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/utils/dem_layout.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 import '../widgets/dem_pro_button.dart';
 import '../widgets/dem_pro_support_tile.dart';
 
@@ -40,7 +40,7 @@ class _State extends State<DemProPendingScreen> {
   Widget build(BuildContext context) {
     final isTablet = DemLayout.isTablet(context);
     return Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.lightBg,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (ctx, constraints) => SingleChildScrollView(
@@ -71,14 +71,14 @@ class _State extends State<DemProPendingScreen> {
                         height: isTablet ? 100.0 : 80.0,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(colors: [
-                            DemProColors.accent.withValues(alpha: 0.18),
-                            DemProColors.accent.withValues(alpha: 0.06),
+                            AppColors.primary.withValues(alpha: 0.18),
+                            AppColors.primary.withValues(alpha: 0.06),
                           ]),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.hourglass_top_rounded,
-                          color: DemProColors.accent,
+                          color: AppColors.primary,
                           size: isTablet ? 50.0 : 40.0,
                         ),
                       ),
@@ -88,23 +88,23 @@ class _State extends State<DemProPendingScreen> {
                       Text(
                         'Votre profil DEM Pro\nest en cours d\'examen',
                         textAlign: TextAlign.center,
-                        style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: isTablet ? 24.0 : 20.0, height: 1.25),
+                        style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: isTablet ? 24.0 : 20.0, height: 1.25),
                       ),
                       const SizedBox(height: 10),
                       Text(
                         'Votre demande a été envoyée avec succès.\nNotre équipe l\'examinera sous 24 à 48h.',
                         textAlign: TextAlign.center,
-                        style: DemProText.body.copyWith(color: DemProColors.muted, height: 1.55),
+                        style: ClientText.body.copyWith(color: AppColors.textMuted, height: 1.55),
                       ),
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.notifications_active_outlined, color: DemProColors.accent, size: 14),
+                          Icon(Icons.notifications_active_outlined, color: AppColors.primary, size: 14),
                           const SizedBox(width: 6),
                           Text(
                             'Vous serez notifié dès que votre demande sera traitée.',
-                            style: DemProText.caption.copyWith(color: DemProColors.accent),
+                            style: ClientText.label.copyWith(color: AppColors.primary),
                           ),
                         ],
                       ),
@@ -119,16 +119,16 @@ class _State extends State<DemProPendingScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: DemProColors.accent.withValues(alpha: 0.06),
+                          color: AppColors.primary.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: DemProColors.accent.withValues(alpha: 0.18)),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'Une fois validé, vous pourrez :',
-                              style: DemProText.bodyStrong.copyWith(color: DemProColors.text),
+                              style: ClientText.bodyStrong.copyWith(color: AppColors.textDark),
                             ),
                             const SizedBox(height: 10),
                             const _Bullet('Commander vos livraisons en quelques tapotements'),
@@ -159,13 +159,13 @@ class _State extends State<DemProPendingScreen> {
                                   children: [
                                     const Icon(
                                       Icons.check_circle_outline,
-                                      color: DemProColors.success,
+                                      color: AppColors.successLight,
                                       size: 14,
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
                                       _checkedText!,
-                                      style: DemProText.caption.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w400),
+                                      style: ClientText.label.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w400),
                                     ),
                                   ],
                                 ),
@@ -180,8 +180,8 @@ class _State extends State<DemProPendingScreen> {
                         icon: const Icon(Icons.help_outline, size: 15),
                         label: const Text('Besoin d\'aide ? Contacter le support'),
                         style: TextButton.styleFrom(
-                          foregroundColor: DemProColors.muted,
-                          textStyle: DemProText.caption.copyWith(fontWeight: FontWeight.w400),
+                          foregroundColor: AppColors.textMuted,
+                          textStyle: ClientText.label.copyWith(fontWeight: FontWeight.w400),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -191,8 +191,8 @@ class _State extends State<DemProPendingScreen> {
                         icon: const Icon(Icons.logout, size: 15),
                         label: const Text('Se déconnecter'),
                         style: TextButton.styleFrom(
-                          foregroundColor: DemProColors.danger,
-                          textStyle: DemProText.caption.copyWith(fontWeight: FontWeight.w400),
+                          foregroundColor: AppColors.error,
+                          textStyle: ClientText.label.copyWith(fontWeight: FontWeight.w400),
                         ),
                       ),
                     ],
@@ -209,7 +209,7 @@ class _State extends State<DemProPendingScreen> {
   void _showSupportDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: DemProColors.bg2,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -219,13 +219,13 @@ class _State extends State<DemProPendingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.support_agent_outlined, color: DemProColors.accent, size: 36),
+              const Icon(Icons.support_agent_outlined, color: AppColors.primary, size: 36),
               const SizedBox(height: 10),
-              Text('Support DEM', style: DemProText.title.copyWith(fontSize: 17)),
+              Text('Support DEM', style: ClientText.title.copyWith(fontSize: 17)),
               const SizedBox(height: 6),
               Text(
                 'Pour toute question sur votre demande DEM Pro',
-                style: DemProText.body.copyWith(color: DemProColors.muted),
+                style: ClientText.body.copyWith(color: AppColors.textMuted),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -272,21 +272,21 @@ class _State extends State<DemProPendingScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: DemProColors.bg2,
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Se déconnecter ?', style: DemProText.title),
+        title: Text('Se déconnecter ?', style: ClientText.title.copyWith(color: AppColors.textDark)),
         content: Text(
           'Vous pourrez vous reconnecter avec le même numéro.',
-          style: DemProText.body.copyWith(color: DemProColors.muted),
+          style: ClientText.body.copyWith(color: AppColors.textMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Annuler', style: DemProText.body.copyWith(color: DemProColors.muted)),
+            child: Text('Annuler', style: ClientText.body.copyWith(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Déconnexion', style: DemProText.body.copyWith(color: DemProColors.danger, fontWeight: FontWeight.w600)),
+            child: Text('Déconnexion', style: ClientText.body.copyWith(color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -314,7 +314,7 @@ class _DemLogo extends StatelessWidget {
       const SizedBox(height: 6),
       Text(
         'delivery express mobility',
-        style: DemProText.micro.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w400, letterSpacing: 0.5),
+        style: ClientText.micro.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w400, letterSpacing: 0.5),
       ),
     ],
   );
@@ -331,21 +331,21 @@ class _StepBadge extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
     decoration: BoxDecoration(
       gradient: LinearGradient(colors: [
-        DemProColors.accent.withValues(alpha: 0.12),
-        DemProColors.accent.withValues(alpha: 0.06),
+        AppColors.primary.withValues(alpha: 0.12),
+        AppColors.primary.withValues(alpha: 0.06),
       ]),
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: DemProColors.accent.withValues(alpha: 0.30)),
+      border: Border.all(color: AppColors.primary.withValues(alpha: 0.30)),
     ),
     child: Row(mainAxisSize: MainAxisSize.min, children: [
       Container(
         width: 8, height: 8,
-        decoration: const BoxDecoration(color: DemProColors.accent, shape: BoxShape.circle),
+        decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
       ),
       const SizedBox(width: 8),
       Text(
         label,
-        style: DemProText.caption.copyWith(color: DemProColors.text, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+        style: ClientText.label.copyWith(color: AppColors.textDark, fontWeight: FontWeight.w700, letterSpacing: 0.3),
       ),
     ]),
   );
@@ -364,14 +364,14 @@ class _Timeline extends StatelessWidget {
       Expanded(
         child: Padding(
           padding: const EdgeInsets.only(top: 15),
-          child: Container(height: 2, color: DemProColors.accent),
+          child: Container(height: 2, color: AppColors.primary),
         ),
       ),
       const _TimelineStep(label: 'En examen', active: true),
       Expanded(
         child: Padding(
           padding: const EdgeInsets.only(top: 15),
-          child: Container(height: 2, color: DemProColors.bg4),
+          child: Container(height: 2, color: AppColors.lightBorder),
         ),
       ),
       const _TimelineStep(label: 'Validé'),
@@ -393,13 +393,13 @@ class _TimelineStep extends StatelessWidget {
         width: 32, height: 32,
         decoration: BoxDecoration(
           color: done
-              ? DemProColors.accent
+              ? AppColors.primary
               : active
-                  ? DemProColors.accent.withValues(alpha: 0.12)
-                  : DemProColors.bg3,
+                  ? AppColors.primary.withValues(alpha: 0.12)
+                  : AppColors.lightFill,
           shape: BoxShape.circle,
           border: Border.all(
-            color: (done || active) ? DemProColors.accent : DemProColors.bg4,
+            color: (done || active) ? AppColors.primary : AppColors.lightBorder,
             width: active ? 2 : 1,
           ),
         ),
@@ -408,13 +408,13 @@ class _TimelineStep extends StatelessWidget {
               ? const Icon(Icons.check, color: Colors.white, size: 16)
               : active
                   ? const _PulsingDot()
-                  : const Icon(Icons.circle_outlined, color: DemProColors.muted, size: 12),
+                  : const Icon(Icons.circle_outlined, color: AppColors.textMuted, size: 12),
         ),
       ),
       const SizedBox(height: 6),
       Text(
         label,
-        style: DemProText.caption.copyWith(fontWeight: (done || active) ? FontWeight.w600 : FontWeight.w400, color: (done || active) ? DemProColors.text : DemProColors.muted),
+        style: ClientText.label.copyWith(fontWeight: (done || active) ? FontWeight.w600 : FontWeight.w400, color: (done || active) ? AppColors.textDark : AppColors.textMuted),
       ),
     ],
   );
@@ -453,7 +453,7 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
     opacity: _anim,
     child: Container(
       width: 10, height: 10,
-      decoration: const BoxDecoration(color: DemProColors.accent, shape: BoxShape.circle),
+      decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
     ),
   );
 }
@@ -467,8 +467,8 @@ class _Bullet extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('• ', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
-      Expanded(child: Text(text, style: DemProText.body.copyWith(color: DemProColors.muted))),
+      Text('• ', style: ClientText.bodyStrong.copyWith(color: AppColors.primary)),
+      Expanded(child: Text(text, style: ClientText.body.copyWith(color: AppColors.textMuted))),
     ]),
   );
 }

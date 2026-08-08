@@ -4,8 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_client.dart';
 import '../data/dem_pro_repository.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 
 String _timeAgo(String? iso) {
   if (iso == null) return '';
@@ -25,9 +25,9 @@ String _statusLabel(String s) => switch (s) {
 };
 
 Color _statusColor(String s) => switch (s) {
-  'CONFIRMED' => DemProColors.success,
-  'REJECTED'  => DemProColors.danger,
-  _           => DemProColors.warning,
+  'CONFIRMED' => AppColors.successLight,
+  'REJECTED'  => AppColors.error,
+  _           => AppColors.warning,
 };
 
 /// Demandes de livraison soumises par des clients finaux (sans compte DEM)
@@ -72,21 +72,21 @@ class _DemProOrderRequestsScreenState extends State<DemProOrderRequestsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: DemProColors.bg2,
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Rejeter cette demande ?', style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 17)),
+        title: Text('Rejeter cette demande ?', style: ClientText.title.copyWith(color: AppColors.textDark, fontSize: 17)),
         content: Text(
           '${request['customerName']} ne sera pas notifié — vous pourrez lui répondre directement si besoin.',
-          style: DemProText.body.copyWith(color: DemProColors.muted),
+          style: ClientText.body.copyWith(color: AppColors.textMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Annuler', style: DemProText.body.copyWith(color: DemProColors.muted)),
+            child: Text('Annuler', style: ClientText.body.copyWith(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Rejeter', style: DemProText.body.copyWith(color: DemProColors.danger)),
+            child: Text('Rejeter', style: ClientText.body.copyWith(color: AppColors.error)),
           ),
         ],
       ),
@@ -110,7 +110,7 @@ class _DemProOrderRequestsScreenState extends State<DemProOrderRequestsScreen> {
     final processed = _requests.where((r) => r['status'] != 'PENDING').toList();
 
     return Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.lightBg,
       body: SafeArea(
         child: Column(children: [
           Padding(
@@ -118,35 +118,35 @@ class _DemProOrderRequestsScreenState extends State<DemProOrderRequestsScreen> {
             child: Row(children: [
               IconButton(
                 onPressed: () => context.pop(),
-                icon: const Icon(Icons.arrow_back_ios_new, color: DemProColors.text, size: 18),
+                icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textDark, size: 18),
               ),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Demandes reçues', style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: 20)),
-                  Text('Via votre lien de commande', style: DemProText.caption.copyWith(color: DemProColors.muted)),
+                  Text('Demandes reçues', style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: 20)),
+                  Text('Via votre lien de commande', style: ClientText.label.copyWith(color: AppColors.textMuted)),
                 ]),
               ),
               if (pending.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: DemProColors.warning.withValues(alpha: 0.15),
+                    color: AppColors.warning.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text('${pending.length}', style: DemProText.caption.copyWith(color: DemProColors.warning, fontWeight: FontWeight.w800)),
+                  child: Text('${pending.length}', style: ClientText.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.w800)),
                 ),
             ]),
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: DemProColors.accent))
+                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : _loadFailed
                     ? _buildError()
                     : (pending.isEmpty && processed.isEmpty)
                         ? _buildEmpty()
                         : RefreshIndicator(
-                            color: DemProColors.accent,
-                            backgroundColor: DemProColors.bg2,
+                            color: AppColors.primary,
+                            backgroundColor: Colors.white,
                             onRefresh: _load,
                             child: ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
@@ -183,15 +183,15 @@ class _DemProOrderRequestsScreenState extends State<DemProOrderRequestsScreen> {
       const SizedBox(height: 70),
       Container(
         width: 80, height: 80,
-        decoration: BoxDecoration(color: DemProColors.accent.withValues(alpha: 0.10), shape: BoxShape.circle),
-        child: const Icon(Icons.link_rounded, color: DemProColors.accent, size: 36),
+        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.10), shape: BoxShape.circle),
+        child: const Icon(Icons.link_rounded, color: AppColors.primary, size: 36),
       ),
       const SizedBox(height: 20),
-      Text('Aucune demande pour l\'instant', style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 17), textAlign: TextAlign.center),
+      Text('Aucune demande pour l\'instant', style: ClientText.title.copyWith(color: AppColors.textDark, fontSize: 17), textAlign: TextAlign.center),
       const SizedBox(height: 8),
       Text(
         'Partagez votre lien de commande depuis l\'accueil pour que vos clients puissent commander directement.',
-        style: DemProText.body.copyWith(color: DemProColors.muted, height: 1.5),
+        style: ClientText.body.copyWith(color: AppColors.textMuted, height: 1.5),
         textAlign: TextAlign.center,
       ),
     ],
@@ -199,16 +199,16 @@ class _DemProOrderRequestsScreenState extends State<DemProOrderRequestsScreen> {
 
   Widget _buildError() => Center(
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.wifi_off_rounded, color: DemProColors.muted, size: 36),
+      const Icon(Icons.wifi_off_rounded, color: AppColors.textMuted, size: 36),
       const SizedBox(height: 12),
-      Text('Impossible de charger les demandes', style: DemProText.subtitle.copyWith(color: DemProColors.text, fontSize: 15)),
+      Text('Impossible de charger les demandes', style: ClientText.subtitle.copyWith(color: AppColors.textDark, fontSize: 15)),
       const SizedBox(height: 16),
       GestureDetector(
         onTap: _load,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(10)),
-          child: Text('Réessayer', style: DemProText.button.copyWith(fontSize: 14)),
+          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
+          child: Text('Réessayer', style: ClientText.button.copyWith(fontSize: 14)),
         ),
       ),
     ]),
@@ -221,7 +221,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: DemProText.caption.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w700, letterSpacing: 1),
+    style: ClientText.label.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w700, letterSpacing: 1),
   );
 }
 
@@ -245,49 +245,49 @@ class _RequestCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: DemProColors.bg2,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isPending ? DemProColors.warning.withValues(alpha: 0.3) : DemProColors.bg3),
+        border: Border.all(color: isPending ? AppColors.warning.withValues(alpha: 0.3) : AppColors.lightFill),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
             width: 38, height: 38,
-            decoration: BoxDecoration(color: DemProColors.accent.withValues(alpha: 0.12), shape: BoxShape.circle),
-            child: const Icon(Icons.person_outline, color: DemProColors.accent, size: 18),
+            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
+            child: const Icon(Icons.person_outline, color: AppColors.primary, size: 18),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(name, style: DemProText.subtitle.copyWith(color: DemProColors.text), maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(_timeAgo(request['createdAt'] as String?), style: DemProText.caption.copyWith(color: DemProColors.muted)),
+              Text(name, style: ClientText.subtitle.copyWith(color: AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(_timeAgo(request['createdAt'] as String?), style: ClientText.label.copyWith(color: AppColors.textMuted)),
             ]),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(color: _statusColor(status).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-            child: Text(_statusLabel(status), style: DemProText.caption.copyWith(color: _statusColor(status), fontWeight: FontWeight.w700)),
+            child: Text(_statusLabel(status), style: ClientText.label.copyWith(color: _statusColor(status), fontWeight: FontWeight.w700)),
           ),
         ]),
         const SizedBox(height: 12),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Icon(Icons.location_on_outlined, color: DemProColors.muted, size: 15),
+          const Icon(Icons.location_on_outlined, color: AppColors.textMuted, size: 15),
           const SizedBox(width: 8),
-          Expanded(child: Text(address, style: DemProText.body.copyWith(color: DemProColors.text))),
+          Expanded(child: Text(address, style: ClientText.body.copyWith(color: AppColors.textDark))),
         ]),
         if (landmark != null && landmark.isNotEmpty) ...[
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.only(left: 23),
-            child: Text(landmark, style: DemProText.caption.copyWith(color: DemProColors.muted)),
+            child: Text(landmark, style: ClientText.label.copyWith(color: AppColors.textMuted)),
           ),
         ],
         if (notes != null && notes.isNotEmpty) ...[
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(10)),
-            child: Text(notes, style: DemProText.caption.copyWith(color: DemProColors.text)),
+            decoration: BoxDecoration(color: AppColors.lightFill, borderRadius: BorderRadius.circular(10)),
+            child: Text(notes, style: ClientText.label.copyWith(color: AppColors.textDark)),
           ),
         ],
         if (phone != null && phone.isNotEmpty) ...[
@@ -295,9 +295,9 @@ class _RequestCard extends StatelessWidget {
           GestureDetector(
             onTap: () => launchUrl(Uri.parse('tel:$phone')),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.phone_outlined, color: DemProColors.accent, size: 14),
+              const Icon(Icons.phone_outlined, color: AppColors.primary, size: 14),
               const SizedBox(width: 6),
-              Text(phone, style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w700)),
+              Text(phone, style: ClientText.label.copyWith(color: AppColors.primary, fontWeight: FontWeight.w700)),
             ]),
           ),
         ],
@@ -308,12 +308,12 @@ class _RequestCard extends StatelessWidget {
               child: OutlinedButton(
                 onPressed: onReject,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: DemProColors.danger,
-                  side: BorderSide(color: DemProColors.danger.withValues(alpha: 0.4)),
+                  foregroundColor: AppColors.error,
+                  side: BorderSide(color: AppColors.error.withValues(alpha: 0.4)),
                   padding: const EdgeInsets.symmetric(vertical: 11),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('Rejeter', style: DemProText.bodyStrong),
+                child: Text('Rejeter', style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)),
               ),
             ),
             const SizedBox(width: 10),
@@ -322,13 +322,13 @@ class _RequestCard extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: onConfirm,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: DemProColors.accent,
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 11),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('Confirmer', style: DemProText.bodyStrong),
+                child: Text('Confirmer', style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)),
               ),
             ),
           ]),

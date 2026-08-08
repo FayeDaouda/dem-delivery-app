@@ -20,9 +20,8 @@ import '../../home_driver/navigation/map_theme.dart';
 import '../../home_driver/navigation/route_tracker.dart';
 import '../../../shared/widgets/operator_picker_sheet.dart';
 import '../../../shared/widgets/samirpay_payment_sheet.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
-import '../utils/dem_pro_format.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 
 class DemProOrderTrackingScreen extends ConsumerStatefulWidget {
   final String orderId;
@@ -286,30 +285,30 @@ class _DemProOrderTrackingScreenState
       barrierDismissible: false,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: DemProColors.bg2,
+          backgroundColor: AppColors.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(
               width: 64, height: 64,
               decoration: BoxDecoration(
-                color: DemProColors.success.withValues(alpha: 0.15),
+                color: AppColors.success.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_rounded, color: DemProColors.success, size: 36),
+              child: const Icon(Icons.check_rounded, color: AppColors.success, size: 36),
             ),
             const SizedBox(height: 16),
             Text(
               'Livraison effectuée !',
-              style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 18),
+              style: ClientText.title.copyWith(color: AppColors.textPrimary, fontSize: 18),
             ),
             const SizedBox(height: 8),
             Text(
               'Commande #${widget.orderId.substring(0, 8).toUpperCase()} livrée avec succès.',
-              style: DemProText.body.copyWith(color: DemProColors.muted),
+              style: ClientText.body.copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
-            Text('Notez le livreur', style: DemProText.subtitle.copyWith(color: DemProColors.text)),
+            Text('Notez le livreur', style: ClientText.subtitle.copyWith(color: AppColors.textPrimary)),
             const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -321,7 +320,7 @@ class _DemProOrderTrackingScreenState
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Icon(
                       star <= selectedRating ? Icons.star : Icons.star_border,
-                      color: star <= selectedRating ? DemProColors.ratingGold : DemProColors.muted,
+                      color: star <= selectedRating ? AppColors.ratingGold : AppColors.textSecondary,
                       size: 32,
                     ),
                   ),
@@ -348,12 +347,12 @@ class _DemProOrderTrackingScreenState
                   context.pushReplacement('/dem-pro/orders/receipt', extra: _order ?? widget.initialOrder ?? {});
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: DemProColors.accent,
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('Voir le reçu', style: DemProText.body.copyWith(fontWeight: FontWeight.w600)),
+                child: Text('Voir le reçu', style: ClientText.body.copyWith(fontWeight: FontWeight.w600)),
               ),
             ),
             const SizedBox(height: 8),
@@ -364,7 +363,7 @@ class _DemProOrderTrackingScreenState
                   Navigator.pop(context);
                   context.go('/dem-pro/home');
                 },
-                child: Text('Retour au tableau de bord', style: DemProText.body.copyWith(color: DemProColors.muted)),
+                child: Text('Retour au tableau de bord', style: ClientText.body.copyWith(color: AppColors.textSecondary)),
               ),
             ),
           ]),
@@ -424,12 +423,12 @@ class _DemProOrderTrackingScreenState
       (addr == null || addr.isEmpty) ? '—' : addr.split(',').first.trim();
 
   (String, Color) get _statusInfo => switch (_status) {
-    'ACCEPTED'   => ('Livreur en route vers le colis', DemProColors.accent),
-    'PICKED_UP'  => ('Colis récupéré · En route', DemProColors.warning),
-    'IN_TRANSIT' => ('En route vers la destination', DemProColors.accent),
-    'DELIVERED'  => ('Livraison effectuée', DemProColors.success),
-    'CANCELLED'  => ('Commande annulée', DemProColors.danger),
-    _            => ('En attente', DemProColors.muted),
+    'ACCEPTED'   => ('Livreur en route vers le colis', AppColors.primary),
+    'PICKED_UP'  => ('Colis récupéré · En route', AppColors.warning),
+    'IN_TRANSIT' => ('En route vers la destination', AppColors.primary),
+    'DELIVERED'  => ('Livraison effectuée', AppColors.success),
+    'CANCELLED'  => ('Commande annulée', AppColors.error),
+    _            => ('En attente', AppColors.textSecondary),
   };
 
   String? get _distanceInfo {
@@ -499,7 +498,7 @@ class _DemProOrderTrackingScreenState
     final initTarget = _driverPos ?? LatLng((pLat + dLat) / 2, (pLng + dLng) / 2);
 
     return Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
           // ── Carte ────────────────────────────────────────────────────────
@@ -517,7 +516,7 @@ class _DemProOrderTrackingScreenState
                       Polyline(
                         polylineId: const PolylineId('route'),
                         points: _displayRoute,
-                        color: DemProColors.accent,
+                        color: AppColors.primary,
                         width: 4,
                       ),
                     }
@@ -543,7 +542,7 @@ class _DemProOrderTrackingScreenState
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [DemProColors.bg.withValues(alpha: 0.9), Colors.transparent],
+                  colors: [AppColors.background.withValues(alpha: 0.9), Colors.transparent],
                 ),
               ),
             ),
@@ -576,7 +575,7 @@ class _DemProOrderTrackingScreenState
               padding: EdgeInsets.fromLTRB(
                   20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
               decoration: BoxDecoration(
-                color: DemProColors.bg2,
+                color: AppColors.surface,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 border: Border(
                     top: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
@@ -604,17 +603,17 @@ class _DemProOrderTrackingScreenState
                   child: Text(
                     statusLabel,
                     textAlign: TextAlign.center,
-                    style: DemProText.bodyStrong.copyWith(color: statusColor),
+                    style: ClientText.bodyStrong.copyWith(color: statusColor),
                   ),
                 ),
                 if (_distanceInfo != null) ...[
                   const SizedBox(height: 8),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    const Icon(Icons.near_me_outlined, color: DemProColors.accent, size: 14),
+                    const Icon(Icons.near_me_outlined, color: AppColors.primary, size: 14),
                     const SizedBox(width: 6),
                     Text(
                       _distanceInfo!,
-                      style: DemProText.bodyStrong.copyWith(color: DemProColors.accent),
+                      style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
                     ),
                   ]),
                 ],
@@ -625,13 +624,13 @@ class _DemProOrderTrackingScreenState
                   Container(
                     width: 44, height: 44,
                     decoration: BoxDecoration(
-                      color: DemProColors.accent.withValues(alpha: 0.12),
+                      color: AppColors.primary.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Center(
                       child: Text(
                         _initials(dName),
-                        style: DemProText.title.copyWith(color: DemProColors.accent, fontSize: 15),
+                        style: ClientText.title.copyWith(color: AppColors.primary, fontSize: 15),
                       ),
                     ),
                   ),
@@ -639,9 +638,9 @@ class _DemProOrderTrackingScreenState
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(dName,
-                          style: DemProText.subtitle.copyWith(color: DemProColors.text)),
+                          style: ClientText.subtitle.copyWith(color: AppColors.textPrimary)),
                       Text('Livreur DEM',
-                          style: DemProText.caption.copyWith(color: DemProColors.muted)),
+                          style: ClientText.label.copyWith(color: AppColors.textSecondary)),
                     ]),
                   ),
                 ]),
@@ -674,28 +673,28 @@ class _DemProOrderTrackingScreenState
                 // ── Prix ───────────────────────────────────────────────────
                 Row(children: [
                   const Icon(Icons.payments_outlined,
-                      color: DemProColors.muted, size: 14),
+                      color: AppColors.textSecondary, size: 14),
                   const SizedBox(width: 6),
                   Builder(builder: (context) {
                     final charge = clientChargeFor(o);
                     if (charge >= price.round()) {
                       return Text(
-                        DemProFormat.fcfa(price.toInt()),
-                        style: DemProText.subtitle.copyWith(color: DemProColors.text),
+                        formatFcfa(price.toInt()),
+                        style: ClientText.subtitle.copyWith(color: AppColors.textPrimary),
                       );
                     }
                     return Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(DemProFormat.fcfa(price.toInt()),
-                          style: DemProText.caption.copyWith(decoration: TextDecoration.lineThrough)),
+                      Text(formatFcfa(price.toInt()),
+                          style: ClientText.label.copyWith(decoration: TextDecoration.lineThrough)),
                       const SizedBox(width: 6),
-                      Text(DemProFormat.fcfa(charge),
-                          style: DemProText.subtitle.copyWith(color: DemProColors.success)),
+                      Text(formatFcfa(charge),
+                          style: ClientText.subtitle.copyWith(color: AppColors.success)),
                     ]);
                   }),
                   const Spacer(),
                   Text(
                     '#${widget.orderId.substring(0, 8).toUpperCase()}',
-                    style: DemProText.caption.copyWith(color: DemProColors.muted),
+                    style: ClientText.label.copyWith(color: AppColors.textSecondary),
                   ),
                 ]),
                 if (needsMerchantPayment) ...[
@@ -705,9 +704,9 @@ class _DemProOrderTrackingScreenState
                     child: ElevatedButton.icon(
                       onPressed: _payOnline,
                       icon: const Icon(Icons.payments_outlined, size: 16),
-                      label: Text('Payer via SamirPay', style: DemProText.bodyStrong.copyWith(color: Colors.white)),
+                      label: Text('Payer via SamirPay', style: ClientText.bodyStrong.copyWith(color: Colors.white)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: DemProColors.accent,
+                        backgroundColor: AppColors.primary,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -720,10 +719,10 @@ class _DemProOrderTrackingScreenState
                   child: OutlinedButton.icon(
                     onPressed: _shareOrder,
                     icon: const Icon(Icons.share_outlined, size: 16),
-                    label: const Text('Partager le suivi', style: DemProText.bodyStrong),
+                    label: Text('Partager le suivi', style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary)),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: DemProColors.accent,
-                      side: BorderSide(color: DemProColors.accent.withValues(alpha: 0.4)),
+                      foregroundColor: AppColors.primary,
+                      side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -757,11 +756,11 @@ class _MapBtn extends StatelessWidget {
     child: Container(
       width: 40, height: 40,
       decoration: BoxDecoration(
-        color: DemProColors.bg2.withValues(alpha: 0.9),
+        color: AppColors.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Icon(icon, color: DemProColors.text, size: 20),
+      child: Icon(icon, color: AppColors.textPrimary, size: 20),
     ),
   );
 }
@@ -778,15 +777,15 @@ class _ActionChip extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: DemProColors.accent.withValues(alpha: 0.10),
+        color: AppColors.primary.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
       ),
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, color: DemProColors.accent, size: 14),
+        Icon(icon, color: AppColors.primary, size: 14),
         const SizedBox(width: 5),
         Text(label,
-            style: DemProText.caption.copyWith(color: DemProColors.accent)),
+            style: ClientText.label.copyWith(color: AppColors.primary)),
       ]),
     ),
   );
@@ -801,16 +800,16 @@ class _AddressCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
-      color: DemProColors.bg3,
+      color: AppColors.card,
       borderRadius: BorderRadius.circular(12),
     ),
     child: Column(children: [
       Row(children: [
-        const Icon(Icons.radio_button_on, color: DemProColors.success, size: 13),
+        const Icon(Icons.radio_button_on, color: AppColors.success, size: 13),
         const SizedBox(width: 10),
         Expanded(
           child: Text(pickup,
-              style: DemProText.body.copyWith(color: DemProColors.text),
+              style: ClientText.body.copyWith(color: AppColors.textPrimary),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ]),
@@ -818,15 +817,15 @@ class _AddressCard extends StatelessWidget {
         padding: const EdgeInsets.only(left: 6, top: 3, bottom: 3),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Container(width: 1.5, height: 10, color: DemProColors.divider),
+          child: Container(width: 1.5, height: 10, color: AppColors.card),
         ),
       ),
       Row(children: [
-        const Icon(Icons.location_on, color: DemProColors.danger, size: 13),
+        const Icon(Icons.location_on, color: AppColors.error, size: 13),
         const SizedBox(width: 10),
         Expanded(
           child: Text(delivery,
-              style: DemProText.body.copyWith(color: DemProColors.text),
+              style: ClientText.body.copyWith(color: AppColors.textPrimary),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ]),

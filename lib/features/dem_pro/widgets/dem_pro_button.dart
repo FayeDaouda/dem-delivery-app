@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 import '../../../core/utils/dem_layout.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
 
 /// Bouton CTA plein/contour standard de l'espace DEM Pro — remplace les
 /// implémentations dupliquées à l'identique dans plusieurs écrans
@@ -25,7 +25,7 @@ class DemProButton extends StatelessWidget {
     required this.onTap,
     this.icon,
     this.loading = false,
-    this.color = DemProColors.accent,
+    this.color = AppColors.primary,
     this.outlined = false,
   });
 
@@ -59,7 +59,7 @@ class DemProButton extends StatelessWidget {
                           Icon(icon, color: foreground, size: 20),
                           const SizedBox(width: 10),
                         ],
-                        Text(label, style: DemProText.button.copyWith(color: foreground)),
+                        Text(label, style: ClientText.button.copyWith(color: foreground)),
                       ],
                     ),
             ),

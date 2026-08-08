@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
-import '../utils/dem_pro_format.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
+import '../../../core/utils/price_format.dart';
 
 class DemProReceiptScreen extends StatelessWidget {
   final Map<String, dynamic> order;
@@ -51,21 +51,20 @@ class DemProReceiptScreen extends StatelessWidget {
     final deliveredAt = order['deliveredAt'] as String?;
     final isDelivered = status == 'DELIVERED';
 
-    final t = _T(true);
 
     return Scaffold(
-      backgroundColor: t.bg,
+      backgroundColor: AppColors.lightBg,
       appBar: AppBar(
-        backgroundColor: t.bg,
+        backgroundColor: AppColors.lightBg,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: t.text),
+          icon: Icon(Icons.arrow_back, color: AppColors.textDark),
           onPressed: () => context.pop(),
         ),
-        title: Text('Reçu #$orderId', style: DemProText.title.copyWith(color: t.text)),
+        title: Text('Reçu #$orderId', style: ClientText.title.copyWith(color: AppColors.textDark)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined, color: DemProColors.accent),
+            icon: const Icon(Icons.share_outlined, color: AppColors.primary),
             onPressed: () => _shareReceipt(orderId, pickup, delivery, total),
           ),
         ],
@@ -79,55 +78,55 @@ class DemProReceiptScreen extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 20),
             decoration: BoxDecoration(
-              color: (isDelivered ? DemProColors.success : DemProColors.danger).withValues(alpha: 0.08),
+              color: (isDelivered ? AppColors.successLight : AppColors.error).withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: (isDelivered ? DemProColors.success : DemProColors.danger).withValues(alpha: 0.2)),
+              border: Border.all(color: (isDelivered ? AppColors.successLight : AppColors.error).withValues(alpha: 0.2)),
             ),
             child: Column(children: [
               Icon(
                 isDelivered ? Icons.check_circle : Icons.cancel,
-                color: isDelivered ? DemProColors.success : DemProColors.danger,
+                color: isDelivered ? AppColors.successLight : AppColors.error,
                 size: 40,
               ),
               const SizedBox(height: 8),
               Text(
                 isDelivered ? 'Livraison effectuée' : 'Commande annulée',
-                style: DemProText.title.copyWith(color: isDelivered ? DemProColors.success : DemProColors.danger),
+                style: ClientText.title.copyWith(color: isDelivered ? AppColors.successLight : AppColors.error),
               ),
               const SizedBox(height: 4),
-              Text(_fmtDate(deliveredAt ?? createdAt), style: DemProText.caption.copyWith(color: t.muted)),
+              Text(_fmtDate(deliveredAt ?? createdAt), style: ClientText.label.copyWith(color: AppColors.textMuted)),
             ]),
           ),
           const SizedBox(height: 20),
 
           // ── Trajet ─────────────────────────────────────────────────────
-          _Card(t: t, children: [
-            _CardHeader(icon: Icons.route_outlined, label: 'TRAJET', t: t),
+          _Card( children: [
+            _CardHeader(icon: Icons.route_outlined, label: 'TRAJET'),
             const SizedBox(height: 12),
             Row(children: [
-              const Icon(Icons.radio_button_on, color: DemProColors.success, size: 12),
+              const Icon(Icons.radio_button_on, color: AppColors.successLight, size: 12),
               const SizedBox(width: 10),
-              Expanded(child: Text(pickup, style: DemProText.body.copyWith(color: t.text))),
+              Expanded(child: Text(pickup, style: ClientText.body.copyWith(color: AppColors.textDark))),
             ]),
             Padding(
               padding: const EdgeInsets.only(left: 5, top: 2, bottom: 2),
-              child: Container(width: 1.5, height: 12, color: t.border),
+              child: Container(width: 1.5, height: 12, color: AppColors.lightBorder),
             ),
             Row(children: [
-              const Icon(Icons.location_on, color: DemProColors.danger, size: 12),
+              const Icon(Icons.location_on, color: AppColors.error, size: 12),
               const SizedBox(width: 10),
-              Expanded(child: Text(delivery, style: DemProText.body.copyWith(color: t.text))),
+              Expanded(child: Text(delivery, style: ClientText.body.copyWith(color: AppColors.textDark))),
             ]),
             if (receiverName != null || receiverPhone != null) ...[
               const SizedBox(height: 10),
-              Divider(color: t.border, height: 1),
+              Divider(color: AppColors.lightBorder, height: 1),
               const SizedBox(height: 10),
               Row(children: [
-                Icon(Icons.person_outline, color: t.muted, size: 14),
+                Icon(Icons.person_outline, color: AppColors.textMuted, size: 14),
                 const SizedBox(width: 8),
                 Text(
                   [if (receiverName != null) receiverName, if (receiverPhone != null) receiverPhone].join(' · '),
-                  style: DemProText.caption.copyWith(color: t.muted),
+                  style: ClientText.label.copyWith(color: AppColors.textMuted),
                 ),
               ]),
             ],
@@ -138,10 +137,10 @@ class DemProReceiptScreen extends StatelessWidget {
           if (description != null && description.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: _Card(t: t, children: [
-                _CardHeader(icon: Icons.inventory_2_outlined, label: 'COLIS', t: t),
+              child: _Card( children: [
+                _CardHeader(icon: Icons.inventory_2_outlined, label: 'COLIS'),
                 const SizedBox(height: 8),
-                Text(description, style: DemProText.body.copyWith(color: t.text)),
+                Text(description, style: ClientText.body.copyWith(color: AppColors.textDark)),
               ]),
             ),
 
@@ -149,8 +148,8 @@ class DemProReceiptScreen extends StatelessWidget {
           if (items.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: _Card(t: t, children: [
-                _CardHeader(icon: Icons.shopping_bag_outlined, label: 'ARTICLES', t: t),
+              child: _Card( children: [
+                _CardHeader(icon: Icons.shopping_bag_outlined, label: 'ARTICLES'),
                 const SizedBox(height: 10),
                 ...items.map((item) {
                   final name = item['name'] as String? ?? '—';
@@ -159,23 +158,23 @@ class DemProReceiptScreen extends StatelessWidget {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(children: [
-                      Text('•  ', style: DemProText.caption.copyWith(color: t.muted)),
-                      Expanded(child: Text('$name × $qty', style: DemProText.body.copyWith(color: t.text))),
+                      Text('•  ', style: ClientText.label.copyWith(color: AppColors.textMuted)),
+                      Expanded(child: Text('$name × $qty', style: ClientText.body.copyWith(color: AppColors.textDark))),
                       if (itemPrice != null)
-                        Text(DemProFormat.fcfa(itemPrice * qty), style: DemProText.caption.copyWith(color: t.text)),
+                        Text(formatFcfa(itemPrice * qty), style: ClientText.label.copyWith(color: AppColors.textDark)),
                     ]),
                   );
                 }),
                 if (items.any((i) => i['price'] != null)) ...[
                   const SizedBox(height: 6),
-                  Divider(color: t.border, height: 1),
+                  Divider(color: AppColors.lightBorder, height: 1),
                   const SizedBox(height: 6),
                   Row(children: [
-                    Text('Total articles', style: DemProText.caption.copyWith(color: t.muted)),
+                    Text('Total articles', style: ClientText.label.copyWith(color: AppColors.textMuted)),
                     const Spacer(),
                     Text(
-                      DemProFormat.fcfa(items.fold<int>(0, (sum, i) => sum + ((i['price'] as num?)?.toInt() ?? 0) * ((i['quantity'] as num?)?.toInt() ?? 1))),
-                      style: DemProText.bodyStrong.copyWith(color: DemProColors.success),
+                      formatFcfa(items.fold<int>(0, (sum, i) => sum + ((i['price'] as num?)?.toInt() ?? 0) * ((i['quantity'] as num?)?.toInt() ?? 1))),
+                      style: ClientText.bodyStrong.copyWith(color: AppColors.successLight),
                     ),
                   ]),
                 ],
@@ -186,52 +185,52 @@ class DemProReceiptScreen extends StatelessWidget {
           if (driverName != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: _Card(t: t, children: [
-                _CardHeader(icon: Icons.two_wheeler, label: 'LIVREUR', t: t),
+              child: _Card( children: [
+                _CardHeader(icon: Icons.two_wheeler, label: 'LIVREUR'),
                 const SizedBox(height: 8),
                 Row(children: [
                   CircleAvatar(
                     radius: 18,
-                    backgroundColor: DemProColors.accent.withValues(alpha: 0.12),
-                    child: Text(driverName[0].toUpperCase(), style: DemProText.bodyStrong.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800)),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                    child: Text(driverName[0].toUpperCase(), style: ClientText.bodyStrong.copyWith(color: AppColors.primary, fontWeight: FontWeight.w800)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(driverName, style: DemProText.bodyStrong.copyWith(color: t.text)),
+                    Text(driverName, style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)),
                     if (vehiclePlate != null)
-                      Text(vehiclePlate, style: DemProText.caption.copyWith(color: t.muted)),
+                      Text(vehiclePlate, style: ClientText.label.copyWith(color: AppColors.textMuted)),
                   ])),
                 ]),
               ]),
             ),
 
           // ── Détail prix ────────────────────────────────────────────────
-          _Card(t: t, children: [
-            _CardHeader(icon: Icons.receipt_long_outlined, label: 'FACTURATION', t: t),
+          _Card( children: [
+            _CardHeader(icon: Icons.receipt_long_outlined, label: 'FACTURATION'),
             const SizedBox(height: 12),
-            _PriceRow(label: 'Course', value: DemProFormat.fcfa(price), t: t),
-            if (demFee > 0) _PriceRow(label: 'Frais DEM', value: DemProFormat.fcfa(demFee), t: t),
+            _PriceRow(label: 'Course', value: formatFcfa(price)),
+            if (demFee > 0) _PriceRow(label: 'Frais DEM', value: formatFcfa(demFee)),
             const SizedBox(height: 8),
-            Divider(color: t.border, height: 1),
+            Divider(color: AppColors.lightBorder, height: 1),
             const SizedBox(height: 8),
             Row(children: [
-              Text('Total', style: DemProText.title.copyWith(color: t.text, fontSize: 15)),
+              Text('Total', style: ClientText.title.copyWith(color: AppColors.textDark, fontSize: 15)),
               const Spacer(),
-              Text(DemProFormat.fcfa(total), style: DemProText.headline.copyWith(color: DemProColors.accent, fontSize: 18)),
+              Text(formatFcfa(total), style: ClientText.headline.copyWith(color: AppColors.primary, fontSize: 18)),
             ]),
           ]),
           const SizedBox(height: 12),
 
           // ── Détails ────────────────────────────────────────────────────
-          _Card(t: t, children: [
-            _CardHeader(icon: Icons.info_outline, label: 'DÉTAILS', t: t),
+          _Card( children: [
+            _CardHeader(icon: Icons.info_outline, label: 'DÉTAILS'),
             const SizedBox(height: 8),
-            _DetailRow(label: 'N° commande', value: '#$orderId', t: t),
-            _DetailRow(label: 'Créée le', value: _fmtDate(createdAt), t: t),
+            _DetailRow(label: 'N° commande', value: '#$orderId'),
+            _DetailRow(label: 'Créée le', value: _fmtDate(createdAt)),
             if (deliveredAt != null)
-              _DetailRow(label: 'Livrée le', value: _fmtDate(deliveredAt), t: t),
+              _DetailRow(label: 'Livrée le', value: _fmtDate(deliveredAt)),
             if (deliveredAt != null)
-              _DetailRow(label: 'Durée', value: _duration(createdAt, deliveredAt), t: t),
+              _DetailRow(label: 'Durée', value: _duration(createdAt, deliveredAt)),
           ]),
           const SizedBox(height: 24),
 
@@ -242,10 +241,10 @@ class DemProReceiptScreen extends StatelessWidget {
             child: OutlinedButton.icon(
               onPressed: () => context.push('/dem-pro/orders/create', extra: order),
               icon: const Icon(Icons.replay, size: 18),
-              label: const Text('Recommander cette commande', style: DemProText.subtitle),
+              label: Text('Recommander cette commande', style: ClientText.subtitle.copyWith(color: AppColors.textDark)),
               style: OutlinedButton.styleFrom(
-                foregroundColor: DemProColors.accent,
-                side: const BorderSide(color: DemProColors.accent),
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
@@ -259,9 +258,9 @@ class DemProReceiptScreen extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () => context.push('/dem-pro/orders/create'),
               icon: const Icon(Icons.add, size: 20),
-              label: const Text('Nouvelle livraison', style: DemProText.subtitle),
+              label: Text('Nouvelle livraison', style: ClientText.subtitle.copyWith(color: AppColors.textDark)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: DemProColors.accent,
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 elevation: 0,
@@ -275,37 +274,24 @@ class DemProReceiptScreen extends StatelessWidget {
 
   void _shareReceipt(String orderId, String pickup, String delivery, num total) {
     SharePlus.instance.share(ShareParams(
-      text: 'Reçu DEM #$orderId\n$pickup → $delivery\nTotal : ${DemProFormat.fcfa(total)}\n\nMerci d\'utiliser DEM !',
+      text: 'Reçu DEM #$orderId\n$pickup → $delivery\nTotal : ${formatFcfa(total)}\n\nMerci d\'utiliser DEM !',
     ));
   }
-}
-
-// ── Theme helper ─────────────────────────────────────────────────────────────
-
-class _T {
-  final bool dark;
-  const _T(this.dark);
-  Color get bg     => dark ? DemProColors.bg    : DemProColors.lightBg;
-  Color get cardBg => dark ? DemProColors.bg2   : Colors.white;
-  Color get border => dark ? DemProColors.bg3   : DemProColors.lightBorder;
-  Color get text   => dark ? DemProColors.text  : DemProColors.lightText;
-  Color get muted  => dark ? DemProColors.muted : DemProColors.lightMuted;
 }
 
 // ── Widgets ──────────────────────────────────────────────────────────────────
 
 class _Card extends StatelessWidget {
-  final _T t;
   final List<Widget> children;
-  const _Card({required this.t, required this.children});
+  const _Card({required this.children});
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: t.cardBg,
+      color: Colors.white,
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: t.border),
+      border: Border.all(color: AppColors.lightBorder),
     ),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
   );
@@ -314,42 +300,39 @@ class _Card extends StatelessWidget {
 class _CardHeader extends StatelessWidget {
   final IconData icon;
   final String label;
-  final _T t;
-  const _CardHeader({required this.icon, required this.label, required this.t});
+  const _CardHeader({required this.icon, required this.label});
   @override
   Widget build(BuildContext context) => Row(children: [
-    Icon(icon, color: DemProColors.accent, size: 16),
+    Icon(icon, color: AppColors.primary, size: 16),
     const SizedBox(width: 8),
-    Text(label, style: DemProText.caption.copyWith(color: t.muted, fontWeight: FontWeight.w700, letterSpacing: 1)),
+    Text(label, style: ClientText.label.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w700, letterSpacing: 1)),
   ]);
 }
 
 class _PriceRow extends StatelessWidget {
   final String label, value;
-  final _T t;
-  const _PriceRow({required this.label, required this.value, required this.t});
+  const _PriceRow({required this.label, required this.value});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
-      Text(label, style: DemProText.body.copyWith(color: t.muted)),
+      Text(label, style: ClientText.body.copyWith(color: AppColors.textMuted)),
       const Spacer(),
-      Text(value, style: DemProText.bodyStrong.copyWith(color: t.text)),
+      Text(value, style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)),
     ]),
   );
 }
 
 class _DetailRow extends StatelessWidget {
   final String label, value;
-  final _T t;
-  const _DetailRow({required this.label, required this.value, required this.t});
+  const _DetailRow({required this.label, required this.value});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(children: [
-      Text(label, style: DemProText.caption.copyWith(color: t.muted)),
+      Text(label, style: ClientText.label.copyWith(color: AppColors.textMuted)),
       const Spacer(),
-      Flexible(child: Text(value, style: DemProText.caption.copyWith(color: t.text), textAlign: TextAlign.end)),
+      Flexible(child: Text(value, style: ClientText.label.copyWith(color: AppColors.textDark), textAlign: TextAlign.end)),
     ]),
   );
 }

@@ -6,8 +6,8 @@ import '../../../core/storage/auth_storage.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../../../core/widgets/network_error_widget.dart';
 import '../../profile/data/profile_repository.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 import '../widgets/dem_pro_button.dart';
 import '../widgets/dem_pro_support_tile.dart';
 
@@ -49,7 +49,7 @@ class _State extends State<DemProRejectedScreen> {
   void _showSupport(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: DemProColors.bg2,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -59,13 +59,13 @@ class _State extends State<DemProRejectedScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.support_agent_outlined, color: DemProColors.accent, size: 36),
+              const Icon(Icons.support_agent_outlined, color: AppColors.primary, size: 36),
               const SizedBox(height: 10),
-              Text('Support DEM', style: DemProText.title.copyWith(fontSize: 17)),
+              Text('Support DEM', style: ClientText.title.copyWith(fontSize: 17)),
               const SizedBox(height: 6),
               Text(
                 'Besoin de précisions sur le refus de votre demande ?',
-                style: DemProText.body.copyWith(color: DemProColors.muted),
+                style: ClientText.body.copyWith(color: AppColors.textMuted),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -106,21 +106,21 @@ class _State extends State<DemProRejectedScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: DemProColors.bg2,
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Se déconnecter ?', style: DemProText.title),
+        title: Text('Se déconnecter ?', style: ClientText.title.copyWith(color: AppColors.textDark)),
         content: Text(
           'Vous pourrez vous reconnecter avec le même numéro.',
-          style: DemProText.body.copyWith(color: DemProColors.muted),
+          style: ClientText.body.copyWith(color: AppColors.textMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Annuler', style: DemProText.body.copyWith(color: DemProColors.muted)),
+            child: Text('Annuler', style: ClientText.body.copyWith(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Déconnexion', style: DemProText.body.copyWith(color: DemProColors.danger, fontWeight: FontWeight.w600)),
+            child: Text('Déconnexion', style: ClientText.body.copyWith(color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -134,12 +134,12 @@ class _State extends State<DemProRejectedScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.lightBg,
       body: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: DemLayout.formMaxWidth(context)),
           child: _loading
-              ? const Center(child: CircularProgressIndicator(color: DemProColors.accent))
+              ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
               : _loadFailed
                   ? NetworkErrorWidget(
                       message: _error!,
@@ -159,7 +159,7 @@ class _State extends State<DemProRejectedScreen> {
                             const SizedBox(height: 6),
                             Text(
                               'delivery express mobility',
-                              style: DemProText.micro.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w400, letterSpacing: 0.5),
+                              style: ClientText.micro.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w400, letterSpacing: 0.5),
                             ),
                             const SizedBox(height: 24),
 
@@ -168,10 +168,10 @@ class _State extends State<DemProRejectedScreen> {
                               return Container(
                                 width: t ? 110.0 : 84.0, height: t ? 110.0 : 84.0,
                                 decoration: BoxDecoration(
-                                  color: DemProColors.danger.withValues(alpha: 0.12),
+                                  color: AppColors.error.withValues(alpha: 0.12),
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(Icons.cancel_outlined, color: DemProColors.danger, size: t ? 52.0 : 42.0),
+                                child: Icon(Icons.cancel_outlined, color: AppColors.error, size: t ? 52.0 : 42.0),
                               );
                             }),
                             const SizedBox(height: 24),
@@ -181,7 +181,7 @@ class _State extends State<DemProRejectedScreen> {
                               return Text(
                                 'Demande non retenue',
                                 textAlign: TextAlign.center,
-                                style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: t ? 26.0 : 22.0),
+                                style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: t ? 26.0 : 22.0),
                               );
                             }),
                             const SizedBox(height: 10),
@@ -190,7 +190,7 @@ class _State extends State<DemProRejectedScreen> {
                                   ? 'Le profil "$_businessName" n\'a pas été validé par notre équipe.'
                                   : 'Votre profil DEM Pro n\'a pas été validé par notre équipe.',
                               textAlign: TextAlign.center,
-                              style: DemProText.subtitle.copyWith(color: DemProColors.muted, fontWeight: FontWeight.w400, height: 1.5),
+                              style: ClientText.subtitle.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w400, height: 1.5),
                             ),
                             const SizedBox(height: 24),
 
@@ -199,19 +199,19 @@ class _State extends State<DemProRejectedScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: DemProColors.danger.withValues(alpha: 0.08),
+                                color: AppColors.error.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: DemProColors.danger.withValues(alpha: 0.25)),
+                                border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
                               ),
                               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                const Icon(Icons.info_outline, color: DemProColors.danger, size: 20),
+                                const Icon(Icons.info_outline, color: AppColors.error, size: 20),
                                 const SizedBox(width: 10),
                                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                   Text('Motif du refus',
-                                    style: DemProText.subtitle.copyWith(color: DemProColors.danger, fontWeight: FontWeight.w800)),
+                                    style: ClientText.subtitle.copyWith(color: AppColors.error, fontWeight: FontWeight.w800)),
                                   const SizedBox(height: 4),
                                   Text(_rejectionReason ?? 'Non précisé',
-                                    style: DemProText.body.copyWith(color: DemProColors.danger, height: 1.4)),
+                                    style: ClientText.body.copyWith(color: AppColors.error, height: 1.4)),
                                 ])),
                               ]),
                             ),
@@ -222,17 +222,17 @@ class _State extends State<DemProRejectedScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: DemProColors.accent.withValues(alpha: 0.06),
+                                color: AppColors.primary.withValues(alpha: 0.06),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: DemProColors.accent.withValues(alpha: 0.20)),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.20)),
                               ),
                               child: Row(children: [
-                                Icon(Icons.edit_outlined, color: DemProColors.accent, size: 18),
+                                Icon(Icons.edit_outlined, color: AppColors.primary, size: 18),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     'Corrigez les informations de votre profil entreprise et resoumettez votre demande.',
-                                    style: DemProText.caption.copyWith(color: DemProColors.text, fontWeight: FontWeight.w400),
+                                    style: ClientText.label.copyWith(color: AppColors.textDark, fontWeight: FontWeight.w400),
                                   ),
                                 ),
                               ]),
@@ -252,8 +252,8 @@ class _State extends State<DemProRejectedScreen> {
                               icon: const Icon(Icons.help_outline, size: 15),
                               label: const Text('Besoin d\'aide ? Contacter le support'),
                               style: TextButton.styleFrom(
-                                foregroundColor: DemProColors.muted,
-                                textStyle: DemProText.caption.copyWith(fontWeight: FontWeight.w400),
+                                foregroundColor: AppColors.textMuted,
+                                textStyle: ClientText.label.copyWith(fontWeight: FontWeight.w400),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -264,8 +264,8 @@ class _State extends State<DemProRejectedScreen> {
                               icon: const Icon(Icons.logout, size: 15),
                               label: const Text('Se déconnecter'),
                               style: TextButton.styleFrom(
-                                foregroundColor: DemProColors.danger,
-                                textStyle: DemProText.caption.copyWith(fontWeight: FontWeight.w400),
+                                foregroundColor: AppColors.error,
+                                textStyle: ClientText.label.copyWith(fontWeight: FontWeight.w400),
                               ),
                             ),
                           ],

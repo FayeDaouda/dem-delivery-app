@@ -3,9 +3,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_client.dart';
 import '../data/dem_pro_repository.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
-import '../utils/dem_pro_format.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
+import '../../../core/utils/price_format.dart';
 import '../widgets/dem_pro_button.dart';
 
 /// Catalogue de produits réutilisables — évite de retaper nom/prix à chaque
@@ -70,21 +70,21 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: DemProColors.bg2,
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Supprimer ce produit ?', style: DemProText.title.copyWith(color: DemProColors.text)),
+        title: Text('Supprimer ce produit ?', style: ClientText.title.copyWith(color: AppColors.textDark)),
         content: Text(
           'Voulez-vous supprimer "${product['name']}" de votre catalogue ?',
-          style: DemProText.body.copyWith(color: DemProColors.muted),
+          style: ClientText.body.copyWith(color: AppColors.textMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Annuler', style: DemProText.body.copyWith(color: DemProColors.muted)),
+            child: Text('Annuler', style: ClientText.body.copyWith(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Supprimer', style: DemProText.body.copyWith(color: DemProColors.danger)),
+            child: Text('Supprimer', style: ClientText.body.copyWith(color: AppColors.error)),
           ),
         ],
       ),
@@ -105,7 +105,7 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.lightBg,
       body: SafeArea(
         child: Column(children: [
 
@@ -115,12 +115,12 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
             child: Row(children: [
               IconButton(
                 onPressed: () => context.pop(),
-                icon: const Icon(Icons.arrow_back_ios_new, color: DemProColors.text, size: 18),
+                icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textDark, size: 18),
               ),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Mes produits', style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: 20)),
-                  Text('Réutilisez-les à chaque commande', style: DemProText.caption.copyWith(color: DemProColors.muted)),
+                  Text('Mes produits', style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: 20)),
+                  Text('Réutilisez-les à chaque commande', style: ClientText.label.copyWith(color: AppColors.textMuted)),
                 ]),
               ),
               IconButton(
@@ -128,10 +128,10 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
                 icon: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.12),
+                    color: AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.add, color: DemProColors.accent, size: 22),
+                  child: const Icon(Icons.add, color: AppColors.primary, size: 22),
                 ),
                 tooltip: 'Ajouter un produit',
               ),
@@ -144,20 +144,20 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Container(
                 decoration: BoxDecoration(
-                  color: DemProColors.bg2,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: DemProColors.bg4),
+                  border: Border.all(color: AppColors.lightBorder),
                 ),
                 child: TextField(
                   controller: _search,
-                  style: DemProText.body.copyWith(color: DemProColors.text, fontSize: 14),
+                  style: ClientText.body.copyWith(color: AppColors.textDark, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Rechercher un produit…',
-                    hintStyle: DemProText.body.copyWith(color: DemProColors.muted, fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, color: DemProColors.muted, size: 20),
+                    hintStyle: ClientText.body.copyWith(color: AppColors.textMuted, fontSize: 14),
+                    prefixIcon: const Icon(Icons.search, color: AppColors.textMuted, size: 20),
                     suffixIcon: _query.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.close, color: DemProColors.muted, size: 18),
+                            icon: const Icon(Icons.close, color: AppColors.textMuted, size: 18),
                             onPressed: () { _search.clear(); setState(() => _query = ''); },
                           )
                         : null,
@@ -171,12 +171,12 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
           // ── Contenu ───────────────────────────────────────────────────────
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: DemProColors.accent))
+                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : _loadFailed
                     ? _buildError()
                     : RefreshIndicator(
-                        color: DemProColors.accent,
-                        backgroundColor: DemProColors.bg2,
+                        color: AppColors.primary,
+                        backgroundColor: Colors.white,
                         onRefresh: _load,
                         child: _filtered.isEmpty ? _buildEmpty() : _buildList(),
                       ),
@@ -205,20 +205,20 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
       Container(
         width: 80, height: 80,
         margin: const EdgeInsets.symmetric(horizontal: 0),
-        decoration: BoxDecoration(color: DemProColors.accent.withValues(alpha: 0.10), shape: BoxShape.circle),
-        child: const Icon(Icons.inventory_2_outlined, color: DemProColors.accent, size: 36),
+        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.10), shape: BoxShape.circle),
+        child: const Icon(Icons.inventory_2_outlined, color: AppColors.primary, size: 36),
       ),
       const SizedBox(height: 20),
       Text(
         _query.isNotEmpty ? 'Aucun résultat pour "$_query"' : 'Aucun produit enregistré',
-        style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 17),
+        style: ClientText.title.copyWith(color: AppColors.textDark, fontSize: 17),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 8),
       if (_query.isEmpty)
         Text(
           'Ajoutez les produits que vous vendez le plus souvent pour les retrouver instantanément à chaque nouvelle commande.',
-          style: DemProText.body.copyWith(color: DemProColors.muted, height: 1.5),
+          style: ClientText.body.copyWith(color: AppColors.textMuted, height: 1.5),
           textAlign: TextAlign.center,
         ),
       if (_query.isEmpty) ...[
@@ -227,11 +227,11 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
           onTap: () => _showForm(),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.add, color: Colors.white, size: 18),
               const SizedBox(width: 8),
-              Text('Ajouter un produit', style: DemProText.button.copyWith(fontSize: 14)),
+              Text('Ajouter un produit', style: ClientText.button.copyWith(fontSize: 14)),
             ]),
           ),
         ),
@@ -241,16 +241,16 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
 
   Widget _buildError() => Center(
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.wifi_off_rounded, color: DemProColors.muted, size: 36),
+      const Icon(Icons.wifi_off_rounded, color: AppColors.textMuted, size: 36),
       const SizedBox(height: 12),
-      Text('Impossible de charger le catalogue', style: DemProText.subtitle.copyWith(color: DemProColors.text, fontSize: 15)),
+      Text('Impossible de charger le catalogue', style: ClientText.subtitle.copyWith(color: AppColors.textDark, fontSize: 15)),
       const SizedBox(height: 16),
       GestureDetector(
         onTap: _load,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(10)),
-          child: Text('Réessayer', style: DemProText.button.copyWith(fontSize: 14)),
+          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
+          child: Text('Réessayer', style: ClientText.button.copyWith(fontSize: 14)),
         ),
       ),
     ]),
@@ -274,9 +274,9 @@ class _ProductCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: DemProColors.bg2,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DemProColors.bg3),
+        border: Border.all(color: AppColors.lightFill),
       ),
       child: Material(
         color: Colors.transparent,
@@ -289,39 +289,39 @@ class _ProductCard extends StatelessWidget {
               Container(
                 width: 42, height: 42,
                 decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.10),
+                  color: AppColors.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.inventory_2_outlined, color: DemProColors.accent, size: 20),
+                child: const Icon(Icons.inventory_2_outlined, color: AppColors.primary, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(name, style: DemProText.subtitle.copyWith(color: DemProColors.text), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(name, style: ClientText.subtitle.copyWith(color: AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 3),
                   Row(children: [
                     Text(
-                      price != null ? DemProFormat.fcfa(price) : 'Prix non défini',
-                      style: DemProText.caption.copyWith(color: price != null ? DemProColors.success : DemProColors.muted),
+                      price != null ? formatFcfa(price) : 'Prix non défini',
+                      style: ClientText.label.copyWith(color: price != null ? AppColors.successLight : AppColors.textMuted),
                     ),
                     if (usageCount > 0) ...[
-                      Text('  ·  ', style: DemProText.caption.copyWith(color: DemProColors.muted)),
-                      Text('$usageCount vente${usageCount > 1 ? 's' : ''}', style: DemProText.caption.copyWith(color: DemProColors.muted)),
+                      Text('  ·  ', style: ClientText.label.copyWith(color: AppColors.textMuted)),
+                      Text('$usageCount vente${usageCount > 1 ? 's' : ''}', style: ClientText.label.copyWith(color: AppColors.textMuted)),
                     ],
                   ]),
                 ]),
               ),
               PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: DemProColors.muted, size: 20),
-                color: DemProColors.bg3,
+                icon: const Icon(Icons.more_vert, color: AppColors.textMuted, size: 20),
+                color: AppColors.lightFill,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 onSelected: (v) {
                   if (v == 'edit') onEdit();
                   if (v == 'delete') onDelete();
                 },
                 itemBuilder: (_) => [
-                  PopupMenuItem(value: 'edit', child: _menuItem(Icons.edit_outlined, 'Modifier', DemProColors.text)),
-                  PopupMenuItem(value: 'delete', child: _menuItem(Icons.delete_outline, 'Supprimer', DemProColors.danger)),
+                  PopupMenuItem(value: 'edit', child: _menuItem(Icons.edit_outlined, 'Modifier', AppColors.textDark)),
+                  PopupMenuItem(value: 'delete', child: _menuItem(Icons.delete_outline, 'Supprimer', AppColors.error)),
                 ],
               ),
             ]),
@@ -334,7 +334,7 @@ class _ProductCard extends StatelessWidget {
   Widget _menuItem(IconData icon, String label, Color color) => Row(children: [
     Icon(icon, color: color, size: 18),
     const SizedBox(width: 10),
-    Text(label, style: DemProText.body.copyWith(color: color)),
+    Text(label, style: ClientText.body.copyWith(color: color)),
   ]);
 }
 
@@ -391,7 +391,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: DemProColors.danger),
+        SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
       );
     }
   }
@@ -401,7 +401,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
     return Container(
       decoration: const BoxDecoration(
-        color: DemProColors.bg2,
+        color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomPadding),
@@ -414,44 +414,44 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Container(
                   width: 36, height: 4,
-                  decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(color: AppColors.lightBorder, borderRadius: BorderRadius.circular(2)),
                 ),
               ),
             ),
             Text(
               _isEdit ? 'Modifier le produit' : 'Nouveau produit',
-              style: DemProText.title.copyWith(color: DemProColors.text, fontSize: 18),
+              style: ClientText.title.copyWith(color: AppColors.textDark, fontSize: 18),
             ),
             const SizedBox(height: 20),
 
-            Text('Nom du produit', style: DemProText.caption.copyWith(color: DemProColors.muted)),
+            Text('Nom du produit', style: ClientText.label.copyWith(color: AppColors.textMuted)),
             const SizedBox(height: 6),
             TextFormField(
               controller: _name,
               autofocus: !_isEdit,
               textCapitalization: TextCapitalization.sentences,
-              style: DemProText.body.copyWith(color: DemProColors.text, fontSize: 14),
+              style: ClientText.body.copyWith(color: AppColors.textDark, fontSize: 14),
               validator: (v) => (v == null || v.trim().length < 2) ? 'Minimum 2 caractères' : null,
               decoration: InputDecoration(
                 hintText: 'ex: Ceebu jën, T-shirt col rond M…',
-                hintStyle: DemProText.body.copyWith(color: DemProColors.muted),
-                filled: true, fillColor: DemProColors.bg3,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
-                errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.danger)),
-                focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.danger, width: 1.5)),
+                hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
+                filled: true, fillColor: AppColors.lightFill,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.lightBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.lightBorder)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error)),
+                focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
             ),
             const SizedBox(height: 14),
 
-            Text('Prix par défaut (optionnel)', style: DemProText.caption.copyWith(color: DemProColors.muted)),
+            Text('Prix par défaut (optionnel)', style: ClientText.label.copyWith(color: AppColors.textMuted)),
             const SizedBox(height: 6),
             TextFormField(
               controller: _price,
               keyboardType: TextInputType.number,
-              style: DemProText.body.copyWith(color: DemProColors.text, fontSize: 14),
+              style: ClientText.body.copyWith(color: AppColors.textDark, fontSize: 14),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return null;
                 final n = num.tryParse(v.trim());
@@ -461,21 +461,21 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
               decoration: InputDecoration(
                 hintText: 'ex: 2500',
                 suffixText: 'FCFA',
-                suffixStyle: DemProText.body.copyWith(color: DemProColors.muted),
-                hintStyle: DemProText.body.copyWith(color: DemProColors.muted),
-                filled: true, fillColor: DemProColors.bg3,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
-                errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.danger)),
-                focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.danger, width: 1.5)),
+                suffixStyle: ClientText.body.copyWith(color: AppColors.textMuted),
+                hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
+                filled: true, fillColor: AppColors.lightFill,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.lightBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.lightBorder)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error)),
+                focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
             ),
             const SizedBox(height: 6),
             Text(
               'Vous pourrez toujours ajuster le prix au moment de la commande.',
-              style: DemProText.micro.copyWith(color: DemProColors.muted),
+              style: ClientText.micro.copyWith(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
 

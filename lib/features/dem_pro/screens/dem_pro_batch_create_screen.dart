@@ -17,22 +17,22 @@ import '../../../core/utils/senegal_phone.dart';
 import '../../../shared/widgets/place_suggestions_list.dart';
 import '../../home_driver/navigation/navigation_service.dart';
 import '../data/dem_pro_repository.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _dakar = LatLng(14.6937, -17.4441);
 
 const _placeSuggestionsColors = PlaceSuggestionsColors(
-  background: DemProColors.bg3,
-  border: DemProColors.bg4,
-  divider: DemProColors.bg4,
-  iconBg: DemProColors.bg4,
-  icon: DemProColors.accent,
-  mainText: DemProColors.text,
-  secondaryText: DemProColors.muted,
-  accent: DemProColors.accent,
+  background: AppColors.card,
+  border: AppColors.primaryDark,
+  divider: AppColors.primaryDark,
+  iconBg: AppColors.primaryDark,
+  icon: AppColors.primary,
+  mainText: AppColors.textPrimary,
+  secondaryText: AppColors.textSecondary,
+  accent: AppColors.primary,
 );
 
 const _pkgTypes = [
@@ -438,8 +438,8 @@ class _State extends State<DemProBatchCreateScreen> {
       lastDate: now.add(const Duration(days: 30)),
       builder: (ctx, child) => Theme(
         data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(primary: DemProColors.accent, onPrimary: Colors.white, surface: DemProColors.bg2, onSurface: DemProColors.text),
-          dialogTheme: const DialogThemeData(backgroundColor: DemProColors.bg2),
+          colorScheme: const ColorScheme.dark(primary: AppColors.primary, onPrimary: Colors.white, surface: AppColors.surface, onSurface: AppColors.textPrimary),
+          dialogTheme: const DialogThemeData(backgroundColor: AppColors.surface),
         ),
         child: child!,
       ),
@@ -452,8 +452,8 @@ class _State extends State<DemProBatchCreateScreen> {
           : TimeOfDay(hour: minDate.hour, minute: (minDate.minute ~/ 15 + 1) * 15 % 60),
       builder: (ctx, child) => Theme(
         data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(primary: DemProColors.accent, onPrimary: Colors.white, surface: DemProColors.bg2, onSurface: DemProColors.text),
-          dialogTheme: const DialogThemeData(backgroundColor: DemProColors.bg2),
+          colorScheme: const ColorScheme.dark(primary: AppColors.primary, onPrimary: Colors.white, surface: AppColors.surface, onSurface: AppColors.textPrimary),
+          dialogTheme: const DialogThemeData(backgroundColor: AppColors.surface),
         ),
         child: child!,
       ),
@@ -564,7 +564,7 @@ class _State extends State<DemProBatchCreateScreen> {
         if (!didPop) setState(() => _placingMap = false);
       },
       child: Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: false,
       body: Stack(children: [
 
@@ -587,12 +587,12 @@ class _State extends State<DemProBatchCreateScreen> {
           Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
             Icon(
               _placingIndex == -1 ? Icons.inventory_2_rounded : Icons.location_on,
-              color: _placingIndex == -1 ? DemProColors.warning : DemProColors.success,
+              color: _placingIndex == -1 ? AppColors.warning : AppColors.success,
               size: 40,
               shadows: const [Shadow(color: Colors.black26, blurRadius: 8)],
             ),
             const SizedBox(height: 2),
-            CircleAvatar(radius: 3, backgroundColor: _placingIndex == -1 ? DemProColors.warning : DemProColors.success),
+            CircleAvatar(radius: 3, backgroundColor: _placingIndex == -1 ? AppColors.warning : AppColors.success),
           ])),
 
         // Header
@@ -606,7 +606,7 @@ class _State extends State<DemProBatchCreateScreen> {
             child: Container(
               height: 130 + MediaQuery.of(context).viewPadding.bottom,
               decoration: BoxDecoration(
-                color: DemProColors.bg2,
+                color: AppColors.surface,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
               ),
@@ -635,7 +635,7 @@ class _State extends State<DemProBatchCreateScreen> {
                   snapSizes: [_sheetMin, _sheetMax],
                   builder: (context, scrollCtrl) => Container(
                     decoration: BoxDecoration(
-                      color: DemProColors.bg2,
+                      color: AppColors.surface,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                       boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, -4))],
                     ),
@@ -663,23 +663,23 @@ class _State extends State<DemProBatchCreateScreen> {
         onPressed: () => context.pop(),
         icon: Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: DemProColors.bg2.withValues(alpha: 0.9), shape: BoxShape.circle),
-          child: const Icon(Icons.arrow_back, color: DemProColors.text, size: 20),
+          decoration: BoxDecoration(color: AppColors.surface.withValues(alpha: 0.9), shape: BoxShape.circle),
+          child: const Icon(Icons.arrow_back, color: AppColors.textPrimary, size: 20),
         ),
       ),
       const SizedBox(width: 4),
       Expanded(child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(color: DemProColors.bg2.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(color: AppColors.surface.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(14)),
         child: Row(children: [
-          const Icon(Icons.route_outlined, color: DemProColors.accent, size: 18),
+          const Icon(Icons.route_outlined, color: AppColors.primary, size: 18),
           const SizedBox(width: 8),
-          const Text('Nouvelle tournée', style: DemProText.subtitle),
+          Text('Nouvelle tournée', style: ClientText.subtitle.copyWith(color: AppColors.textPrimary)),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: DemProColors.accent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-            child: Text('${_stops.length} arrêts', style: DemProText.micro.copyWith(color: DemProColors.accent)),
+            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+            child: Text('${_stops.length} arrêts', style: ClientText.micro.copyWith(color: AppColors.primary)),
           ),
         ]),
       )),
@@ -692,23 +692,23 @@ class _State extends State<DemProBatchCreateScreen> {
     child: Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
+        Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.primaryDark, borderRadius: BorderRadius.circular(2))),
         const SizedBox(height: 12),
         Text(
           _placingIndex == -1 ? 'Positionnez le point de départ' : 'Arrêt ${_placingIndex + 1} — Positionnez la destination',
-          style: DemProText.bodyStrong,
+          style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary),
         ),
         const SizedBox(height: 12),
         SizedBox(width: double.infinity, height: 48,
           child: DecoratedBox(
-            decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
             child: Material(color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: _geocoding ? null : _confirmPlacement,
                 child: Center(child: _geocoding
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Confirmer la position', style: DemProText.button),
+                    : Text('Confirmer la position', style: ClientText.button.copyWith(color: AppColors.textPrimary)),
                 ),
               ),
             ),
@@ -735,7 +735,7 @@ class _State extends State<DemProBatchCreateScreen> {
       children: [
         Center(child: Padding(
           padding: const EdgeInsets.only(top: 12, bottom: 8),
-          child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
+          child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.primaryDark, borderRadius: BorderRadius.circular(2))),
         )),
 
         // Bandeau départ
@@ -767,10 +767,10 @@ class _State extends State<DemProBatchCreateScreen> {
             padding: const EdgeInsets.only(top: 4, bottom: 8),
             child: OutlinedButton.icon(
               onPressed: () => setState(() => _stops.add(_Stop())),
-              icon: const Icon(Icons.add, color: DemProColors.accent, size: 18),
-              label: Text('Ajouter un arrêt', style: DemProText.bodyStrong.copyWith(color: DemProColors.accent)),
+              icon: const Icon(Icons.add, color: AppColors.primary, size: 18),
+              label: Text('Ajouter un arrêt', style: ClientText.bodyStrong.copyWith(color: AppColors.primary)),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: DemProColors.accent),
+                side: const BorderSide(color: AppColors.primary),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -779,20 +779,20 @@ class _State extends State<DemProBatchCreateScreen> {
 
         // Notes globales
         const SizedBox(height: 4),
-        const Text('Instructions pour le livreur (optionnel)', style: DemProText.caption),
+        Text('Instructions pour le livreur (optionnel)', style: ClientText.label.copyWith(color: AppColors.textPrimary)),
         const SizedBox(height: 6),
         TextField(
           controller: _notesCtrl,
           maxLines: 2,
           onChanged: (_) => _scheduleDraftSave(),
-          style: DemProText.body,
+          style: ClientText.body.copyWith(color: AppColors.textPrimary),
           decoration: InputDecoration(
             hintText: 'ex: Sonner à chaque arrêt, ne pas laisser en gardiennage…',
-            hintStyle: DemProText.caption,
-            filled: true, fillColor: DemProColors.bg3,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
+            hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
+            filled: true, fillColor: AppColors.card,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryDark)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryDark)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
             contentPadding: const EdgeInsets.all(12),
           ),
         ),
@@ -800,23 +800,23 @@ class _State extends State<DemProBatchCreateScreen> {
         // Programmation
         const SizedBox(height: 16),
         Container(
-          decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: _isScheduled ? DemProColors.accent.withValues(alpha: 0.4) : DemProColors.bg4)),
+          decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _isScheduled ? AppColors.primary.withValues(alpha: 0.4) : AppColors.primaryDark)),
           child: SwitchListTile(
             value: _isScheduled,
             onChanged: (v) {
               setState(() { _isScheduled = v; if (!v) _scheduledAt = null; });
               if (v) _pickScheduleDate();
             },
-            activeTrackColor: DemProColors.accent,
+            activeTrackColor: AppColors.primary,
             activeThumbColor: Colors.white,
             inactiveThumbColor: Colors.white,
-            inactiveTrackColor: DemProColors.bg4,
-            title: const Row(children: [
-              Icon(Icons.schedule, color: DemProColors.accent, size: 18),
-              SizedBox(width: 8),
-              Text('Programmer la tournée', style: DemProText.subtitle),
+            inactiveTrackColor: AppColors.primaryDark,
+            title: Row(children: [
+              const Icon(Icons.schedule, color: AppColors.primary, size: 18),
+              const SizedBox(width: 8),
+              Text('Programmer la tournée', style: ClientText.subtitle.copyWith(color: AppColors.textPrimary)),
             ]),
-            subtitle: const Text('Choisir une date et heure', style: DemProText.caption),
+            subtitle: Text('Choisir une date et heure', style: ClientText.label.copyWith(color: AppColors.textPrimary)),
             dense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
           ),
@@ -828,19 +828,19 @@ class _State extends State<DemProBatchCreateScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: DemProColors.accent.withValues(alpha: 0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: DemProColors.accent.withValues(alpha: 0.4), width: 1.5),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.4), width: 1.5),
               ),
               child: Row(children: [
-                const Icon(Icons.calendar_today, color: DemProColors.accent, size: 16),
+                const Icon(Icons.calendar_today, color: AppColors.primary, size: 16),
                 const SizedBox(width: 10),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(_fmtDate(_scheduledAt!), style: DemProText.bodyStrong),
-                  Text(_fmtTime(_scheduledAt!), style: DemProText.caption),
+                  Text(_fmtDate(_scheduledAt!), style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary)),
+                  Text(_fmtTime(_scheduledAt!), style: ClientText.label.copyWith(color: AppColors.textPrimary)),
                 ]),
                 const Spacer(),
-                const Icon(Icons.edit_outlined, color: DemProColors.muted, size: 14),
+                const Icon(Icons.edit_outlined, color: AppColors.textSecondary, size: 14),
               ]),
             ),
           ),
@@ -855,7 +855,7 @@ class _State extends State<DemProBatchCreateScreen> {
       child: SizedBox(height: 52, width: double.infinity,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: _canSubmit ? DemProColors.accent : DemProColors.bg3,
+            color: _canSubmit ? AppColors.primary : AppColors.card,
             borderRadius: BorderRadius.circular(14),
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 4))],
           ),
@@ -867,7 +867,7 @@ class _State extends State<DemProBatchCreateScreen> {
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : Text(
                       _isScheduled ? 'Programmer la tournée' : 'Lancer la tournée (${_stops.length} arrêts)',
-                      style: DemProText.button.copyWith(color: _canSubmit ? Colors.white : DemProColors.muted),
+                      style: ClientText.button.copyWith(color: _canSubmit ? Colors.white : AppColors.textSecondary),
                     ),
               ),
             ),
@@ -1026,9 +1026,9 @@ class _StopCardState extends State<_StopCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: DemProColors.bg3,
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: s.hasLocation ? DemProColors.accent.withValues(alpha: 0.25) : DemProColors.bg4),
+        border: Border.all(color: s.hasLocation ? AppColors.primary.withValues(alpha: 0.25) : AppColors.primaryDark),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
@@ -1036,15 +1036,15 @@ class _StopCardState extends State<_StopCard> {
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
           child: Row(children: [
-            CircleAvatar(radius: 13, backgroundColor: DemProColors.accent.withValues(alpha: 0.15),
-              child: Text('${widget.index + 1}', style: DemProText.caption.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800)),
+            CircleAvatar(radius: 13, backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+              child: Text('${widget.index + 1}', style: ClientText.label.copyWith(color: AppColors.primary, fontWeight: FontWeight.w800)),
             ),
             const SizedBox(width: 10),
-            Expanded(child: Text('Arrêt ${widget.index + 1}', style: DemProText.subtitle)),
+            Expanded(child: Text('Arrêt ${widget.index + 1}', style: ClientText.subtitle.copyWith(color: AppColors.textPrimary))),
             if (widget.canRemove)
               IconButton(
                 onPressed: widget.onRemove,
-                icon: const Icon(Icons.remove_circle_outline, color: DemProColors.danger, size: 20),
+                icon: const Icon(Icons.remove_circle_outline, color: AppColors.error, size: 20),
                 padding: EdgeInsets.zero, constraints: const BoxConstraints(),
               ),
           ]),
@@ -1057,35 +1057,35 @@ class _StopCardState extends State<_StopCard> {
             Expanded(
               child: TextField(
                 controller: _addrCtrl,
-                style: DemProText.caption.copyWith(color: DemProColors.text),
+                style: ClientText.label.copyWith(color: AppColors.textPrimary),
                 onChanged: _onAddrChanged,
                 onSubmitted: (q) => _forwardGeocode(q),
                 decoration: InputDecoration(
                   hintText: 'Saisir une adresse…',
-                  hintStyle: DemProText.caption,
+                  hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
                   prefixIcon: _searching
-                      ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2)))
+                      ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
                       : Icon(
                           s.hasLocation ? Icons.check_circle : Icons.search,
-                          color: s.hasLocation ? DemProColors.success : DemProColors.muted,
+                          color: s.hasLocation ? AppColors.success : AppColors.textSecondary,
                           size: 16,
                         ),
                   suffixIcon: _addrCtrl.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear, color: DemProColors.muted, size: 14),
+                          icon: const Icon(Icons.clear, color: AppColors.textSecondary, size: 14),
                           onPressed: () { _addrCtrl.clear(); setState(() => _suggestions = []); },
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         )
                       : null,
-                  filled: true, fillColor: DemProColors.bg4,
+                  filled: true, fillColor: AppColors.primaryDark,
                   isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: DemProColors.bg4)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primaryDark)),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: s.hasLocation ? DemProColors.success.withValues(alpha: 0.5) : DemProColors.bg4),
+                    borderSide: BorderSide(color: s.hasLocation ? AppColors.success.withValues(alpha: 0.5) : AppColors.primaryDark),
                   ),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),
               ),
@@ -1096,13 +1096,13 @@ class _StopCardState extends State<_StopCard> {
               child: Container(
                 width: 46, height: 38,
                 decoration: BoxDecoration(
-                  color: DemProColors.accent.withValues(alpha: 0.12),
+                  color: AppColors.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: DemProColors.accent.withValues(alpha: 0.3)),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Icon(Icons.map_outlined, color: DemProColors.accent, size: 15),
-                  Text('Carte', style: DemProText.micro.copyWith(color: DemProColors.accent)),
+                  const Icon(Icons.map_outlined, color: AppColors.primary, size: 15),
+                  Text('Carte', style: ClientText.micro.copyWith(color: AppColors.primary)),
                 ]),
               ),
             ),
@@ -1116,9 +1116,9 @@ class _StopCardState extends State<_StopCard> {
             child: Container(
               constraints: const BoxConstraints(maxHeight: 150),
               decoration: BoxDecoration(
-                color: DemProColors.bg4,
+                color: AppColors.primaryDark,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: DemProColors.bg3),
+                border: Border.all(color: AppColors.card),
               ),
               child: ListView(
                 padding: EdgeInsets.zero,
@@ -1127,9 +1127,9 @@ class _StopCardState extends State<_StopCard> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
                     child: Row(children: [
-                      const Icon(Icons.history, color: DemProColors.muted, size: 12),
+                      const Icon(Icons.history, color: AppColors.textSecondary, size: 12),
                       const SizedBox(width: 6),
-                      Text('Récentes', style: DemProText.micro),
+                      Text('Récentes', style: ClientText.micro.copyWith(color: AppColors.textPrimary)),
                     ]),
                   ),
                   ...widget.recentDestinations.map((d) => InkWell(
@@ -1137,9 +1137,9 @@ class _StopCardState extends State<_StopCard> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                       child: Row(children: [
-                        const Icon(Icons.place_outlined, color: DemProColors.accent, size: 13),
+                        const Icon(Icons.place_outlined, color: AppColors.primary, size: 13),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(d['address'] as String? ?? '', style: DemProText.caption.copyWith(color: DemProColors.text), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(child: Text(d['address'] as String? ?? '', style: ClientText.label.copyWith(color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis)),
                       ]),
                     ),
                   )),
@@ -1182,7 +1182,7 @@ class _StopCardState extends State<_StopCard> {
             onChanged: (v) { s.phone = v; widget.onChanged(); },
             suffixIcon: _phoneCtrl.text.isEmpty ? null : Icon(
               isValidSenegalMobile(_phoneCtrl.text.trim()) ? Icons.check_circle : Icons.error_outline,
-              color: isValidSenegalMobile(_phoneCtrl.text.trim()) ? DemProColors.success : DemProColors.danger,
+              color: isValidSenegalMobile(_phoneCtrl.text.trim()) ? AppColors.success : AppColors.error,
               size: 16,
             )),
         ),
@@ -1219,14 +1219,14 @@ class _StopCardState extends State<_StopCard> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
-                    color: sel ? DemProColors.accent.withValues(alpha: 0.12) : DemProColors.bg4,
+                    color: sel ? AppColors.primary.withValues(alpha: 0.12) : AppColors.primaryDark,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: sel ? DemProColors.accent : DemProColors.bg4, width: sel ? 1.5 : 1),
+                    border: Border.all(color: sel ? AppColors.primary : AppColors.primaryDark, width: sel ? 1.5 : 1),
                   ),
                   child: Column(children: [
-                    Icon(t.$3, color: sel ? DemProColors.accent : DemProColors.muted, size: 16),
+                    Icon(t.$3, color: sel ? AppColors.primary : AppColors.textSecondary, size: 16),
                     const SizedBox(height: 3),
-                    Text(t.$2.split(' ').first, style: DemProText.micro.copyWith(color: sel ? DemProColors.accent : DemProColors.muted)),
+                    Text(t.$2.split(' ').first, style: ClientText.micro.copyWith(color: sel ? AppColors.primary : AppColors.textSecondary)),
                   ]),
                 ),
               ),
@@ -1241,12 +1241,12 @@ class _StopCardState extends State<_StopCard> {
             Checkbox(
               value: s.fragile,
               onChanged: (v) { setState(() { s.fragile = v ?? false; }); widget.onChanged(); },
-              activeColor: DemProColors.warning,
-              side: const BorderSide(color: DemProColors.muted),
+              activeColor: AppColors.warning,
+              side: const BorderSide(color: AppColors.textSecondary),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             const SizedBox(width: 4),
-            const Text('Fragile', style: DemProText.caption),
+            Text('Fragile', style: ClientText.label.copyWith(color: AppColors.textPrimary)),
           ]),
         ),
       ]),
@@ -1272,18 +1272,18 @@ class _MiniField extends StatelessWidget {
     onChanged: onChanged,
     textInputAction: textInputAction,
     onSubmitted: onSubmitted,
-    style: DemProText.body,
+    style: ClientText.body.copyWith(color: AppColors.textPrimary),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: DemProText.caption,
+      hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
       prefixText: prefix,
-      prefixStyle: DemProText.caption.copyWith(fontSize: 13),
+      prefixStyle: ClientText.label.copyWith(fontSize: 13),
       suffixIcon: suffixIcon,
-      filled: true, fillColor: DemProColors.bg4,
+      filled: true, fillColor: AppColors.primaryDark,
       isDense: true,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: DemProColors.bg4)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: DemProColors.bg4)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primaryDark)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primaryDark)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     ),
   );
@@ -1305,20 +1305,20 @@ class _DepartureBannerBatch extends StatelessWidget {
     child: Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.bg4)),
+      decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.primaryDark)),
       child: Row(children: [
-        const Icon(Icons.location_on, color: DemProColors.accent, size: 16),
+        const Icon(Icons.location_on, color: AppColors.primary, size: 16),
         const SizedBox(width: 8),
         Expanded(child: loading
-            ? const Text('Localisation…', style: DemProText.caption)
+            ? Text('Localisation…', style: ClientText.label.copyWith(color: AppColors.textPrimary))
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (label != null) Text(label!, style: DemProText.caption.copyWith(color: DemProColors.text, fontWeight: FontWeight.w700)),
+                if (label != null) Text(label!, style: ClientText.label.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
                 Text(address != null && address!.isNotEmpty ? address! : 'Aucun départ',
-                  style: DemProText.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  style: ClientText.label.copyWith(color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
               ])),
         const SizedBox(width: 8),
-        Text('Changer', style: DemProText.micro.copyWith(color: DemProColors.accent)),
-        const Icon(Icons.chevron_right, color: DemProColors.accent, size: 14),
+        Text('Changer', style: ClientText.micro.copyWith(color: AppColors.primary)),
+        const Icon(Icons.chevron_right, color: AppColors.primary, size: 14),
       ]),
     ),
   );
@@ -1428,32 +1428,32 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
     padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
     child: Container(
     constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
-    decoration: const BoxDecoration(color: DemProColors.bg2, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
     padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewPadding.bottom),
     child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Center(child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Container(width: 36, height: 4, decoration: BoxDecoration(color: DemProColors.bg4, borderRadius: BorderRadius.circular(2))),
+        child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.primaryDark, borderRadius: BorderRadius.circular(2))),
       )),
-      const Text('Point de départ', style: DemProText.title),
+      Text('Point de départ', style: ClientText.title.copyWith(color: AppColors.textPrimary)),
       const SizedBox(height: 14),
 
       TextField(
         controller: _searchCtrl,
-        style: DemProText.body,
+        style: ClientText.body.copyWith(color: AppColors.textPrimary),
         textInputAction: TextInputAction.search,
         onChanged: _onChanged,
         onSubmitted: _submitManual,
         decoration: InputDecoration(
           hintText: 'Saisir l\'adresse d\'expédition…',
-          hintStyle: DemProText.caption,
+          hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
           prefixIcon: _searching
-              ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2)))
-              : const Icon(Icons.search, color: DemProColors.muted, size: 18),
-          filled: true, fillColor: DemProColors.bg3,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.bg4)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DemProColors.accent, width: 1.5)),
+              ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
+              : const Icon(Icons.search, color: AppColors.textSecondary, size: 18),
+          filled: true, fillColor: AppColors.card,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryDark)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primaryDark)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         ),
       ),
@@ -1473,7 +1473,7 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
       const SizedBox(height: 14),
 
       if (widget.proAddresses.isNotEmpty) ...[
-        const Text('Mes adresses', style: DemProText.micro),
+        Text('Mes adresses', style: ClientText.micro.copyWith(color: AppColors.textPrimary)),
         const SizedBox(height: 8),
         ...widget.proAddresses.map((a) {
           final sel  = a['id'] == widget.selectedId;
@@ -1484,18 +1484,18 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: sel ? DemProColors.accent.withValues(alpha: 0.10) : DemProColors.bg3,
+                color: sel ? AppColors.primary.withValues(alpha: 0.10) : AppColors.card,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: sel ? DemProColors.accent : DemProColors.bg4, width: sel ? 1.5 : 1),
+                border: Border.all(color: sel ? AppColors.primary : AppColors.primaryDark, width: sel ? 1.5 : 1),
               ),
               child: Row(children: [
-                Icon(icon, color: DemProColors.accent, size: 20),
+                Icon(icon, color: AppColors.primary, size: 20),
                 const SizedBox(width: 10),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(a['label'] as String? ?? '', style: DemProText.bodyStrong),
-                  Text(a['address'] as String? ?? '', style: DemProText.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(a['label'] as String? ?? '', style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary)),
+                  Text(a['address'] as String? ?? '', style: ClientText.label.copyWith(color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ])),
-                if (sel) const Icon(Icons.check_circle, color: DemProColors.accent, size: 18),
+                if (sel) const Icon(Icons.check_circle, color: AppColors.primary, size: 18),
               ]),
             ),
           );
@@ -1518,13 +1518,13 @@ class _SheetActionBtn extends StatelessWidget {
     child: Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(color: DemProColors.bg3, borderRadius: BorderRadius.circular(12), border: Border.all(color: DemProColors.bg4)),
+      decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.primaryDark)),
       child: loading
-          ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: DemProColors.accent, strokeWidth: 2)))
+          ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
           : Row(children: [
-              Icon(icon, color: DemProColors.muted, size: 18),
+              Icon(icon, color: AppColors.textSecondary, size: 18),
               const SizedBox(width: 10),
-              Text(label, style: DemProText.bodyStrong),
+              Text(label, style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary)),
             ]),
     ),
   );
@@ -1554,38 +1554,38 @@ class _BatchDraftResumeSheet extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: DemProColors.bg2,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: DemProColors.bg4),
+        border: Border.all(color: AppColors.primaryDark),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.route_outlined, color: DemProColors.accent, size: 32),
+        const Icon(Icons.route_outlined, color: AppColors.primary, size: 32),
         const SizedBox(height: 12),
-        const Text('Reprendre votre brouillon ?', style: DemProText.title),
+        Text('Reprendre votre brouillon ?', style: ClientText.title.copyWith(color: AppColors.textPrimary)),
         const SizedBox(height: 6),
-        Text(_label, textAlign: TextAlign.center, style: DemProText.caption),
+        Text(_label, textAlign: TextAlign.center, style: ClientText.label.copyWith(color: AppColors.textPrimary)),
         const SizedBox(height: 18),
         Row(children: [
           Expanded(child: OutlinedButton(
             onPressed: onDiscard,
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: DemProColors.bg4),
+              side: const BorderSide(color: AppColors.primaryDark),
               padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text('Nouvelle tournée', style: DemProText.bodyStrong.copyWith(color: DemProColors.muted)),
+            child: Text('Nouvelle tournée', style: ClientText.bodyStrong.copyWith(color: AppColors.textSecondary)),
           )),
           const SizedBox(width: 10),
           Expanded(child: ElevatedButton(
             onPressed: onResume,
             style: ElevatedButton.styleFrom(
-              backgroundColor: DemProColors.accent,
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 13),
               elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Reprendre', style: DemProText.button),
+            child: Text('Reprendre', style: ClientText.button.copyWith(color: AppColors.textPrimary)),
           )),
         ]),
       ]),

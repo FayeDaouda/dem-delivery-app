@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_startup_notifier.dart';
-import '../theme/dem_pro_colors.dart';
-import '../utils/dem_pro_format.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
+import '../../../core/utils/price_format.dart';
 import '../widgets/dem_pro_button.dart';
 
 class DemProBatchConfirmationScreen extends StatelessWidget {
@@ -19,7 +19,7 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
     final isScheduled = scheduled != null;
 
     return Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.lightBg,
       body: SafeArea(child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(children: [
@@ -30,19 +30,19 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
           Container(
             width: 80, height: 80,
             decoration: BoxDecoration(
-              color: DemProColors.success.withValues(alpha: 0.12),
+              color: AppColors.successLight.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(
               isScheduled ? Icons.schedule : Icons.check_circle,
-              color: DemProColors.success, size: 44,
+              color: AppColors.successLight, size: 44,
             ),
           ),
           const SizedBox(height: 20),
 
           Text(
             isScheduled ? 'Tournée programmée !' : 'Tournée lancée !',
-            style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: 24, fontWeight: FontWeight.w900),
+            style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: 24, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 8),
           Text(
@@ -50,7 +50,7 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
                 ? 'Votre tournée sera dispatchée au créneau choisi.'
                 : 'Nous recherchons un livreur pour votre tournée.',
             textAlign: TextAlign.center,
-            style: DemProText.body.copyWith(color: DemProColors.muted, fontSize: 14),
+            style: ClientText.body.copyWith(color: AppColors.textMuted, fontSize: 14),
           ),
           const SizedBox(height: 28),
 
@@ -59,19 +59,19 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: DemProColors.bg2,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: DemProColors.bg4),
+              border: Border.all(color: AppColors.lightBorder),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                const Icon(Icons.route_outlined, color: DemProColors.accent, size: 18),
+                const Icon(Icons.route_outlined, color: AppColors.primary, size: 18),
                 const SizedBox(width: 8),
                 Text('${orders.length} arrêt${orders.length > 1 ? 's' : ''}',
-                  style: DemProText.subtitle.copyWith(color: DemProColors.text)),
+                  style: ClientText.subtitle.copyWith(color: AppColors.textDark)),
                 const Spacer(),
-                Text(DemProFormat.fcfa(total),
-                  style: DemProText.title.copyWith(color: DemProColors.accent, fontSize: 15)),
+                Text(formatFcfa(total),
+                  style: ClientText.title.copyWith(color: AppColors.primary, fontSize: 15)),
               ]),
               const SizedBox(height: 12),
               if (isScheduled) ...[
@@ -80,16 +80,16 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: DemProColors.accent.withValues(alpha: 0.08),
+                    color: AppColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: DemProColors.accent.withValues(alpha: 0.25)),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                   ),
                   child: Row(children: [
-                    const Icon(Icons.schedule_outlined, color: DemProColors.accent, size: 16),
+                    const Icon(Icons.schedule_outlined, color: AppColors.primary, size: 16),
                     const SizedBox(width: 8),
                     Text(
                       _fmtDateTime(scheduled),
-                      style: DemProText.bodyStrong.copyWith(color: DemProColors.accent),
+                      style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
                     ),
                   ]),
                 ),
@@ -101,14 +101,14 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    CircleAvatar(radius: 10, backgroundColor: DemProColors.accent.withValues(alpha: 0.15),
-                      child: Text('${i + 1}', style: DemProText.micro.copyWith(color: DemProColors.accent, fontWeight: FontWeight.w800))),
+                    CircleAvatar(radius: 10, backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                      child: Text('${i + 1}', style: ClientText.micro.copyWith(color: AppColors.primary, fontWeight: FontWeight.w800))),
                     const SizedBox(width: 8),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(o['deliveryAddress'] as String? ?? 'Destination',
-                        style: DemProText.caption.copyWith(color: DemProColors.text), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        style: ClientText.label.copyWith(color: AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
                       if (o['receiverName'] != null)
-                        Text(o['receiverName'] as String, style: DemProText.caption.copyWith(color: DemProColors.muted)),
+                        Text(o['receiverName'] as String, style: ClientText.label.copyWith(color: AppColors.textMuted)),
                     ])),
                   ]),
                 );

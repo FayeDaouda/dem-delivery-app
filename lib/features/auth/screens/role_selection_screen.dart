@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../dem_pro/theme/dem_pro_colors.dart';
 import '../providers/auth_provider.dart';
 
 class RoleSelectionScreen extends ConsumerStatefulWidget {
@@ -207,7 +206,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen>
                         icon: Icons.storefront_outlined,
                         title: 'DEM Pro',
                         subtitle: 'Je gère des livraisons pour mon business',
-                        color: DemProColors.accent,
+                        color: AppColors.primary,
                         loading: loading,
                         onTap: () => _select('DEM_PRO'),
                       ),

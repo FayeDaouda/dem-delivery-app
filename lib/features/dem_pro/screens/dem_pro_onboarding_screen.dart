@@ -13,8 +13,8 @@ import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/utils/dem_layout.dart';
 import '../../profile/data/profile_repository.dart';
 import '../providers/dem_pro_provider.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 import '../widgets/dem_pro_button.dart';
 
 final _emailRegex = RegExp(r'^[\w.\-]+@[\w\-]+\.[\w\-.]+$');
@@ -159,7 +159,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
     final isTablet = DemLayout.isTablet(context);
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(color: DemProColors.bg2),
+      decoration: const BoxDecoration(color: Colors.white),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -208,7 +208,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                       child: Container(
                         width: 24, height: 24,
                         decoration: BoxDecoration(
-                          color: DemProColors.accent,
+                          color: AppColors.primary,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
                         ),
@@ -221,12 +221,12 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
               const SizedBox(height: 12),
               Text(
                 'Profil de votre entreprise',
-                style: DemProText.headline.copyWith(color: Colors.white, fontSize: isTablet ? 24.0 : 20.0, letterSpacing: -0.3),
+                style: ClientText.headline.copyWith(color: Colors.white, fontSize: isTablet ? 24.0 : 20.0, letterSpacing: -0.3),
               ),
               const SizedBox(height: 6),
               Text(
                 'Ces informations seront examinées par notre équipe',
-                style: DemProText.caption.copyWith(color: Colors.white.withValues(alpha: 0.75)),
+                style: ClientText.label.copyWith(color: Colors.white.withValues(alpha: 0.75)),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -239,7 +239,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.lightBg,
       body: Column(
         children: [
           // Header bord-à-bord — jamais contraint par le formMaxWidth
@@ -247,7 +247,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
 
           if (_loadingProfile)
             const Expanded(
-              child: Center(child: CircularProgressIndicator(color: DemProColors.accent)),
+              child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
             )
           else
             Expanded(
@@ -302,7 +302,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                             hint: 'contact@entreprise.com',
                             keyboard: TextInputType.emailAddress,
                             textInputAction: TextInputAction.done,
-                            suffixIcon: const Icon(Icons.mail_outline, color: DemProColors.muted, size: 18),
+                            suffixIcon: const Icon(Icons.mail_outline, color: AppColors.textMuted, size: 18),
                           ),
                           const SizedBox(height: 28),
 
@@ -310,7 +310,7 @@ class _State extends ConsumerState<DemProOnboardingScreen> {
                           const SizedBox(height: 8),
                           Text(
                             'Combien de livraisons effectuez-vous par semaine ?',
-                            style: DemProText.body.copyWith(color: DemProColors.muted),
+                            style: ClientText.body.copyWith(color: AppColors.textMuted),
                           ),
                           const SizedBox(height: 12),
                           Row(
@@ -361,9 +361,9 @@ class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title, required this.icon});
   @override
   Widget build(BuildContext context) => Row(children: [
-    Icon(icon, color: DemProColors.accent, size: 18),
+    Icon(icon, color: AppColors.primary, size: 18),
     const SizedBox(width: 8),
-    Text(title, style: DemProText.subtitle.copyWith(color: DemProColors.accent)),
+    Text(title, style: ClientText.subtitle.copyWith(color: AppColors.primary)),
   ]);
 }
 
@@ -388,7 +388,7 @@ class _LightField extends StatelessWidget {
     children: [
       Text(
         label,
-        style: DemProText.caption.copyWith(color: DemProColors.muted),
+        style: ClientText.label.copyWith(color: AppColors.textMuted),
       ),
       const SizedBox(height: 6),
       TextField(
@@ -396,24 +396,24 @@ class _LightField extends StatelessWidget {
         textCapitalization: textCapitalization,
         keyboardType: keyboard,
         textInputAction: textInputAction,
-        style: DemProText.body.copyWith(color: DemProColors.text, fontSize: 14),
+        style: ClientText.body.copyWith(color: AppColors.textDark, fontSize: 14),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: DemProText.body.copyWith(color: DemProColors.muted),
+          hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
           suffixIcon: suffixIcon,
           filled: true,
-          fillColor: DemProColors.bg3,
+          fillColor: AppColors.lightFill,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: DemProColors.bg4),
+            borderSide: const BorderSide(color: AppColors.lightBorder),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: DemProColors.bg4),
+            borderSide: const BorderSide(color: AppColors.lightBorder),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: DemProColors.accent, width: 2),
+            borderSide: const BorderSide(color: AppColors.primary, width: 2),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         ),
@@ -433,7 +433,7 @@ class _SectorDropdown extends StatelessWidget {
     children: [
       Text(
         'Domaine d\'activité *',
-        style: DemProText.caption.copyWith(color: DemProColors.muted),
+        style: ClientText.label.copyWith(color: AppColors.textMuted),
       ),
       const SizedBox(height: 6),
       DropdownButtonFormField<String>(
@@ -441,32 +441,32 @@ class _SectorDropdown extends StatelessWidget {
         onChanged: onChanged,
         hint: Text(
           'Sélectionner un domaine',
-          style: DemProText.body.copyWith(color: DemProColors.muted),
+          style: ClientText.body.copyWith(color: AppColors.textMuted),
         ),
         icon: Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: DemProColors.accent.withValues(alpha: 0.12),
+            color: AppColors.primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: const Icon(Icons.keyboard_arrow_down_rounded, color: DemProColors.accent, size: 18),
+          child: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.primary, size: 18),
         ),
-        style: DemProText.body.copyWith(color: DemProColors.text, fontSize: 14),
-        dropdownColor: DemProColors.bg2,
+        style: ClientText.body.copyWith(color: AppColors.textDark, fontSize: 14),
+        dropdownColor: Colors.white,
         decoration: InputDecoration(
           filled: true,
-          fillColor: DemProColors.bg3,
+          fillColor: AppColors.lightFill,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: DemProColors.bg4),
+            borderSide: const BorderSide(color: AppColors.lightBorder),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: DemProColors.bg4),
+            borderSide: const BorderSide(color: AppColors.lightBorder),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: DemProColors.accent, width: 2),
+            borderSide: const BorderSide(color: AppColors.primary, width: 2),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         ),
@@ -489,14 +489,14 @@ class _VolumeCard extends StatelessWidget {
     duration: const Duration(milliseconds: 200),
     curve: Curves.easeInOut,
     decoration: BoxDecoration(
-      color: selected ? DemProColors.accent : DemProColors.bg3,
+      color: selected ? AppColors.primary : AppColors.lightFill,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: selected ? DemProColors.accent : DemProColors.bg4,
+        color: selected ? AppColors.primary : AppColors.lightBorder,
         width: selected ? 2 : 1,
       ),
       boxShadow: selected
-          ? [BoxShadow(color: DemProColors.accent.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 3))]
+          ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 3))]
           : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))],
     ),
     child: Material(
@@ -504,21 +504,21 @@ class _VolumeCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        splashColor: DemProColors.accent.withValues(alpha: 0.15),
-        highlightColor: DemProColors.accent.withValues(alpha: 0.08),
+        splashColor: AppColors.primary.withValues(alpha: 0.15),
+        highlightColor: AppColors.primary.withValues(alpha: 0.08),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
           child: Column(
             children: [
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
-                style: DemProText.subtitle.copyWith(fontWeight: FontWeight.w800, color: selected ? Colors.white : DemProColors.text),
+                style: ClientText.subtitle.copyWith(fontWeight: FontWeight.w800, color: selected ? Colors.white : AppColors.textDark),
                 child: Text(option.title, textAlign: TextAlign.center),
               ),
               const SizedBox(height: 2),
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
-                style: DemProText.micro.copyWith(height: 1.2, fontWeight: FontWeight.w600, color: selected ? Colors.white.withValues(alpha: 0.85) : DemProColors.muted),
+                style: ClientText.micro.copyWith(height: 1.2, fontWeight: FontWeight.w600, color: selected ? Colors.white.withValues(alpha: 0.85) : AppColors.textMuted),
                 child: const Text('livraisons /\nsemaine', textAlign: TextAlign.center),
               ),
             ],
@@ -536,14 +536,14 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: DemProColors.danger.withValues(alpha: 0.08),
+      color: AppColors.error.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: DemProColors.danger.withValues(alpha: 0.25)),
+      border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
     ),
     child: Row(children: [
-      const Icon(Icons.error_outline, color: DemProColors.danger, size: 16),
+      const Icon(Icons.error_outline, color: AppColors.error, size: 16),
       const SizedBox(width: 8),
-      Expanded(child: Text(message, style: DemProText.body.copyWith(color: DemProColors.danger))),
+      Expanded(child: Text(message, style: ClientText.body.copyWith(color: AppColors.error))),
     ]),
   );
 }

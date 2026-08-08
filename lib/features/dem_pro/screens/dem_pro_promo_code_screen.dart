@@ -5,8 +5,8 @@ import '../../../core/error/app_exception.dart';
 import '../../../core/storage/promo_code_storage.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../deliveries/data/orders_repository.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 
 String _describe(Map<String, dynamic> promo) {
   final type = promo['type'] as String?;
@@ -85,7 +85,7 @@ class _DemProPromoCodeScreenState extends State<DemProPromoCodeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DemProColors.bg,
+      backgroundColor: AppColors.lightBg,
       body: SafeArea(
         child: Column(children: [
           Padding(
@@ -93,14 +93,14 @@ class _DemProPromoCodeScreenState extends State<DemProPromoCodeScreen> {
             child: Row(children: [
               IconButton(
                 onPressed: () => context.pop(),
-                icon: const Icon(Icons.arrow_back_ios_new, color: DemProColors.text, size: 18),
+                icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textDark, size: 18),
               ),
-              Text('Code promo', style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: 20)),
+              Text('Code promo', style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: 20)),
             ]),
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: DemProColors.accent))
+                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                     children: [
@@ -108,15 +108,15 @@ class _DemProPromoCodeScreenState extends State<DemProPromoCodeScreen> {
                         _ActivePromoCard(promo: _savedPromo!, onRemove: _remove),
                         const SizedBox(height: 24),
                         Text('Utiliser un autre code',
-                            style: DemProText.bodyStrong.copyWith(color: DemProColors.text)),
+                            style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)),
                         const SizedBox(height: 12),
                       ] else ...[
                         Text('Vous avez un code promo ?',
-                            style: DemProText.headline.copyWith(color: DemProColors.text, fontSize: 17)),
+                            style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: 17)),
                         const SizedBox(height: 6),
                         Text(
                           'Saisissez-le ici — il sera automatiquement appliqué à votre prochaine commande éligible, sans avoir à le retaper.',
-                          style: DemProText.caption.copyWith(color: DemProColors.muted, height: 1.4),
+                          style: ClientText.label.copyWith(color: AppColors.textMuted, height: 1.4),
                         ),
                         const SizedBox(height: 20),
                       ],
@@ -125,12 +125,12 @@ class _DemProPromoCodeScreenState extends State<DemProPromoCodeScreen> {
                           child: TextField(
                             controller: _ctrl,
                             textCapitalization: TextCapitalization.characters,
-                            style: DemProText.subtitle.copyWith(color: DemProColors.text),
+                            style: ClientText.subtitle.copyWith(color: AppColors.textDark),
                             decoration: InputDecoration(
                               hintText: 'Ex : DEM20',
-                              hintStyle: DemProText.body.copyWith(color: DemProColors.muted),
+                              hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
                               filled: true,
-                              fillColor: DemProColors.bg3,
+                              fillColor: AppColors.lightFill,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                             ),
@@ -141,16 +141,16 @@ class _DemProPromoCodeScreenState extends State<DemProPromoCodeScreen> {
                           onTap: _checking ? null : _apply,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                            decoration: BoxDecoration(color: DemProColors.accent, borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
                             child: _checking
                                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : Text('Valider', style: DemProText.bodyStrong.copyWith(color: Colors.white)),
+                                : Text('Valider', style: ClientText.bodyStrong.copyWith(color: Colors.white)),
                           ),
                         ),
                       ]),
                       if (_error != null) ...[
                         const SizedBox(height: 8),
-                        Text(_error!, style: DemProText.caption.copyWith(color: DemProColors.danger)),
+                        Text(_error!, style: ClientText.label.copyWith(color: AppColors.error)),
                       ],
                     ],
                   ),
@@ -171,29 +171,29 @@ class _ActivePromoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: DemProColors.success.withValues(alpha: 0.10),
+        color: AppColors.successLight.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DemProColors.success.withValues(alpha: 0.35)),
+        border: Border.all(color: AppColors.successLight.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            const Icon(Icons.check_circle, color: DemProColors.success, size: 20),
+            const Icon(Icons.check_circle, color: AppColors.successLight, size: 20),
             const SizedBox(width: 8),
             Text(promo['code'] as String? ?? '',
-                style: DemProText.bodyStrong.copyWith(color: DemProColors.success, letterSpacing: 0.5)),
+                style: ClientText.bodyStrong.copyWith(color: AppColors.successLight, letterSpacing: 0.5)),
             const Spacer(),
             GestureDetector(
               onTap: onRemove,
-              child: Text('Retirer', style: DemProText.caption.copyWith(color: DemProColors.muted, decoration: TextDecoration.underline)),
+              child: Text('Retirer', style: ClientText.label.copyWith(color: AppColors.textMuted, decoration: TextDecoration.underline)),
             ),
           ]),
           const SizedBox(height: 6),
-          Text(_describe(promo), style: DemProText.body.copyWith(color: DemProColors.text, fontWeight: FontWeight.w600)),
+          Text(_describe(promo), style: ClientText.body.copyWith(color: AppColors.textDark, fontWeight: FontWeight.w600)),
           if (promo['name'] != null) ...[
             const SizedBox(height: 2),
-            Text(promo['name'] as String, style: DemProText.caption.copyWith(color: DemProColors.muted)),
+            Text(promo['name'] as String, style: ClientText.label.copyWith(color: AppColors.textMuted)),
           ],
         ],
       ),

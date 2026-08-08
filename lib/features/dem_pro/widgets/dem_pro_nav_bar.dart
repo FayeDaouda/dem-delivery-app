@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/dem_pro_colors.dart';
-import '../theme/dem_pro_text.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/client_text.dart';
 
 class _NavItem {
   final IconData outline;
@@ -20,24 +20,18 @@ const _items = [
 class DemProNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
-  final bool darkMode;
   const DemProNavBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
-    this.darkMode = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bg      = darkMode ? DemProColors.bg2      : Colors.white;
-    final border  = darkMode ? DemProColors.bg3      : DemProColors.lightBorder;
-    final inactive = darkMode ? const Color(0xFF8EABC5) : const Color(0xFF94A3B8);
-
     return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(top: BorderSide(color: border)),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.lightBorder)),
       ),
       child: SafeArea(
         top: false,
@@ -55,15 +49,15 @@ class DemProNavBar extends StatelessWidget {
                     children: [
                       Icon(
                         selected ? item.filled : item.outline,
-                        color: selected ? DemProColors.accent : inactive,
+                        color: selected ? AppColors.primary : AppColors.lightIconMuted,
                         size: 24,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         item.label,
-                        style: DemProText.caption.copyWith(
+                        style: ClientText.label.copyWith(
                           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected ? DemProColors.accent : inactive,
+                          color: selected ? AppColors.primary : AppColors.lightIconMuted,
                         ),
                       ),
                     ],
