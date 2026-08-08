@@ -233,6 +233,18 @@ class DemProRepository {
     }
   }
 
+  Future<Map<String, dynamic>> getBusinessInsights(String period) async {
+    try {
+      final res = await _dio.get('/dem-pro/me/insights', queryParameters: {'period': period});
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger les indicateurs.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> getBatchById(String id) async {
     try {
       final res = await _dio.get('/dem-pro/batch/$id');

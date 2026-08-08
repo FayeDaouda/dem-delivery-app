@@ -4772,7 +4772,7 @@ const _periodOptions = [
   ('3months', '3 mois'),
 ];
 
-enum _FinanceView { sales, deliveries }
+enum _FinanceView { sales, deliveries, insights }
 
 class _FinancesTab extends StatefulWidget {
   final _T t;
@@ -4788,6 +4788,7 @@ class _FinancesTabState extends State<_FinancesTab> {
   _FinanceView _view = _FinanceView.sales;
 
   Map<String, dynamic>? _financeData;
+  Map<String, dynamic>? _insightsData;
   List<Map<String, dynamic>> _orders = [];
   bool _loading = true;
   String? _error;
@@ -4809,11 +4810,13 @@ class _FinancesTabState extends State<_FinancesTab> {
       final results = await Future.wait([
         _repo.getMyFinances(_period),
         _repo.getMyOrders(),
+        _repo.getBusinessInsights(_period),
       ]);
       if (!mounted) return;
       setState(() {
         _financeData = results[0] as Map<String, dynamic>;
         _orders = (results[1] as List).cast<Map<String, dynamic>>();
+        _insightsData = results[2] as Map<String, dynamic>;
         _loading = false;
       });
     } catch (e) {
@@ -4973,6 +4976,14 @@ class _FinancesTabState extends State<_FinancesTab> {
                         setState(() => _view = _FinanceView.deliveries),
                     t: t,
                   ),
+                  _FinanceToggle(
+                    label: 'Pilotage',
+                    icon: Icons.insights_rounded,
+                    active: _view == _FinanceView.insights,
+                    onTap: () =>
+                        setState(() => _view = _FinanceView.insights),
+                    t: t,
+                  ),
                 ],
               ),
             ),
@@ -4996,9 +5007,11 @@ class _FinancesTabState extends State<_FinancesTab> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
                       physics: const AlwaysScrollableScrollPhysics(),
-                      children: _view == _FinanceView.sales
-                          ? _buildSalesContent()
-                          : _buildDeliveriesContent(),
+                      children: switch (_view) {
+                        _FinanceView.sales => _buildSalesContent(),
+                        _FinanceView.deliveries => _buildDeliveriesContent(),
+                        _FinanceView.insights => _buildInsightsContent(),
+                      },
                     ),
                   ),
           ),
@@ -5280,6 +5293,263 @@ class _FinancesTabState extends State<_FinancesTab> {
     ];
   }
 
+  // ── Vue PILOTAGE ───────────────────────────────────────────────────────────
+  // Indicateurs de pilotage business — jusqu'ici l'onglet Finances ne
+  // montrait qu'un historique de transactions, jamais de quoi vraiment
+  // suivre son activité (délai de livraison, fiabilité, destinataires
+  // récurrents, tendance). Toutes ces données existaient déjà côté
+  // serveur (Order.acceptedAt/deliveredAt, Rating, cancelReason...), il
+  // ne manquait que l'agrégation et cet écran.
+  String _formatMinutes(int minutes) {
+    if (minutes < 60) return '$minutes min';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m == 0 ? '${h}h' : '${h}h${m.toString().padLeft(2, '0')}';
+  }
+
+  List<Widget> _buildInsightsContent() {
+    final data = _insightsData;
+    if (data == null) return [_buildEmpty('Aucune donnée sur cette période')];
+
+    final avgMinutes = (data['avgDeliveryMinutes'] as num?)?.toInt();
+    final topDriver = data['topDriver'] as Map<String, dynamic>?;
+    final cancellationRate = (data['cancellationRate'] as num?)?.toDouble() ?? 0;
+    final totalCreated = (data['totalOrdersCreated'] as num?)?.toInt() ?? 0;
+    final topDestinations =
+        (data['topDestinations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final trend = data['trend'] as Map<String, dynamic>? ?? {};
+    final spendTrendPct = (trend['spendTrendPct'] as num?)?.toDouble();
+    final currentTotal = (trend['currentTotal'] as num?)?.toInt() ?? 0;
+
+    return [
+      // ── Tendance ──────────────────────────────────────────────────────────
+      Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: t.dark
+                ? [DemProColors.bg3, DemProColors.bg4]
+                : DemProColors.lightGradientBlue,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: t.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Dépensé cette période',
+                style: DemProText.caption.copyWith(color: t.muted)),
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(DemProFormat.fcfa(currentTotal),
+                    style: DemProText.hero.copyWith(color: t.text)),
+                if (spendTrendPct != null) ...[
+                  const SizedBox(width: 10),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: (spendTrendPct >= 0
+                                ? DemProColors.success
+                                : DemProColors.danger)
+                            .withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            spendTrendPct >= 0
+                                ? Icons.arrow_upward_rounded
+                                : Icons.arrow_downward_rounded,
+                            size: 12,
+                            color: spendTrendPct >= 0
+                                ? DemProColors.success
+                                : DemProColors.danger,
+                          ),
+                          Text(
+                            '${spendTrendPct.abs().toStringAsFixed(0)}%',
+                            style: DemProText.caption.copyWith(
+                              color: spendTrendPct >= 0
+                                  ? DemProColors.success
+                                  : DemProColors.danger,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            Text('vs période précédente équivalente',
+                style: DemProText.micro.copyWith(color: t.muted)),
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // ── Délai moyen + Taux d'annulation ──────────────────────────────────
+      Row(
+        children: [
+          Expanded(
+            child: _InsightCard(
+              icon: Icons.timer_outlined,
+              label: 'Délai moyen',
+              value: avgMinutes != null ? _formatMinutes(avgMinutes) : '—',
+              t: t,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _InsightCard(
+              icon: Icons.cancel_outlined,
+              label: 'Annulations',
+              value: totalCreated > 0
+                  ? '${cancellationRate.toStringAsFixed(0)}%'
+                  : '—',
+              valueColor: cancellationRate > 15 ? DemProColors.danger : null,
+              t: t,
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+
+      // ── Livreur habituel ──────────────────────────────────────────────────
+      Text('Livreur habituel',
+          style: DemProText.bodyStrong.copyWith(color: t.text)),
+      const SizedBox(height: 10),
+      if (topDriver == null)
+        _buildEmpty('Aucune livraison sur cette période')
+      else
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: t.cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: t.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: DemProColors.accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.two_wheeler,
+                    color: DemProColors.accent, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(topDriver['name'] as String? ?? 'Livreur DEM',
+                        style: DemProText.bodyStrong.copyWith(color: t.text)),
+                    Text('${topDriver['count']} livraison(s) sur la période',
+                        style: DemProText.caption.copyWith(color: t.muted)),
+                  ],
+                ),
+              ),
+              if (topDriver['avgRating'] != null)
+                Row(
+                  children: [
+                    const Icon(Icons.star_rounded,
+                        color: DemProColors.warning, size: 16),
+                    const SizedBox(width: 3),
+                    Text(
+                      (topDriver['avgRating'] as num).toStringAsFixed(1),
+                      style: DemProText.bodyStrong.copyWith(color: t.text),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      const SizedBox(height: 16),
+
+      // ── Top destinataires ────────────────────────────────────────────────
+      Text('Destinataires les plus fréquents',
+          style: DemProText.bodyStrong.copyWith(color: t.text)),
+      const SizedBox(height: 10),
+      if (topDestinations.isEmpty)
+        _buildEmpty('Aucune livraison sur cette période')
+      else
+        Container(
+          decoration: BoxDecoration(
+            color: t.cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: t.border),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < topDestinations.length; i++) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (topDestinations[i]['receiverName']
+                                          as String?) ??
+                                  (topDestinations[i]['address'] as String? ??
+                                      '—'),
+                              style: DemProText.bodyStrong
+                                  .copyWith(color: t.text),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              topDestinations[i]['address'] as String? ?? '',
+                              style: DemProText.caption
+                                  .copyWith(color: t.muted),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: DemProColors.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${topDestinations[i]['count']}×',
+                          style: DemProText.caption.copyWith(
+                            color: DemProColors.accent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (i < topDestinations.length - 1)
+                  Divider(height: 1, color: t.border),
+              ],
+            ],
+          ),
+        ),
+    ];
+  }
+
   Widget _buildChart(List<Map<String, dynamic>> breakdown) {
     final maxAmt = breakdown
         .map((b) => (b['amount'] as num?)?.toDouble() ?? 0.0)
@@ -5453,6 +5723,43 @@ class _MiniStat extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(value, style: DemProText.title.copyWith(color: color)),
+        const SizedBox(height: 2),
+        Text(label, style: DemProText.caption.copyWith(color: t.muted)),
+      ],
+    ),
+  );
+}
+
+// ── Carte indicateur pilotage (délai moyen, taux d'annulation...) ───────────
+class _InsightCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? valueColor;
+  final _T t;
+  const _InsightCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.valueColor,
+    required this.t,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: t.cardBg,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: t.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: DemProColors.accent, size: 18),
+        const SizedBox(height: 10),
+        Text(value,
+            style: DemProText.title.copyWith(color: valueColor ?? t.text)),
         const SizedBox(height: 2),
         Text(label, style: DemProText.caption.copyWith(color: t.muted)),
       ],
