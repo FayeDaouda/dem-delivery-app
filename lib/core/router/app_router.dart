@@ -223,6 +223,9 @@ final appRouter = GoRouter(
       path: '/dem-pro/orders/create',
       builder: (context, state) {
         final scheduled = state.uri.queryParameters['scheduled'] == 'true';
+        final priority = state.uri.queryParameters['priority'] == 'EXPRESS'
+            ? 'EXPRESS'
+            : 'NORMAL';
         final extra = state.extra;
         Map<String, dynamic>? reorderFrom;
         Map<String, dynamic>? fromOrderRequest;
@@ -236,6 +239,7 @@ final appRouter = GoRouter(
         }
         return DemProOrderCreateScreen(
           scheduled: scheduled,
+          priority: priority,
           reorderFrom: reorderFrom,
           fromOrderRequest: fromOrderRequest,
         );

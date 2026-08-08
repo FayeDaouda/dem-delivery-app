@@ -421,14 +421,6 @@ class _AccueilTab extends StatelessWidget {
       }
     }
 
-    final recentHistory = allOrders
-        .where((o) {
-          final s = o['status'] as String? ?? '';
-          return s == 'DELIVERED' || s == 'CANCELLED';
-        })
-        .take(5)
-        .toList();
-
     final now = DateTime.now();
     final dateStr =
         '${_dayNames[now.weekday - 1]} ${now.day} ${_monthNames[now.month - 1]}';
@@ -436,60 +428,57 @@ class _AccueilTab extends StatelessWidget {
     return SafeArea(
       child: Column(
         children: [
-          // ── Header — fixe, ne défile pas avec le contenu ─────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          // ── Header dégradé cyan — fixe, ne défile pas avec le contenu ────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+            decoration: const BoxDecoration(gradient: AppColors.gradientCta),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _ProAvatar(
+                  avatarUrl: user?['avatar'] as String?,
+                  businessName: businessName,
+                  size: 42,
+                ),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Tableau de bord',
-                        style: ClientText.label.copyWith(color: t.muted),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          _ProAvatar(
-                            avatarUrl: user?['avatar'] as String?,
-                            businessName: businessName,
-                            size: 40,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              businessName?.isNotEmpty == true
-                                  ? businessName!
-                                  : 'Mon entreprise',
-                              style: ClientText.headline.copyWith(
-                                color: t.text,
-                                fontSize: 22,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  child: Text(
+                    businessName?.isNotEmpty == true
+                        ? businessName!
+                        : 'Mon entreprise',
+                    style: ClientText.headline.copyWith(
+                      color: Colors.white,
+                      fontSize: 21,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const _ProBadge(),
-                    if (activeOrders.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      _ActiveOrderIcon(
-                        count: activeOrders.length,
-                        onTap: () =>
-                            _goToActiveOrder(context, activeOrders.first),
-                      ),
-                    ],
-                  ],
+                const SizedBox(width: 8),
+                if (activeOrders.isNotEmpty) ...[
+                  _ActiveOrderIcon(
+                    count: activeOrders.length,
+                    onTap: () => _goToActiveOrder(context, activeOrders.first),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.20),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'DEM PRO',
+                    style: ClientText.micro.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -502,11 +491,11 @@ class _AccueilTab extends StatelessWidget {
               onRefresh: onRefresh,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Carte résumé ─────────────────────────────────────────────
+                    // ── Carte résumé — tableau de bord ────────────────────
                     if (loading)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -521,15 +510,9 @@ class _AccueilTab extends StatelessWidget {
                         width: double.infinity,
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: t.statGradient,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: AppColors.primary.withValues(alpha: 0.15),
-                          ),
+                          boxShadow: AppShadows.card,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,7 +567,7 @@ class _AccueilTab extends StatelessWidget {
                                   child: Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: t.cardBg,
+                                      color: AppColors.lightFill,
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Column(
@@ -614,7 +597,7 @@ class _AccueilTab extends StatelessWidget {
                                   child: Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: t.cardBg,
+                                      color: AppColors.lightFill,
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Column(
@@ -644,87 +627,84 @@ class _AccueilTab extends StatelessWidget {
                           ],
                         ),
                       ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
 
-                    // ── Actions ──────────────────────────────────────────────────
+                    // ── Types de livraison ────────────────────────────────
                     Row(
                       children: [
                         Expanded(
-                          child: _ActionButton(
-                            label: 'Livraison',
-                            icon: Icons.two_wheeler,
-                            filled: true,
+                          child: _PremiumServiceCard(
+                            icon: Icons.bolt_rounded,
+                            label: 'Express',
+                            color: AppColors.warning,
+                            onTap: () async {
+                              if (!await ensureLocationEnabled(context)) return;
+                              if (!context.mounted) return;
+                              context.push(
+                                '/dem-pro/orders/create?priority=EXPRESS',
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _PremiumServiceCard(
+                            icon: Icons.two_wheeler_rounded,
+                            label: 'Simple',
+                            color: AppColors.primary,
                             onTap: () async {
                               if (!await ensureLocationEnabled(context)) return;
                               if (!context.mounted) return;
                               context.push('/dem-pro/orders/create');
                             },
-                            t: t,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
-                          child: _ActionButton(
-                            label: 'Programmer',
-                            icon: Icons.schedule_outlined,
-                            filled: false,
+                          child: _PremiumServiceCard(
+                            icon: Icons.route_rounded,
+                            label: 'Groupée',
+                            color: AppColors.accentIndigo,
                             onTap: () async {
                               if (!await ensureLocationEnabled(context)) return;
                               if (!context.mounted) return;
-                              context.push(
-                                '/dem-pro/orders/create?scheduled=true',
-                              );
+                              context.push('/dem-pro/batch/create');
                             },
-                            t: t,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 28),
 
-                    // ── En cours ─────────────────────────────────────────────────
-                    _SectionLabel(label: 'EN COURS', t: t),
-                    const SizedBox(height: 12),
-                    if (activeOrders.isEmpty)
-                      _EnCoursEmpty(
-                        onOrder: () => context.push('/dem-pro/orders/create'),
-                        // "Passez votre première commande" n'a de sens que
-                        // si le compte n'a strictement jamais commandé —
-                        // sinon ça réapparaît à chaque fois qu'aucune
-                        // livraison n'est en cours, ce qui est l'état
-                        // normal entre deux commandes.
-                        isFirstOrder: allOrders.isEmpty,
-                        t: t,
-                      )
-                    else
-                      ...activeOrders.map(
-                        (o) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _OrderMiniCard(
-                            order: o,
-                            t: t,
-                            onTap: () => _goToActiveOrder(context, o),
+                    // ── Produits enregistrés ──────────────────────────────
+                    Row(
+                      children: [
+                        _SectionLabel(label: 'PRODUITS', t: t),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => context.push('/dem-pro/products'),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Voir plus',
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right,
+                                color: AppColors.primary,
+                                size: 16,
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    const SizedBox(height: 24),
-
-                    // ── Historique récent ─────────────────────────────────────────
-                    _SectionLabel(label: 'HISTORIQUE RÉCENT', t: t),
+                      ],
+                    ),
                     const SizedBox(height: 12),
-                    if (recentHistory.isEmpty)
-                      _HistoriqueEmpty(t: t)
-                    else
-                      ...recentHistory.map(
-                        (o) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _OrderMiniCard(
-                            order: o,
-                            t: t,
-                            onTap: () => _navigateToOrder(context, o),
-                          ),
-                        ),
-                      ),
+                    const _ProductsPreviewSection(),
                   ],
                 ),
               ),
@@ -1867,47 +1847,102 @@ class _BigStatBox extends StatelessWidget {
   );
 }
 
-class _ActionButton extends StatelessWidget {
-  final String label;
+// ── Raccourci type de livraison — carte animée (pression = léger zoom-out) ──
+class _PremiumServiceCard extends StatefulWidget {
   final IconData icon;
-  final bool filled;
+  final String label;
+  final Color color;
   final VoidCallback onTap;
-  final _T t;
-  const _ActionButton({
-    required this.label,
+  const _PremiumServiceCard({
     required this.icon,
-    required this.filled,
+    required this.label,
+    required this.color,
     required this.onTap,
-    required this.t,
   });
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: filled ? AppColors.primary : Colors.transparent,
-    borderRadius: BorderRadius.circular(14),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
+  State<_PremiumServiceCard> createState() => _PremiumServiceCardState();
+}
+
+class _PremiumServiceCardState extends State<_PremiumServiceCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 0.94,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTapDown: (_) => _ctrl.forward(),
+    onTapUp: (_) => _ctrl.reverse(),
+    onTapCancel: () => _ctrl.reverse(),
+    onTap: widget.onTap,
+    child: AnimatedBuilder(
+      animation: _scale,
+      builder: (_, child) =>
+          Transform.scale(scale: _scale.value, child: child),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+        padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: filled ? null : Border.all(color: t.border),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: widget.color.withValues(alpha: 0.14)),
+          boxShadow: [
+            BoxShadow(
+              color: widget.color.withValues(alpha: 0.16),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           children: [
-            Icon(
-              icon,
-              color: filled ? Colors.white : AppColors.primary,
-              size: 22,
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    widget.color,
+                    widget.color.withValues(alpha: 0.75),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.color.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(widget.icon, color: Colors.white, size: 22),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             Text(
-              label,
-              textAlign: TextAlign.center,
-              style: ClientText.label.copyWith(
-                color: filled ? Colors.white : t.text,
-                fontWeight: FontWeight.w700,
+              widget.label,
+              style: ClientText.bodyStrong.copyWith(
+                color: AppColors.textDark,
+                fontSize: 13,
               ),
             ),
           ],
@@ -1915,6 +1950,222 @@ class _ActionButton extends StatelessWidget {
       ),
     ),
   );
+}
+
+// ── Aperçu du catalogue produits sur l'Accueil ───────────────────────────────
+class _ProductsPreviewSection extends StatefulWidget {
+  const _ProductsPreviewSection();
+
+  @override
+  State<_ProductsPreviewSection> createState() =>
+      _ProductsPreviewSectionState();
+}
+
+class _ProductsPreviewSectionState extends State<_ProductsPreviewSection> {
+  final _repo = DemProRepository(ApiClient.dio);
+  List<Map<String, dynamic>> _products = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final products = await _repo.getProducts();
+      if (mounted) setState(() { _products = products; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _goToProducts() async {
+    await context.push('/dem-pro/products');
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    if (_products.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.lightBorder),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.inventory_2_outlined,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Aucun produit enregistré',
+              style: ClientText.subtitle.copyWith(color: AppColors.textDark),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Ajoutez vos produits pour les retrouver instantanément à chaque commande.',
+              textAlign: TextAlign.center,
+              style: ClientText.label.copyWith(
+                color: AppColors.textMuted,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: _goToProducts,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.add, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Ajouter un produit',
+                      style: ClientText.button.copyWith(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final preview = _products.take(3).toList();
+    return Column(
+      children: [
+        for (final p in preview)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _ProductPreviewCard(
+              product: p,
+              onTap: _goToProducts,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ProductPreviewCard extends StatelessWidget {
+  final Map<String, dynamic> product;
+  final VoidCallback onTap;
+  const _ProductPreviewCard({required this.product, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = product['name'] as String? ?? '';
+    final price = product['defaultPrice'] as num?;
+    final quantity = (product['quantity'] as num?)?.toInt();
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.lightBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.inventory_2_outlined,
+                color: AppColors.primary,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: ClientText.bodyStrong.copyWith(
+                      color: AppColors.textDark,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (price != null)
+                    Text(
+                      formatFcfa(price),
+                      style: ClientText.label.copyWith(
+                        color: AppColors.successLight,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (quantity != null)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: (quantity > 0 ? AppColors.successLight : AppColors.warning)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  quantity > 0 ? '$quantity' : 'Rupture',
+                  style: ClientText.micro.copyWith(
+                    color: quantity > 0 ? AppColors.successLight : AppColors.warning,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SectionLabel extends StatelessWidget {
@@ -1930,221 +2181,6 @@ class _SectionLabel extends StatelessWidget {
       letterSpacing: 1,
     ),
   );
-}
-
-// Empty state "EN COURS" avec micro CTA
-class _EnCoursEmpty extends StatelessWidget {
-  final VoidCallback onOrder;
-  final bool isFirstOrder;
-  final _T t;
-  const _EnCoursEmpty({
-    required this.onOrder,
-    required this.isFirstOrder,
-    required this.t,
-  });
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
-    decoration: BoxDecoration(
-      color: t.cardBg,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: AppColors.primary.withValues(alpha: 0.20)),
-    ),
-    child: Column(
-      children: [
-        Icon(
-          Icons.two_wheeler,
-          color: AppColors.primary.withValues(alpha: 0.55),
-          size: 30,
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'Aucune livraison en cours',
-          style: ClientText.body.copyWith(color: t.muted),
-        ),
-        const SizedBox(height: 14),
-        GestureDetector(
-          onTap: onOrder,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.30),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  isFirstOrder
-                      ? 'Passez votre première commande'
-                      : 'Nouvelle commande',
-                  style: ClientText.label.copyWith(
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.arrow_forward,
-                  color: AppColors.primary,
-                  size: 14,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-// Empty state "HISTORIQUE" — neutre, différent de EN COURS
-class _HistoriqueEmpty extends StatelessWidget {
-  final _T t;
-  const _HistoriqueEmpty({required this.t});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.symmetric(vertical: 28),
-    decoration: BoxDecoration(
-      color: t.cardBg,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: t.border),
-    ),
-    child: Column(
-      children: [
-        Icon(
-          Icons.receipt_long_outlined,
-          color: t.muted.withValues(alpha: 0.5),
-          size: 28,
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'Aucune livraison récente',
-          style: ClientText.body.copyWith(color: t.muted),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Votre historique apparaîtra ici',
-          style: ClientText.label.copyWith(
-            color: t.muted.withValues(alpha: 0.55),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _OrderMiniCard extends StatelessWidget {
-  final Map<String, dynamic> order;
-  final _T t;
-  final VoidCallback onTap;
-  const _OrderMiniCard({
-    required this.order,
-    required this.t,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final status = order['status'] as String? ?? '';
-    final color = _statusColor(status);
-    final dropoff = order['dropoffAddress'] as String? ?? '—';
-    final price = (order['price'] as num?)?.toInt();
-    final createdAt = _timeAgo(order['createdAt'] as String?);
-    final driverName = (order['driver'] as Map?)?['name'] as String?;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: t.cardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: t.border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                _isActiveStatus(status)
-                    ? Icons.two_wheeler
-                    : status == 'DELIVERED'
-                    ? Icons.check_circle_outline
-                    : Icons.cancel_outlined,
-                color: color,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _shortAddress(dropoff),
-                    style: ClientText.bodyStrong.copyWith(color: t.text),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Text(
-                        _statusLabel(status),
-                        style: ClientText.label.copyWith(color: color),
-                      ),
-                      if (driverName != null) ...[
-                        Text(
-                          ' · ',
-                          style: ClientText.label.copyWith(color: t.muted),
-                        ),
-                        Text(
-                          driverName,
-                          style: ClientText.label.copyWith(color: t.muted),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (price != null)
-                  Text(
-                    formatFcfa(price),
-                    style: ClientText.label.copyWith(
-                      color: t.text,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                if (createdAt.isNotEmpty)
-                  Text(
-                    createdAt,
-                    style: ClientText.micro.copyWith(color: t.muted),
-                  ),
-              ],
-            ),
-            const SizedBox(width: 4),
-            Icon(Icons.chevron_right, color: t.muted, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _InfoCard extends StatelessWidget {

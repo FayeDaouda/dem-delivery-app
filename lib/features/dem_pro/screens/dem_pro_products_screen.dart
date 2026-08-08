@@ -269,6 +269,7 @@ class _ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = product['name'] as String? ?? '';
     final price = product['defaultPrice'] as num?;
+    final quantity = (product['quantity'] as num?)?.toInt();
     final usageCount = (product['usageCount'] as num?)?.toInt() ?? 0;
 
     return Container(
@@ -309,6 +310,24 @@ class _ProductCard extends StatelessWidget {
                       Text('$usageCount vente${usageCount > 1 ? 's' : ''}', style: ClientText.label.copyWith(color: AppColors.textMuted)),
                     ],
                   ]),
+                  if (quantity != null) ...[
+                    const SizedBox(height: 3),
+                    Row(children: [
+                      Icon(
+                        quantity > 0 ? Icons.inventory_outlined : Icons.error_outline,
+                        size: 12,
+                        color: quantity > 0 ? AppColors.textMuted : AppColors.warning,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        quantity > 0 ? '$quantity en stock' : 'Rupture de stock',
+                        style: ClientText.micro.copyWith(
+                          color: quantity > 0 ? AppColors.textMuted : AppColors.warning,
+                          fontWeight: quantity > 0 ? FontWeight.w500 : FontWeight.w700,
+                        ),
+                      ),
+                    ]),
+                  ],
                 ]),
               ),
               PopupMenuButton<String>(
@@ -352,6 +371,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _price;
+  late final TextEditingController _quantity;
   bool _saving = false;
 
   bool get _isEdit => widget.existing != null && widget.existing!.containsKey('id');
@@ -363,12 +383,15 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _name = TextEditingController(text: e?['name'] as String? ?? '');
     final price = e?['defaultPrice'] as num?;
     _price = TextEditingController(text: price != null ? price.toInt().toString() : '');
+    final quantity = e?['quantity'] as num?;
+    _quantity = TextEditingController(text: quantity != null ? quantity.toInt().toString() : '');
   }
 
   @override
   void dispose() {
     _name.dispose();
     _price.dispose();
+    _quantity.dispose();
     super.dispose();
   }
 
@@ -377,9 +400,11 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     setState(() => _saving = true);
     try {
       final priceText = _price.text.trim();
+      final quantityText = _quantity.text.trim();
       final data = {
         'name': _name.text.trim(),
         'defaultPrice': priceText.isEmpty ? null : num.tryParse(priceText),
+        'quantity': quantityText.isEmpty ? null : int.tryParse(quantityText),
       };
       if (_isEdit) {
         await widget.repo.updateProduct(widget.existing!['id'] as String, data);
@@ -475,6 +500,39 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
             const SizedBox(height: 6),
             Text(
               'Vous pourrez toujours ajuster le prix au moment de la commande.',
+              style: ClientText.micro.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 14),
+
+            Text('Quantité disponible (optionnel)', style: ClientText.label.copyWith(color: AppColors.textMuted)),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _quantity,
+              keyboardType: TextInputType.number,
+              style: ClientText.body.copyWith(color: AppColors.textDark, fontSize: 14),
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return null;
+                final n = int.tryParse(v.trim());
+                if (n == null || n < 0) return 'Quantité invalide';
+                return null;
+              },
+              decoration: InputDecoration(
+                hintText: 'ex: 20',
+                suffixText: 'en stock',
+                suffixStyle: ClientText.body.copyWith(color: AppColors.textMuted),
+                hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
+                filled: true, fillColor: AppColors.lightFill,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.lightBorder)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.lightBorder)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error)),
+                focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.error, width: 1.5)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Laissez vide si vous ne suivez pas votre stock depuis l\'app.',
               style: ClientText.micro.copyWith(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),

@@ -75,6 +75,7 @@ class _Article {
 
 class DemProOrderCreateScreen extends StatefulWidget {
   final bool scheduled;
+  final String priority; // NORMAL | EXPRESS — voir orders.service.js
   final Map<String, dynamic>? reorderFrom;
 
   /// Demande soumise par un client final via le lien de commande public
@@ -87,6 +88,7 @@ class DemProOrderCreateScreen extends StatefulWidget {
   const DemProOrderCreateScreen({
     super.key,
     this.scheduled = false,
+    this.priority = 'NORMAL',
     this.reorderFrom,
     this.fromOrderRequest,
   });
@@ -660,6 +662,7 @@ class _State extends State<DemProOrderCreateScreen> {
             deliveryLat: _deliveryLat!,
             deliveryLng: _deliveryLng!,
             orderType: 'DELIVERY',
+            priority: widget.priority,
           )
           .timeout(const Duration(seconds: 10));
       debugPrint('[ESTIMATE] result: $est');
@@ -796,6 +799,7 @@ class _State extends State<DemProOrderCreateScreen> {
 
       final order = await _ordersRepo.createOrder({
         'orderType': 'DELIVERY',
+        'priority': widget.priority,
         'pickupAddress': _pickupAddress.isNotEmpty
             ? _pickupAddress
             : '${_pickupLat!.toStringAsFixed(4)}, ${_pickupLng!.toStringAsFixed(4)}',
@@ -1203,7 +1207,9 @@ class _State extends State<DemProOrderCreateScreen> {
                     Text(
                       _isScheduled
                           ? 'Programmer une livraison'
-                          : 'Nouvelle livraison',
+                          : widget.priority == 'EXPRESS'
+                              ? 'Livraison Express ⚡'
+                              : 'Nouvelle livraison',
                       style: ClientText.subtitle.copyWith(color: AppColors.textPrimary),
                     ),
                     const Spacer(),
