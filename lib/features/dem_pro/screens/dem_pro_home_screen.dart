@@ -216,6 +216,9 @@ class DemProHomeScreen extends StatefulWidget {
 
 class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
+  late final PageController _pageController = PageController(
+    initialPage: _currentIndex,
+  );
 
   final _demProRepo = DemProRepository(ApiClient.dio);
   final _livraisonsKey = GlobalKey<_LivraisonsTabState>();
@@ -247,7 +250,23 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pageController.dispose();
     super.dispose();
+  }
+
+  void _onPageChanged(int i) {
+    setState(() => _currentIndex = i);
+    if (i == 0) _load();
+    if (i == 1) _livraisonsKey.currentState?._loadOrders();
+    if (i == 3) _financesKey.currentState?._load();
+  }
+
+  void _goToTab(int i) {
+    _pageController.animateToPage(
+      i,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -296,8 +315,9 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
     const t = _T();
     return Scaffold(
       backgroundColor: t.scaffoldBg,
-      body: IndexedStack(
-        index: _currentIndex,
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: _onPageChanged,
         children: [
           _AccueilTab(
             user: _user,
@@ -306,7 +326,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
             activeOrders: _activeOrders,
             allOrders: _allOrders,
             onRefresh: _load,
-            onOpenDashboard: () => setState(() => _currentIndex = 3),
+            onOpenDashboard: () => _goToTab(3),
             t: t,
           ),
           _LivraisonsTab(key: _livraisonsKey, t: t),
@@ -343,12 +363,7 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
       },
       bottomNavigationBar: DemProNavBar(
         currentIndex: _currentIndex,
-        onTap: (i) {
-          setState(() => _currentIndex = i);
-          if (i == 0) _load();
-          if (i == 1) _livraisonsKey.currentState?._loadOrders();
-          if (i == 3) _financesKey.currentState?._load();
-        },
+        onTap: _goToTab,
       ),
     );
   }
@@ -800,8 +815,12 @@ class _CompteTab extends StatefulWidget {
   State<_CompteTab> createState() => _CompteTabState();
 }
 
-class _CompteTabState extends State<_CompteTab> {
+class _CompteTabState extends State<_CompteTab>
+    with AutomaticKeepAliveClientMixin {
   final _repo = DemProRepository(ApiClient.dio);
+
+  @override
+  bool get wantKeepAlive => true;
 
   bool _uploading = false;
   bool _logoutLoading = false;
@@ -1324,6 +1343,7 @@ class _CompteTabState extends State<_CompteTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final t = widget.t;
     final user = widget.user;
     final businessName = (user?['proBusinessName'] as String?)?.trim();
@@ -2026,10 +2046,14 @@ class _ProductsPreviewSection extends StatefulWidget {
       _ProductsPreviewSectionState();
 }
 
-class _ProductsPreviewSectionState extends State<_ProductsPreviewSection> {
+class _ProductsPreviewSectionState extends State<_ProductsPreviewSection>
+    with AutomaticKeepAliveClientMixin {
   final _repo = DemProRepository(ApiClient.dio);
   List<Map<String, dynamic>> _products = [];
   bool _loading = true;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -2053,6 +2077,7 @@ class _ProductsPreviewSectionState extends State<_ProductsPreviewSection> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_loading) {
       return const Center(
         child: CircularProgressIndicator(
@@ -2425,8 +2450,12 @@ class _LivraisonsTab extends StatefulWidget {
   State<_LivraisonsTab> createState() => _LivraisonsTabState();
 }
 
-class _LivraisonsTabState extends State<_LivraisonsTab> {
+class _LivraisonsTabState extends State<_LivraisonsTab>
+    with AutomaticKeepAliveClientMixin {
   late final DemProRepository _repo;
+
+  @override
+  bool get wantKeepAlive => true;
 
   // ── Livraisons ─────────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _orders = [];
@@ -2504,6 +2533,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final t = widget.t;
 
     return SafeArea(
@@ -3659,9 +3689,13 @@ class _AdressesTab extends StatefulWidget {
   State<_AdressesTab> createState() => _AdressesTabState();
 }
 
-class _AdressesTabState extends State<_AdressesTab> {
+class _AdressesTabState extends State<_AdressesTab>
+    with AutomaticKeepAliveClientMixin {
   final _repo = DemProRepository(ApiClient.dio);
   final _search = TextEditingController();
+
+  @override
+  bool get wantKeepAlive => true;
 
   List<Map<String, dynamic>> _addresses = [];
   List<Map<String, dynamic>> _recent = [];
@@ -3780,6 +3814,7 @@ class _AdressesTabState extends State<_AdressesTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return SafeArea(
       child: Column(
         children: [
@@ -4885,8 +4920,12 @@ class _FinancesTab extends StatefulWidget {
   State<_FinancesTab> createState() => _FinancesTabState();
 }
 
-class _FinancesTabState extends State<_FinancesTab> {
+class _FinancesTabState extends State<_FinancesTab>
+    with AutomaticKeepAliveClientMixin {
   final _repo = DemProRepository(ApiClient.dio);
+
+  @override
+  bool get wantKeepAlive => true;
 
   String _period = 'this_month';
   _FinanceView _view = _FinanceView.sales;
@@ -5001,6 +5040,7 @@ class _FinancesTabState extends State<_FinancesTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return SafeArea(
       child: Column(
         children: [
