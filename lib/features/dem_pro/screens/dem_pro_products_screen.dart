@@ -13,7 +13,8 @@ import '../widgets/dem_pro_button.dart';
 /// nombre d'utilisations (voir `usageCount`), incrémenté à chaque commande
 /// où le produit est choisi depuis ce catalogue.
 class DemProProductsScreen extends StatefulWidget {
-  const DemProProductsScreen({super.key});
+  final bool autoOpenForm;
+  const DemProProductsScreen({super.key, this.autoOpenForm = false});
   @override
   State<DemProProductsScreen> createState() => _DemProProductsScreenState();
 }
@@ -32,6 +33,11 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
     super.initState();
     _load();
     _search.addListener(() => setState(() => _query = _search.text.toLowerCase()));
+    if (widget.autoOpenForm) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showForm();
+      });
+    }
   }
 
   @override

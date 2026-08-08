@@ -296,7 +296,9 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/dem-pro/products',
-      builder: (context, state) => const DemProProductsScreen(),
+      builder: (context, state) => DemProProductsScreen(
+        autoOpenForm: state.uri.queryParameters['add'] == 'true',
+      ),
     ),
     GoRoute(
       path: '/dem-pro/order-requests',
