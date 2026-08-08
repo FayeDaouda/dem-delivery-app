@@ -215,6 +215,62 @@ class _T {
   List<Color> get headerCardGradient => [Colors.white, AppColors.lightBg];
 }
 
+// ── Physique du swipe entre onglets — moins nerveuse qu'un PageView par défaut.
+// Un petit flick très court génère déjà une vélocité largement au-dessus de la
+// tolérance par défaut de ScrollPhysics (proche de 0), ce qui fait basculer de
+// page au moindre effleurement. On relève cette tolérance pour qu'il faille un
+// vrai geste de swipe (vélocité franche ou plus de la moitié de l'écran
+// parcourue) avant de committer le changement de page.
+class _PremiumPageScrollPhysics extends PageScrollPhysics {
+  const _PremiumPageScrollPhysics({super.parent});
+
+  @override
+  _PremiumPageScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _PremiumPageScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  SpringDescription get spring =>
+      SpringDescription.withDampingRatio(mass: 0.7, stiffness: 130, ratio: 1.1);
+
+  @override
+  Tolerance toleranceFor(ScrollMetrics metrics) =>
+      const Tolerance(velocity: 500, distance: 0.01);
+}
+
+// ── Transition premium entre onglets : léger fondu + zoom-out proportionnel à
+// la distance de la page courante, façon carrousel — purement compositing
+// (Transform/Opacity), donc sans impact sur l'état conservé des onglets.
+class _PageTransition extends StatelessWidget {
+  final PageController controller;
+  final int index;
+  final Widget child;
+  const _PageTransition({
+    required this.controller,
+    required this.index,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: controller,
+    child: child,
+    builder: (context, child) {
+      double page = index.toDouble();
+      if (controller.hasClients && controller.position.haveDimensions) {
+        page = controller.page ?? index.toDouble();
+      }
+      final delta = (page - index).clamp(-1.0, 1.0);
+      final scale = 1 - (delta.abs() * 0.05);
+      final opacity = (1 - (delta.abs() * 0.4)).clamp(0.0, 1.0);
+      return Opacity(
+        opacity: opacity,
+        child: Transform.scale(scale: scale, child: child),
+      );
+    },
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 class DemProHomeScreen extends StatefulWidget {
@@ -326,26 +382,47 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
       backgroundColor: t.scaffoldBg,
       body: PageView(
         controller: _pageController,
+        physics: const _PremiumPageScrollPhysics(),
         onPageChanged: _onPageChanged,
         children: [
-          _AccueilTab(
-            user: _user,
-            stats: _stats,
-            loading: _loading,
-            activeOrders: _activeOrders,
-            allOrders: _allOrders,
-            onRefresh: _load,
-            onOpenDashboard: () => _goToTab(3),
-            t: t,
+          _PageTransition(
+            controller: _pageController,
+            index: 0,
+            child: _AccueilTab(
+              user: _user,
+              stats: _stats,
+              loading: _loading,
+              activeOrders: _activeOrders,
+              allOrders: _allOrders,
+              onRefresh: _load,
+              onOpenDashboard: () => _goToTab(3),
+              t: t,
+            ),
           ),
-          _LivraisonsTab(key: _livraisonsKey, t: t),
-          _AdressesTab(t: t),
-          _FinancesTab(key: _financesKey, t: t, user: _user),
-          _CompteTab(
-            user: _user,
-            onLogout: _handleLogout,
-            t: t,
-            onRefresh: _load,
+          _PageTransition(
+            controller: _pageController,
+            index: 1,
+            child: _LivraisonsTab(key: _livraisonsKey, t: t),
+          ),
+          _PageTransition(
+            controller: _pageController,
+            index: 2,
+            child: _AdressesTab(t: t),
+          ),
+          _PageTransition(
+            controller: _pageController,
+            index: 3,
+            child: _FinancesTab(key: _financesKey, t: t, user: _user),
+          ),
+          _PageTransition(
+            controller: _pageController,
+            index: 4,
+            child: _CompteTab(
+              user: _user,
+              onLogout: _handleLogout,
+              t: t,
+              onRefresh: _load,
+            ),
           ),
         ],
       ),
@@ -2656,30 +2733,10 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
         // ── Toggle Livraisons / Tournées ────────────────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: t.cardBg2,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                _ViewToggleBtn(
-                  label: 'Livraisons',
-                  icon: Icons.two_wheeler,
-                  active: _viewType == _ViewType.orders,
-                  onTap: () => _switchView(_ViewType.orders),
-                  t: t,
-                ),
-                _ViewToggleBtn(
-                  label: 'Tournées',
-                  icon: Icons.route_outlined,
-                  active: _viewType == _ViewType.batches,
-                  onTap: () => _switchView(_ViewType.batches),
-                  t: t,
-                ),
-              ],
-            ),
+          child: _ViewToggleBar(
+            viewType: _viewType,
+            onChanged: _switchView,
+            t: t,
           ),
         ),
         const SizedBox(height: 12),
@@ -2983,10 +3040,11 @@ class _OrderSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 42,
+    height: 44,
     decoration: BoxDecoration(
-      color: t.cardBg2,
-      borderRadius: BorderRadius.circular(12),
+      color: AppColors.primary.withValues(alpha: 0.07),
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
     ),
     child: TextField(
       controller: controller,
@@ -2996,7 +3054,7 @@ class _OrderSearchField extends StatelessWidget {
         isDense: true,
         hintText: 'Rechercher une adresse, un destinataire…',
         hintStyle: ClientText.body.copyWith(color: t.muted),
-        prefixIcon: Icon(Icons.search, color: t.muted, size: 20),
+        prefixIcon: Icon(Icons.search, color: AppColors.primary, size: 20),
         suffixIcon: controller.text.isEmpty
             ? null
             : IconButton(
@@ -3007,7 +3065,7 @@ class _OrderSearchField extends StatelessWidget {
                 },
               ),
         border: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(vertical: 11),
       ),
     ),
   );
@@ -3540,15 +3598,94 @@ class _HistoriqueRow extends StatelessWidget {
   }
 }
 
-// ── Toggle vue Livraisons / Tournées ─────────────────────────────────────────
+// ── Toggle vue Livraisons / Tournées — pastille glissante premium ────────────
 
-class _ViewToggleBtn extends StatelessWidget {
+class _ViewToggleBar extends StatelessWidget {
+  final _ViewType viewType;
+  final ValueChanged<_ViewType> onChanged;
+  final _T t;
+  const _ViewToggleBar({
+    required this.viewType,
+    required this.onChanged,
+    required this.t,
+  });
+
+  static const _gap = 8.0;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 48,
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: t.cardBg2,
+      borderRadius: BorderRadius.circular(15),
+    ),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final btnWidth = (constraints.maxWidth - _gap) / 2;
+        final left = viewType == _ViewType.orders ? 0.0 : btnWidth + _gap;
+        return Stack(
+          children: [
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutCubic,
+              left: left,
+              top: 0,
+              bottom: 0,
+              width: btnWidth,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(11),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.30),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                SizedBox(
+                  width: btnWidth,
+                  child: _ToggleTapZone(
+                    label: 'Livraisons',
+                    icon: Icons.two_wheeler,
+                    active: viewType == _ViewType.orders,
+                    onTap: () => onChanged(_ViewType.orders),
+                    t: t,
+                  ),
+                ),
+                const SizedBox(width: _gap),
+                SizedBox(
+                  width: btnWidth,
+                  child: _ToggleTapZone(
+                    label: 'Tournées',
+                    icon: Icons.route_outlined,
+                    active: viewType == _ViewType.batches,
+                    onTap: () => onChanged(_ViewType.batches),
+                    t: t,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+class _ToggleTapZone extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool active;
   final VoidCallback onTap;
   final _T t;
-  const _ViewToggleBtn({
+  const _ToggleTapZone({
     required this.label,
     required this.icon,
     required this.active,
@@ -3557,30 +3694,25 @@ class _ViewToggleBtn extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: active ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 15, color: active ? Colors.white : t.muted),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: ClientText.body.copyWith(
-                color: active ? Colors.white : t.muted,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              ),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    behavior: HitTestBehavior.opaque,
+    child: Center(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 15, color: active ? Colors.white : t.muted),
+          const SizedBox(width: 6),
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            style: ClientText.body.copyWith(
+              color: active ? Colors.white : t.muted,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
             ),
-          ],
-        ),
+            child: Text(label),
+          ),
+        ],
       ),
     ),
   );
