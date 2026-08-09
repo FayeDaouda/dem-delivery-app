@@ -1081,11 +1081,144 @@ class _CompteTabState extends State<_CompteTab>
   int _logoutSwipeTick = 0;
   int _deleteSwipeTick = 0;
   int _pendingRequestCount = 0;
+  Map<String, dynamic>? _planData;
 
   @override
   void initState() {
     super.initState();
     _loadPendingRequestCount();
+    _loadPlan();
+  }
+
+  Future<void> _loadPlan() async {
+    try {
+      final plan = await _repo.getMyPlan();
+      if (mounted) setState(() => _planData = plan);
+    } catch (_) {}
+  }
+
+  Future<void> _showPlanSheet() async {
+    final data = _planData;
+    final planLabel = data?['planLabel'] as String? ?? 'Gratuit';
+    final features = (data?['features'] as List?)?.cast<String>() ?? [];
+    final nextTier = data?['nextTier'] as String?;
+    final nextTierFeatures =
+        (data?['nextTierFeatures'] as List?)?.cast<String>() ?? [];
+    final nextTierLabel = switch (nextTier) {
+      'PRO' => 'Pro',
+      'BUSINESS' => 'Business',
+      _ => null,
+    };
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          MediaQuery.of(sheetCtx).viewPadding.bottom + 24,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightBorder,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Plan $planLabel',
+                    style: ClientText.title.copyWith(
+                      color: AppColors.textDark,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Ce que vous avez déjà',
+                style: ClientText.label.copyWith(
+                  color: AppColors.textMuted,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final f in features) _PlanFeatureRow(text: f, included: true),
+              if (nextTierLabel != null) ...[
+                const SizedBox(height: 18),
+                Text(
+                  'Débloquez avec $nextTierLabel',
+                  style: ClientText.label.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final f in nextTierFeatures)
+                  _PlanFeatureRow(text: f, included: false),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      launchUrl(
+                        Uri.parse(
+                          'https://wa.me/221710064664?text=${Uri.encodeComponent('Bonjour, je souhaite passer au plan $nextTierLabel sur DEM Pro.')}',
+                        ),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                    label: Text('Nous contacter pour passer $nextTierLabel'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadPendingRequestCount() async {
@@ -1846,52 +1979,83 @@ class _CompteTabState extends State<_CompteTab>
             // ── Abonnement ───────────────────────────────────────────────
             _SectionLabel(label: 'ABONNEMENT', t: t),
             const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
+            Builder(
+              builder: (context) {
+                final planCode = _planData?['plan'] as String? ?? 'FREE';
+                final planLabel = _planData?['planLabel'] as String? ?? 'Gratuit';
+                final planColor = switch (planCode) {
+                  'PRO' => AppColors.primary,
+                  'BUSINESS' => AppColors.accentIndigo,
+                  _ => AppColors.textMuted,
+                };
+                final isFree = planCode == 'FREE';
+                return GestureDetector(
+                  onTap: _showPlanSheet,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
+                      color: planColor.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: planColor.withValues(alpha: 0.2)),
                     ),
-                    child: const Icon(
-                      Icons.workspace_premium,
-                      color: AppColors.primary,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Text(
-                          'DEM Pro',
-                          style: ClientText.subtitle.copyWith(color: t.text),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Plan gratuit — lancement',
-                          style: ClientText.label.copyWith(
-                            color: AppColors.primary,
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: planColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.workspace_premium,
+                            color: planColor,
+                            size: 22,
                           ),
                         ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'DEM Pro',
+                                style: ClientText.subtitle.copyWith(color: t.text),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                isFree ? 'Plan $planLabel' : 'Plan $planLabel actif',
+                                style: ClientText.label.copyWith(color: planColor),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (isFree)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Découvrir',
+                              style: ClientText.micro.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          )
+                        else
+                          Icon(Icons.chevron_right_rounded, color: planColor),
                       ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
             const SizedBox(height: 24),
 
@@ -2029,6 +2193,35 @@ class _PressScaleState extends State<_PressScale> {
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
       child: widget.child,
+    ),
+  );
+}
+
+// ── Ligne fonctionnalité dans la feuille d'abonnement ────────────────────────
+class _PlanFeatureRow extends StatelessWidget {
+  final String text;
+  final bool included;
+  const _PlanFeatureRow({required this.text, required this.included});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          included ? Icons.check_circle : Icons.lock_outline_rounded,
+          color: included ? AppColors.successLight : AppColors.primary,
+          size: 18,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: ClientText.body.copyWith(color: AppColors.textDark),
+          ),
+        ),
+      ],
     ),
   );
 }

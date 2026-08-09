@@ -48,6 +48,19 @@ class DemProRepository {
     }
   }
 
+  /// Abonnement DEM Pro (palier, statut, fonctionnalités incluses).
+  Future<Map<String, dynamic>> getMyPlan() async {
+    try {
+      final res = await _dio.get('/dem-pro/me/plan');
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger l\'abonnement.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   /// Statistiques du tableau de bord (livraisons du jour, dépenses, etc.)
   Future<Map<String, dynamic>> getMyStats() async {
     try {
