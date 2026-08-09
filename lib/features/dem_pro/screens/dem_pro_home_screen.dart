@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -6107,6 +6108,91 @@ class _FinancesTabState extends State<_FinancesTab>
     _load();
   }
 
+  String _csvEscape(String value) {
+    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
+  }
+
+  Future<void> _exportCsv() async {
+    final orders = _filteredOrders;
+    if (orders.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucune livraison à exporter sur cette période.')),
+      );
+      return;
+    }
+
+    final periodLabel =
+        _periodOptions.firstWhere((p) => p.$1 == _period, orElse: () => ('', _period)).$2;
+
+    final rows = <List<String>>[
+      [
+        'Date livraison',
+        'Adresse départ',
+        'Adresse livraison',
+        'Destinataire',
+        'Téléphone',
+        'Articles',
+        'Type',
+        'Montant produits (FCFA)',
+        'Frais livraison (FCFA)',
+        'Total (FCFA)',
+        'Livreur',
+      ],
+    ];
+
+    for (final o in orders) {
+      final items = (o['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final articles = items
+          .map((it) => '${it['name']} x${it['quantity'] ?? 1}')
+          .join(' | ');
+      int productTotal = 0;
+      for (final it in items) {
+        productTotal += ((it['price'] as num?)?.toInt() ?? 0) *
+            ((it['quantity'] as num?)?.toInt() ?? 1);
+      }
+      final deliveryPrice = (o['price'] as num?)?.toInt() ?? 0;
+      final driver = o['driver'] as Map<String, dynamic>?;
+      final deliveredAt = DateTime.tryParse(o['deliveredAt'] as String? ?? '')?.toLocal();
+
+      rows.add([
+        deliveredAt != null
+            ? '${deliveredAt.day.toString().padLeft(2, '0')}/${deliveredAt.month.toString().padLeft(2, '0')}/${deliveredAt.year} ${deliveredAt.hour.toString().padLeft(2, '0')}:${deliveredAt.minute.toString().padLeft(2, '0')}'
+            : '',
+        o['pickupAddress'] as String? ?? '',
+        o['deliveryAddress'] as String? ?? '',
+        o['receiverName'] as String? ?? '',
+        o['receiverPhone'] as String? ?? '',
+        articles,
+        o['priority'] == 'EXPRESS' ? 'Express' : 'Simple',
+        productTotal.toString(),
+        deliveryPrice.toString(),
+        (productTotal + deliveryPrice).toString(),
+        driver?['name'] as String? ?? '',
+      ]);
+    }
+
+    final csv = rows
+        .map((r) => r.map(_csvEscape).join(','))
+        .join('\r\n');
+    final bytes = utf8.encode('﻿$csv'); // BOM — accents lisibles dans Excel
+
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile.fromData(
+            bytes,
+            name: 'dem_pro_ventes_$_period.csv',
+            mimeType: 'text/csv',
+          ),
+        ],
+        subject: 'Export DEM Pro — $periodLabel',
+      ),
+    );
+  }
+
   // ── Filtrage des commandes par période ────────────────────────────────────
   // Filtre et trie sur deliveredAt (pas createdAt) — c'est la date que
   // getMyFinances()/getBusinessInsights() utilisent côté serveur pour ces
@@ -6237,7 +6323,7 @@ class _FinancesTabState extends State<_FinancesTab>
                       ],
                     ),
                   ),
-                  if (!_loading)
+                  if (!_loading) ...[
                     Text(
                       headerValue,
                       style: ClientText.title.copyWith(
@@ -6246,6 +6332,12 @@ class _FinancesTabState extends State<_FinancesTab>
                         fontWeight: FontWeight.w800,
                       ),
                     ),
+                    const SizedBox(width: 10),
+                    _HeaderIconButton(
+                      icon: Icons.ios_share_rounded,
+                      onTap: _exportCsv,
+                    ),
+                  ],
                 ],
               ),
             ),
