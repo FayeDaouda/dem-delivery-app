@@ -61,6 +61,91 @@ class DemProRepository {
     }
   }
 
+  /// Active/désactive le paiement intégré (voir pilier Wallet DEM Pro).
+  Future<Map<String, dynamic>> setInAppPaymentEnabled(bool enabled) async {
+    try {
+      final res = await _dio.patch(
+        '/dem-pro/me/payment-settings',
+        data: {'inAppPaymentEnabled': enabled},
+      );
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de mettre à jour ce réglage.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  /// Solde + transactions récentes du wallet DEM Pro.
+  Future<Map<String, dynamic>> getWalletSummary() async {
+    try {
+      final res = await _dio.get('/users/dem-pro/wallet');
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger le portefeuille.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> getWalletTransactions({int page = 1}) async {
+    try {
+      final res = await _dio.get(
+        '/users/dem-pro/wallet/transactions',
+        queryParameters: {'page': page},
+      );
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger l\'historique.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  /// Requis uniquement si [destinationPhone] diffère du numéro du compte.
+  Future<Map<String, dynamic>> requestCashoutOtp(String destinationPhone) async {
+    try {
+      final res = await _dio.post(
+        '/users/dem-pro/wallet/cashout/request-otp',
+        data: {'destinationPhone': destinationPhone},
+      );
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'envoyer le code de confirmation.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  /// Retrait du solde vers Wave/Orange Money.
+  Future<Map<String, dynamic>> requestCashout({
+    required int amount,
+    required String operatorName,
+    String? destinationPhone,
+    String? destinationName,
+    String? otp,
+  }) async {
+    try {
+      final res = await _dio.post('/users/dem-pro/wallet/cashout', data: {
+        'amount': amount,
+        'operatorName': operatorName,
+        if (destinationPhone != null) 'destinationPhone': destinationPhone,
+        if (destinationName != null) 'destinationName': destinationName,
+        if (otp != null) 'otp': otp,
+      });
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Le retrait a échoué.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   /// Statistiques du tableau de bord (livraisons du jour, dépenses, etc.)
   Future<Map<String, dynamic>> getMyStats() async {
     try {

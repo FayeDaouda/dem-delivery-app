@@ -1097,6 +1097,21 @@ class _CompteTabState extends State<_CompteTab>
     } catch (_) {}
   }
 
+  Future<void> _toggleInAppPayment(bool value) async {
+    setState(() => _planData = {...?_planData, 'inAppPaymentEnabled': value});
+    try {
+      await _repo.setInAppPaymentEnabled(value);
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _planData = {...?_planData, 'inAppPaymentEnabled': !value},
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible de mettre à jour ce réglage.')),
+      );
+    }
+  }
+
   Future<void> _showPlanSheet() async {
     final data = _planData;
     final planLabel = data?['planLabel'] as String? ?? 'Gratuit';
@@ -1936,6 +1951,52 @@ class _CompteTabState extends State<_CompteTab>
                   onTap: () => context.push('/dem-pro/products'),
                 ),
               ],
+            ),
+            const SizedBox(height: 24),
+
+            // ── Wallet & paiement intégré ────────────────────────────────
+            _SectionLabel(label: 'WALLET & PAIEMENT', t: t),
+            const SizedBox(height: 12),
+            _InfoCard(
+              t: t,
+              children: [
+                _TapRow(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: 'Wallet DEM Pro',
+                  subtitle: 'Solde, retraits, historique des ventes',
+                  t: t,
+                  onTap: () => context.push('/dem-pro/wallet'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: t.cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: t.border),
+              ),
+              child: SwitchListTile(
+                value: _planData?['inAppPaymentEnabled'] as bool? ?? false,
+                onChanged: _toggleInAppPayment,
+                activeTrackColor: AppColors.primary,
+                activeThumbColor: Colors.white,
+                inactiveThumbColor: Colors.white,
+                inactiveTrackColor: t.border,
+                title: Text(
+                  'Paiement intégré',
+                  style: ClientText.subtitle.copyWith(color: t.text),
+                ),
+                subtitle: Text(
+                  'Le client paie le produit et la livraison en une fois dans l\'app — le produit est crédité sur votre wallet.',
+                  style: ClientText.label.copyWith(color: t.muted, height: 1.4),
+                ),
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
+              ),
             ),
             const SizedBox(height: 24),
 

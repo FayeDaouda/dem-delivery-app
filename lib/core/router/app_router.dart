@@ -57,6 +57,7 @@ import '../../features/dem_pro/screens/dem_pro_receipt_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_products_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_requests_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_promo_code_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_wallet_screen.dart';
 import '../../features/guest_tracking/guest_tracking_screen.dart';
 
 final routeObserver = RouteObserver<ModalRoute<void>>();
@@ -307,6 +308,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/dem-pro/promo-code',
       builder: (context, state) => const DemProPromoCodeScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/wallet',
+      builder: (context, state) => const DemProWalletScreen(),
     ),
     GoRoute(
       path: '/orders/confirmation',
