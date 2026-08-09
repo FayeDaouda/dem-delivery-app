@@ -1784,6 +1784,7 @@ class _CompteTabState extends State<_CompteTab>
     final email = user?['email'] as String?;
     final sector = user?['proSector'] as String?;
     final volume = user?['proWeeklyVolume'] as String?;
+    final ninea = user?['proNinea'] as String?;
 
     return Column(
       children: [
@@ -1930,8 +1931,16 @@ class _CompteTabState extends State<_CompteTab>
                   label: 'Volume hebdo',
                   value: _volumeLabels[volume] ?? '—',
                   t: t,
-                  isLast: true,
                   onTap: () => _showVolumePicker(volume),
+                ),
+                _EditableInfoRow(
+                  icon: Icons.badge_outlined,
+                  label: 'NINEA',
+                  value: ninea?.isNotEmpty == true ? ninea! : 'Ajouter (pour vos factures)',
+                  isPlaceholder: ninea == null || ninea.isEmpty,
+                  t: t,
+                  isLast: true,
+                  onTap: () => _editField('NINEA', ninea ?? '', 'proNinea'),
                 ),
               ],
             ),

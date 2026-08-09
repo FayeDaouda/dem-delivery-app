@@ -5,10 +5,38 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/client_text.dart';
 import '../../../core/utils/price_format.dart';
+import '../../profile/data/profile_repository.dart';
+import '../utils/dem_pro_invoice.dart';
 
-class DemProReceiptScreen extends StatelessWidget {
+class DemProReceiptScreen extends StatefulWidget {
   final Map<String, dynamic> order;
   const DemProReceiptScreen({super.key, required this.order});
+
+  @override
+  State<DemProReceiptScreen> createState() => _DemProReceiptScreenState();
+}
+
+class _DemProReceiptScreenState extends State<DemProReceiptScreen> {
+  bool _generatingInvoice = false;
+
+  Map<String, dynamic> get order => widget.order;
+
+  Future<void> _generateInvoice() async {
+    setState(() => _generatingInvoice = true);
+    try {
+      final merchant = await ProfileRepository().getMe();
+      if (!mounted) return;
+      await shareInvoicePdf(order: order, merchant: merchant);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Impossible de générer la facture.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _generatingInvoice = false);
+    }
+  }
 
   String _short(String? addr) =>
       (addr == null || addr.isEmpty) ? '—' : addr.split(',').first.trim();
@@ -253,6 +281,34 @@ class DemProReceiptScreen extends StatelessWidget {
               _DetailRow(label: 'Durée', value: _duration(createdAt, deliveredAt)),
           ]),
           const SizedBox(height: 24),
+
+          // ── Facture pro ──────────────────────────────────────────────
+          if (isDelivered) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: _generatingInvoice ? null : _generateInvoice,
+                icon: _generatingInvoice
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.receipt_long_outlined, size: 18),
+                label: Text(
+                  _generatingInvoice ? 'Génération…' : 'Générer la facture',
+                  style: ClientText.subtitle.copyWith(color: AppColors.textDark),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
 
           // ── Recommander cette commande ──────────────────────────────
           SizedBox(
