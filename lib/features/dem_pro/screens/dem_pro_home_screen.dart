@@ -1104,6 +1104,7 @@ class _CompteTabState extends State<_CompteTab>
     final nextTier = data?['nextTier'] as String?;
     final nextTierFeatures =
         (data?['nextTierFeatures'] as List?)?.cast<String>() ?? [];
+    final commissionRate = data?['commissionRatePercent'] as num?;
     final nextTierLabel = switch (nextTier) {
       'PRO' => 'Pro',
       'BUSINESS' => 'Business',
@@ -1188,6 +1189,35 @@ class _CompteTabState extends State<_CompteTab>
                 const SizedBox(height: 8),
                 for (final f in nextTierFeatures)
                   _PlanFeatureRow(text: f, included: false),
+                if (commissionRate != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.info_outline,
+                          color: AppColors.primary,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Le wallet DEM Pro prélève une commission de ${commissionRate.toStringAsFixed(commissionRate % 1 == 0 ? 0 : 1)}% sur la part produit des commandes payées via le paiement intégré.',
+                            style: ClientText.label.copyWith(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
