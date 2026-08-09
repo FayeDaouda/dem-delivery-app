@@ -276,6 +276,8 @@ class NotificationService {
     // ── Pilotage / stock — DEM Pro ──────────────────────────────────────────
     'DEM_PRO_WEEKLY_DIGEST'     => '/dem-pro/home',
     'DEM_PRO_LOW_STOCK'         => '/dem-pro/home',
+    'DEM_PRO_PLAN_EXPIRED'      => '/dem-pro/home',
+    'DEM_PRO_PLAN_EXPIRING'     => '/dem-pro/home',
     // ── Paiement — driver ───────────────────────────────────────────────────
     'PAYMENT_RESOLVED'          => '/driver/home',     // admin confirme paiement
     _ => null,

@@ -24,6 +24,10 @@ import '../../../core/utils/price_format.dart';
 import '../widgets/dem_pro_nav_bar.dart';
 import '../../../core/utils/location_gate.dart';
 import '../../../shared/widgets/swipe_to_confirm.dart';
+import '../../../core/services/socket_service.dart';
+import '../../../core/utils/dem_toast.dart';
+import '../../../shared/widgets/operator_picker_sheet.dart';
+import '../../../shared/widgets/samirpay_payment_sheet.dart';
 
 const _sectorLabels = {
   'commerce': 'Commerce',
@@ -1121,6 +1125,7 @@ class _CompteTabState extends State<_CompteTab>
     final nextTierFeatures =
         (data?['nextTierFeatures'] as List?)?.cast<String>() ?? [];
     final commissionRate = data?['commissionRatePercent'] as num?;
+    final nextTierPrice = (data?['nextTierPrice'] as num?)?.toInt();
     final nextTierLabel = switch (nextTier) {
       'PRO' => 'Pro',
       'BUSINESS' => 'Business',
@@ -1205,6 +1210,16 @@ class _CompteTabState extends State<_CompteTab>
                 const SizedBox(height: 8),
                 for (final f in nextTierFeatures)
                   _PlanFeatureRow(text: f, included: false),
+                if (nextTierPrice != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    '${formatFcfa(nextTierPrice)} / mois',
+                    style: ClientText.title.copyWith(
+                      color: AppColors.textDark,
+                      fontSize: 20,
+                    ),
+                  ),
+                ],
                 if (commissionRate != null) ...[
                   const SizedBox(height: 10),
                   Container(
@@ -1239,17 +1254,14 @@ class _CompteTabState extends State<_CompteTab>
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(sheetCtx);
-                      launchUrl(
-                        Uri.parse(
-                          'https://wa.me/221710064664?text=${Uri.encodeComponent('Bonjour, je souhaite passer au plan $nextTierLabel sur DEM Pro.')}',
-                        ),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                    label: Text('Nous contacter pour passer $nextTierLabel'),
+                    onPressed: nextTierPrice == null
+                        ? null
+                        : () {
+                            Navigator.pop(sheetCtx);
+                            _purchasePlan(nextTier!, nextTierPrice, nextTierLabel);
+                          },
+                    icon: const Icon(Icons.workspace_premium, size: 18),
+                    label: Text('Passer $nextTierLabel'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -1259,11 +1271,58 @@ class _CompteTabState extends State<_CompteTab>
                     ),
                   ),
                 ),
+                const SizedBox(height: 10),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      launchUrl(
+                        Uri.parse(
+                          'https://wa.me/221710064664?text=${Uri.encodeComponent('Bonjour, j\'ai une question sur le plan $nextTierLabel sur DEM Pro.')}',
+                        ),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                    label: const Text('Une question ? Nous contacter'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textMuted,
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // Achète directement le palier via SamirPay — même mécanique que la passe
+  // journalière driver (chooseOperator + SamirpayPaymentSheet), le paiement
+  // active le plan automatiquement dès confirmation (voir samirpay.service.js).
+  Future<void> _purchasePlan(String plan, int amount, String? planLabel) async {
+    final operatorName = await chooseOperator(
+      context,
+      title: 'Payer avec',
+    );
+    if (operatorName == null || !mounted) return;
+
+    await SamirpayPaymentSheet.show(
+      context,
+      amount: amount,
+      title: 'Abonnement DEM Pro ${planLabel ?? plan}',
+      initPayment: () async {
+        final result = await _repo.purchasePlan(plan, operatorName);
+        return result;
+      },
+      confirmationStream: SocketService.instance.onWalletUpdated,
+      matchesConfirmation: (event, payment) =>
+          event['orderRef'] == payment['orderRef'],
+      onSuccess: () {
+        showDemToast(context, 'Abonnement ${planLabel ?? plan} activé !');
+        _loadPlan();
+      },
     );
   }
 

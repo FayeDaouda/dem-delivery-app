@@ -103,6 +103,26 @@ class DemProRepository {
     }
   }
 
+  /// Lance l'achat direct d'un palier (PRO/BUSINESS) via SamirPay — le
+  /// montant vient du backend (dem_pro.plans.js), jamais choisi ici.
+  Future<Map<String, dynamic>> purchasePlan(
+    String plan,
+    String operatorName,
+  ) async {
+    try {
+      final res = await _dio.post(
+        '/dem-pro/me/plan/purchase',
+        data: {'plan': plan, 'operatorName': operatorName},
+      );
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de lancer le paiement.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   /// Solde + transactions récentes du wallet DEM Pro.
   Future<Map<String, dynamic>> getWalletSummary() async {
     try {
