@@ -111,33 +111,39 @@ class _DemProOrderRequestsScreenState extends State<DemProOrderRequestsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.lightBg,
-      body: SafeArea(
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 20, 0),
-            child: Row(children: [
-              IconButton(
-                onPressed: () => context.pop(),
-                icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textDark, size: 18),
-              ),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Demandes reçues', style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: 20)),
-                  Text('Via votre lien de commande', style: ClientText.label.copyWith(color: AppColors.textMuted)),
-                ]),
-              ),
-              if (pending.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text('${pending.length}', style: ClientText.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.w800)),
+      body: Column(children: [
+        Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 20, 20),
+              child: Row(children: [
+                IconButton(
+                  onPressed: () => context.pop(),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
                 ),
-            ]),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Demandes reçues', style: ClientText.title.copyWith(color: Colors.white, fontSize: 18)),
+                    Text('Via votre lien de commande', style: ClientText.label.copyWith(color: Colors.white.withValues(alpha: 0.75))),
+                  ]),
+                ),
+                if (pending.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.20),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('${pending.length}', style: ClientText.label.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                  ),
+              ]),
+            ),
           ),
-          Expanded(
+        ),
+        Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : _loadFailed
@@ -170,9 +176,8 @@ class _DemProOrderRequestsScreenState extends State<DemProOrderRequestsScreen> {
                               ],
                             ),
                           ),
-          ),
-        ]),
-      ),
+        ),
+      ]),
     );
   }
 

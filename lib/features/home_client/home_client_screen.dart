@@ -28,6 +28,7 @@ import '../notifications/data/notifications_repository.dart';
 import '../../shared/widgets/map_location_mode_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/pressable.dart';
+import '../../shared/widgets/staggered_entrance.dart';
 import '../deliveries/data/orders_repository.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../../shared/widgets/promo_highlight_popup.dart';
@@ -1232,7 +1233,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
         Row(
           children: [
             Expanded(
-              child: _StaggeredEntrance(
+              child: StaggeredEntrance(
                 index: 0,
                 child: _ServiceTile(
                   icon: Icons.inventory_2_outlined,
@@ -1249,7 +1250,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             ),
             const SizedBox(width: AppSpacing.s),
             Expanded(
-              child: _StaggeredEntrance(
+              child: StaggeredEntrance(
                 index: 1,
                 child: _ServiceTile(
                   icon: Icons.bolt_rounded,
@@ -1268,7 +1269,7 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             ),
             const SizedBox(width: AppSpacing.s),
             Expanded(
-              child: _StaggeredEntrance(
+              child: StaggeredEntrance(
                 index: 2,
                 child: _ServiceTile(
                   icon: Icons.route_outlined,
@@ -1652,47 +1653,9 @@ class _BreathingBadgeState extends State<_BreathingBadge>
 }
 
 // ── Tuile de service compacte — 3 côte à côte (Simple / Express / Groupée) ────
-// ── Entrée en fondu + léger glissement, décalée par index ──────────────────
-// Donne une impression de fluidité à l'apparition des 3 tuiles (au lieu
-// qu'elles apparaissent toutes d'un bloc) — effet courant sur les apps
-// premium (Revolut, Cash App). Délai croissant par `index`, indépendant
-// pour chaque tuile.
-class _StaggeredEntrance extends StatefulWidget {
-  final int index;
-  final Widget child;
-  const _StaggeredEntrance({required this.index, required this.child});
-
-  @override
-  State<_StaggeredEntrance> createState() => _StaggeredEntranceState();
-}
-
-class _StaggeredEntranceState extends State<_StaggeredEntrance> {
-  bool _visible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(Duration(milliseconds: 70 * widget.index), () {
-      if (mounted) setState(() => _visible = true);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSlide(
-      offset: _visible ? Offset.zero : const Offset(0, 0.18),
-      duration: const Duration(milliseconds: 340),
-      curve: Curves.easeOutCubic,
-      child: AnimatedOpacity(
-        opacity: _visible ? 1 : 0,
-        duration: const Duration(milliseconds: 340),
-        curve: Curves.easeOut,
-        child: widget.child,
-      ),
-    );
-  }
-}
-
+// L'entrée échelonnée (StaggeredEntrance) est maintenant partagée depuis
+// shared/widgets/staggered_entrance.dart — réutilisée par les écrans de
+// livraison DEM Pro.
 class _ServiceTile extends StatelessWidget {
   final IconData icon;
   final String label;

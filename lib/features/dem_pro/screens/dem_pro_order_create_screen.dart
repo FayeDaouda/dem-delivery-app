@@ -17,6 +17,7 @@ import '../../../core/storage/promo_code_storage.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../../core/utils/senegal_phone.dart';
 import '../../../shared/widgets/place_suggestions_list.dart';
+import '../../../shared/widgets/staggered_entrance.dart';
 import '../../deliveries/data/orders_repository.dart';
 import '../../home_driver/navigation/directions_service.dart';
 import '../../home_driver/navigation/navigation_service.dart';
@@ -1218,9 +1219,11 @@ class _State extends State<DemProOrderCreateScreen> {
                       _isScheduled
                           ? 'Programmer une livraison'
                           : widget.priority == 'EXPRESS'
-                              ? 'Livraison Express ⚡'
-                              : 'Nouvelle livraison',
-                      style: ClientText.subtitle.copyWith(color: AppColors.textPrimary),
+                          ? 'Livraison Express ⚡'
+                          : 'Nouvelle livraison',
+                      style: ClientText.subtitle.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                     const Spacer(),
                     Text(
@@ -1310,7 +1313,9 @@ class _State extends State<DemProOrderCreateScreen> {
                           )
                         : Text(
                             'Confirmer la position',
-                            style: ClientText.button.copyWith(color: AppColors.textPrimary),
+                            style: ClientText.button.copyWith(
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                   ),
                 ),
@@ -1372,7 +1377,12 @@ class _State extends State<DemProOrderCreateScreen> {
               children: [
                 Icon(_stepMeta[_step].$1, color: AppColors.primary, size: 18),
                 const SizedBox(width: 8),
-                Text(_stepMeta[_step].$2, style: ClientText.title.copyWith(color: AppColors.textPrimary)),
+                Text(
+                  _stepMeta[_step].$2,
+                  style: ClientText.title.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1382,11 +1392,29 @@ class _State extends State<DemProOrderCreateScreen> {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
           sliver: SliverToBoxAdapter(
-            child: switch (_step) {
-              0 => _buildStep0(),
-              1 => _buildStep1(),
-              _ => _buildStep2(),
-            },
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.04, 0),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              ),
+              child: KeyedSubtree(
+                key: ValueKey(_step),
+                child: switch (_step) {
+                  0 => _buildStep0(),
+                  1 => _buildStep1(),
+                  _ => _buildStep2(),
+                },
+              ),
+            ),
           ),
         ),
       ],
@@ -1513,9 +1541,7 @@ class _State extends State<DemProOrderCreateScreen> {
                 children: [
                   CircleAvatar(
                     radius: 12,
-                    backgroundColor: AppColors.primary.withValues(
-                      alpha: 0.15,
-                    ),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                     child: Text(
                       '${i + 1}',
                       style: ClientText.micro.copyWith(
@@ -1631,11 +1657,7 @@ class _State extends State<DemProOrderCreateScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
-                        Icons.add,
-                        color: AppColors.primary,
-                        size: 16,
-                      ),
+                      const Icon(Icons.add, color: AppColors.primary, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         'Ajouter',
@@ -1695,7 +1717,12 @@ class _State extends State<DemProOrderCreateScreen> {
                 size: 18,
               ),
               const SizedBox(width: 8),
-              Text('Fragile', style: ClientText.subtitle.copyWith(color: AppColors.textPrimary)),
+              Text(
+                'Fragile',
+                style: ClientText.subtitle.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
             ],
           ),
           subtitle: Text(
@@ -1871,7 +1898,12 @@ class _State extends State<DemProOrderCreateScreen> {
               children: [
                 const Icon(Icons.schedule, color: AppColors.primary, size: 18),
                 const SizedBox(width: 8),
-                Text('Programmer la livraison', style: ClientText.subtitle.copyWith(color: AppColors.textPrimary)),
+                Text(
+                  'Programmer la livraison',
+                  style: ClientText.subtitle.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ],
             ),
             subtitle: Text(
@@ -1919,11 +1951,15 @@ class _State extends State<DemProOrderCreateScreen> {
                             children: [
                               Text(
                                 _fmtDate(_scheduledAt!),
-                                style: ClientText.subtitle.copyWith(color: AppColors.textPrimary),
+                                style: ClientText.subtitle.copyWith(
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
                               Text(
                                 _fmtTime(_scheduledAt!),
-                                style: ClientText.label.copyWith(color: AppColors.textPrimary),
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
                             ],
                           )
@@ -1964,238 +2000,311 @@ class _State extends State<DemProOrderCreateScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Résumé trajet
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primaryDark),
-          ),
-          child: Column(
-            children: [
-              _RouteRow(
-                icon: Icons.location_on,
-                color: AppColors.primary,
-                label: _selectedProAddr != null
-                    ? '${_selectedProAddr!['label']} — $_pickupAddress'
-                    : _pickupAddress.isNotEmpty
-                    ? _pickupAddress
-                    : 'Départ',
-              ),
-              Padding(
-                padding: const EdgeInsets.only(left: 11),
-                child: Column(
-                  children: List.generate(
-                    3,
-                    (_) => Container(
-                      margin: const EdgeInsets.symmetric(vertical: 2),
-                      width: 2,
-                      height: 6,
-                      color: AppColors.textSecondary.withValues(alpha: 0.3),
+        StaggeredEntrance(
+          index: 0,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.primaryDark),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.22),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _RouteRow(
+                  icon: Icons.location_on,
+                  color: AppColors.primary,
+                  label: _selectedProAddr != null
+                      ? '${_selectedProAddr!['label']} — $_pickupAddress'
+                      : _pickupAddress.isNotEmpty
+                      ? _pickupAddress
+                      : 'Départ',
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 11),
+                  child: Column(
+                    children: List.generate(
+                      3,
+                      (_) => Container(
+                        margin: const EdgeInsets.symmetric(vertical: 2),
+                        width: 2,
+                        height: 6,
+                        color: AppColors.textSecondary.withValues(alpha: 0.3),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              _RouteRow(
-                icon: Icons.flag,
-                color: AppColors.error,
-                label: _deliveryAddress.isNotEmpty
-                    ? _deliveryAddress
-                    : 'Destination',
-              ),
-              if (_recipientNameCtrl.text.trim().isNotEmpty ||
-                  _recipientPhoneCtrl.text.trim().isNotEmpty) ...[
-                const SizedBox(height: 10),
-                const Divider(color: AppColors.primaryDark, height: 1),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.person_outline,
-                      color: AppColors.textSecondary,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        [
-                          if (_recipientNameCtrl.text.trim().isNotEmpty)
-                            _recipientNameCtrl.text.trim(),
-                          if (_recipientPhoneCtrl.text.trim().isNotEmpty)
-                            '+221 ${_recipientPhoneCtrl.text.trim()}',
-                        ].join(' · '),
-                        style: ClientText.label.copyWith(color: AppColors.textPrimary),
-                      ),
-                    ),
-                  ],
+                _RouteRow(
+                  icon: Icons.flag,
+                  color: AppColors.error,
+                  label: _deliveryAddress.isNotEmpty
+                      ? _deliveryAddress
+                      : 'Destination',
                 ),
+                if (_recipientNameCtrl.text.trim().isNotEmpty ||
+                    _recipientPhoneCtrl.text.trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  const Divider(color: AppColors.primaryDark, height: 1),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.person_outline,
+                        color: AppColors.textSecondary,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          [
+                            if (_recipientNameCtrl.text.trim().isNotEmpty)
+                              _recipientNameCtrl.text.trim(),
+                            if (_recipientPhoneCtrl.text.trim().isNotEmpty)
+                              '+221 ${_recipientPhoneCtrl.text.trim()}',
+                          ].join(' · '),
+                          style: ClientText.label.copyWith(
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
 
         // Détails colis
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.primaryDark),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                _packageTypes.firstWhere((t) => t.$1 == _packageType).$3,
-                color: AppColors.primary,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Text(
-                _packageTypes.firstWhere((t) => t.$1 == _packageType).$2,
-                style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary),
-              ),
-              if (_isFragile) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'Fragile',
-                    style: ClientText.micro.copyWith(
-                      color: AppColors.warning,
-                    ),
-                  ),
+        StaggeredEntrance(
+          index: 1,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primaryDark),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.22),
+                  blurRadius: 12,
+                  offset: const Offset(0, 5),
                 ),
               ],
-            ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _packageTypes.firstWhere((t) => t.$1 == _packageType).$3,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  _packageTypes.firstWhere((t) => t.$1 == _packageType).$2,
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (_isFragile) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Fragile',
+                      style: ClientText.micro.copyWith(
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 10),
 
         // Articles
         if (_articles.any((a) => a.nameCtrl.text.trim().isNotEmpty))
-          Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primaryDark),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.shopping_bag_outlined,
-                      color: AppColors.primary,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text('Articles', style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ..._articles
-                    .where((a) => a.nameCtrl.text.trim().isNotEmpty)
-                    .map((a) {
-                      final qty = int.tryParse(a.qtyCtrl.text.trim()) ?? 1;
-                      final price = int.tryParse(a.priceCtrl.text.trim());
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          children: [
-                            Text('•  ', style: ClientText.label.copyWith(color: AppColors.textPrimary)),
-                            Expanded(
-                              child: Text(
-                                '${a.nameCtrl.text.trim()} × $qty',
+          StaggeredEntrance(
+            index: 2,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.primaryDark),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.22),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.shopping_bag_outlined,
+                        color: AppColors.primary,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Articles',
+                        style: ClientText.bodyStrong.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ..._articles
+                      .where((a) => a.nameCtrl.text.trim().isNotEmpty)
+                      .map((a) {
+                        final qty = int.tryParse(a.qtyCtrl.text.trim()) ?? 1;
+                        final price = int.tryParse(a.priceCtrl.text.trim());
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Text(
+                                '•  ',
                                 style: ClientText.label.copyWith(
                                   color: AppColors.textPrimary,
                                 ),
                               ),
-                            ),
-                            if (price != null)
-                              Text('$price FCFA', style: ClientText.label.copyWith(color: AppColors.textPrimary)),
-                          ],
-                        ),
-                      );
-                    }),
-              ],
+                              Expanded(
+                                child: Text(
+                                  '${a.nameCtrl.text.trim()} × $qty',
+                                  style: ClientText.label.copyWith(
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              if (price != null)
+                                Text(
+                                  '$price FCFA',
+                                  style: ClientText.label.copyWith(
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      }),
+                ],
+              ),
             ),
           ),
 
         // Paiement
-        Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.primaryDark),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                _paymentMode == 'merchant'
-                    ? Icons.storefront_outlined
-                    : Icons.payments_outlined,
-                color: AppColors.primary,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Text(
-                _paymentMode == 'merchant'
-                    ? 'Vous payez la livraison'
-                    : 'Le client paie à la livraison',
-                style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary),
-              ),
-            ],
+        StaggeredEntrance(
+          index: 3,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primaryDark),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.22),
+                  blurRadius: 12,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _paymentMode == 'merchant'
+                      ? Icons.storefront_outlined
+                      : Icons.payments_outlined,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  _paymentMode == 'merchant'
+                      ? 'Vous payez la livraison'
+                      : 'Le client paie à la livraison',
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
 
         // Créneau programmé
         if (_scheduledAt != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.35),
+          StaggeredEntrance(
+            index: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.18),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.schedule,
-                  color: AppColors.primary,
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Livraison programmée',
-                      style: ClientText.micro.copyWith(
-                        color: AppColors.primary,
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.schedule,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Livraison programmée',
+                        style: ClientText.micro.copyWith(
+                          color: AppColors.primary,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '${_fmtDate(_scheduledAt!)} à ${_fmtTime(_scheduledAt!)}',
-                      style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary),
-                    ),
-                  ],
-                ),
-              ],
+                      Text(
+                        '${_fmtDate(_scheduledAt!)} à ${_fmtTime(_scheduledAt!)}',
+                        style: ClientText.bodyStrong.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         const SizedBox(height: 14),
@@ -2212,61 +2321,74 @@ class _State extends State<DemProOrderCreateScreen> {
             ),
           )
         else if (total != null)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.card, AppColors.primaryDark],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Column(
-              children: [
-                // Le livreur touche toujours `total` en entier — la réduction ne
-                // change que ce que DEM Pro/le destinataire paie réellement (voir
-                // orders.service.js:confirmPayment côté serveur).
-                if (_discountAmount != null && _discountAmount! > 0) ...[
-                  Text(
-                    formatFcfa(total),
-                    style: ClientText.label.copyWith(
-                      decoration: TextDecoration.lineThrough,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    formatFcfa(
-                      (total - _discountAmount!).clamp(0, double.infinity),
-                    ),
-                    style: ClientText.hero.copyWith(
-                      color: AppColors.success,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _promoLabel != null
-                        ? 'Réduction appliquée ($_promoLabel)'
-                        : 'Réduction appliquée',
-                    style: ClientText.label.copyWith(
-                      color: AppColors.success,
-                    ),
-                  ),
-                ] else
-                  Text(formatFcfa(total), style: ClientText.hero.copyWith(color: AppColors.primary)),
-                if (dist != null || dur != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    [
-                      if (dist != null) '$dist km',
-                      if (dur != null) '~$dur min',
-                    ].join(' · '),
-                    style: ClientText.label.copyWith(color: AppColors.textPrimary),
+          StaggeredEntrance(
+            index: 5,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.card, AppColors.primaryDark],
+                ),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.25),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
                   ),
                 ],
-              ],
+              ),
+              child: Column(
+                children: [
+                  // Le livreur touche toujours `total` en entier — la réduction ne
+                  // change que ce que DEM Pro/le destinataire paie réellement (voir
+                  // orders.service.js:confirmPayment côté serveur).
+                  if (_discountAmount != null && _discountAmount! > 0) ...[
+                    Text(
+                      formatFcfa(total),
+                      style: ClientText.label.copyWith(
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      formatFcfa(
+                        (total - _discountAmount!).clamp(0, double.infinity),
+                      ),
+                      style: ClientText.hero.copyWith(color: AppColors.success),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _promoLabel != null
+                          ? 'Réduction appliquée ($_promoLabel)'
+                          : 'Réduction appliquée',
+                      style: ClientText.label.copyWith(
+                        color: AppColors.success,
+                      ),
+                    ),
+                  ] else
+                    Text(
+                      formatFcfa(total),
+                      style: ClientText.hero.copyWith(color: AppColors.primary),
+                    ),
+                  if (dist != null || dur != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      [
+                        if (dist != null) '$dist km',
+                        if (dur != null) '~$dur min',
+                      ].join(' · '),
+                      style: ClientText.label.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           )
         else
@@ -2283,11 +2405,7 @@ class _State extends State<DemProOrderCreateScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.refresh,
-                    color: AppColors.warning,
-                    size: 16,
-                  ),
+                  const Icon(Icons.refresh, color: AppColors.warning, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -2313,7 +2431,9 @@ class _State extends State<DemProOrderCreateScreen> {
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: 'Code promo (optionnel)',
-                    hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
+                    hintStyle: ClientText.label.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
                     filled: true,
                     fillColor: AppColors.card,
                     contentPadding: const EdgeInsets.symmetric(
@@ -2437,7 +2557,9 @@ class _State extends State<DemProOrderCreateScreen> {
             surface: AppColors.surface,
             onSurface: AppColors.textPrimary,
           ),
-          dialogTheme: const DialogThemeData(backgroundColor: AppColors.surface),
+          dialogTheme: const DialogThemeData(
+            backgroundColor: AppColors.surface,
+          ),
         ),
         child: child!,
       ),
@@ -2460,7 +2582,9 @@ class _State extends State<DemProOrderCreateScreen> {
             surface: AppColors.surface,
             onSurface: AppColors.textPrimary,
           ),
-          dialogTheme: const DialogThemeData(backgroundColor: AppColors.surface),
+          dialogTheme: const DialogThemeData(
+            backgroundColor: AppColors.surface,
+          ),
         ),
         child: child!,
       ),
@@ -2653,7 +2777,9 @@ class _DepartureBanner extends StatelessWidget {
             child: loading
                 ? Text(
                     'Localisation en cours…',
-                    style: ClientText.label.copyWith(color: AppColors.textPrimary),
+                    style: ClientText.label.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2676,7 +2802,9 @@ class _DepartureBanner extends StatelessWidget {
                         ),
                       Text(
                         address.isNotEmpty ? address : placeholder,
-                        style: ClientText.label.copyWith(color: AppColors.textPrimary),
+                        style: ClientText.label.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -2876,7 +3004,10 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                 ),
               ),
             ),
-            Text(widget.title, style: ClientText.title.copyWith(color: AppColors.textPrimary)),
+            Text(
+              widget.title,
+              style: ClientText.title.copyWith(color: AppColors.textPrimary),
+            ),
             const SizedBox(height: 14),
 
             // Recherche manuelle avec autocomplete
@@ -2888,7 +3019,9 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
               onSubmitted: _submitManual,
               decoration: InputDecoration(
                 hintText: widget.searchHint,
-                hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
+                hintStyle: ClientText.label.copyWith(
+                  color: AppColors.textPrimary,
+                ),
                 prefixIcon: _searching
                     ? const Padding(
                         padding: EdgeInsets.all(12),
@@ -2946,7 +3079,10 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
 
             // Adresses Pro
             if (widget.proAddresses.isNotEmpty) ...[
-              Text('Mes adresses', style: ClientText.micro.copyWith(color: AppColors.textPrimary)),
+              Text(
+                'Mes adresses',
+                style: ClientText.micro.copyWith(color: AppColors.textPrimary),
+              ),
               const SizedBox(height: 8),
               ...widget.proAddresses.map((a) {
                 final isSelected = a['id'] == widget.selectedId;
@@ -2980,11 +3116,15 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                             children: [
                               Text(
                                 a['label'] as String? ?? '',
-                                style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary),
+                                style: ClientText.bodyStrong.copyWith(
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
                               Text(
                                 a['address'] as String? ?? '',
-                                style: ClientText.label.copyWith(color: AppColors.textPrimary),
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.textPrimary,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -3008,7 +3148,10 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
             // Destinations récentes — uniquement côté destination.
             if (widget.recentAddresses != null &&
                 widget.recentAddresses!.isNotEmpty) ...[
-              Text('Destinations récentes', style: ClientText.micro.copyWith(color: AppColors.textPrimary)),
+              Text(
+                'Destinations récentes',
+                style: ClientText.micro.copyWith(color: AppColors.textPrimary),
+              ),
               const SizedBox(height: 8),
               ...widget.recentAddresses!.map((d) {
                 final address = d['address'] as String? ?? '';
@@ -3037,14 +3180,18 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                             children: [
                               Text(
                                 address,
-                                style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary),
+                                style: ClientText.bodyStrong.copyWith(
+                                  color: AppColors.textPrimary,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               if (name != null && name.isNotEmpty)
                                 Text(
                                   name,
-                                  style: ClientText.label.copyWith(color: AppColors.textPrimary),
+                                  style: ClientText.label.copyWith(
+                                    color: AppColors.textPrimary,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -3117,7 +3264,12 @@ class _SheetAction extends StatelessWidget {
               children: [
                 Icon(icon, color: AppColors.textSecondary, size: 18),
                 const SizedBox(width: 10),
-                Text(label, style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary)),
+                Text(
+                  label,
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ],
             ),
     ),
@@ -3165,9 +3317,16 @@ class _DraftResumeSheet extends StatelessWidget {
             size: 32,
           ),
           const SizedBox(height: 12),
-          Text('Reprendre votre brouillon ?', style: ClientText.title.copyWith(color: AppColors.textPrimary)),
+          Text(
+            'Reprendre votre brouillon ?',
+            style: ClientText.title.copyWith(color: AppColors.textPrimary),
+          ),
           const SizedBox(height: 6),
-          Text(_label, textAlign: TextAlign.center, style: ClientText.label.copyWith(color: AppColors.textPrimary)),
+          Text(
+            _label,
+            textAlign: TextAlign.center,
+            style: ClientText.label.copyWith(color: AppColors.textPrimary),
+          ),
           const SizedBox(height: 18),
           Row(
             children: [
@@ -3202,7 +3361,12 @@ class _DraftResumeSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: Text('Reprendre', style: ClientText.button.copyWith(color: AppColors.textPrimary)),
+                  child: Text(
+                    'Reprendre',
+                    style: ClientText.button.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -3221,7 +3385,10 @@ class _FieldLabel extends StatelessWidget {
   final String text;
   const _FieldLabel(this.text);
   @override
-  Widget build(BuildContext context) => Text(text, style: ClientText.label.copyWith(color: AppColors.textPrimary));
+  Widget build(BuildContext context) => Text(
+    text,
+    style: ClientText.label.copyWith(color: AppColors.textPrimary),
+  );
 }
 
 class _ProTextField extends StatelessWidget {
@@ -3351,7 +3518,12 @@ class _PackageTypeRow extends StatelessWidget {
                             : AppColors.textPrimary,
                       ),
                     ),
-                    Text(subtitle, style: ClientText.label.copyWith(color: AppColors.textPrimary)),
+                    Text(
+                      subtitle,
+                      style: ClientText.label.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -3448,7 +3620,9 @@ class _NavBtn extends StatelessWidget {
                       style: ClientText.button.copyWith(
                         color: outline
                             ? AppColors.textSecondary
-                            : (disabled ? AppColors.textSecondary : Colors.white),
+                            : (disabled
+                                  ? AppColors.textSecondary
+                                  : Colors.white),
                       ),
                     ),
             ),
@@ -3520,7 +3694,9 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
     if (widget.proAddressId != null) {
       list = list
           .where(
-            (p) => p['proAddressId'] == null || p['proAddressId'] == widget.proAddressId,
+            (p) =>
+                p['proAddressId'] == null ||
+                p['proAddressId'] == widget.proAddressId,
           )
           .toList();
     }
@@ -3622,9 +3798,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
                   child: Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primary,
-                    ),
+                    child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 )
               : _loadFailed

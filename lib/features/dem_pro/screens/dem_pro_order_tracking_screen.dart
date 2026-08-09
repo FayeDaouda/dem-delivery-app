@@ -20,6 +20,7 @@ import '../../home_driver/navigation/map_theme.dart';
 import '../../home_driver/navigation/route_tracker.dart';
 import '../../../shared/widgets/operator_picker_sheet.dart';
 import '../../../shared/widgets/samirpay_payment_sheet.dart';
+import '../../../shared/widgets/staggered_entrance.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/client_text.dart';
 
@@ -72,7 +73,8 @@ class _DemProOrderTrackingScreenState
   void initState() {
     super.initState();
     _order = widget.initialOrder;
-    _status = (widget.initialOrder?['status'] as String? ?? 'ACCEPTED').toUpperCase();
+    _status = (widget.initialOrder?['status'] as String? ?? 'ACCEPTED')
+        .toUpperCase();
     _initDriverPos();
     _loadMapStyle();
     _buildDriverIcon();
@@ -155,19 +157,27 @@ class _DemProOrderTrackingScreenState
   // recalcul si le livreur dévie de plus de 70 m, limité à 1 fois/15s.
   void _matchAndTrimRoute(LatLng driverLoc) {
     if (_routePoints.isEmpty) return;
-    final match = RouteTracker.closestMatch(_routePoints, driverLoc, _lastTrimIdx);
+    final match = RouteTracker.closestMatch(
+      _routePoints,
+      driverLoc,
+      _lastTrimIdx,
+    );
     if (match == null) return;
 
     if (match.segmentIndex >= _lastTrimIdx) {
       _lastTrimIdx = match.segmentIndex;
       if (mounted) {
-        setState(() => _displayRoute = RouteTracker.remainingRoute(_routePoints, match));
+        setState(
+          () =>
+              _displayRoute = RouteTracker.remainingRoute(_routePoints, match),
+        );
       }
     }
 
     final now = DateTime.now();
     if (match.distanceMeters > 70 &&
-        (_lastReroute == null || now.difference(_lastReroute!).inSeconds >= 15)) {
+        (_lastReroute == null ||
+            now.difference(_lastReroute!).inSeconds >= 15)) {
       _lastReroute = now;
       _lastTrimIdx = 0;
       _fetchRoute();
@@ -189,7 +199,8 @@ class _DemProOrderTrackingScreenState
         final lng = (driver?['longitude'] as num?)?.toDouble();
         final phaseChanged = s != _status;
         LatLng? newPos;
-        if (lat != null && lng != null && lat != 0 && lng != 0) newPos = LatLng(lat, lng);
+        if (lat != null && lng != null && lat != 0 && lng != 0)
+          newPos = LatLng(lat, lng);
         setState(() {
           _order = order;
           _status = s;
@@ -213,9 +224,9 @@ class _DemProOrderTrackingScreenState
   Future<void> _fetchRoute() async {
     final o = _order ?? widget.initialOrder;
     if (o == null) return;
-    final pLat = o['pickupLatitude']    as double?;
-    final pLng = o['pickupLongitude']   as double?;
-    final dLat = o['deliveryLatitude']  as double?;
+    final pLat = o['pickupLatitude'] as double?;
+    final pLng = o['pickupLongitude'] as double?;
+    final dLat = o['deliveryLatitude'] as double?;
     final dLng = o['deliveryLongitude'] as double?;
     if (pLat == null || pLng == null || dLat == null || dLng == null) return;
 
@@ -224,27 +235,33 @@ class _DemProOrderTrackingScreenState
     // (sinon le tracé reste figé sur pickup→livraison toute la course).
     final double oLat, oLng, tLat, tLng;
     if (_status == 'ACCEPTED' && _driverPos != null) {
-      oLat = _driverPos!.latitude;  oLng = _driverPos!.longitude;
-      tLat = pLat;                  tLng = pLng;
+      oLat = _driverPos!.latitude;
+      oLng = _driverPos!.longitude;
+      tLat = pLat;
+      tLng = pLng;
     } else if (_status == 'PICKED_UP' || _status == 'IN_TRANSIT') {
-      oLat = _driverPos?.latitude  ?? pLat;
+      oLat = _driverPos?.latitude ?? pLat;
       oLng = _driverPos?.longitude ?? pLng;
-      tLat = dLat;                  tLng = dLng;
+      tLat = dLat;
+      tLng = dLng;
     } else {
-      oLat = pLat; oLng = pLng;
-      tLat = dLat; tLng = dLng;
+      oLat = pLat;
+      oLng = pLng;
+      tLat = dLat;
+      tLng = dLng;
     }
 
     try {
       final res = await Dio().get(
         'https://maps.googleapis.com/maps/api/directions/json',
         queryParameters: {
-          'origin':      '$oLat,$oLng',
+          'origin': '$oLat,$oLng',
           'destination': '$tLat,$tLng',
-          'key':         AppConfig.mapsApiKey,
+          'key': AppConfig.mapsApiKey,
         },
       );
-      final steps = (res.data['routes'] as List?)?.first['legs']?.first['steps'] as List?;
+      final steps =
+          (res.data['routes'] as List?)?.first['legs']?.first['steps'] as List?;
       if (steps == null || !mounted) return;
       final pts = <LatLng>[];
       for (final s in steps) {
@@ -265,10 +282,19 @@ class _DemProOrderTrackingScreenState
     int idx = 0, lat = 0, lng = 0;
     while (idx < encoded.length) {
       int b, shift = 0, result = 0;
-      do { b = encoded.codeUnitAt(idx++) - 63; result |= (b & 0x1F) << shift; shift += 5; } while (b >= 0x20);
+      do {
+        b = encoded.codeUnitAt(idx++) - 63;
+        result |= (b & 0x1F) << shift;
+        shift += 5;
+      } while (b >= 0x20);
       lat += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
-      shift = 0; result = 0;
-      do { b = encoded.codeUnitAt(idx++) - 63; result |= (b & 0x1F) << shift; shift += 5; } while (b >= 0x20);
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(idx++) - 63;
+        result |= (b & 0x1F) << shift;
+        shift += 5;
+      } while (b >= 0x20);
       lng += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
       pts.add(LatLng(lat / 1e5, lng / 1e5));
     }
@@ -286,87 +312,131 @@ class _DemProOrderTrackingScreenState
       builder: (_) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              width: 64, height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.elasticOut,
+                builder: (_, v, child) =>
+                    Transform.scale(scale: v.clamp(0.0, 1.15), child: child),
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: AppColors.success,
+                    size: 36,
+                  ),
+                ),
               ),
-              child: const Icon(Icons.check_rounded, color: AppColors.success, size: 36),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Livraison effectuée !',
-              style: ClientText.title.copyWith(color: AppColors.textPrimary, fontSize: 18),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Commande #${widget.orderId.substring(0, 8).toUpperCase()} livrée avec succès.',
-              style: ClientText.body.copyWith(color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            Text('Notez le livreur', style: ClientText.subtitle.copyWith(color: AppColors.textPrimary)),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(5, (i) {
-                final star = i + 1;
-                return GestureDetector(
-                  onTap: () => setDialogState(() => selectedRating = star),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(
-                      star <= selectedRating ? Icons.star : Icons.star_border,
-                      color: star <= selectedRating ? AppColors.ratingGold : AppColors.textSecondary,
-                      size: 32,
+              const SizedBox(height: 16),
+              Text(
+                'Livraison effectuée !',
+                style: ClientText.title.copyWith(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Commande #${widget.orderId.substring(0, 8).toUpperCase()} livrée avec succès.',
+                style: ClientText.body.copyWith(color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Notez le livreur',
+                style: ClientText.subtitle.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  final star = i + 1;
+                  return GestureDetector(
+                    onTap: () => setDialogState(() => selectedRating = star),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(
+                        star <= selectedRating ? Icons.star : Icons.star_border,
+                        color: star <= selectedRating
+                            ? AppColors.ratingGold
+                            : AppColors.textSecondary,
+                        size: 32,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final dId = (_order?['driver'] as Map?)?['id'] as String?;
+                    if (dId != null && selectedRating > 0) {
+                      try {
+                        await ref
+                            .read(ordersRepositoryProvider)
+                            .rateDriver(
+                              orderId: widget.orderId,
+                              driverId: dId,
+                              score: selectedRating,
+                            );
+                      } catch (_) {}
+                    }
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                    context.pushReplacement(
+                      '/dem-pro/orders/receipt',
+                      extra: _order ?? widget.initialOrder ?? {},
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                );
-              }),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () async {
-                  final dId = (_order?['driver'] as Map?)?['id'] as String?;
-                  if (dId != null && selectedRating > 0) {
-                    try {
-                      await ref.read(ordersRepositoryProvider).rateDriver(
-                        orderId: widget.orderId,
-                        driverId: dId,
-                        score: selectedRating,
-                      );
-                    } catch (_) {}
-                  }
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  context.pushReplacement('/dem-pro/orders/receipt', extra: _order ?? widget.initialOrder ?? {});
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Text(
+                    'Voir le reçu',
+                    style: ClientText.body.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-                child: Text('Voir le reçu', style: ClientText.body.copyWith(fontWeight: FontWeight.w600)),
               ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  context.go('/dem-pro/home');
-                },
-                child: Text('Retour au tableau de bord', style: ClientText.body.copyWith(color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    context.go('/dem-pro/home');
+                  },
+                  child: Text(
+                    'Retour au tableau de bord',
+                    style: ClientText.body.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ),
       ),
     );
@@ -375,7 +445,9 @@ class _DemProOrderTrackingScreenState
   void _shareOrder() {
     final baseUrl = 'https://api.dem.sn';
     final url = '$baseUrl/track/${widget.orderId}';
-    SharePlus.instance.share(ShareParams(text: 'Suivez ma livraison DEM en temps réel : $url'));
+    SharePlus.instance.share(
+      ShareParams(text: 'Suivez ma livraison DEM en temps réel : $url'),
+    );
   }
 
   // "Vous payez la livraison" (paymentMode merchant) : c'est l'entreprise
@@ -393,11 +465,20 @@ class _DemProOrderTrackingScreenState
       context,
       amount: price,
       title: 'Paiement de la livraison',
-      initPayment: () => ref.read(ordersRepositoryProvider).payOnline(widget.orderId, operatorName),
-      confirmationStream: SocketService.instance.onOrderPaymentConfirmed
-          .where((event) => event['orderId'] == widget.orderId),
+      initPayment: () => ref
+          .read(ordersRepositoryProvider)
+          .payOnline(widget.orderId, operatorName),
+      confirmationStream: SocketService.instance.onOrderPaymentConfirmed.where(
+        (event) => event['orderId'] == widget.orderId,
+      ),
       onSuccess: () {
-        if (mounted) setState(() => _order = {..._order ?? widget.initialOrder ?? {}, 'paymentStatus': 'PAID'});
+        if (mounted)
+          setState(
+            () => _order = {
+              ..._order ?? widget.initialOrder ?? {},
+              'paymentStatus': 'PAID',
+            },
+          );
       },
     );
   }
@@ -423,12 +504,12 @@ class _DemProOrderTrackingScreenState
       (addr == null || addr.isEmpty) ? '—' : addr.split(',').first.trim();
 
   (String, Color) get _statusInfo => switch (_status) {
-    'ACCEPTED'   => ('Livreur en route vers le colis', AppColors.primary),
-    'PICKED_UP'  => ('Colis récupéré · En route', AppColors.warning),
+    'ACCEPTED' => ('Livreur en route vers le colis', AppColors.primary),
+    'PICKED_UP' => ('Colis récupéré · En route', AppColors.warning),
     'IN_TRANSIT' => ('En route vers la destination', AppColors.primary),
-    'DELIVERED'  => ('Livraison effectuée', AppColors.success),
-    'CANCELLED'  => ('Commande annulée', AppColors.error),
-    _            => ('En attente', AppColors.textSecondary),
+    'DELIVERED' => ('Livraison effectuée', AppColors.success),
+    'CANCELLED' => ('Commande annulée', AppColors.error),
+    _ => ('En attente', AppColors.textSecondary),
   };
 
   String? get _distanceInfo {
@@ -441,7 +522,12 @@ class _DemProOrderTrackingScreenState
         ? (o['deliveryLongitude'] as num?)?.toDouble()
         : (o['pickupLongitude'] as num?)?.toDouble();
     if (targetLat == null || targetLng == null) return null;
-    final km = _haversineKm(_driverPos!.latitude, _driverPos!.longitude, targetLat, targetLng);
+    final km = _haversineKm(
+      _driverPos!.latitude,
+      _driverPos!.longitude,
+      targetLat,
+      targetLng,
+    );
     final mins = (km / 25 * 60).round(); // ~25 km/h en ville
     if (km < 1) return '${(km * 1000).round()} m · ~$mins min';
     return '${km.toStringAsFixed(1)} km · ~$mins min';
@@ -452,27 +538,31 @@ class _DemProOrderTrackingScreenState
     const deg2rad = 3.141592653589793 / 180;
     final dLat = (lat2 - lat1) * deg2rad;
     final dLng = (lng2 - lng1) * deg2rad;
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * deg2rad) * cos(lat2 * deg2rad) * sin(dLng / 2) * sin(dLng / 2);
+    final a =
+        sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * deg2rad) *
+            cos(lat2 * deg2rad) *
+            sin(dLng / 2) *
+            sin(dLng / 2);
     return r * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final o        = _order ?? widget.initialOrder ?? {};
-    final pLat     = o['pickupLatitude']    as double? ?? 14.6928;
-    final pLng     = o['pickupLongitude']   as double? ?? -17.4467;
-    final dLat     = o['deliveryLatitude']  as double? ?? 14.6928;
-    final dLng     = o['deliveryLongitude'] as double? ?? -17.4467;
-    final pickup   = _short(o['pickupAddress']   as String?);
+    final o = _order ?? widget.initialOrder ?? {};
+    final pLat = o['pickupLatitude'] as double? ?? 14.6928;
+    final pLng = o['pickupLongitude'] as double? ?? -17.4467;
+    final dLat = o['deliveryLatitude'] as double? ?? 14.6928;
+    final dLng = o['deliveryLongitude'] as double? ?? -17.4467;
+    final pickup = _short(o['pickupAddress'] as String?);
     final delivery = _short(o['deliveryAddress'] as String?);
-    final price    = (o['price'] as num?) ?? 0;
+    final price = (o['price'] as num?) ?? 0;
     final needsMerchantPayment =
         o['paymentMode'] == 'merchant' && o['paymentStatus'] != 'PAID';
-    final driver   = o['driver'] as Map<String, dynamic>?;
-    final dName    = driver?['name'] as String? ?? 'Livreur DEM';
-    final dPhone   = driver?['phone'] as String?;
+    final driver = o['driver'] as Map<String, dynamic>?;
+    final dName = driver?['name'] as String? ?? 'Livreur DEM';
+    final dPhone = driver?['phone'] as String?;
     final (statusLabel, statusColor) = _statusInfo;
 
     // Marqueurs
@@ -491,11 +581,14 @@ class _DemProOrderTrackingScreenState
         Marker(
           markerId: const MarkerId('driver'),
           position: _driverPos!,
-          icon: _driverIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan),
+          icon:
+              _driverIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan),
         ),
     };
 
-    final initTarget = _driverPos ?? LatLng((pLat + dLat) / 2, (pLng + dLng) / 2);
+    final initTarget =
+        _driverPos ?? LatLng((pLat + dLat) / 2, (pLng + dLng) / 2);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -504,7 +597,10 @@ class _DemProOrderTrackingScreenState
           // ── Carte ────────────────────────────────────────────────────────
           Positioned.fill(
             child: GoogleMap(
-              initialCameraPosition: CameraPosition(target: initTarget, zoom: 14),
+              initialCameraPosition: CameraPosition(
+                target: initTarget,
+                zoom: 14,
+              ),
               myLocationEnabled: false,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -527,7 +623,10 @@ class _DemProOrderTrackingScreenState
                   final sw = LatLng(min(pLat, dLat), min(pLng, dLng));
                   final ne = LatLng(max(pLat, dLat), max(pLng, dLng));
                   c.animateCamera(
-                    CameraUpdate.newLatLngBounds(LatLngBounds(southwest: sw, northeast: ne), 80),
+                    CameraUpdate.newLatLngBounds(
+                      LatLngBounds(southwest: sw, northeast: ne),
+                      80,
+                    ),
                   );
                 }
               },
@@ -536,13 +635,19 @@ class _DemProOrderTrackingScreenState
 
           // ── Dégradé haut ─────────────────────────────────────────────────
           Positioned(
-            top: 0, left: 0, right: 0, height: 140,
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 140,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [AppColors.background.withValues(alpha: 0.9), Colors.transparent],
+                  colors: [
+                    AppColors.background.withValues(alpha: 0.9),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
@@ -551,184 +656,303 @@ class _DemProOrderTrackingScreenState
           // ── App bar ───────────────────────────────────────────────────────
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
-            left: 12, right: 12,
-            child: Row(children: [
-              _MapBtn(
-                icon: Icons.arrow_back,
-                onTap: () => context.go('/dem-pro/home'),
-              ),
-              const Spacer(),
-              _MapBtn(
-                icon: Icons.my_location,
-                onTap: () {
-                  final pos = _driverPos ?? LatLng(pLat, pLng);
-                  _mapCtrl?.animateCamera(CameraUpdate.newLatLng(pos));
-                },
-              ),
-            ]),
+            left: 12,
+            right: 12,
+            child: Row(
+              children: [
+                _MapBtn(
+                  icon: Icons.arrow_back,
+                  onTap: () => context.go('/dem-pro/home'),
+                ),
+                const Spacer(),
+                _MapBtn(
+                  icon: Icons.my_location,
+                  onTap: () {
+                    final pos = _driverPos ?? LatLng(pLat, pLng);
+                    _mapCtrl?.animateCamera(CameraUpdate.newLatLng(pos));
+                  },
+                ),
+              ],
+            ),
           ),
 
           // ── Panel bas ─────────────────────────────────────────────────────
           Positioned(
-            bottom: 0, left: 0, right: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: Container(
               padding: EdgeInsets.fromLTRB(
-                  20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                border: Border(
-                    top: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+                20,
+                20,
+                20,
+                MediaQuery.of(context).padding.bottom + 20,
               ),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                // Pill drag indicator
-                Container(
-                  width: 36, height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              decoration: BoxDecoration(
+                gradient: AppColors.gradientSplash,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
                 ),
-
-                // ── Statut ─────────────────────────────────────────────────
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.25)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
                   ),
-                  child: Text(
-                    statusLabel,
-                    textAlign: TextAlign.center,
-                    style: ClientText.bodyStrong.copyWith(color: statusColor),
-                  ),
-                ),
-                if (_distanceInfo != null) ...[
-                  const SizedBox(height: 8),
-                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    const Icon(Icons.near_me_outlined, color: AppColors.primary, size: 14),
-                    const SizedBox(width: 6),
-                    Text(
-                      _distanceInfo!,
-                      style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
-                    ),
-                  ]),
                 ],
-                const SizedBox(height: 16),
-
-                // ── Livreur ────────────────────────────────────────────────
-                Row(children: [
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Pill drag indicator
                   Container(
-                    width: 44, height: 44,
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    child: Center(
+                  ),
+
+                  // ── Statut ─────────────────────────────────────────────────
+                  StaggeredEntrance(
+                    index: 0,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.4),
+                        ),
+                      ),
                       child: Text(
-                        _initials(dName),
-                        style: ClientText.title.copyWith(color: AppColors.primary, fontSize: 15),
+                        statusLabel,
+                        textAlign: TextAlign.center,
+                        style: ClientText.bodyStrong.copyWith(
+                          color: statusColor,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(dName,
-                          style: ClientText.subtitle.copyWith(color: AppColors.textPrimary)),
-                      Text('Livreur DEM',
-                          style: ClientText.label.copyWith(color: AppColors.textSecondary)),
-                    ]),
-                  ),
-                ]),
-                if (dPhone != null) ...[
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(
-                      child: _ActionChip(
-                        icon: Icons.chat_bubble_outline,
-                        label: 'WhatsApp',
-                        onTap: () => _whatsAppDriver(dPhone),
-                      ),
+                  if (_distanceInfo != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.near_me_outlined,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _distanceInfo!,
+                          style: ClientText.bodyStrong.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _ActionChip(
-                        icon: Icons.phone_outlined,
-                        label: 'Appeler',
-                        onTap: _callDriver,
-                      ),
-                    ),
-                  ]),
-                ],
-                const SizedBox(height: 16),
+                  ],
+                  const SizedBox(height: 16),
 
-                // ── Adresses ───────────────────────────────────────────────
-                _AddressCard(pickup: pickup, delivery: delivery),
-                const SizedBox(height: 14),
-
-                // ── Prix ───────────────────────────────────────────────────
-                Row(children: [
-                  const Icon(Icons.payments_outlined,
-                      color: AppColors.textSecondary, size: 14),
-                  const SizedBox(width: 6),
-                  Builder(builder: (context) {
-                    final charge = clientChargeFor(o);
-                    if (charge >= price.round()) {
-                      return Text(
-                        formatFcfa(price.toInt()),
-                        style: ClientText.subtitle.copyWith(color: AppColors.textPrimary),
-                      );
-                    }
-                    return Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(formatFcfa(price.toInt()),
-                          style: ClientText.label.copyWith(decoration: TextDecoration.lineThrough)),
-                      const SizedBox(width: 6),
-                      Text(formatFcfa(charge),
-                          style: ClientText.subtitle.copyWith(color: AppColors.success)),
-                    ]);
-                  }),
-                  const Spacer(),
-                  Text(
-                    '#${widget.orderId.substring(0, 8).toUpperCase()}',
-                    style: ClientText.label.copyWith(color: AppColors.textSecondary),
+                  // ── Livreur ────────────────────────────────────────────────
+                  StaggeredEntrance(
+                    index: 1,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.3),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              _initials(dName),
+                              style: ClientText.title.copyWith(
+                                color: Colors.white,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                dName,
+                                style: ClientText.subtitle.copyWith(
+                                  color: Colors.white,
+                                ),
+                              ),
+                              Text(
+                                'Livreur DEM',
+                                style: ClientText.label.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ]),
-                if (needsMerchantPayment) ...[
+                  if (dPhone != null) ...[
+                    const SizedBox(height: 10),
+                    StaggeredEntrance(
+                      index: 2,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _ActionChip(
+                              icon: Icons.chat_bubble_outline,
+                              label: 'WhatsApp',
+                              onTap: () => _whatsAppDriver(dPhone),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _ActionChip(
+                              icon: Icons.phone_outlined,
+                              label: 'Appeler',
+                              onTap: _callDriver,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+
+                  // ── Adresses ───────────────────────────────────────────────
+                  StaggeredEntrance(
+                    index: 3,
+                    child: _AddressCard(pickup: pickup, delivery: delivery),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ── Prix ───────────────────────────────────────────────────
+                  StaggeredEntrance(
+                    index: 4,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.payments_outlined,
+                          color: Colors.white.withValues(alpha: 0.75),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Builder(
+                          builder: (context) {
+                            final charge = clientChargeFor(o);
+                            if (charge >= price.round()) {
+                              return Text(
+                                formatFcfa(price.toInt()),
+                                style: ClientText.subtitle.copyWith(
+                                  color: Colors.white,
+                                ),
+                              );
+                            }
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  formatFcfa(price.toInt()),
+                                  style: ClientText.label.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  formatFcfa(charge),
+                                  style: ClientText.subtitle.copyWith(
+                                    color: AppColors.successBright,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        const Spacer(),
+                        Text(
+                          '#${widget.orderId.substring(0, 8).toUpperCase()}',
+                          style: ClientText.label.copyWith(
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (needsMerchantPayment) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _payOnline,
+                        icon: const Icon(Icons.payments_outlined, size: 16),
+                        label: Text(
+                          'Payer via SamirPay',
+                          style: ClientText.bodyStrong.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _payOnline,
-                      icon: const Icon(Icons.payments_outlined, size: 16),
-                      label: Text('Payer via SamirPay', style: ClientText.bodyStrong.copyWith(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                    child: OutlinedButton.icon(
+                      onPressed: _shareOrder,
+                      icon: const Icon(
+                        Icons.share_outlined,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      label: Text(
+                        'Partager le suivi',
+                        style: ClientText.bodyStrong.copyWith(
+                          color: Colors.white,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.4),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _shareOrder,
-                    icon: const Icon(Icons.share_outlined, size: 16),
-                    label: Text('Partager le suivi', style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ]),
+              ),
             ),
           ),
         ],
@@ -754,7 +978,8 @@ class _MapBtn extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
-      width: 40, height: 40,
+      width: 40,
+      height: 40,
       decoration: BoxDecoration(
         color: AppColors.surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),
@@ -769,7 +994,11 @@ class _ActionChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _ActionChip({required this.icon, required this.label, required this.onTap});
+  const _ActionChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -777,16 +1006,18 @@ class _ActionChip extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.10),
+        color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
       ),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, color: AppColors.primary, size: 14),
-        const SizedBox(width: 5),
-        Text(label,
-            style: ClientText.label.copyWith(color: AppColors.primary)),
-      ]),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: Colors.white, size: 14),
+          const SizedBox(width: 5),
+          Text(label, style: ClientText.label.copyWith(color: Colors.white)),
+        ],
+      ),
     ),
   );
 }
@@ -800,35 +1031,56 @@ class _AddressCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
-      color: AppColors.card,
+      color: Colors.white.withValues(alpha: 0.14),
       borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
     ),
-    child: Column(children: [
-      Row(children: [
-        const Icon(Icons.radio_button_on, color: AppColors.success, size: 13),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(pickup,
-              style: ClientText.body.copyWith(color: AppColors.textPrimary),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.radio_button_on,
+              color: AppColors.successBright,
+              size: 13,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                pickup,
+                style: ClientText.body.copyWith(color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
-      ]),
-      Padding(
-        padding: const EdgeInsets.only(left: 6, top: 3, bottom: 3),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(width: 1.5, height: 10, color: AppColors.card),
+        Padding(
+          padding: const EdgeInsets.only(left: 6, top: 3, bottom: 3),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              width: 1.5,
+              height: 10,
+              color: Colors.white.withValues(alpha: 0.3),
+            ),
+          ),
         ),
-      ),
-      Row(children: [
-        const Icon(Icons.location_on, color: AppColors.error, size: 13),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(delivery,
-              style: ClientText.body.copyWith(color: AppColors.textPrimary),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+        Row(
+          children: [
+            const Icon(Icons.location_on, color: Colors.white, size: 13),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                delivery,
+                style: ClientText.body.copyWith(color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
-      ]),
-    ]),
+      ],
+    ),
   );
 }

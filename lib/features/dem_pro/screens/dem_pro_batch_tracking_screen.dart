@@ -9,6 +9,7 @@ import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../deliveries/data/orders_repository.dart';
 import '../data/dem_pro_repository.dart';
+import '../../../shared/widgets/staggered_entrance.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/price_format.dart';
 import '../../../core/theme/client_text.dart';
@@ -138,7 +139,6 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
     }
   }
 
-
   // Annulation — l'endpoint backend existait déjà (DELETE /dem-pro/batch/:id)
   // mais rien ne l'appelait côté app, contrairement à la commande simple qui
   // propose bien "Annuler" (dem_pro_order_confirmation_screen.dart).
@@ -148,8 +148,10 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Annuler cette tournée ?',
-            style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)),
+        title: Text(
+          'Annuler cette tournée ?',
+          style: ClientText.bodyStrong.copyWith(color: AppColors.textDark),
+        ),
         content: Text(
           'Toutes les livraisons non encore effectuées de cette tournée seront annulées.',
           style: ClientText.body.copyWith(color: AppColors.textMuted),
@@ -157,13 +159,17 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Continuer',
-                style: ClientText.body.copyWith(color: AppColors.primary)),
+            child: Text(
+              'Continuer',
+              style: ClientText.body.copyWith(color: AppColors.primary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Annuler la tournée',
-                style: ClientText.body.copyWith(color: AppColors.error)),
+            child: Text(
+              'Annuler la tournée',
+              style: ClientText.body.copyWith(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -200,17 +206,24 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.successLight.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: AppColors.successLight,
-                  size: 36,
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.elasticOut,
+                builder: (_, v, child) =>
+                    Transform.scale(scale: v.clamp(0.0, 1.15), child: child),
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: AppColors.successLight.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: AppColors.successLight,
+                    size: 36,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -303,12 +316,19 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
         backgroundColor: AppColors.lightBg,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: AppColors.textDark, size: 18),
+          icon: Icon(
+            Icons.arrow_back_ios_new,
+            color: AppColors.textDark,
+            size: 18,
+          ),
           onPressed: () => context.pop(),
         ),
         title: Text(
           'Suivi de tournée',
-          style: ClientText.title.copyWith(color: AppColors.textDark, fontSize: 17),
+          style: ClientText.title.copyWith(
+            color: AppColors.textDark,
+            fontSize: 17,
+          ),
         ),
         actions: [
           IconButton(
@@ -335,7 +355,10 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
         const SizedBox(height: 14),
         Text(
           'Impossible de charger la tournée.',
-          style: ClientText.subtitle.copyWith(color: AppColors.textDark, fontSize: 15),
+          style: ClientText.subtitle.copyWith(
+            color: AppColors.textDark,
+            fontSize: 15,
+          ),
         ),
         const SizedBox(height: 12),
         GestureDetector(
@@ -388,65 +411,81 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Statut global ───────────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: statusColor.withValues(alpha: 0.25)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _batchStatusLabel(status),
-                        style: ClientText.subtitle.copyWith(color: statusColor),
-                      ),
-                      const Spacer(),
-                      if (_loading)
-                        SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: statusColor.withValues(alpha: 0.6),
-                          ),
-                        ),
-                    ],
+            StaggeredEntrance(
+              index: 0,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.25),
                   ),
-                  if (isActive && orders.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    // Barre de progression
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: orders.isEmpty
-                            ? 0
-                            : deliveredCount / orders.length,
-                        backgroundColor: AppColors.lightFill,
-                        color: AppColors.successLight,
-                        minHeight: 6,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '$deliveredCount / ${orders.length} arrêts livrés',
-                      style: ClientText.label.copyWith(color: AppColors.textMuted),
+                  boxShadow: [
+                    BoxShadow(
+                      color: statusColor.withValues(alpha: 0.14),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
                     ),
                   ],
-                ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _batchStatusLabel(status),
+                          style: ClientText.subtitle.copyWith(
+                            color: statusColor,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (_loading)
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: statusColor.withValues(alpha: 0.6),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (isActive && orders.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      // Barre de progression
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: orders.isEmpty
+                              ? 0
+                              : deliveredCount / orders.length,
+                          backgroundColor: AppColors.lightFill,
+                          color: AppColors.successLight,
+                          minHeight: 6,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '$deliveredCount / ${orders.length} arrêts livrés',
+                        style: ClientText.label.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -455,175 +494,192 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
             _SectionLabel(label: 'LIVREUR'),
             const SizedBox(height: 10),
             if (driver != null)
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.lightBorder),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              _initials(driver['name'] as String?),
-                              style: ClientText.subtitle.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                driver['name'] as String? ?? 'Livreur DEM',
-                                style: ClientText.subtitle.copyWith(
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                              Text(
-                                'Moto · DEM',
-                                style: ClientText.label.copyWith(
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.successLight.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.check_circle,
-                                color: AppColors.successLight,
-                                size: 13,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Assigné',
-                                style: ClientText.label.copyWith(
-                                  color: AppColors.successLight,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (driver['phone'] != null) ...[
-                      const SizedBox(height: 10),
+              StaggeredEntrance(
+                index: 1,
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.lightBorder),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
                       Row(
                         children: [
-                          Expanded(
-                            child: _ContactChip(
-                              icon: Icons.chat_bubble_outline,
-                              label: 'WhatsApp',
-                              onTap: () {
-                                final phone = (driver['phone'] as String)
-                                    .replaceAll(RegExp(r'[^0-9]'), '');
-                                final number = phone.startsWith('221')
-                                    ? phone
-                                    : '221$phone';
-                                launchUrl(
-                                  Uri.parse('https://wa.me/$number'),
-                                  mode: LaunchMode.externalApplication,
-                                );
-                              },
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                _initials(driver['name'] as String?),
+                                style: ClientText.subtitle.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 12),
                           Expanded(
-                            child: _ContactChip(
-                              icon: Icons.phone_outlined,
-                              label: 'Appeler',
-                              onTap: () => launchUrl(
-                                Uri.parse('tel:${driver['phone']}'),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  driver['name'] as String? ?? 'Livreur DEM',
+                                  style: ClientText.subtitle.copyWith(
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                                Text(
+                                  'Moto · DEM',
+                                  style: ClientText.label.copyWith(
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.successLight.withValues(
+                                alpha: 0.12,
                               ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.successLight,
+                                  size: 13,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Assigné',
+                                  style: ClientText.label.copyWith(
+                                    color: AppColors.successLight,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
+                      if (driver['phone'] != null) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _ContactChip(
+                                icon: Icons.chat_bubble_outline,
+                                label: 'WhatsApp',
+                                onTap: () {
+                                  final phone = (driver['phone'] as String)
+                                      .replaceAll(RegExp(r'[^0-9]'), '');
+                                  final number = phone.startsWith('221')
+                                      ? phone
+                                      : '221$phone';
+                                  launchUrl(
+                                    Uri.parse('https://wa.me/$number'),
+                                    mode: LaunchMode.externalApplication,
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _ContactChip(
+                                icon: Icons.phone_outlined,
+                                label: 'Appeler',
+                                onTap: () => launchUrl(
+                                  Uri.parse('tel:${driver['phone']}'),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               )
             else
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppColors.warning.withValues(alpha: 0.2),
+              StaggeredEntrance(
+                index: 1,
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.2),
+                    ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 42,
-                      height: 42,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          SizedBox(
-                            width: 42,
-                            height: 42,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.warning.withValues(
-                                alpha: 0.5,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 42,
+                        height: 42,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: 42,
+                              height: 42,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.warning.withValues(alpha: 0.5),
                               ),
                             ),
-                          ),
-                          const Icon(
-                            Icons.two_wheeler,
-                            color: AppColors.warning,
-                            size: 20,
-                          ),
-                        ],
+                            const Icon(
+                              Icons.two_wheeler,
+                              color: AppColors.warning,
+                              size: 20,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Recherche en cours…',
-                            style: ClientText.subtitle.copyWith(color: AppColors.textDark),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Nous cherchons le livreur le plus proche pour votre tournée.',
-                            style: ClientText.label.copyWith(color: AppColors.textMuted),
-                          ),
-                        ],
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Recherche en cours…',
+                              style: ClientText.subtitle.copyWith(
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Nous cherchons le livreur le plus proche pour votre tournée.',
+                              style: ClientText.label.copyWith(
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             const SizedBox(height: 20),
@@ -631,28 +687,40 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
             // ── Récupération ────────────────────────────────────────────────
             _SectionLabel(label: 'RÉCUPÉRATION'),
             const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.lightBorder),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.radio_button_on,
-                    color: AppColors.primary,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      pickup,
-                      style: ClientText.body.copyWith(color: AppColors.textDark),
+            StaggeredEntrance(
+              index: 2,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.lightBorder),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.radio_button_on,
+                      color: AppColors.primary,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        pickup,
+                        style: ClientText.body.copyWith(
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -683,69 +751,88 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
             ),
             const SizedBox(height: 10),
 
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.lightBorder),
-              ),
-              child: Column(
-                children: [
-                  for (int i = 0; i < orders.length; i++)
-                    _StopRow(
-                      index: i,
-                      order: orders[i],
-                      isLast: i == orders.length - 1,
+            StaggeredEntrance(
+              index: 3,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.lightBorder),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
                     ),
-                ],
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    for (int i = 0; i < orders.length; i++)
+                      _StopRow(
+                        index: i,
+                        order: orders[i],
+                        isLast: i == orders.length - 1,
+                      ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 20),
 
             // ── Récapitulatif ───────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.lightFill,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Coût total',
-                        style: ClientText.label.copyWith(color: AppColors.textMuted),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        formatFcfa(total),
-                        style: ClientText.headline.copyWith(
-                          color: AppColors.textDark,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  if (createdAt != null)
+            StaggeredEntrance(
+              index: 4,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.lightFill,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
                     Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Créée le',
-                          style: ClientText.label.copyWith(color: AppColors.textMuted),
+                          'Coût total',
+                          style: ClientText.label.copyWith(
+                            color: AppColors.textMuted,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _fmtDate(createdAt),
-                          style: ClientText.label.copyWith(color: AppColors.textMuted),
+                          formatFcfa(total),
+                          style: ClientText.headline.copyWith(
+                            color: AppColors.textDark,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ],
                     ),
-                ],
+                    const Spacer(),
+                    if (createdAt != null)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Créée le',
+                            style: ClientText.label.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _fmtDate(createdAt),
+                            style: ClientText.label.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
 
@@ -760,7 +847,12 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                     driver['id'] as String,
                   ),
                   icon: const Icon(Icons.star_outline, size: 18),
-                  label: Text('Noter le livreur', style: ClientText.subtitle.copyWith(color: AppColors.textDark)),
+                  label: Text(
+                    'Noter le livreur',
+                    style: ClientText.subtitle.copyWith(
+                      color: AppColors.textDark,
+                    ),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -785,7 +877,9 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                   icon: const Icon(Icons.replay, size: 18),
                   label: Text(
                     'Recommander cette tournée',
-                    style: ClientText.subtitle.copyWith(color: AppColors.textDark),
+                    style: ClientText.subtitle.copyWith(
+                      color: AppColors.textDark,
+                    ),
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.primary,
@@ -805,7 +899,9 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
                   icon: const Icon(Icons.home_outlined, size: 20),
                   label: Text(
                     'Retour au tableau de bord',
-                    style: ClientText.subtitle.copyWith(color: AppColors.textDark),
+                    style: ClientText.subtitle.copyWith(
+                      color: AppColors.textDark,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -890,7 +986,9 @@ class _StopRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: isLast
             ? null
-            : Border(bottom: BorderSide(color: AppColors.lightBorder, width: 0.8)),
+            : Border(
+                bottom: BorderSide(color: AppColors.lightBorder, width: 0.8),
+              ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -940,7 +1038,9 @@ class _StopRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     receiver,
-                    style: ClientText.label.copyWith(color: AppColors.textMuted),
+                    style: ClientText.label.copyWith(
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ],
               ],
@@ -1027,4 +1127,3 @@ class _ContactChip extends StatelessWidget {
     ),
   );
 }
-

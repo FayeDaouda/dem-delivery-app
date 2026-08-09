@@ -86,19 +86,25 @@ class _DemProPromoCodeScreenState extends State<DemProPromoCodeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.lightBg,
-      body: SafeArea(
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 20, 0),
-            child: Row(children: [
-              IconButton(
-                onPressed: () => context.pop(),
-                icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textDark, size: 18),
-              ),
-              Text('Code promo', style: ClientText.headline.copyWith(color: AppColors.textDark, fontSize: 20)),
-            ]),
+      body: Column(children: [
+        Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 20, 20),
+              child: Row(children: [
+                IconButton(
+                  onPressed: () => context.pop(),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                ),
+                Text('Code promo', style: ClientText.title.copyWith(color: Colors.white, fontSize: 18)),
+              ]),
+            ),
           ),
-          Expanded(
+        ),
+        Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : ListView(
@@ -154,9 +160,8 @@ class _DemProPromoCodeScreenState extends State<DemProPromoCodeScreen> {
                       ],
                     ],
                   ),
-          ),
-        ]),
-      ),
+        ),
+      ]),
     );
   }
 }

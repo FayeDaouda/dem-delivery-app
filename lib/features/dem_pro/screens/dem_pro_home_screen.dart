@@ -743,6 +743,23 @@ class _AccueilTab extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                   ],
+                  GestureDetector(
+                    onTap: () => context.push('/dem-pro/wallet'),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.20),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
