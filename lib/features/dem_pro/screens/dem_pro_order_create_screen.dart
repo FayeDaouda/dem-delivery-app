@@ -121,6 +121,12 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
   bool _isMapPlacement = false;
   bool _placingPickup = false; // false = placing delivery
   final _sheetCtrl = DraggableScrollableController();
+  // Hauteur de la feuille agrandie pendant que le clavier est ouvert — sinon
+  // un champ situé en bas d'une étape (ex: "Instructions pour le livreur")
+  // reste couvert par le clavier, la feuille elle-même ne grandissant pas
+  // par défaut (seul son contenu se décale, dans un espace inchangé).
+  static const _sheetMaxKeyboard = 0.94;
+  double _lastKeyboardInset = 0;
 
   // ── Départ (auto-rempli depuis ProAddress défaut) ────────────────────────
   List<Map<String, dynamic>> _proAddresses = [];
@@ -159,7 +165,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
   final List<_Article> _articles = [_Article()];
 
   // ── Paiement ───────────────────────────────────────────────────────────
-  String _paymentMode = 'merchant'; // 'merchant' | 'cod'
+  String _paymentMode = 'cod'; // 'merchant' | 'cod' — le client paie par défaut
 
   // ── Étape 3 — Confirmation ──────────────────────────────────────────────
   Map<String, dynamic>? _estimate;
@@ -194,6 +200,27 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     }
     if (widget.scheduled) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _pickScheduleDate());
+    }
+  }
+
+  // `MediaQuery.of(context)` étant lu ici, ce callback se redéclenche à
+  // chaque changement de `viewInsets` (ouverture/fermeture du clavier) —
+  // on agrandit alors la feuille pour que le champ actif ne reste jamais
+  // caché derrière le clavier, plutôt que de compter uniquement sur le
+  // padding interne (qui ne libère pas plus d'espace, juste décale).
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final inset = MediaQuery.of(context).viewInsets.bottom;
+    if (inset != _lastKeyboardInset) {
+      _lastKeyboardInset = inset;
+      if (_sheetCtrl.isAttached) {
+        _sheetCtrl.animateTo(
+          inset > 0 ? _sheetMaxKeyboard : _sheetMax,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      }
     }
   }
 
@@ -357,7 +384,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       _packageType = draft['packageType'] as String? ?? 'small';
       _isFragile = draft['isFragile'] as bool? ?? false;
       _instructionsCtrl.text = draft['instructions'] as String? ?? '';
-      _paymentMode = draft['paymentMode'] as String? ?? 'merchant';
+      _paymentMode = draft['paymentMode'] as String? ?? 'cod';
       final articles =
           (draft['articles'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       if (articles.isNotEmpty) {
@@ -1137,7 +1164,10 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 controller: _sheetCtrl,
                 initialChildSize: _sheetMax,
                 minChildSize: _sheetMin,
-                maxChildSize: _sheetMax,
+                // Le max réel autorise l'agrandissement clavier (voir
+                // didChangeDependencies) — snapSizes garde le comportement de
+                // repli normal (sans clavier) borné à _sheetMax.
+                maxChildSize: _sheetMaxKeyboard,
                 snap: true,
                 snapSizes: [_sheetMin, _sheetMax],
                 builder: (context, scrollCtrl) {
@@ -1373,17 +1403,20 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
           ),
         ),
 
-        // ── Bandeau départ ────────────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: _DepartureBanner(
-            fixedLabel: 'EXPÉDITION',
-            placeholder: 'Choisir le lieu d\'expédition',
-            proLabel: _selectedProAddr?['label'] as String?,
-            address: _pickupAddress,
-            loading: _loadingGps,
-            onTap: () => _showChangeDeparture(),
+        // ── Bandeau départ ───────────────────────────────────────────────────
+        // Uniquement à l'étape Destination — répété sur chaque étape suivante,
+        // c'était redondant (le récap final montre déjà le trajet complet).
+        if (_step == 0)
+          SliverToBoxAdapter(
+            child: _DepartureBanner(
+              fixedLabel: 'EXPÉDITION',
+              placeholder: 'Choisir le lieu d\'expédition',
+              proLabel: _selectedProAddr?['label'] as String?,
+              address: _pickupAddress,
+              loading: _loadingGps,
+              onTap: () => _showChangeDeparture(),
+            ),
           ),
-        ),
 
         // ── Titre étape ───────────────────────────────────────────────────────
         SliverToBoxAdapter(
@@ -1543,81 +1576,78 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       // ── Articles ──────────────────────────────────────────────────────────
       const _FieldLabel('Articles'),
       const SizedBox(height: 10),
+      // Une seule ligne compacte par article (badge + nom + qté + prix +
+      // retirer) au lieu de 2 lignes empilées — une commande de 10+ articles
+      // (le max autorisé) reste raisonnablement scrollable au lieu de
+      // s'étirer sur des écrans entiers.
       ...List.generate(_articles.length, (i) {
         final a = _articles[i];
         return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
           ),
-          child: Column(
+          child: Row(
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                    child: Text(
-                      '${i + 1}',
-                      style: ClientText.micro.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+              CircleAvatar(
+                radius: 11,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                child: Text(
+                  '${i + 1}',
+                  style: ClientText.micro.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w800,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _ProTextField(
-                      controller: a.nameCtrl,
-                      hint: 'Nom du produit',
-                      onChanged: (_) => _scheduleDraftSave(),
-                    ),
-                  ),
-                  if (_articles.length > 1) ...[
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _articles[i].dispose();
-                          _articles.removeAt(i);
-                        });
-                        _scheduleDraftSave();
-                      },
-                      child: const Icon(
-                        Icons.remove_circle_outline,
-                        color: AppColors.error,
-                        size: 20,
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ProTextField(
-                      controller: a.qtyCtrl,
-                      hint: 'Qté',
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => _scheduleDraftSave(),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: _ProTextField(
-                      controller: a.priceCtrl,
-                      hint: 'Prix (FCFA)',
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => _scheduleDraftSave(),
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ProTextField(
+                  controller: a.nameCtrl,
+                  hint: 'Produit',
+                  onChanged: (_) => _scheduleDraftSave(),
+                ),
               ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 52,
+                child: _ProTextField(
+                  controller: a.qtyCtrl,
+                  hint: 'Qté',
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => _scheduleDraftSave(),
+                ),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 84,
+                child: _ProTextField(
+                  controller: a.priceCtrl,
+                  hint: 'Prix',
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => _scheduleDraftSave(),
+                ),
+              ),
+              if (_articles.length > 1) ...[
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _articles[i].dispose();
+                      _articles.removeAt(i);
+                    });
+                    _scheduleDraftSave();
+                  },
+                  child: const Icon(
+                    Icons.remove_circle_outline,
+                    color: AppColors.error,
+                    size: 20,
+                  ),
+                ),
+              ],
             ],
           ),
         );
@@ -2094,11 +2124,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Détails colis
+        // Détails (colis + paiement) — regroupés en une seule carte compacte
         StaggeredEntrance(
           index: 1,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
@@ -2111,37 +2141,66 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
               children: [
-                Icon(
-                  _packageTypes.firstWhere((t) => t.$1 == _packageType).$3,
-                  color: AppColors.primary,
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  _packageTypes.firstWhere((t) => t.$1 == _packageType).$2,
-                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
-                ),
-                if (_isFragile) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
+                Row(
+                  children: [
+                    Icon(
+                      _packageTypes.firstWhere((t) => t.$1 == _packageType).$3,
+                      color: AppColors.primary,
+                      size: 18,
                     ),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'Fragile',
-                      style: ClientText.micro.copyWith(
-                        color: AppColors.warning,
+                    const SizedBox(width: 10),
+                    Text(
+                      _packageTypes.firstWhere((t) => t.$1 == _packageType).$2,
+                      style: ClientText.bodyStrong.copyWith(
+                        color: Colors.white,
                       ),
                     ),
-                  ),
-                ],
+                    if (_isFragile) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Fragile',
+                          style: ClientText.micro.copyWith(
+                            color: AppColors.warning,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Icon(
+                      _paymentMode == 'merchant'
+                          ? Icons.storefront_outlined
+                          : Icons.payments_outlined,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _paymentMode == 'merchant'
+                          ? 'Vous payez la livraison'
+                          : 'Le client paie à la livraison',
+                      style: ClientText.bodyStrong.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -2226,49 +2285,10 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
             ),
           ),
 
-        // Paiement
-        StaggeredEntrance(
-          index: 3,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.22),
-                  blurRadius: 12,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _paymentMode == 'merchant'
-                      ? Icons.storefront_outlined
-                      : Icons.payments_outlined,
-                  color: AppColors.primary,
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  _paymentMode == 'merchant'
-                      ? 'Vous payez la livraison'
-                      : 'Le client paie à la livraison',
-                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
-                ),
-              ],
-            ),
-          ),
-        ),
-
         // Créneau programmé
         if (_scheduledAt != null)
           StaggeredEntrance(
-            index: 4,
+            index: 3,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
@@ -2329,7 +2349,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
           )
         else if (total != null)
           StaggeredEntrance(
-            index: 5,
+            index: 4,
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -3311,28 +3331,32 @@ class _DraftResumeSheet extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        gradient: AppColors.gradientSplash,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primaryDark),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.description_outlined,
-            color: AppColors.primary,
-            size: 32,
-          ),
+          const Icon(Icons.description_outlined, color: Colors.white, size: 32),
           const SizedBox(height: 12),
           Text(
             'Reprendre votre brouillon ?',
-            style: ClientText.title.copyWith(color: AppColors.textPrimary),
+            style: ClientText.title.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 6),
           Text(
             _label,
             textAlign: TextAlign.center,
-            style: ClientText.label.copyWith(color: AppColors.textPrimary),
+            style: ClientText.label.copyWith(
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
           ),
           const SizedBox(height: 18),
           Row(
@@ -3341,7 +3365,9 @@ class _DraftResumeSheet extends StatelessWidget {
                 child: OutlinedButton(
                   onPressed: onDiscard,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.primaryDark),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -3349,9 +3375,7 @@ class _DraftResumeSheet extends StatelessWidget {
                   ),
                   child: Text(
                     'Nouvelle livraison',
-                    style: ClientText.bodyStrong.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+                    style: ClientText.bodyStrong.copyWith(color: Colors.white),
                   ),
                 ),
               ),
@@ -3360,8 +3384,8 @@ class _DraftResumeSheet extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: onResume,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -3370,9 +3394,7 @@ class _DraftResumeSheet extends StatelessWidget {
                   ),
                   child: Text(
                     'Reprendre',
-                    style: ClientText.button.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
+                    style: ClientText.button.copyWith(color: AppColors.primary),
                   ),
                 ),
               ),
