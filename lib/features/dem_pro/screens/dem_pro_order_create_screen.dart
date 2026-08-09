@@ -63,6 +63,10 @@ class _Article {
   final nameCtrl = TextEditingController();
   final qtyCtrl = TextEditingController(text: '1');
   final priceCtrl = TextEditingController();
+  // Rempli uniquement quand l'article vient du catalogue (voir
+  // _openProductPicker) — sert au décrément de stock automatique côté
+  // serveur. Un article tapé librement reste null, jamais décrémenté.
+  String? productId;
 
   void dispose() {
     nameCtrl.dispose();
@@ -293,6 +297,7 @@ class _State extends State<DemProOrderCreateScreen> {
         a.nameCtrl.text = it['name'] as String? ?? '';
         a.qtyCtrl.text = '${it['quantity'] ?? 1}';
         if (it['price'] != null) a.priceCtrl.text = '${it['price']}';
+        a.productId = it['productId'] as String?;
         _articles.add(a);
       }
     }
@@ -318,6 +323,7 @@ class _State extends State<DemProOrderCreateScreen> {
             'name': a.nameCtrl.text,
             'qty': a.qtyCtrl.text,
             'price': a.priceCtrl.text,
+            if (a.productId != null) 'productId': a.productId,
           },
         )
         .toList(),
@@ -357,6 +363,7 @@ class _State extends State<DemProOrderCreateScreen> {
           a.nameCtrl.text = it['name'] as String? ?? '';
           a.qtyCtrl.text = it['qty'] as String? ?? '1';
           a.priceCtrl.text = it['price'] as String? ?? '';
+          a.productId = it['productId'] as String?;
           _articles.add(a);
         }
       }
@@ -793,6 +800,7 @@ class _State extends State<DemProOrderCreateScreen> {
               'quantity': int.tryParse(a.qtyCtrl.text.trim()) ?? 1,
               if (a.priceCtrl.text.trim().isNotEmpty)
                 'price': int.tryParse(a.priceCtrl.text.trim()) ?? 0,
+              if (a.productId != null) 'productId': a.productId,
             },
           )
           .toList();
@@ -1459,6 +1467,7 @@ class _State extends State<DemProOrderCreateScreen> {
 
     final name = product['name'] as String? ?? '';
     final price = product['defaultPrice'] as num?;
+    final id = product['id'] as String?;
     setState(() {
       // Réutilise la dernière ligne si elle est encore vide (cas le plus
       // fréquent : premier article de la commande) plutôt que d'empiler une
@@ -1470,10 +1479,10 @@ class _State extends State<DemProOrderCreateScreen> {
       if (!identical(target, last)) _articles.add(target);
       target.nameCtrl.text = name;
       target.priceCtrl.text = price != null ? price.toInt().toString() : '';
+      target.productId = id;
     });
     _scheduleDraftSave();
 
-    final id = product['id'] as String?;
     if (id != null) _proRepo.incrementProductUsage(id);
   }
 

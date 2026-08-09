@@ -318,21 +318,43 @@ class _ProductCard extends StatelessWidget {
                   ]),
                   if (quantity != null) ...[
                     const SizedBox(height: 3),
-                    Row(children: [
-                      Icon(
-                        quantity > 0 ? Icons.inventory_outlined : Icons.error_outline,
-                        size: 12,
-                        color: quantity > 0 ? AppColors.textMuted : AppColors.warning,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        quantity > 0 ? '$quantity en stock' : 'Rupture de stock',
-                        style: ClientText.micro.copyWith(
-                          color: quantity > 0 ? AppColors.textMuted : AppColors.warning,
-                          fontWeight: quantity > 0 ? FontWeight.w500 : FontWeight.w700,
+                    Builder(builder: (context) {
+                      // Mêmes seuils que le décrément côté serveur (voir
+                      // orders.service.js:LOW_STOCK_THRESHOLD) — la carte
+                      // catalogue doit refléter l'urgence de la même façon
+                      // que l'alerte push.
+                      final isOut = quantity <= 0;
+                      final isLow = !isOut && quantity <= 3;
+                      final color = isOut
+                          ? AppColors.error
+                          : isLow
+                          ? AppColors.warning
+                          : AppColors.textMuted;
+                      final label = isOut
+                          ? 'Rupture de stock'
+                          : isLow
+                          ? 'Stock faible — $quantity restant${quantity > 1 ? 's' : ''}'
+                          : '$quantity en stock';
+                      return Row(children: [
+                        Icon(
+                          isOut
+                              ? Icons.error_outline
+                              : isLow
+                              ? Icons.warning_amber_rounded
+                              : Icons.inventory_outlined,
+                          size: 12,
+                          color: color,
                         ),
-                      ),
-                    ]),
+                        const SizedBox(width: 4),
+                        Text(
+                          label,
+                          style: ClientText.micro.copyWith(
+                            color: color,
+                            fontWeight: isOut || isLow ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                        ),
+                      ]);
+                    }),
                   ],
                 ]),
               ),

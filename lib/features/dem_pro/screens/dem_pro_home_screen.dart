@@ -2817,23 +2817,34 @@ class _ProductPreviewCard extends StatelessWidget {
               ),
             ),
             if (quantity != null)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: (quantity > 0 ? AppColors.successLight : AppColors.warning)
-                      .withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  quantity > 0 ? '$quantity' : 'Rupture',
-                  style: ClientText.micro.copyWith(
-                    color: quantity > 0 ? AppColors.successLight : AppColors.warning,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+              Builder(
+                builder: (context) {
+                  // Mêmes seuils que orders.service.js:LOW_STOCK_THRESHOLD.
+                  final isOut = quantity <= 0;
+                  final isLow = !isOut && quantity <= 3;
+                  final color = isOut
+                      ? AppColors.error
+                      : isLow
+                      ? AppColors.warning
+                      : AppColors.successLight;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      isOut ? 'Rupture' : '$quantity',
+                      style: ClientText.micro.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                },
               ),
           ],
         ),
