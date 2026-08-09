@@ -48,6 +48,20 @@ class DemProRepository {
     }
   }
 
+  /// CRM léger — clients agrégés sur tout l'historique livré (nom,
+  /// téléphone, nombre de commandes, total dépensé, dernière commande).
+  Future<List<Map<String, dynamic>>> getClients() async {
+    try {
+      final res = await _dio.get('/dem-pro/me/clients');
+      return (res.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de charger les clients.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   /// Abonnement DEM Pro (palier, statut, fonctionnalités incluses).
   Future<Map<String, dynamic>> getMyPlan() async {
     try {

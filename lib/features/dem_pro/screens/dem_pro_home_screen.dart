@@ -2010,6 +2010,24 @@ class _CompteTabState extends State<_CompteTab>
             ),
             const SizedBox(height: 24),
 
+            // ── Clients (CRM léger) ────────────────────────────────────────
+            _SectionLabel(label: 'CLIENTS', t: t),
+            const SizedBox(height: 12),
+            _InfoCard(
+              t: t,
+              children: [
+                _TapRow(
+                  icon: Icons.people_outline,
+                  label: 'Mes clients',
+                  subtitle: 'Historique, contact, fidélisation',
+                  t: t,
+                  isLast: true,
+                  onTap: () => context.push('/dem-pro/clients'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
             // ── Lien de commande ───────────────────────────────────────────
             _SectionLabel(label: 'LIEN DE COMMANDE', t: t),
             const SizedBox(height: 12),
