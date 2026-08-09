@@ -1149,7 +1149,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                         builder: (context, scrollCtrl) {
                           return Container(
                             decoration: BoxDecoration(
-                              color: AppColors.surface,
+                              gradient: AppColors.gradientSplash,
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(24),
                               ),
@@ -1366,7 +1366,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryDark,
+                  color: Colors.white.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1392,13 +1392,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
             child: Row(
               children: [
-                Icon(_stepMeta[_step].$1, color: AppColors.primary, size: 18),
+                Icon(_stepMeta[_step].$1, color: Colors.white, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   _stepMeta[_step].$2,
-                  style: ClientText.title.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
+                  style: ClientText.title.copyWith(color: Colors.white),
                 ),
               ],
             ),
@@ -1458,7 +1456,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       ),
       const SizedBox(height: 14),
 
-      const Divider(color: AppColors.card, height: 1),
+      Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
       const SizedBox(height: 14),
 
       _FieldLabel('Nom du client (optionnel)'),
@@ -1552,9 +1550,9 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.card,
+            color: Colors.white.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.primaryDark),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
           ),
           child: Column(
             children: [
@@ -1720,9 +1718,9 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       const SizedBox(height: 14),
       Container(
         decoration: BoxDecoration(
-          color: AppColors.card,
+          color: Colors.white.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.primaryDark),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
         ),
         child: SwitchListTile(
           value: _isFragile,
@@ -1733,7 +1731,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
           activeTrackColor: AppColors.warning,
           activeThumbColor: Colors.white,
           inactiveThumbColor: Colors.white,
-          inactiveTrackColor: AppColors.primaryDark,
+          inactiveTrackColor: Colors.white.withValues(alpha: 0.25),
           title: Row(
             children: [
               const Icon(
@@ -1744,15 +1742,13 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               const SizedBox(width: 8),
               Text(
                 'Fragile',
-                style: ClientText.subtitle.copyWith(
-                  color: AppColors.textPrimary,
-                ),
+                style: ClientText.subtitle.copyWith(color: Colors.white),
               ),
             ],
           ),
           subtitle: Text(
             'Le livreur sera notifié de faire attention',
-            style: ClientText.label.copyWith(color: AppColors.textPrimary),
+            style: ClientText.label.copyWith(color: Colors.white),
           ),
           dense: true,
           contentPadding: const EdgeInsets.symmetric(
@@ -1783,42 +1779,36 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
-                  color: _paymentMode == 'merchant'
-                      ? AppColors.primary.withValues(alpha: 0.12)
-                      : AppColors.card,
+                  color: Colors.white.withValues(
+                    alpha: _paymentMode == 'merchant' ? 0.24 : 0.14,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _paymentMode == 'merchant'
-                        ? AppColors.primary
-                        : AppColors.primaryDark,
+                    color: Colors.white.withValues(
+                      alpha: _paymentMode == 'merchant' ? 0.6 : 0.25,
+                    ),
                     width: _paymentMode == 'merchant' ? 1.5 : 1,
                   ),
                 ),
                 child: Column(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.storefront_outlined,
-                      color: _paymentMode == 'merchant'
-                          ? AppColors.primary
-                          : AppColors.textSecondary,
+                      color: Colors.white,
                       size: 22,
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Je paie',
                       style: ClientText.bodyStrong.copyWith(
-                        color: _paymentMode == 'merchant'
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Paiement en ligne',
                       style: ClientText.micro.copyWith(
-                        color: _paymentMode == 'merchant'
-                            ? AppColors.primary.withValues(alpha: 0.7)
-                            : AppColors.textSecondary,
+                        color: Colors.white.withValues(alpha: 0.75),
                       ),
                     ),
                   ],
@@ -1836,42 +1826,36 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
-                  color: _paymentMode == 'cod'
-                      ? AppColors.primary.withValues(alpha: 0.12)
-                      : AppColors.card,
+                  color: Colors.white.withValues(
+                    alpha: _paymentMode == 'cod' ? 0.24 : 0.14,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _paymentMode == 'cod'
-                        ? AppColors.primary
-                        : AppColors.primaryDark,
+                    color: Colors.white.withValues(
+                      alpha: _paymentMode == 'cod' ? 0.6 : 0.25,
+                    ),
                     width: _paymentMode == 'cod' ? 1.5 : 1,
                   ),
                 ),
                 child: Column(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.payments_outlined,
-                      color: _paymentMode == 'cod'
-                          ? AppColors.primary
-                          : AppColors.textSecondary,
+                      color: Colors.white,
                       size: 22,
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Client paie',
                       style: ClientText.bodyStrong.copyWith(
-                        color: _paymentMode == 'cod'
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'À la livraison',
                       style: ClientText.micro.copyWith(
-                        color: _paymentMode == 'cod'
-                            ? AppColors.primary.withValues(alpha: 0.7)
-                            : AppColors.textSecondary,
+                        color: Colors.white.withValues(alpha: 0.75),
                       ),
                     ),
                   ],
@@ -1882,7 +1866,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         ],
       ),
       const SizedBox(height: 16),
-      const Divider(color: AppColors.card, height: 1),
+      Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
       const SizedBox(height: 14),
 
       // ── Instructions ──────────────────────────────────────────────────────
@@ -1898,16 +1882,16 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       // ── Livraison programmée (uniquement si lancé depuis "Programmer") ──
       if (widget.scheduled) ...[
         const SizedBox(height: 16),
-        const Divider(color: AppColors.card, height: 1),
+        Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
         const SizedBox(height: 14),
         Container(
           decoration: BoxDecoration(
-            color: AppColors.card,
+            color: Colors.white.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isScheduled
                   ? AppColors.primary.withValues(alpha: 0.4)
-                  : AppColors.primaryDark,
+                  : Colors.white.withValues(alpha: 0.25),
             ),
           ),
           child: SwitchListTile(
@@ -1922,22 +1906,20 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
             activeTrackColor: AppColors.primary,
             activeThumbColor: Colors.white,
             inactiveThumbColor: Colors.white,
-            inactiveTrackColor: AppColors.primaryDark,
+            inactiveTrackColor: Colors.white.withValues(alpha: 0.25),
             title: Row(
               children: [
                 const Icon(Icons.schedule, color: AppColors.primary, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   'Programmer la livraison',
-                  style: ClientText.subtitle.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
+                  style: ClientText.subtitle.copyWith(color: Colors.white),
                 ),
               ],
             ),
             subtitle: Text(
               'Choisir une date et heure précise',
-              style: ClientText.label.copyWith(color: AppColors.textPrimary),
+              style: ClientText.label.copyWith(color: Colors.white),
             ),
             dense: true,
             contentPadding: const EdgeInsets.symmetric(
@@ -1954,7 +1936,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: Colors.white.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: _scheduledAt != null
@@ -1981,13 +1963,13 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                               Text(
                                 _fmtDate(_scheduledAt!),
                                 style: ClientText.subtitle.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white,
                                 ),
                               ),
                               Text(
                                 _fmtTime(_scheduledAt!),
                                 style: ClientText.label.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white,
                                 ),
                               ),
                             ],
@@ -2002,7 +1984,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                   Icon(
                     Icons.edit_outlined,
                     color: _scheduledAt != null
-                        ? AppColors.textSecondary
+                        ? Colors.white.withValues(alpha: 0.75)
                         : AppColors.warning,
                     size: 16,
                   ),
@@ -2034,9 +2016,9 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.primaryDark),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.22),
@@ -2065,7 +2047,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                         margin: const EdgeInsets.symmetric(vertical: 2),
                         width: 2,
                         height: 6,
-                        color: AppColors.textSecondary.withValues(alpha: 0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                       ),
                     ),
                   ),
@@ -2080,13 +2062,16 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 if (_recipientNameCtrl.text.trim().isNotEmpty ||
                     _recipientPhoneCtrl.text.trim().isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  const Divider(color: AppColors.primaryDark, height: 1),
+                  Divider(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    height: 1,
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.person_outline,
-                        color: AppColors.textSecondary,
+                        color: Colors.white.withValues(alpha: 0.75),
                         size: 16,
                       ),
                       const SizedBox(width: 8),
@@ -2098,9 +2083,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                             if (_recipientPhoneCtrl.text.trim().isNotEmpty)
                               '+221 ${_recipientPhoneCtrl.text.trim()}',
                           ].join(' · '),
-                          style: ClientText.label.copyWith(
-                            color: AppColors.textPrimary,
-                          ),
+                          style: ClientText.label.copyWith(color: Colors.white),
                         ),
                       ),
                     ],
@@ -2118,9 +2101,9 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primaryDark),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.22),
@@ -2139,9 +2122,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 const SizedBox(width: 10),
                 Text(
                   _packageTypes.firstWhere((t) => t.$1 == _packageType).$2,
-                  style: ClientText.bodyStrong.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
+                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
                 ),
                 if (_isFragile) ...[
                   const SizedBox(width: 8),
@@ -2176,9 +2157,9 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: Colors.white.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.primaryDark),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.22),
@@ -2201,7 +2182,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                       Text(
                         'Articles',
                         style: ClientText.bodyStrong.copyWith(
-                          color: AppColors.textPrimary,
+                          color: Colors.white,
                         ),
                       ),
                     ],
@@ -2219,14 +2200,14 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                               Text(
                                 '•  ',
                                 style: ClientText.label.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white,
                                 ),
                               ),
                               Expanded(
                                 child: Text(
                                   '${a.nameCtrl.text.trim()} × $qty',
                                   style: ClientText.label.copyWith(
-                                    color: AppColors.textPrimary,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
@@ -2234,7 +2215,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                                 Text(
                                   '$price FCFA',
                                   style: ClientText.label.copyWith(
-                                    color: AppColors.textPrimary,
+                                    color: Colors.white,
                                   ),
                                 ),
                             ],
@@ -2253,9 +2234,9 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primaryDark),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.22),
@@ -2278,9 +2259,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                   _paymentMode == 'merchant'
                       ? 'Vous payez la livraison'
                       : 'Le client paie à la livraison',
-                  style: ClientText.bodyStrong.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
+                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
                 ),
               ],
             ),
@@ -2327,7 +2306,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                       Text(
                         '${_fmtDate(_scheduledAt!)} à ${_fmtTime(_scheduledAt!)}',
                         style: ClientText.bodyStrong.copyWith(
-                          color: AppColors.textPrimary,
+                          color: Colors.white,
                         ),
                       ),
                     ],
@@ -2356,16 +2335,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.card, AppColors.primaryDark],
-                ),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.25),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 18,
                     offset: const Offset(0, 8),
                   ),
@@ -2412,7 +2386,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                         if (dur != null) '~$dur min',
                       ].join(' · '),
                       style: ClientText.label.copyWith(
-                        color: AppColors.textPrimary,
+                        color: AppColors.textMuted,
                       ),
                     ),
                   ],
@@ -2426,7 +2400,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: Colors.white.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: AppColors.warning.withValues(alpha: 0.4),
@@ -2456,15 +2430,13 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 child: TextField(
                   controller: _promoCodeCtrl,
                   textCapitalization: TextCapitalization.characters,
-                  style: ClientText.body.copyWith(color: AppColors.textPrimary),
+                  style: ClientText.body.copyWith(color: Colors.white),
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: 'Code promo (optionnel)',
-                    hintStyle: ClientText.label.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
+                    hintStyle: ClientText.label.copyWith(color: Colors.white),
                     filled: true,
-                    fillColor: AppColors.card,
+                    fillColor: Colors.white.withValues(alpha: 0.14),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 12,
@@ -2794,21 +2766,19 @@ class _DepartureBanner extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryDark),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.location_on, color: AppColors.primary, size: 18),
+          const Icon(Icons.location_on, color: Colors.white, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: loading
                 ? Text(
                     'Localisation en cours…',
-                    style: ClientText.label.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
+                    style: ClientText.label.copyWith(color: Colors.white),
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2816,7 +2786,7 @@ class _DepartureBanner extends StatelessWidget {
                       Text(
                         fixedLabel,
                         style: ClientText.micro.copyWith(
-                          color: AppColors.textSecondary,
+                          color: Colors.white.withValues(alpha: 0.75),
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.4,
                         ),
@@ -2825,15 +2795,13 @@ class _DepartureBanner extends StatelessWidget {
                         Text(
                           proLabel!,
                           style: ClientText.label.copyWith(
-                            color: AppColors.textPrimary,
+                            color: Colors.white,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       Text(
                         address.isNotEmpty ? address : placeholder,
-                        style: ClientText.label.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
+                        style: ClientText.label.copyWith(color: Colors.white),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -2844,11 +2812,11 @@ class _DepartureBanner extends StatelessWidget {
           Text(
             'Changer',
             style: ClientText.label.copyWith(
-              color: AppColors.primary,
+              color: Colors.white,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const Icon(Icons.chevron_right, color: AppColors.primary, size: 16),
+          const Icon(Icons.chevron_right, color: Colors.white, size: 16),
         ],
       ),
     ),
@@ -3426,10 +3394,8 @@ class _FieldLabel extends StatelessWidget {
   final String text;
   const _FieldLabel(this.text);
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: ClientText.label.copyWith(color: AppColors.textPrimary),
-  );
+  Widget build(BuildContext context) =>
+      Text(text, style: ClientText.label.copyWith(color: Colors.white));
 }
 
 class _ProTextField extends StatelessWidget {
@@ -3468,27 +3434,29 @@ class _ProTextField extends StatelessWidget {
     onChanged: onChanged,
     textInputAction: textInputAction,
     onSubmitted: onSubmitted,
-    style: ClientText.body.copyWith(fontSize: 14),
+    style: ClientText.body.copyWith(fontSize: 14, color: Colors.white),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
+      hintStyle: ClientText.label.copyWith(
+        color: Colors.white.withValues(alpha: 0.7),
+      ),
       prefixText: prefix,
-      prefixStyle: ClientText.label.copyWith(fontSize: 14),
+      prefixStyle: ClientText.label.copyWith(fontSize: 14, color: Colors.white),
       suffixIcon: suffixIcon,
       counterText: '',
       filled: true,
-      fillColor: AppColors.card,
+      fillColor: Colors.white.withValues(alpha: 0.14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.primaryDark),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.primaryDark),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        borderSide: BorderSide(color: Colors.white, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     ),
@@ -3513,12 +3481,10 @@ class _PackageTypeRow extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.only(bottom: 8),
     decoration: BoxDecoration(
-      color: selected
-          ? AppColors.primary.withValues(alpha: 0.10)
-          : AppColors.card,
+      color: Colors.white.withValues(alpha: selected ? 0.24 : 0.14),
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: selected ? AppColors.primary : AppColors.primaryDark,
+        color: Colors.white.withValues(alpha: selected ? 0.6 : 0.25),
         width: selected ? 1.5 : 1,
       ),
     ),
@@ -3535,16 +3501,10 @@ class _PackageTypeRow extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.primary.withValues(alpha: 0.15)
-                      : AppColors.primaryDark,
+                  color: Colors.white.withValues(alpha: selected ? 0.28 : 0.16),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  icon,
-                  color: selected ? AppColors.primary : AppColors.textSecondary,
-                  size: 20,
-                ),
+                child: Icon(icon, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -3553,27 +3513,19 @@ class _PackageTypeRow extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: ClientText.subtitle.copyWith(
-                        color: selected
-                            ? AppColors.primary
-                            : AppColors.textPrimary,
-                      ),
+                      style: ClientText.subtitle.copyWith(color: Colors.white),
                     ),
                     Text(
                       subtitle,
                       style: ClientText.label.copyWith(
-                        color: AppColors.textPrimary,
+                        color: Colors.white.withValues(alpha: 0.75),
                       ),
                     ),
                   ],
                 ),
               ),
               if (selected)
-                const Icon(
-                  Icons.check_circle,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
             ],
           ),
         ),
@@ -3600,7 +3552,7 @@ class _RouteRow extends StatelessWidget {
       Expanded(
         child: Text(
           label,
-          style: ClientText.body.copyWith(color: AppColors.textPrimary),
+          style: ClientText.body.copyWith(color: Colors.white),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -3629,10 +3581,14 @@ class _NavBtn extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: outline
-              ? AppColors.surface
-              : (disabled ? AppColors.card : AppColors.primary),
+              ? Colors.white.withValues(alpha: 0.14)
+              : (disabled
+                    ? Colors.white.withValues(alpha: 0.14)
+                    : AppColors.primary),
           borderRadius: BorderRadius.circular(14),
-          border: outline ? Border.all(color: AppColors.primaryDark) : null,
+          border: outline
+              ? Border.all(color: Colors.white.withValues(alpha: 0.3))
+              : null,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.35),
@@ -3660,9 +3616,9 @@ class _NavBtn extends StatelessWidget {
                       label,
                       style: ClientText.button.copyWith(
                         color: outline
-                            ? AppColors.textSecondary
+                            ? Colors.white
                             : (disabled
-                                  ? AppColors.textSecondary
+                                  ? Colors.white.withValues(alpha: 0.5)
                                   : Colors.white),
                       ),
                     ),
