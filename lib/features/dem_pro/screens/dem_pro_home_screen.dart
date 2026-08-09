@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -28,6 +29,7 @@ import '../../../core/services/socket_service.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../../shared/widgets/operator_picker_sheet.dart';
 import '../../../shared/widgets/samirpay_payment_sheet.dart';
+import '../../../core/theme/map_theme_provider.dart';
 
 const _sectorLabels = {
   'commerce': 'Commerce',
@@ -795,55 +797,266 @@ class _AccueilTab extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── Carte résumé — tableau de bord ────────────────────
-                    if (loading)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 40),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primary,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Carte résumé — tableau de bord ────────────────────
+                      if (loading)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
                           ),
-                        ),
-                      )
-                    else
-                      GestureDetector(
-                        onTap: onOpenDashboard,
-                        child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                          ),
-                          boxShadow: AppShadows.card,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // En-tête avec date dynamique + affordance "cliquable"
-                            Row(
+                        )
+                      else
+                        GestureDetector(
+                          onTap: onOpenDashboard,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.12,
+                                ),
+                              ),
+                              boxShadow: AppShadows.card,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(
-                                  Icons.two_wheeler,
-                                  color: AppColors.primary,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Livraisons — $dateStr',
-                                    style: ClientText.label.copyWith(
-                                      color: t.muted,
+                                // En-tête avec date dynamique + affordance "cliquable"
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.two_wheeler,
+                                      color: AppColors.primary,
+                                      size: 16,
                                     ),
-                                  ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Livraisons — $dateStr',
+                                        style: ClientText.label.copyWith(
+                                          color: t.muted,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      'Détails',
+                                      style: ClientText.micro.copyWith(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.chevron_right,
+                                      color: AppColors.primary,
+                                      size: 14,
+                                    ),
+                                  ],
                                 ),
+                                const SizedBox(height: 14),
+
+                                // Grandes stats livrées / en cours
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _BigStatBox(
+                                        value: '$delivered',
+                                        label: 'Livrées',
+                                        color: AppColors.successLight,
+                                        t: t,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: _BigStatBox(
+                                        value: '$inProgress',
+                                        label: 'En cours',
+                                        color: AppColors.warning,
+                                        t: t,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+
+                                // Ventes en 2 mini-cards distinctes
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Ventes aujourd\'hui',
+                                              style: ClientText.micro.copyWith(
+                                                color: t.muted,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              formatFcfa(salesToday),
+                                              style: ClientText.subtitle
+                                                  .copyWith(
+                                                    color:
+                                                        AppColors.successLight,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Ventes ce mois',
+                                              style: ClientText.micro.copyWith(
+                                                color: t.muted,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              formatFcfa(salesMonth),
+                                              style: ClientText.subtitle
+                                                  .copyWith(
+                                                    color:
+                                                        AppColors.successLight,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 24),
+
+                      // ── Faire une livraison ───────────────────────────────
+                      Text(
+                        'Faire une livraison',
+                        style: ClientText.bodyStrong.copyWith(color: t.text),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── Types de livraison ────────────────────────────────
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _PremiumServiceCard(
+                              icon: Icons.bolt_rounded,
+                              label: 'Express',
+                              color: AppColors.warning,
+                              onTap: () async {
+                                if (!await ensureLocationEnabled(context))
+                                  return;
+                                if (!context.mounted) return;
+                                context.push(
+                                  '/dem-pro/orders/create?priority=EXPRESS',
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _PremiumServiceCard(
+                              icon: Icons.two_wheeler_rounded,
+                              label: 'Simple',
+                              color: AppColors.primary,
+                              onTap: () async {
+                                if (!await ensureLocationEnabled(context))
+                                  return;
+                                if (!context.mounted) return;
+                                context.push('/dem-pro/orders/create');
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _PremiumServiceCard(
+                              icon: Icons.route_rounded,
+                              label: 'Groupée',
+                              color: AppColors.accentIndigo,
+                              onTap: () async {
+                                if (!await ensureLocationEnabled(context))
+                                  return;
+                                if (!context.mounted) return;
+                                context.push('/dem-pro/batch/create');
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+
+                      // ── Produits enregistrés ──────────────────────────────
+                      Row(
+                        children: [
+                          _SectionLabel(label: 'PRODUITS', t: t),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () =>
+                                context.push('/dem-pro/products?add=true'),
+                            child: Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.12,
+                                ),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.add,
+                                color: AppColors.primary,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          GestureDetector(
+                            onTap: () => context.push('/dem-pro/products'),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                                 Text(
-                                  'Détails',
-                                  style: ClientText.micro.copyWith(
+                                  'Voir plus',
+                                  style: ClientText.label.copyWith(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -851,205 +1064,14 @@ class _AccueilTab extends StatelessWidget {
                                 const Icon(
                                   Icons.chevron_right,
                                   color: AppColors.primary,
-                                  size: 14,
+                                  size: 16,
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 14),
-
-                            // Grandes stats livrées / en cours
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _BigStatBox(
-                                    value: '$delivered',
-                                    label: 'Livrées',
-                                    color: AppColors.successLight,
-                                    t: t,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _BigStatBox(
-                                    value: '$inProgress',
-                                    label: 'En cours',
-                                    color: AppColors.warning,
-                                    t: t,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-
-                            // Ventes en 2 mini-cards distinctes
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Ventes aujourd\'hui',
-                                          style: ClientText.micro.copyWith(
-                                            color: t.muted,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          formatFcfa(salesToday),
-                                          style: ClientText.subtitle.copyWith(
-                                            color: AppColors.successLight,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Ventes ce mois',
-                                          style: ClientText.micro.copyWith(
-                                            color: t.muted,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          formatFcfa(salesMonth),
-                                          style: ClientText.subtitle.copyWith(
-                                            color: AppColors.successLight,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        ),
+                          ),
+                        ],
                       ),
-                    const SizedBox(height: 24),
-
-                    // ── Faire une livraison ───────────────────────────────
-                    Text(
-                      'Faire une livraison',
-                      style: ClientText.bodyStrong.copyWith(color: t.text),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ── Types de livraison ────────────────────────────────
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _PremiumServiceCard(
-                            icon: Icons.bolt_rounded,
-                            label: 'Express',
-                            color: AppColors.warning,
-                            onTap: () async {
-                              if (!await ensureLocationEnabled(context)) return;
-                              if (!context.mounted) return;
-                              context.push(
-                                '/dem-pro/orders/create?priority=EXPRESS',
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _PremiumServiceCard(
-                            icon: Icons.two_wheeler_rounded,
-                            label: 'Simple',
-                            color: AppColors.primary,
-                            onTap: () async {
-                              if (!await ensureLocationEnabled(context)) return;
-                              if (!context.mounted) return;
-                              context.push('/dem-pro/orders/create');
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _PremiumServiceCard(
-                            icon: Icons.route_rounded,
-                            label: 'Groupée',
-                            color: AppColors.accentIndigo,
-                            onTap: () async {
-                              if (!await ensureLocationEnabled(context)) return;
-                              if (!context.mounted) return;
-                              context.push('/dem-pro/batch/create');
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 28),
-
-                    // ── Produits enregistrés ──────────────────────────────
-                    Row(
-                      children: [
-                        _SectionLabel(label: 'PRODUITS', t: t),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: () => context.push('/dem-pro/products?add=true'),
-                          child: Container(
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.add,
-                              color: AppColors.primary,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        GestureDetector(
-                          onTap: () => context.push('/dem-pro/products'),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Voir plus',
-                                style: ClientText.label.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: AppColors.primary,
-                                size: 16,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                    ],
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1068,7 +1090,6 @@ class _AccueilTab extends StatelessWidget {
       ],
     );
   }
-
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1129,7 +1150,9 @@ class _CompteTabState extends State<_CompteTab>
         () => _planData = {...?_planData, 'inAppPaymentEnabled': !value},
       );
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Impossible de mettre à jour ce réglage.')),
+        const SnackBar(
+          content: Text('Impossible de mettre à jour ce réglage.'),
+        ),
       );
     }
   }
@@ -1214,7 +1237,8 @@ class _CompteTabState extends State<_CompteTab>
                 ),
               ),
               const SizedBox(height: 8),
-              for (final f in features) _PlanFeatureRow(text: f, included: true),
+              for (final f in features)
+                _PlanFeatureRow(text: f, included: true),
               if (nextTierLabel != null) ...[
                 const SizedBox(height: 18),
                 Text(
@@ -1275,7 +1299,11 @@ class _CompteTabState extends State<_CompteTab>
                         ? null
                         : () {
                             Navigator.pop(sheetCtx);
-                            _purchasePlan(nextTier!, nextTierPrice, nextTierLabel);
+                            _purchasePlan(
+                              nextTier!,
+                              nextTierPrice,
+                              nextTierLabel,
+                            );
                           },
                     icon: const Icon(Icons.workspace_premium, size: 18),
                     label: Text('Passer $nextTierLabel'),
@@ -1319,10 +1347,7 @@ class _CompteTabState extends State<_CompteTab>
   // journalière driver (chooseOperator + SamirpayPaymentSheet), le paiement
   // active le plan automatiquement dès confirmation (voir samirpay.service.js).
   Future<void> _purchasePlan(String plan, int amount, String? planLabel) async {
-    final operatorName = await chooseOperator(
-      context,
-      title: 'Payer avec',
-    );
+    final operatorName = await chooseOperator(context, title: 'Payer avec');
     if (operatorName == null || !mounted) return;
 
     await SamirpayPaymentSheet.show(
@@ -1966,384 +1991,448 @@ class _CompteTabState extends State<_CompteTab>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            _SectionLabel(label: 'INFORMATIONS', t: t),
-            const SizedBox(height: 12),
-            _InfoCard(
-              t: t,
-              children: [
-                _EditableInfoRow(
-                  icon: Icons.person_outline,
-                  label: 'Responsable',
-                  value: name ?? '—',
+                _SectionLabel(label: 'INFORMATIONS', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
                   t: t,
-                  onTap: () => _editField('Responsable', name ?? '', 'name'),
+                  children: [
+                    _EditableInfoRow(
+                      icon: Icons.person_outline,
+                      label: 'Responsable',
+                      value: name ?? '—',
+                      t: t,
+                      onTap: () =>
+                          _editField('Responsable', name ?? '', 'name'),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.phone_outlined,
+                      label: 'Téléphone',
+                      value: phone ?? '—',
+                      t: t,
+                      onTap: () => _requestPhoneChange(phone ?? ''),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.email_outlined,
+                      label: 'Email',
+                      value: email?.isNotEmpty == true
+                          ? email!
+                          : 'Ajouter un email',
+                      isPlaceholder: email == null || email.isEmpty,
+                      t: t,
+                      onTap: () => _editField('Email', email ?? '', 'email'),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.category_outlined,
+                      label: 'Secteur',
+                      value: _sectorLabels[sector] ?? '—',
+                      t: t,
+                      onTap: () => _showSectorPicker(sector),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.bar_chart_outlined,
+                      label: 'Volume hebdo',
+                      value: _volumeLabels[volume] ?? '—',
+                      t: t,
+                      onTap: () => _showVolumePicker(volume),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.badge_outlined,
+                      label: 'NINEA',
+                      value: ninea?.isNotEmpty == true
+                          ? ninea!
+                          : 'Ajouter (pour vos factures)',
+                      isPlaceholder: ninea == null || ninea.isEmpty,
+                      t: t,
+                      isLast: true,
+                      onTap: () => _editField('NINEA', ninea ?? '', 'proNinea'),
+                    ),
+                  ],
                 ),
-                _EditableInfoRow(
-                  icon: Icons.phone_outlined,
-                  label: 'Téléphone',
-                  value: phone ?? '—',
-                  t: t,
-                  onTap: () => _requestPhoneChange(phone ?? ''),
-                ),
-                _EditableInfoRow(
-                  icon: Icons.email_outlined,
-                  label: 'Email',
-                  value: email?.isNotEmpty == true
-                      ? email!
-                      : 'Ajouter un email',
-                  isPlaceholder: email == null || email.isEmpty,
-                  t: t,
-                  onTap: () => _editField('Email', email ?? '', 'email'),
-                ),
-                _EditableInfoRow(
-                  icon: Icons.category_outlined,
-                  label: 'Secteur',
-                  value: _sectorLabels[sector] ?? '—',
-                  t: t,
-                  onTap: () => _showSectorPicker(sector),
-                ),
-                _EditableInfoRow(
-                  icon: Icons.bar_chart_outlined,
-                  label: 'Volume hebdo',
-                  value: _volumeLabels[volume] ?? '—',
-                  t: t,
-                  onTap: () => _showVolumePicker(volume),
-                ),
-                _EditableInfoRow(
-                  icon: Icons.badge_outlined,
-                  label: 'NINEA',
-                  value: ninea?.isNotEmpty == true ? ninea! : 'Ajouter (pour vos factures)',
-                  isPlaceholder: ninea == null || ninea.isEmpty,
-                  t: t,
-                  isLast: true,
-                  onTap: () => _editField('NINEA', ninea ?? '', 'proNinea'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // ── Catalogue ────────────────────────────────────────────────
-            _SectionLabel(label: 'CATALOGUE', t: t),
-            const SizedBox(height: 12),
-            _InfoCard(
-              t: t,
-              children: [
-                _TapRow(
-                  icon: Icons.inventory_2_outlined,
-                  label: 'Mes produits',
-                  subtitle: 'Réutilisez-les à chaque commande',
+                // ── Catalogue ────────────────────────────────────────────────
+                _SectionLabel(label: 'CATALOGUE', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
                   t: t,
-                  isLast: true,
-                  onTap: () => context.push('/dem-pro/products'),
+                  children: [
+                    _TapRow(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Mes produits',
+                      subtitle: 'Réutilisez-les à chaque commande',
+                      t: t,
+                      isLast: true,
+                      onTap: () => context.push('/dem-pro/products'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // ── Wallet & paiement intégré ────────────────────────────────
-            _SectionLabel(label: 'WALLET & PAIEMENT', t: t),
-            const SizedBox(height: 12),
-            _InfoCard(
-              t: t,
-              children: [
-                _TapRow(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: 'Wallet DEM Pro',
-                  subtitle: 'Solde, retraits, historique des ventes',
+                // ── Wallet & paiement intégré ────────────────────────────────
+                _SectionLabel(label: 'WALLET & PAIEMENT', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
                   t: t,
-                  onTap: () => context.push('/dem-pro/wallet'),
+                  children: [
+                    _TapRow(
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: 'Wallet DEM Pro',
+                      subtitle: 'Solde, retraits, historique des ventes',
+                      t: t,
+                      onTap: () => context.push('/dem-pro/wallet'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: t.cardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: t.border),
-              ),
-              child: SwitchListTile(
-                value: _planData?['inAppPaymentEnabled'] as bool? ?? false,
-                onChanged: _toggleInAppPayment,
-                activeTrackColor: AppColors.primary,
-                activeThumbColor: Colors.white,
-                inactiveThumbColor: Colors.white,
-                inactiveTrackColor: t.border,
-                title: Text(
-                  'Paiement intégré',
-                  style: ClientText.subtitle.copyWith(color: t.text),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: t.cardBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: t.border),
+                  ),
+                  child: SwitchListTile(
+                    value: _planData?['inAppPaymentEnabled'] as bool? ?? false,
+                    onChanged: _toggleInAppPayment,
+                    activeTrackColor: AppColors.primary,
+                    activeThumbColor: Colors.white,
+                    inactiveThumbColor: Colors.white,
+                    inactiveTrackColor: t.border,
+                    title: Text(
+                      'Paiement intégré',
+                      style: ClientText.subtitle.copyWith(color: t.text),
+                    ),
+                    subtitle: Text(
+                      'Le client paie le produit et la livraison en une fois dans l\'app — le produit est crédité sur votre wallet.',
+                      style: ClientText.label.copyWith(
+                        color: t.muted,
+                        height: 1.4,
+                      ),
+                    ),
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
+                  ),
                 ),
-                subtitle: Text(
-                  'Le client paie le produit et la livraison en une fois dans l\'app — le produit est crédité sur votre wallet.',
-                  style: ClientText.label.copyWith(color: t.muted, height: 1.4),
-                ),
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 4,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // ── Clients (CRM léger) ────────────────────────────────────────
-            _SectionLabel(label: 'CLIENTS', t: t),
-            const SizedBox(height: 12),
-            _InfoCard(
-              t: t,
-              children: [
-                _TapRow(
-                  icon: Icons.people_outline,
-                  label: 'Mes clients',
-                  subtitle: 'Historique, contact, fidélisation',
+                // ── Clients (CRM léger) ────────────────────────────────────────
+                _SectionLabel(label: 'CLIENTS', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
                   t: t,
-                  isLast: true,
-                  onTap: () => context.push('/dem-pro/clients'),
+                  children: [
+                    _TapRow(
+                      icon: Icons.people_outline,
+                      label: 'Mes clients',
+                      subtitle: 'Historique, contact, fidélisation',
+                      t: t,
+                      isLast: true,
+                      onTap: () => context.push('/dem-pro/clients'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // ── Lien de commande ───────────────────────────────────────────
-            _SectionLabel(label: 'LIEN DE COMMANDE', t: t),
-            const SizedBox(height: 12),
-            _InfoCard(
-              t: t,
-              children: [
-                _TapRow(
-                  icon: Icons.share_outlined,
-                  label: 'Partager mon lien de commande',
-                  subtitle: 'Vos clients commandent directement, sans compte',
+                // ── Lien de commande ───────────────────────────────────────────
+                _SectionLabel(label: 'LIEN DE COMMANDE', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
                   t: t,
-                  onTap: _shareOrderLink,
+                  children: [
+                    _TapRow(
+                      icon: Icons.share_outlined,
+                      label: 'Partager mon lien de commande',
+                      subtitle:
+                          'Vos clients commandent directement, sans compte',
+                      t: t,
+                      onTap: _shareOrderLink,
+                    ),
+                    _TapRow(
+                      icon: Icons.inbox_outlined,
+                      label: 'Demandes reçues',
+                      subtitle: _pendingRequestCount > 0
+                          ? '$_pendingRequestCount en attente de confirmation'
+                          : 'Aucune demande en attente',
+                      t: t,
+                      isLast: true,
+                      trailing: _pendingRequestCount > 0
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withValues(
+                                  alpha: 0.15,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '$_pendingRequestCount',
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.warning,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            )
+                          : null,
+                      onTap: () async {
+                        await context.push('/dem-pro/order-requests');
+                        _loadPendingRequestCount();
+                      },
+                    ),
+                  ],
                 ),
-                _TapRow(
-                  icon: Icons.inbox_outlined,
-                  label: 'Demandes reçues',
-                  subtitle: _pendingRequestCount > 0
-                      ? '$_pendingRequestCount en attente de confirmation'
-                      : 'Aucune demande en attente',
+                const SizedBox(height: 24),
+
+                // ── Promotions ───────────────────────────────────────────────
+                _SectionLabel(label: 'PROMOTIONS', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
                   t: t,
-                  isLast: true,
-                  trailing: _pendingRequestCount > 0
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
+                  children: [
+                    _TapRow(
+                      icon: Icons.local_offer_outlined,
+                      label: 'Code promo',
+                      subtitle: 'Réduction sur votre prochaine commande',
+                      t: t,
+                      isLast: true,
+                      onTap: () => context.push('/dem-pro/promo-code'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // ── Abonnement ───────────────────────────────────────────────
+                _SectionLabel(label: 'ABONNEMENT', t: t),
+                const SizedBox(height: 12),
+                Builder(
+                  builder: (context) {
+                    final planCode = _planData?['plan'] as String? ?? 'FREE';
+                    final planLabel =
+                        _planData?['planLabel'] as String? ?? 'Gratuit';
+                    final planColor = switch (planCode) {
+                      'PRO' => AppColors.primary,
+                      'BUSINESS' => AppColors.accentIndigo,
+                      _ => AppColors.textMuted,
+                    };
+                    final isFree = planCode == 'FREE';
+                    return GestureDetector(
+                      onTap: _showPlanSheet,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: planColor.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: planColor.withValues(alpha: 0.2),
                           ),
-                          decoration: BoxDecoration(
-                            color: AppColors.warning.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '$_pendingRequestCount',
-                            style: ClientText.label.copyWith(
-                              color: AppColors.warning,
-                              fontWeight: FontWeight.w800,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: planColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                Icons.workspace_premium,
+                                color: planColor,
+                                size: 22,
+                              ),
                             ),
-                          ),
-                        )
-                      : null,
-                  onTap: () async {
-                    await context.push('/dem-pro/order-requests');
-                    _loadPendingRequestCount();
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'DEM Pro',
+                                    style: ClientText.subtitle.copyWith(
+                                      color: t.text,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isFree
+                                        ? 'Plan $planLabel'
+                                        : 'Plan $planLabel actif',
+                                    style: ClientText.label.copyWith(
+                                      color: planColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isFree)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'Découvrir',
+                                  style: ClientText.micro.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              )
+                            else
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                color: planColor,
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
                   },
                 ),
-              ],
-            ),
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // ── Promotions ───────────────────────────────────────────────
-            _SectionLabel(label: 'PROMOTIONS', t: t),
-            const SizedBox(height: 12),
-            _InfoCard(
-              t: t,
-              children: [
-                _TapRow(
-                  icon: Icons.local_offer_outlined,
-                  label: 'Code promo',
-                  subtitle: 'Réduction sur votre prochaine commande',
-                  t: t,
-                  isLast: true,
-                  onTap: () => context.push('/dem-pro/promo-code'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // ── Abonnement ───────────────────────────────────────────────
-            _SectionLabel(label: 'ABONNEMENT', t: t),
-            const SizedBox(height: 12),
-            Builder(
-              builder: (context) {
-                final planCode = _planData?['plan'] as String? ?? 'FREE';
-                final planLabel = _planData?['planLabel'] as String? ?? 'Gratuit';
-                final planColor = switch (planCode) {
-                  'PRO' => AppColors.primary,
-                  'BUSINESS' => AppColors.accentIndigo,
-                  _ => AppColors.textMuted,
-                };
-                final isFree = planCode == 'FREE';
-                return GestureDetector(
-                  onTap: _showPlanSheet,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: planColor.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: planColor.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: planColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.workspace_premium,
-                            color: planColor,
-                            size: 22,
+                // ── Support ──────────────────────────────────────────────────
+                // ── Affichage carte ─────────────────────────────────────────────
+                _SectionLabel(label: 'AFFICHAGE', t: t),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: t.cardBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: t.border),
+                  ),
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final isNight = ref.watch(mapNightProvider);
+                      return SwitchListTile(
+                        value: isNight,
+                        onChanged: (_) =>
+                            ref.read(mapNightProvider.notifier).toggle(),
+                        activeTrackColor: AppColors.primary,
+                        activeThumbColor: Colors.white,
+                        inactiveThumbColor: Colors.white,
+                        inactiveTrackColor: t.border,
+                        title: Text(
+                          'Carte en mode nuit',
+                          style: ClientText.subtitle.copyWith(color: t.text),
+                        ),
+                        subtitle: Text(
+                          'S\'applique à toutes les cartes DEM Pro (livraison, tournée) jusqu\'au prochain changement.',
+                          style: ClientText.label.copyWith(
+                            color: t.muted,
+                            height: 1.4,
                           ),
                         ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'DEM Pro',
-                                style: ClientText.subtitle.copyWith(color: t.text),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isFree ? 'Plan $planLabel' : 'Plan $planLabel actif',
-                                style: ClientText.label.copyWith(color: planColor),
-                              ),
-                            ],
-                          ),
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 4,
                         ),
-                        if (isFree)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'Découvrir',
-                              style: ClientText.micro.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          )
-                        else
-                          Icon(Icons.chevron_right_rounded, color: planColor),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-
-            // ── Support ──────────────────────────────────────────────────
-            _SectionLabel(label: 'SUPPORT', t: t),
-            const SizedBox(height: 12),
-            _InfoCard(
-              t: t,
-              children: [
-                _TapRow(
-                  icon: Icons.phone_outlined,
-                  label: 'Appeler le support',
-                  t: t,
-                  subtitle: '+221 71 006 46 64',
-                  onTap: () => launchUrl(Uri.parse('tel:+221710064664')),
-                ),
-                _TapRow(
-                  icon: Icons.chat_bubble_outline,
-                  label: 'WhatsApp',
-                  t: t,
-                  subtitle: '+221 71 006 46 64',
-                  onTap: () => launchUrl(
-                    Uri.parse('https://wa.me/221710064664'),
-                    mode: LaunchMode.externalApplication,
+                      );
+                    },
                   ),
                 ),
-                _TapRow(
-                  icon: Icons.email_outlined,
-                  label: 'Envoyer un e-mail',
+                const SizedBox(height: 24),
+
+                _SectionLabel(label: 'SUPPORT', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
                   t: t,
-                  subtitle: 'support@dem.sn',
-                  onTap: () => launchUrl(Uri.parse('mailto:support@dem.sn')),
-                ),
-                _TapRow(
-                  icon: Icons.description_outlined,
-                  label: 'Conditions d\'utilisation',
-                  t: t,
-                  isLast: true,
-                  onTap: () => launchUrl(
-                    Uri.parse('https://www.dem.sn/#cgu'),
-                    mode: LaunchMode.externalApplication,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // ── Déconnexion ───────────────────────────────────────────────
-            _LogoutButton(onTap: () => _confirmLogout(context), t: t),
-
-            const SizedBox(height: 12),
-
-            // ── Supprimer le compte ──────────────────────────────────────
-            GestureDetector(
-              onTap: () => _confirmDeleteAccount(context),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppColors.error.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
-                      Icons.delete_outline,
-                      color: AppColors.error,
-                      size: 18,
+                    _TapRow(
+                      icon: Icons.phone_outlined,
+                      label: 'Appeler le support',
+                      t: t,
+                      subtitle: '+221 71 006 46 64',
+                      onTap: () => launchUrl(Uri.parse('tel:+221710064664')),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Supprimer mon compte',
-                      style: ClientText.bodyStrong.copyWith(
-                        color: AppColors.error,
+                    _TapRow(
+                      icon: Icons.chat_bubble_outline,
+                      label: 'WhatsApp',
+                      t: t,
+                      subtitle: '+221 71 006 46 64',
+                      onTap: () => launchUrl(
+                        Uri.parse('https://wa.me/221710064664'),
+                        mode: LaunchMode.externalApplication,
+                      ),
+                    ),
+                    _TapRow(
+                      icon: Icons.email_outlined,
+                      label: 'Envoyer un e-mail',
+                      t: t,
+                      subtitle: 'support@dem.sn',
+                      onTap: () =>
+                          launchUrl(Uri.parse('mailto:support@dem.sn')),
+                    ),
+                    _TapRow(
+                      icon: Icons.description_outlined,
+                      label: 'Conditions d\'utilisation',
+                      t: t,
+                      isLast: true,
+                      onTap: () => launchUrl(
+                        Uri.parse('https://www.dem.sn/#cgu'),
+                        mode: LaunchMode.externalApplication,
                       ),
                     ),
                   ],
                 ),
-              ),
-            ),
+                const SizedBox(height: 24),
 
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                'DEM v1.1.1',
-                style: ClientText.label.copyWith(
-                  color: t.muted.withValues(alpha: 0.5),
+                // ── Déconnexion ───────────────────────────────────────────────
+                _LogoutButton(onTap: () => _confirmLogout(context), t: t),
+
+                const SizedBox(height: 12),
+
+                // ── Supprimer le compte ──────────────────────────────────────
+                GestureDetector(
+                  onTap: () => _confirmDeleteAccount(context),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppColors.error.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.delete_outline,
+                          color: AppColors.error,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Supprimer mon compte',
+                          style: ClientText.bodyStrong.copyWith(
+                            color: AppColors.error,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
+
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    'DEM v1.1.1',
+                    style: ClientText.label.copyWith(
+                      color: t.muted.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -2477,14 +2566,10 @@ class _ActiveOrderIconState extends State<_ActiveOrderIcon>
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(
-            alpha: 0.12 + _ctrl.value * 0.08,
-          ),
+          color: AppColors.primary.withValues(alpha: 0.12 + _ctrl.value * 0.08),
           shape: BoxShape.circle,
           border: Border.all(
-            color: AppColors.primary.withValues(
-              alpha: 0.4 + _ctrl.value * 0.3,
-            ),
+            color: AppColors.primary.withValues(alpha: 0.4 + _ctrl.value * 0.3),
             width: 1.5,
           ),
         ),
@@ -2658,8 +2743,7 @@ class _PremiumServiceCardState extends State<_PremiumServiceCard>
     onTap: widget.onTap,
     child: AnimatedBuilder(
       animation: _scale,
-      builder: (_, child) =>
-          Transform.scale(scale: _scale.value, child: child),
+      builder: (_, child) => Transform.scale(scale: _scale.value, child: child),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
@@ -2681,10 +2765,7 @@ class _PremiumServiceCardState extends State<_PremiumServiceCard>
               height: 46,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    widget.color,
-                    widget.color.withValues(alpha: 0.75),
-                  ],
+                  colors: [widget.color, widget.color.withValues(alpha: 0.75)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -2741,7 +2822,11 @@ class _ProductsPreviewSectionState extends State<_ProductsPreviewSection>
   Future<void> _load() async {
     try {
       final products = await _repo.getProducts();
-      if (mounted) setState(() { _products = products; _loading = false; });
+      if (mounted)
+        setState(() {
+          _products = products;
+          _loading = false;
+        });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -2853,10 +2938,8 @@ class _ProductsPreviewSectionState extends State<_ProductsPreviewSection>
         padding: EdgeInsets.zero,
         itemCount: _products.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _ProductPreviewCard(
-          product: _products[i],
-          onTap: _goToProducts,
-        ),
+        itemBuilder: (_, i) =>
+            _ProductPreviewCard(product: _products[i], onTap: _goToProducts),
       ),
     );
   }
@@ -3110,11 +3193,7 @@ class _LogoutButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.logout_outlined,
-              color: AppColors.error,
-              size: 18,
-            ),
+            const Icon(Icons.logout_outlined, color: AppColors.error, size: 18),
             const SizedBox(width: 10),
             Text(
               'Se déconnecter',
@@ -3276,83 +3355,83 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
       onTap: () => FocusScope.of(context).unfocus(),
       behavior: HitTestBehavior.translucent,
       child: Column(
-      children: [
-        // ── Header dégradé cyan — même pattern que l'Accueil, plein-bleed
-        // jusqu'en haut de l'écran (Container hors SafeArea) ────────────────
-        Container(
-          width: double.infinity,
-          decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.20),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.two_wheeler_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Livraisons',
-                      style: ClientText.headline.copyWith(
-                        color: Colors.white,
-                        fontSize: 21,
-                      ),
-                    ),
-                  ),
-                  if (_activeCount > 0)
+        children: [
+          // ── Header dégradé cyan — même pattern que l'Accueil, plein-bleed
+          // jusqu'en haut de l'écran (Container hors SafeArea) ────────────────
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+                child: Row(
+                  children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.20),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(14),
                       ),
+                      child: const Icon(
+                        Icons.two_wheeler_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
                       child: Text(
-                        '$_activeCount en cours',
-                        style: ClientText.micro.copyWith(
+                        'Livraisons',
+                        style: ClientText.headline.copyWith(
                           color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
+                          fontSize: 21,
                         ),
                       ),
                     ),
-                ],
+                    if (_activeCount > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.20),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '$_activeCount en cours',
+                          style: ClientText.micro.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-        // ── Toggle Livraisons / Tournées ────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _ViewToggleBar(
-            viewType: _viewType,
-            onChanged: _switchView,
-            t: t,
+          const SizedBox(height: 16),
+          // ── Toggle Livraisons / Tournées ────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _ViewToggleBar(
+              viewType: _viewType,
+              onChanged: _switchView,
+              t: t,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        // ── Contenu ──────────────────────────────────────────────────────
-        Expanded(
-          child: _viewType == _ViewType.orders
-              ? _buildOrdersView(t)
-              : _buildBatchesView(t),
-        ),
-      ],
+          const SizedBox(height: 12),
+          // ── Contenu ──────────────────────────────────────────────────────
+          Expanded(
+            child: _viewType == _ViewType.orders
+                ? _buildOrdersView(t)
+                : _buildBatchesView(t),
+          ),
+        ],
       ),
     );
   }
@@ -3379,7 +3458,9 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
     final isEmpty = activeToShow.isEmpty && historyToShow.isEmpty;
     final isSearchEmpty = isEmpty && _searchQuery.isNotEmpty;
     final canLoadMore =
-        _hasMoreOrders && _filter != _OrderFilter.active && _searchQuery.isEmpty;
+        _hasMoreOrders &&
+        _filter != _OrderFilter.active &&
+        _searchQuery.isEmpty;
 
     return Column(
       children: [
@@ -3667,7 +3748,10 @@ class _OrderSearchField extends StatelessWidget {
         hintText: hintText,
         hintStyle: ClientText.body.copyWith(color: t.muted),
         prefixIcon: Icon(Icons.search, color: AppColors.primary, size: 20),
-        prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 20),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 40,
+          minHeight: 20,
+        ),
         suffixIcon: controller.text.isEmpty
             ? null
             : IconButton(
@@ -3726,9 +3810,7 @@ class _LoadMoreButton extends StatelessWidget {
               )
             : Text(
                 'Charger plus',
-                style: ClientText.bodyStrong.copyWith(
-                  color: AppColors.primary,
-                ),
+                style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
               ),
       ),
     ),
@@ -4167,10 +4249,7 @@ class _HistoriqueRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    date,
-                    style: ClientText.label.copyWith(color: t.muted),
-                  ),
+                  Text(date, style: ClientText.label.copyWith(color: t.muted)),
                 ],
               ),
             ),
@@ -4192,8 +4271,9 @@ class _HistoriqueRow extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: (isExpress ? AppColors.warning : AppColors.primary)
-                            .withValues(alpha: 0.12),
+                        color:
+                            (isExpress ? AppColors.warning : AppColors.primary)
+                                .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
@@ -4953,9 +5033,7 @@ class _AdressesTabState extends State<_AdressesTab>
       setState(() {
         _addresses = results[0];
         _recent = results[1];
-        _addressStats = {
-          for (final s in stats) s['proAddressId'] as String: s,
-        };
+        _addressStats = {for (final s in stats) s['proAddressId'] as String: s};
         _loading = false;
       });
     } catch (_) {
@@ -4977,9 +5055,7 @@ class _AdressesTabState extends State<_AdressesTab>
   // rien des favoris), ce qui permettait de recréer un doublon en le
   // retapant. On masque celles déjà présentes dans les favoris.
   List<Map<String, dynamic>> get _recentFiltered => _recent
-      .where(
-        (r) => !_addresses.any((a) => a['address'] == r['address']),
-      )
+      .where((r) => !_addresses.any((a) => a['address'] == r['address']))
       .toList();
 
   Future<void> _showForm({Map<String, dynamic>? existing}) async {
@@ -5186,15 +5262,12 @@ class _AdressesTabState extends State<_AdressesTab>
                             ),
                             const SizedBox(height: 20),
                           ],
-                          if (_recentFiltered.isNotEmpty &&
-                              _query.isEmpty) ...[
+                          if (_recentFiltered.isNotEmpty && _query.isEmpty) ...[
                             _buildSectionHeader('Depuis vos commandes', null),
                             const SizedBox(height: 4),
                             Text(
                               'Adresses utilisées récemment comme point de départ',
-                              style: ClientText.label.copyWith(
-                                color: t.muted,
-                              ),
+                              style: ClientText.label.copyWith(color: t.muted),
                             ),
                             const SizedBox(height: 10),
                             ..._recentFiltered.map(
@@ -5447,7 +5520,11 @@ class _AddressCard extends StatelessWidget {
                         const SizedBox(height: 5),
                         Row(
                           children: [
-                            Icon(Icons.storefront_outlined, color: AppColors.primary, size: 12),
+                            Icon(
+                              Icons.storefront_outlined,
+                              color: AppColors.primary,
+                              size: 12,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '${stats!['orderCount']} livraison${(stats!['orderCount'] as num) > 1 ? 's' : ''} · ${formatFcfa((stats!['totalValue'] as num?) ?? 0)}',
@@ -5766,10 +5843,7 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
       );
     }
   }
@@ -6083,7 +6157,9 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
                                 _isEdit
                                     ? 'Enregistrer les modifications'
                                     : 'Ajouter l\'adresse',
-                                style: ClientText.button.copyWith(color: AppColors.textDark),
+                                style: ClientText.button.copyWith(
+                                  color: AppColors.textDark,
+                                ),
                               ),
                       ),
                     ),
@@ -6108,7 +6184,9 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: ClientText.label.copyWith(color: Colors.white.withValues(alpha: 0.8)),
+    style: ClientText.label.copyWith(
+      color: Colors.white.withValues(alpha: 0.8),
+    ),
   );
 }
 
@@ -6253,13 +6331,16 @@ class _FinancesTabState extends State<_FinancesTab>
     final orders = _filteredOrders;
     if (orders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucune livraison à exporter sur cette période.')),
+        const SnackBar(
+          content: Text('Aucune livraison à exporter sur cette période.'),
+        ),
       );
       return;
     }
 
-    final periodLabel =
-        _periodOptions.firstWhere((p) => p.$1 == _period, orElse: () => ('', _period)).$2;
+    final periodLabel = _periodOptions
+        .firstWhere((p) => p.$1 == _period, orElse: () => ('', _period))
+        .$2;
 
     final rows = <List<String>>[
       [
@@ -6284,12 +6365,15 @@ class _FinancesTabState extends State<_FinancesTab>
           .join(' | ');
       int productTotal = 0;
       for (final it in items) {
-        productTotal += ((it['price'] as num?)?.toInt() ?? 0) *
+        productTotal +=
+            ((it['price'] as num?)?.toInt() ?? 0) *
             ((it['quantity'] as num?)?.toInt() ?? 1);
       }
       final deliveryPrice = (o['price'] as num?)?.toInt() ?? 0;
       final driver = o['driver'] as Map<String, dynamic>?;
-      final deliveredAt = DateTime.tryParse(o['deliveredAt'] as String? ?? '')?.toLocal();
+      final deliveredAt = DateTime.tryParse(
+        o['deliveredAt'] as String? ?? '',
+      )?.toLocal();
 
       rows.add([
         deliveredAt != null
@@ -6308,9 +6392,7 @@ class _FinancesTabState extends State<_FinancesTab>
       ]);
     }
 
-    final csv = rows
-        .map((r) => r.map(_csvEscape).join(','))
-        .join('\r\n');
+    final csv = rows.map((r) => r.map(_csvEscape).join(',')).join('\r\n');
     final bytes = utf8.encode('﻿$csv'); // BOM — accents lisibles dans Excel
 
     await SharePlus.instance.share(
@@ -6337,7 +6419,9 @@ class _FinancesTabState extends State<_FinancesTab>
   List<Map<String, dynamic>> get _filteredOrders {
     final now = DateTime.now();
     final delivered = _orders
-        .where((o) => (o['status'] as String? ?? '').toUpperCase() == 'DELIVERED')
+        .where(
+          (o) => (o['status'] as String? ?? '').toUpperCase() == 'DELIVERED',
+        )
         .where((o) {
           final dt = DateTime.tryParse(
             o['deliveredAt'] as String? ?? '',
@@ -6395,13 +6479,11 @@ class _FinancesTabState extends State<_FinancesTab>
     final headerValue = switch (_view) {
       _FinanceView.sales => formatFcfa(_totalSales),
       _FinanceView.deliveries => formatFcfa(
-        ((_financeData?['summary'] as Map?)?['totalSpent'] as num?)
-                ?.toInt() ??
+        ((_financeData?['summary'] as Map?)?['totalSpent'] as num?)?.toInt() ??
             _totalDelivery,
       ),
       _FinanceView.insights => formatFcfa(
-        ((_insightsData?['trend'] as Map?)?['currentTotal'] as num?)
-                ?.toInt() ??
+        ((_insightsData?['trend'] as Map?)?['currentTotal'] as num?)?.toInt() ??
             0,
       ),
     };
@@ -6482,80 +6564,78 @@ class _FinancesTabState extends State<_FinancesTab>
         // ── Filtre 1 — Période ───────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-            child: Row(
-              children: _periodOptions.map((opt) {
-                final selected = _period == opt.$1;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => _selectPeriod(opt.$1),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      margin: EdgeInsets.only(
-                        right: opt.$1 != '3months' ? 6 : 0,
+          child: Row(
+            children: _periodOptions.map((opt) {
+              final selected = _period == opt.$1;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => _selectPeriod(opt.$1),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: EdgeInsets.only(right: opt.$1 != '3months' ? 6 : 0),
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    decoration: BoxDecoration(
+                      color: selected ? AppColors.primary : t.cardBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected ? AppColors.primary : t.border,
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      decoration: BoxDecoration(
-                        color: selected ? AppColors.primary : t.cardBg,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selected ? AppColors.primary : t.border,
-                        ),
-                      ),
-                      child: Text(
-                        opt.$2,
-                        textAlign: TextAlign.center,
-                        style: ClientText.label.copyWith(
-                          color: selected ? Colors.white : t.muted,
-                          fontWeight: selected
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                        ),
+                    ),
+                    child: Text(
+                      opt.$2,
+                      textAlign: TextAlign.center,
+                      style: ClientText.label.copyWith(
+                        color: selected ? Colors.white : t.muted,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
                   ),
-                );
-              }).toList(),
-            ),
+                ),
+              );
+            }).toList(),
           ),
+        ),
 
-          // ── Filtre 2 — Ventes / Livraisons / Pilotage ────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-            child: _FinanceToggleBar(
-              view: _view,
-              onChanged: (v) => setState(() => _view = v),
-              t: t,
-            ),
+        // ── Filtre 2 — Ventes / Livraisons / Pilotage ────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+          child: _FinanceToggleBar(
+            view: _view,
+            onChanged: (v) => setState(() => _view = v),
+            t: t,
           ),
+        ),
 
-          // ── Contenu ───────────────────────────────────────────────────────
-          Expanded(
-            child: _loading
-                ? Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primary,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : _error != null
-                ? _buildError()
-                : RefreshIndicator(
+        // ── Contenu ───────────────────────────────────────────────────────
+        Expanded(
+          child: _loading
+              ? Center(
+                  child: CircularProgressIndicator(
                     color: AppColors.primary,
-                    backgroundColor: t.cardBg,
-                    onRefresh: _load,
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: switch (_view) {
-                        _FinanceView.sales => _buildSalesContent(),
-                        _FinanceView.deliveries => _buildDeliveriesContent(),
-                        _FinanceView.insights => _buildInsightsContent(),
-                      },
-                    ),
+                    strokeWidth: 2,
                   ),
-          ),
-        ],
-      );
+                )
+              : _error != null
+              ? _buildError()
+              : RefreshIndicator(
+                  color: AppColors.primary,
+                  backgroundColor: t.cardBg,
+                  onRefresh: _load,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: switch (_view) {
+                      _FinanceView.sales => _buildSalesContent(),
+                      _FinanceView.deliveries => _buildDeliveriesContent(),
+                      _FinanceView.insights => _buildInsightsContent(),
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
   }
 
   Widget _buildError() => Center(
@@ -6839,7 +6919,8 @@ class _FinancesTabState extends State<_FinancesTab>
 
     final avgMinutes = (data['avgDeliveryMinutes'] as num?)?.toInt();
     final topDriver = data['topDriver'] as Map<String, dynamic>?;
-    final cancellationRate = (data['cancellationRate'] as num?)?.toDouble() ?? 0;
+    final cancellationRate =
+        (data['cancellationRate'] as num?)?.toDouble() ?? 0;
     final totalCreated = (data['totalOrdersCreated'] as num?)?.toInt() ?? 0;
     final topDestinations =
         (data['topDestinations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -6863,7 +6944,9 @@ class _FinancesTabState extends State<_FinancesTab>
           decoration: BoxDecoration(
             color: AppColors.primary.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.12),
+            ),
           ),
           child: Row(
             children: [
@@ -6874,23 +6957,34 @@ class _FinancesTabState extends State<_FinancesTab>
                   color: AppColors.primary.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.flag_outlined,
-                    color: AppColors.primary, size: 20),
+                child: const Icon(
+                  Icons.flag_outlined,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Objectif : ${_volumeLabels[weeklyVolume] ?? weeklyVolume}',
-                        style: ClientText.bodyStrong.copyWith(color: t.text)),
-                    Text('$currentCount livraison(s) cette semaine',
-                        style: ClientText.label.copyWith(color: t.muted)),
+                    Text(
+                      'Objectif : ${_volumeLabels[weeklyVolume] ?? weeklyVolume}',
+                      style: ClientText.bodyStrong.copyWith(color: t.text),
+                    ),
+                    Text(
+                      '$currentCount livraison(s) cette semaine',
+                      style: ClientText.label.copyWith(color: t.muted),
+                    ),
                   ],
                 ),
               ),
               if ((weeklyMin[weeklyVolume] ?? 0) <= currentCount)
-                const Icon(Icons.check_circle, color: AppColors.successLight, size: 22),
+                const Icon(
+                  Icons.check_circle,
+                  color: AppColors.successLight,
+                  size: 22,
+                ),
             ],
           ),
         ),
@@ -6908,25 +7002,33 @@ class _FinancesTabState extends State<_FinancesTab>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Dépensé cette période',
-                style: ClientText.label.copyWith(color: t.muted)),
+            Text(
+              'Dépensé cette période',
+              style: ClientText.label.copyWith(color: t.muted),
+            ),
             const SizedBox(height: 6),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(formatFcfa(currentTotal),
-                    style: ClientText.hero.copyWith(color: t.text)),
+                Text(
+                  formatFcfa(currentTotal),
+                  style: ClientText.hero.copyWith(color: t.text),
+                ),
                 if (spendTrendPct != null) ...[
                   const SizedBox(width: 10),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
-                        color: (spendTrendPct >= 0
-                                ? AppColors.successLight
-                                : AppColors.error)
-                            .withValues(alpha: 0.12),
+                        color:
+                            (spendTrendPct >= 0
+                                    ? AppColors.successLight
+                                    : AppColors.error)
+                                .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -6957,8 +7059,10 @@ class _FinancesTabState extends State<_FinancesTab>
                 ],
               ],
             ),
-            Text('vs période précédente équivalente',
-                style: ClientText.micro.copyWith(color: t.muted)),
+            Text(
+              'vs période précédente équivalente',
+              style: ClientText.micro.copyWith(color: t.muted),
+            ),
           ],
         ),
       ),
@@ -6992,8 +7096,10 @@ class _FinancesTabState extends State<_FinancesTab>
       const SizedBox(height: 16),
 
       // ── Livreur habituel ──────────────────────────────────────────────────
-      Text('Livreur habituel',
-          style: ClientText.bodyStrong.copyWith(color: t.text)),
+      Text(
+        'Livreur habituel',
+        style: ClientText.bodyStrong.copyWith(color: t.text),
+      ),
       const SizedBox(height: 10),
       if (topDriver == null)
         _buildEmpty('Aucune livraison sur cette période')
@@ -7014,26 +7120,36 @@ class _FinancesTabState extends State<_FinancesTab>
                   color: AppColors.primary.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.two_wheeler,
-                    color: AppColors.primary, size: 20),
+                child: const Icon(
+                  Icons.two_wheeler,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(topDriver['name'] as String? ?? 'Livreur DEM',
-                        style: ClientText.bodyStrong.copyWith(color: t.text)),
-                    Text('${topDriver['count']} livraison(s) sur la période',
-                        style: ClientText.label.copyWith(color: t.muted)),
+                    Text(
+                      topDriver['name'] as String? ?? 'Livreur DEM',
+                      style: ClientText.bodyStrong.copyWith(color: t.text),
+                    ),
+                    Text(
+                      '${topDriver['count']} livraison(s) sur la période',
+                      style: ClientText.label.copyWith(color: t.muted),
+                    ),
                   ],
                 ),
               ),
               if (topDriver['avgRating'] != null)
                 Row(
                   children: [
-                    const Icon(Icons.star_rounded,
-                        color: AppColors.warning, size: 16),
+                    const Icon(
+                      Icons.star_rounded,
+                      color: AppColors.warning,
+                      size: 16,
+                    ),
                     const SizedBox(width: 3),
                     Text(
                       (topDriver['avgRating'] as num).toStringAsFixed(1),
@@ -7047,8 +7163,10 @@ class _FinancesTabState extends State<_FinancesTab>
       const SizedBox(height: 16),
 
       // ── Top destinataires ────────────────────────────────────────────────
-      Text('Destinataires les plus fréquents',
-          style: ClientText.bodyStrong.copyWith(color: t.text)),
+      Text(
+        'Destinataires les plus fréquents',
+        style: ClientText.bodyStrong.copyWith(color: t.text),
+      ),
       const SizedBox(height: 10),
       if (topDestinations.isEmpty)
         _buildEmpty('Aucune livraison sur cette période')
@@ -7064,7 +7182,9 @@ class _FinancesTabState extends State<_FinancesTab>
               for (var i = 0; i < topDestinations.length; i++) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 12),
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -7072,18 +7192,19 @@ class _FinancesTabState extends State<_FinancesTab>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              (topDestinations[i]['receiverName']
-                                          as String?) ??
+                              (topDestinations[i]['receiverName'] as String?) ??
                                   (topDestinations[i]['address'] as String? ??
                                       '—'),
-                              style: ClientText.bodyStrong.copyWith(color: AppColors.textDark)
+                              style: ClientText.bodyStrong
+                                  .copyWith(color: AppColors.textDark)
                                   .copyWith(color: t.text),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
                               topDestinations[i]['address'] as String? ?? '',
-                              style: ClientText.label.copyWith(color: AppColors.textDark)
+                              style: ClientText.label
+                                  .copyWith(color: AppColors.textDark)
                                   .copyWith(color: t.muted),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -7094,7 +7215,9 @@ class _FinancesTabState extends State<_FinancesTab>
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(20),
@@ -7406,8 +7529,10 @@ class _InsightCard extends StatelessWidget {
       children: [
         Icon(icon, color: AppColors.primary, size: 18),
         const SizedBox(height: 10),
-        Text(value,
-            style: ClientText.title.copyWith(color: valueColor ?? t.text)),
+        Text(
+          value,
+          style: ClientText.title.copyWith(color: valueColor ?? t.text),
+        ),
         const SizedBox(height: 2),
         Text(label, style: ClientText.label.copyWith(color: t.muted)),
       ],

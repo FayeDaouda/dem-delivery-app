@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -12,10 +13,12 @@ import '../../../core/api/api_client.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/services/places_autocomplete_service.dart';
 import '../../../core/storage/dem_pro_draft_storage.dart';
+import '../../../core/theme/map_theme_provider.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../../core/utils/senegal_phone.dart';
 import '../../../shared/widgets/place_suggestions_list.dart';
 import '../../../shared/widgets/staggered_entrance.dart';
+import '../../home_driver/navigation/map_theme.dart';
 import '../../home_driver/navigation/navigation_service.dart';
 import '../data/dem_pro_repository.dart';
 import '../../../core/theme/app_theme.dart';
@@ -59,14 +62,14 @@ class _Stop {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-class DemProBatchCreateScreen extends StatefulWidget {
+class DemProBatchCreateScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? reorderFrom;
   const DemProBatchCreateScreen({super.key, this.reorderFrom});
   @override
-  State<DemProBatchCreateScreen> createState() => _State();
+  ConsumerState<DemProBatchCreateScreen> createState() => _State();
 }
 
-class _State extends State<DemProBatchCreateScreen> {
+class _State extends ConsumerState<DemProBatchCreateScreen> {
   final _proRepo = DemProRepository(ApiClient.dio);
   final _publicDio = Dio();
 
@@ -250,7 +253,8 @@ class _State extends State<DemProBatchCreateScreen> {
   // ── Map ───────────────────────────────────────────────────────────────────
 
   Future<void> _loadMapStyle() async {
-    final s = await rootBundle.loadString('assets/map_style_waze.json');
+    final isNight = ref.read(mapNightProvider);
+    final s = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = s);
   }
 

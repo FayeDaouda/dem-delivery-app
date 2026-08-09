@@ -4,11 +4,14 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/theme/map_theme_provider.dart';
+import '../../home_driver/navigation/map_theme.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/services/places_autocomplete_service.dart';
@@ -53,9 +56,11 @@ const _packageTypes = [
 ];
 
 const _stepMeta = [
-  (Icons.flag_outlined, 'Destination', '1/3'),
-  (Icons.inventory_2_outlined, 'Colis', '2/3'),
-  (Icons.check_circle_outline, 'Confirmation', '3/3'),
+  (Icons.flag_outlined, 'Destination', '1/5'),
+  (Icons.shopping_bag_outlined, 'Articles', '2/5'),
+  (Icons.inventory_2_outlined, 'Colis', '3/5'),
+  (Icons.payments_outlined, 'Livraison', '4/5'),
+  (Icons.check_circle_outline, 'Confirmation', '5/5'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +83,7 @@ class _Article {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-class DemProOrderCreateScreen extends StatefulWidget {
+class DemProOrderCreateScreen extends ConsumerStatefulWidget {
   final bool scheduled;
   final String priority; // NORMAL | EXPRESS — voir orders.service.js
   final Map<String, dynamic>? reorderFrom;
@@ -98,15 +103,16 @@ class DemProOrderCreateScreen extends StatefulWidget {
     this.fromOrderRequest,
   });
   @override
-  State<DemProOrderCreateScreen> createState() => _State();
+  ConsumerState<DemProOrderCreateScreen> createState() => _State();
 }
 
-class _State extends State<DemProOrderCreateScreen> {
+class _State extends ConsumerState<DemProOrderCreateScreen> {
   final _ordersRepo = OrdersRepository();
   final _proRepo = DemProRepository(ApiClient.dio);
 
   // ── Navigation ──────────────────────────────────────────────────────────
-  int _step = 0; // 0=Destination, 1=Colis, 2=Confirmation
+  int _step =
+      0; // 0=Destination, 1=Articles, 2=Colis, 3=Livraison, 4=Confirmation
 
   // ── Map ─────────────────────────────────────────────────────────────────
   GoogleMapController? _mapCtrl;
@@ -397,7 +403,8 @@ class _State extends State<DemProOrderCreateScreen> {
   // ── Map style ────────────────────────────────────────────────────────────
 
   Future<void> _loadMapStyle() async {
-    final style = await rootBundle.loadString('assets/map_style_waze.json');
+    final isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
   }
 
@@ -465,7 +472,7 @@ class _State extends State<DemProOrderCreateScreen> {
     if (lat != null && lng != null) _recenterMap();
     if (lat == null || lng == null) {
       _geocodePickupAddress(address);
-    } else if (_step == 2) {
+    } else if (_step == 4) {
       _fetchEstimate();
       _fetchRoute();
     }
@@ -485,7 +492,7 @@ class _State extends State<DemProOrderCreateScreen> {
     });
     if (lat != null && lng != null) {
       _recenterMap();
-      if (_step == 2) {
+      if (_step == 4) {
         _fetchEstimate();
         _fetchRoute();
       }
@@ -509,7 +516,7 @@ class _State extends State<DemProOrderCreateScreen> {
         _pickupLng = loc.longitude;
       });
       _recenterMap();
-      if (_step == 2) {
+      if (_step == 4) {
         _fetchEstimate();
         _fetchRoute();
       }
@@ -586,7 +593,7 @@ class _State extends State<DemProOrderCreateScreen> {
         _isMapPlacement = false;
         _geocoding = false;
       });
-      if (_step == 2) {
+      if (_step == 4) {
         _fetchEstimate();
         _fetchRoute();
       } else {
@@ -875,7 +882,7 @@ class _State extends State<DemProOrderCreateScreen> {
     0 =>
       _deliveryLat != null &&
           isValidSenegalMobile(_recipientPhoneCtrl.text.trim()),
-    1 => true,
+    1 || 2 || 3 => true,
     _ => false,
   };
 
@@ -893,7 +900,7 @@ class _State extends State<DemProOrderCreateScreen> {
       showDemToast(context, _stepError, isError: true);
       return;
     }
-    if (_step == 1) {
+    if (_step == 3) {
       _fetchEstimate();
       _fetchRoute();
     }
@@ -938,7 +945,7 @@ class _State extends State<DemProOrderCreateScreen> {
   }
 
   Set<Polyline> get _polylines {
-    if (_pickupLat == null || _deliveryLat == null || _step < 2) return {};
+    if (_pickupLat == null || _deliveryLat == null || _step < 4) return {};
     final pts = _routePoints.isNotEmpty
         ? _routePoints
         : [
@@ -1100,7 +1107,7 @@ class _State extends State<DemProOrderCreateScreen> {
                 child: Container(
                   height: 130 + MediaQuery.of(context).viewPadding.bottom,
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    gradient: AppColors.gradientSplash,
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(24),
                     ),
@@ -1176,9 +1183,11 @@ class _State extends State<DemProOrderCreateScreen> {
 
   double get _sheetMin => 0.12;
   double get _sheetMax => switch (_step) {
-    1 => 0.60,
-    2 => 0.60,
-    _ => 0.58,
+    1 => 0.52, // Articles
+    2 => 0.50, // Colis
+    3 => 0.60, // Livraison (paiement + instructions + programmation)
+    4 => 0.60, // Confirmation
+    _ => 0.58, // Destination
   };
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -1207,8 +1216,15 @@ class _State extends State<DemProOrderCreateScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.92),
+              gradient: AppColors.gradientSplash,
               borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1221,15 +1237,14 @@ class _State extends State<DemProOrderCreateScreen> {
                           : widget.priority == 'EXPRESS'
                           ? 'Livraison Express ⚡'
                           : 'Nouvelle livraison',
-                      style: ClientText.subtitle.copyWith(
-                        color: AppColors.textPrimary,
-                      ),
+                      style: ClientText.subtitle.copyWith(color: Colors.white),
                     ),
                     const Spacer(),
                     Text(
                       _stepMeta[_step].$3,
                       style: ClientText.label.copyWith(
-                        color: AppColors.primary,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -1237,17 +1252,19 @@ class _State extends State<DemProOrderCreateScreen> {
                 const SizedBox(height: 6),
                 Row(
                   children: List.generate(
-                    3,
+                    _stepMeta.length,
                     (i) => Expanded(
                       child: Padding(
-                        padding: EdgeInsets.only(right: i < 2 ? 4 : 0),
+                        padding: EdgeInsets.only(
+                          right: i < _stepMeta.length - 1 ? 4 : 0,
+                        ),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           height: 3,
                           decoration: BoxDecoration(
                             color: i <= _step
-                                ? AppColors.primary
-                                : AppColors.primaryDark,
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -1276,7 +1293,7 @@ class _State extends State<DemProOrderCreateScreen> {
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.primaryDark,
+              color: Colors.white.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -1285,7 +1302,7 @@ class _State extends State<DemProOrderCreateScreen> {
             _placingPickup
                 ? 'Positionnez le point de départ'
                 : 'Positionnez la destination',
-            style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary),
+            style: ClientText.bodyStrong.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -1293,7 +1310,7 @@ class _State extends State<DemProOrderCreateScreen> {
             height: 48,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: AppColors.primary,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Material(
@@ -1307,14 +1324,14 @@ class _State extends State<DemProOrderCreateScreen> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                              color: Colors.white,
+                              color: AppColors.primary,
                               strokeWidth: 2,
                             ),
                           )
                         : Text(
                             'Confirmer la position',
                             style: ClientText.button.copyWith(
-                              color: AppColors.textPrimary,
+                              color: AppColors.primary,
                             ),
                           ),
                   ),
@@ -1410,7 +1427,9 @@ class _State extends State<DemProOrderCreateScreen> {
                 key: ValueKey(_step),
                 child: switch (_step) {
                   0 => _buildStep0(),
-                  1 => _buildStep1(),
+                  1 => _buildStepArticles(),
+                  2 => _buildStepColis(),
+                  3 => _buildStepLivraison(),
                   _ => _buildStep2(),
                 },
               ),
@@ -1446,7 +1465,7 @@ class _State extends State<DemProOrderCreateScreen> {
       const SizedBox(height: 6),
       _ProTextField(
         controller: _recipientNameCtrl,
-        hint: 'Prénom Nom',
+        hint: 'Nom du client',
         textInputAction: TextInputAction.next,
         onChanged: (_) => _scheduleDraftSave(),
       ),
@@ -1456,7 +1475,7 @@ class _State extends State<DemProOrderCreateScreen> {
       const SizedBox(height: 6),
       _ProTextField(
         controller: _recipientPhoneCtrl,
-        hint: '77 000 00 00',
+        hint: 'Numéro de téléphone',
         prefix: '+221 ',
         keyboardType: TextInputType.phone,
         maxLength: 9,
@@ -1519,7 +1538,9 @@ class _State extends State<DemProOrderCreateScreen> {
     if (id != null) _proRepo.incrementProductUsage(id);
   }
 
-  Widget _buildStep1() => Column(
+  // ── Étape 1 — Articles ───────────────────────────────────────────────────
+
+  Widget _buildStepArticles() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       // ── Articles ──────────────────────────────────────────────────────────
@@ -1672,10 +1693,14 @@ class _State extends State<DemProOrderCreateScreen> {
             ),
           ],
         ),
-      const SizedBox(height: 16),
-      const Divider(color: AppColors.card, height: 1),
-      const SizedBox(height: 14),
+    ],
+  );
 
+  // ── Étape 2 — Colis ──────────────────────────────────────────────────────
+
+  Widget _buildStepColis() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
       // ── Type de colis ─────────────────────────────────────────────────────
       const _FieldLabel('Type de colis'),
       const SizedBox(height: 10),
@@ -1736,10 +1761,14 @@ class _State extends State<DemProOrderCreateScreen> {
           ),
         ),
       ),
-      const SizedBox(height: 16),
-      const Divider(color: AppColors.card, height: 1),
-      const SizedBox(height: 14),
+    ],
+  );
 
+  // ── Étape 3 — Livraison (paiement, instructions, programmation) ────────────
+
+  Widget _buildStepLivraison() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
       // ── Paiement ──────────────────────────────────────────────────────────
       const _FieldLabel('Qui paie la livraison ?'),
       const SizedBox(height: 10),
@@ -2505,7 +2534,7 @@ class _State extends State<DemProOrderCreateScreen> {
     top: false,
     child: Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-      child: _step < 2
+      child: _step < 4
           ? Row(
               children: [
                 if (_step > 0) ...[
@@ -2713,7 +2742,7 @@ class _State extends State<DemProOrderCreateScreen> {
       _pickupAddress = address;
     });
     _recenterMap();
-    if (_step == 2) {
+    if (_step == 4) {
       _fetchEstimate();
       _fetchRoute();
     }
@@ -2728,7 +2757,7 @@ class _State extends State<DemProOrderCreateScreen> {
       _addressSearchCtrl.text = address;
     });
     _recenterMap();
-    if (_step == 2) {
+    if (_step == 4) {
       _fetchEstimate();
       _fetchRoute();
     }
@@ -2976,9 +3005,16 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        gradient: AppColors.gradientSplash,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       padding: EdgeInsets.fromLTRB(
         20,
@@ -2998,7 +3034,7 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryDark,
+                    color: Colors.white.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -3006,21 +3042,21 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
             ),
             Text(
               widget.title,
-              style: ClientText.title.copyWith(color: AppColors.textPrimary),
+              style: ClientText.title.copyWith(color: Colors.white),
             ),
             const SizedBox(height: 14),
 
             // Recherche manuelle avec autocomplete
             TextField(
               controller: _searchCtrl,
-              style: ClientText.body.copyWith(color: AppColors.textPrimary),
+              style: ClientText.body.copyWith(color: Colors.white),
               textInputAction: TextInputAction.search,
               onChanged: _onChanged,
               onSubmitted: _submitManual,
               decoration: InputDecoration(
                 hintText: widget.searchHint,
                 hintStyle: ClientText.label.copyWith(
-                  color: AppColors.textPrimary,
+                  color: Colors.white.withValues(alpha: 0.7),
                 ),
                 prefixIcon: _searching
                     ? const Padding(
@@ -3029,32 +3065,33 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                            color: AppColors.primary,
+                            color: Colors.white,
                             strokeWidth: 2,
                           ),
                         ),
                       )
-                    : const Icon(
+                    : Icon(
                         Icons.search,
-                        color: AppColors.textSecondary,
+                        color: Colors.white.withValues(alpha: 0.7),
                         size: 18,
                       ),
                 filled: true,
-                fillColor: AppColors.card,
+                fillColor: Colors.white.withValues(alpha: 0.14),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primaryDark),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primaryDark),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppColors.primary,
-                    width: 1.5,
-                  ),
+                  borderSide: const BorderSide(color: Colors.white, width: 1.5),
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -3081,7 +3118,9 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
             if (widget.proAddresses.isNotEmpty) ...[
               Text(
                 'Mes adresses',
-                style: ClientText.micro.copyWith(color: AppColors.textPrimary),
+                style: ClientText.micro.copyWith(
+                  color: Colors.white.withValues(alpha: 0.75),
+                ),
               ),
               const SizedBox(height: 8),
               ...widget.proAddresses.map((a) {
@@ -3095,20 +3134,20 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.primary.withValues(alpha: 0.10)
-                          : AppColors.card,
+                      color: Colors.white.withValues(
+                        alpha: isSelected ? 0.24 : 0.14,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isSelected
-                            ? AppColors.primary
-                            : AppColors.primaryDark,
+                        color: Colors.white.withValues(
+                          alpha: isSelected ? 0.6 : 0.25,
+                        ),
                         width: isSelected ? 1.5 : 1,
                       ),
                     ),
                     child: Row(
                       children: [
-                        Icon(icon, color: AppColors.primary, size: 20),
+                        Icon(icon, color: Colors.white, size: 20),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
@@ -3117,13 +3156,13 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                               Text(
                                 a['label'] as String? ?? '',
                                 style: ClientText.bodyStrong.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white,
                                 ),
                               ),
                               Text(
                                 a['address'] as String? ?? '',
                                 style: ClientText.label.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white.withValues(alpha: 0.75),
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -3134,7 +3173,7 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                         if (isSelected)
                           const Icon(
                             Icons.check_circle,
-                            color: AppColors.primary,
+                            color: Colors.white,
                             size: 18,
                           ),
                       ],
@@ -3150,7 +3189,9 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                 widget.recentAddresses!.isNotEmpty) ...[
               Text(
                 'Destinations récentes',
-                style: ClientText.micro.copyWith(color: AppColors.textPrimary),
+                style: ClientText.micro.copyWith(
+                  color: Colors.white.withValues(alpha: 0.75),
+                ),
               ),
               const SizedBox(height: 8),
               ...widget.recentAddresses!.map((d) {
@@ -3162,15 +3203,17 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.card,
+                      color: Colors.white.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.primaryDark),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                      ),
                     ),
                     child: Row(
                       children: [
                         const Icon(
                           Icons.history,
-                          color: AppColors.primary,
+                          color: Colors.white,
                           size: 18,
                         ),
                         const SizedBox(width: 10),
@@ -3181,7 +3224,7 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                               Text(
                                 address,
                                 style: ClientText.bodyStrong.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -3190,7 +3233,7 @@ class _ChangeAddressSheetState extends State<_ChangeAddressSheet> {
                                 Text(
                                   name,
                                   style: ClientText.label.copyWith(
-                                    color: AppColors.textPrimary,
+                                    color: Colors.white.withValues(alpha: 0.75),
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -3245,9 +3288,9 @@ class _SheetAction extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryDark),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
       ),
       child: loading
           ? const Center(
@@ -3255,20 +3298,18 @@ class _SheetAction extends StatelessWidget {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                  color: AppColors.primary,
+                  color: Colors.white,
                   strokeWidth: 2,
                 ),
               ),
             )
           : Row(
               children: [
-                Icon(icon, color: AppColors.textSecondary, size: 18),
+                Icon(icon, color: Colors.white, size: 18),
                 const SizedBox(width: 10),
                 Text(
                   label,
-                  style: ClientText.bodyStrong.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
+                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
                 ),
               ],
             ),
