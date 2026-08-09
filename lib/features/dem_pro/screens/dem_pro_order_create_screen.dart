@@ -830,6 +830,8 @@ class _State extends State<DemProOrderCreateScreen> {
         if (_scheduledAt != null)
           'scheduledAt': _scheduledAt!.toUtc().toIso8601String(),
         'paymentMode': _paymentMode,
+        if (_selectedProAddr?['id'] != null)
+          'proAddressId': _selectedProAddr!['id'],
         if (items.isNotEmpty) 'items': items,
         // Uniquement si saisi manuellement et validé (voir _applyPromoCode) —
         // une promo auto-appliquée n'a pas besoin d'être renvoyée.
@@ -1461,7 +1463,10 @@ class _State extends State<DemProOrderCreateScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ProductPickerSheet(repo: _proRepo),
+      builder: (_) => _ProductPickerSheet(
+        repo: _proRepo,
+        proAddressId: _selectedProAddr?['id'] as String?,
+      ),
     );
     if (product == null) return;
 
@@ -3460,7 +3465,11 @@ class _NavBtn extends StatelessWidget {
 
 class _ProductPickerSheet extends StatefulWidget {
   final DemProRepository repo;
-  const _ProductPickerSheet({required this.repo});
+  // Point de vente sélectionné pour le ramassage — null si adresse tapée
+  // librement ou aucune sélectionnée. Ne filtre que si non-null : un
+  // catalogue sans produit scopé à un site continue de tout montrer.
+  final String? proAddressId;
+  const _ProductPickerSheet({required this.repo, this.proAddressId});
   @override
   State<_ProductPickerSheet> createState() => _ProductPickerSheetState();
 }
@@ -3504,7 +3513,17 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
   }
 
   List<Map<String, dynamic>> get _filtered {
-    final list = _products ?? [];
+    var list = _products ?? [];
+    // Un produit scopé à un autre point de vente que celui choisi pour ce
+    // ramassage n'a pas de stock disponible ici — pas la peine de l'afficher.
+    // Non-scopé (proAddressId null) = disponible partout, jamais filtré.
+    if (widget.proAddressId != null) {
+      list = list
+          .where(
+            (p) => p['proAddressId'] == null || p['proAddressId'] == widget.proAddressId,
+          )
+          .toList();
+    }
     if (_query.isEmpty) return list;
     return list
         .where(

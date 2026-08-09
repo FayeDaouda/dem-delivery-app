@@ -402,6 +402,13 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   late final TextEditingController _quantity;
   bool _saving = false;
 
+  // Multi-point de vente — null = disponible partout (comportement
+  // historique). Chargé séparément du produit lui-même : le catalogue
+  // d'adresses n'est pas toujours déjà en mémoire quand la feuille s'ouvre.
+  String? _proAddressId;
+  List<Map<String, dynamic>> _addresses = [];
+  bool _loadingAddresses = true;
+
   bool get _isEdit => widget.existing != null && widget.existing!.containsKey('id');
 
   @override
@@ -413,6 +420,20 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _price = TextEditingController(text: price != null ? price.toInt().toString() : '');
     final quantity = e?['quantity'] as num?;
     _quantity = TextEditingController(text: quantity != null ? quantity.toInt().toString() : '');
+    _proAddressId = e?['proAddressId'] as String?;
+    _loadAddresses();
+  }
+
+  Future<void> _loadAddresses() async {
+    try {
+      final addresses = await widget.repo.getAddresses();
+      if (mounted) setState(() {
+        _addresses = addresses;
+        _loadingAddresses = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingAddresses = false);
+    }
   }
 
   @override
@@ -433,6 +454,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
         'name': _name.text.trim(),
         'defaultPrice': priceText.isEmpty ? null : num.tryParse(priceText),
         'quantity': quantityText.isEmpty ? null : int.tryParse(quantityText),
+        'proAddressId': _proAddressId,
       };
       if (_isEdit) {
         await widget.repo.updateProduct(widget.existing!['id'] as String, data);
@@ -563,7 +585,38 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
               'Laissez vide si vous ne suivez pas votre stock depuis l\'app.',
               style: ClientText.micro.copyWith(color: AppColors.textMuted),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
+
+            // ── Point de vente (multi-site) — masqué tant qu'aucune adresse
+            // n'est enregistrée : rien à choisir, pas la peine d'encombrer.
+            if (!_loadingAddresses && _addresses.isNotEmpty) ...[
+              Text('Point de vente', style: ClientText.label.copyWith(color: AppColors.textMuted)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _ProAddressChip(
+                    label: 'Tous',
+                    active: _proAddressId == null,
+                    onTap: () => setState(() => _proAddressId = null),
+                  ),
+                  for (final a in _addresses)
+                    _ProAddressChip(
+                      label: a['label'] as String? ?? '—',
+                      active: _proAddressId == a['id'],
+                      onTap: () => setState(() => _proAddressId = a['id'] as String?),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Ce produit n\'apparaîtra que pour les commandes expédiées depuis ce point de vente.',
+                style: ClientText.micro.copyWith(color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 14),
+            ],
+            const SizedBox(height: 10),
 
             DemProButton(
               label: _isEdit ? 'Enregistrer les modifications' : 'Ajouter au catalogue',
@@ -575,4 +628,32 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
       ),
     );
   }
+}
+
+class _ProAddressChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _ProAddressChip({required this.label, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: active ? AppColors.primary : AppColors.lightFill,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: active ? AppColors.primary : AppColors.lightBorder),
+      ),
+      child: Text(
+        label,
+        style: ClientText.body.copyWith(
+          color: active ? Colors.white : AppColors.textDark,
+          fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+        ),
+      ),
+    ),
+  );
 }

@@ -4843,6 +4843,10 @@ class _AdressesTabState extends State<_AdressesTab>
 
   List<Map<String, dynamic>> _addresses = [];
   List<Map<String, dynamic>> _recent = [];
+  // Multi-point de vente — clé = proAddressId. Chargement best-effort
+  // séparé (voir getAddressStats) : une erreur ici ne doit jamais bloquer
+  // l'affichage des adresses elles-mêmes.
+  Map<String, Map<String, dynamic>> _addressStats = {};
   bool _loading = true;
   String _query = '';
 
@@ -4866,11 +4870,16 @@ class _AdressesTabState extends State<_AdressesTab>
       final results = await Future.wait([
         _repo.getAddresses(),
         _repo.getRecentPickups(),
+        _repo.getAddressStats(),
       ]);
       if (!mounted) return;
+      final stats = (results[2] as List).cast<Map<String, dynamic>>();
       setState(() {
         _addresses = results[0];
         _recent = results[1];
+        _addressStats = {
+          for (final s in stats) s['proAddressId'] as String: s,
+        };
         _loading = false;
       });
     } catch (_) {
@@ -5092,6 +5101,7 @@ class _AdressesTabState extends State<_AdressesTab>
                             ..._filtered.map(
                               (a) => _AddressCard(
                                 addr: a,
+                                stats: _addressStats[a['id']],
                                 t: t,
                                 onEdit: () => _showForm(existing: a),
                                 onDelete: () => _delete(a),
@@ -5240,6 +5250,10 @@ class _AdressesTabState extends State<_AdressesTab>
 
 class _AddressCard extends StatelessWidget {
   final Map<String, dynamic> addr;
+  // Multi-point de vente — commandes livrées depuis ce point de vente
+  // (voir dem_pro.service.js:getAddressStats). null = jamais utilisé comme
+  // pickup via le catalogue, rien à afficher.
+  final Map<String, dynamic>? stats;
   final _T t;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -5247,6 +5261,7 @@ class _AddressCard extends StatelessWidget {
 
   const _AddressCard({
     required this.addr,
+    this.stats,
     required this.t,
     required this.onEdit,
     required this.onDelete,
@@ -5347,6 +5362,22 @@ class _AddressCard extends StatelessWidget {
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (stats != null) ...[
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            Icon(Icons.storefront_outlined, color: AppColors.primary, size: 12),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${stats!['orderCount']} livraison${(stats!['orderCount'] as num) > 1 ? 's' : ''} · ${formatFcfa((stats!['totalValue'] as num?) ?? 0)}',
+                              style: ClientText.micro.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],

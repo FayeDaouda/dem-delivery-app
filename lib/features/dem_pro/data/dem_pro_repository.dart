@@ -62,6 +62,18 @@ class DemProRepository {
     }
   }
 
+  /// Multi-point de vente — commandes livrées agrégées par point de vente
+  /// (voir Order.proAddressId). Les adresses jamais utilisées comme pickup
+  /// via le catalogue n'apparaissent pas dans la liste (aucune stat).
+  Future<List<Map<String, dynamic>>> getAddressStats() async {
+    try {
+      final res = await _dio.get('/dem-pro/me/addresses/stats');
+      return (res.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (_) {
+      return []; // best-effort — jamais bloquant pour l'écran Adresses
+    }
+  }
+
   /// Abonnement DEM Pro (palier, statut, fonctionnalités incluses).
   Future<Map<String, dynamic>> getMyPlan() async {
     try {
