@@ -273,6 +273,9 @@ class NotificationService {
     'BATCH_COMPLETED'           => null,
     'DRIVER_NEARBY'             => null, // géré dans _handleTap
     'DISPUTE_OPENED'            => '/orders/my',
+    // ── Pilotage / stock — DEM Pro ──────────────────────────────────────────
+    'DEM_PRO_WEEKLY_DIGEST'     => '/dem-pro/home',
+    'DEM_PRO_LOW_STOCK'         => '/dem-pro/home',
     // ── Paiement — driver ───────────────────────────────────────────────────
     'PAYMENT_RESOLVED'          => '/driver/home',     // admin confirme paiement
     _ => null,
