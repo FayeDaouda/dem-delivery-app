@@ -1123,57 +1123,53 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 ),
               ),
 
-            // Panel bas (infos + CTA) — remontent ensemble de façon fluide
-            // au-dessus du clavier (même logique que le sheet "Changer le
-            // départ") et reviennent à leur position normale à la fermeture
-            // du clavier. Le CTA reste hors du panneau rétractable lui-même
-            // pour ne jamais pousser la poignée hors de l'écran quand celui-ci
-            // est réduit au minimum.
+            // Panel bas (infos + CTA) — le fond dégradé du panneau reste
+            // ancré au bas de l'écran en toutes circonstances (jamais
+            // décalé par le clavier), pour que l'arrière-plan visible
+            // derrière le clavier reste la continuité du dégradé et non
+            // la carte. Seul le CONTENU interne (liste + bouton CTA)
+            // remonte au-dessus du clavier via un padding animé local —
+            // le CTA fait maintenant partie du panneau lui-même (plus de
+            // positionnement flottant indépendant), il ne peut donc plus
+            // chevaucher le contenu quand le panneau est réduit au drag.
             if (!_isMapPlacement)
-              Positioned.fill(
-                child: AnimatedPadding(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).viewInsets.bottom,
-                  ),
-                  child: Stack(
-                    children: [
-                      DraggableScrollableSheet(
-                        controller: _sheetCtrl,
-                        initialChildSize: _sheetMax,
-                        minChildSize: _sheetMin,
-                        maxChildSize: _sheetMax,
-                        snap: true,
-                        snapSizes: [_sheetMin, _sheetMax],
-                        builder: (context, scrollCtrl) {
-                          return Container(
-                            decoration: BoxDecoration(
-                              gradient: AppColors.gradientSplash,
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(24),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.4),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, -4),
-                                ),
-                              ],
-                            ),
-                            child: _buildPanel(scrollCtrl),
-                          );
-                        },
+              DraggableScrollableSheet(
+                controller: _sheetCtrl,
+                initialChildSize: _sheetMax,
+                minChildSize: _sheetMin,
+                maxChildSize: _sheetMax,
+                snap: true,
+                snapSizes: [_sheetMin, _sheetMax],
+                builder: (context, scrollCtrl) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      gradient: AppColors.gradientSplash,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(24),
                       ),
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: _buildNavButtons(),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, -4),
+                        ),
+                      ],
+                    ),
+                    child: AnimatedPadding(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.of(context).viewInsets.bottom,
                       ),
-                    ],
-                  ),
-                ),
+                      child: Column(
+                        children: [
+                          Expanded(child: _buildPanel(scrollCtrl)),
+                          _buildNavButtons(),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
           ],
         ),
@@ -1181,7 +1177,10 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     );
   }
 
-  double get _sheetMin => 0.12;
+  // Le CTA fait maintenant partie du panneau (voir build()) — le minimum
+  // doit rester assez grand pour toujours l'accueillir proprement, sans
+  // jamais le couper ni le faire chevaucher le contenu au-dessus.
+  double get _sheetMin => 0.22;
   double get _sheetMax => switch (_step) {
     1 => 0.52, // Articles
     2 => 0.50, // Colis
@@ -1403,9 +1402,9 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
           ),
         ),
 
-        // ── Contenu — le padding bas laisse la place au CTA flottant ─────────
+        // ── Contenu ──────────────────────────────────────────────────────────
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
           sliver: SliverToBoxAdapter(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 260),
@@ -1632,10 +1631,10 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.10),
+                    color: Colors.white.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.3),
+                      color: Colors.white.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
@@ -1643,14 +1642,14 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                     children: [
                       const Icon(
                         Icons.inventory_2_outlined,
-                        color: AppColors.primary,
+                        color: Colors.white,
                         size: 16,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'Catalogue',
                         style: ClientText.bodyStrong.copyWith(
-                          color: AppColors.primary,
+                          color: Colors.white,
                         ),
                       ),
                     ],
@@ -1670,18 +1669,18 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.3),
+                      color: Colors.white.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.add, color: AppColors.primary, size: 16),
+                      const Icon(Icons.add, color: Colors.white, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         'Ajouter',
                         style: ClientText.bodyStrong.copyWith(
-                          color: AppColors.primary,
+                          color: Colors.white,
                         ),
                       ),
                     ],
@@ -2760,66 +2759,65 @@ class _DepartureBanner extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 24, bottom: 6),
+        child: Text(
+          fixedLabel,
+          style: ClientText.micro.copyWith(
+            color: Colors.white.withValues(alpha: 0.75),
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+          ),
+        ),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.location_on, color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: loading
-                ? Text(
-                    'Localisation en cours…',
-                    style: ClientText.label.copyWith(color: Colors.white),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        fixedLabel,
-                        style: ClientText.micro.copyWith(
-                          color: Colors.white.withValues(alpha: 0.75),
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4,
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.search, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: loading
+                    ? Text(
+                        'Localisation en cours…',
+                        style: ClientText.body.copyWith(color: Colors.white),
+                      )
+                    : Text(
+                        proLabel != null
+                            ? '$proLabel — $address'
+                            : (address.isNotEmpty ? address : placeholder),
+                        style: ClientText.body.copyWith(
+                          color: address.isNotEmpty || proLabel != null
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.65),
                         ),
-                      ),
-                      if (proLabel != null)
-                        Text(
-                          proLabel!,
-                          style: ClientText.label.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      Text(
-                        address.isNotEmpty ? address : placeholder,
-                        style: ClientText.label.copyWith(color: Colors.white),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withValues(alpha: 0.75),
+                size: 20,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            'Changer',
-            style: ClientText.label.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const Icon(Icons.chevron_right, color: Colors.white, size: 16),
-        ],
+        ),
       ),
-    ),
+    ],
   );
 }
 
@@ -3705,14 +3703,28 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
         .toList();
   }
 
+  // Au-delà de 3 produits visibles, la liste se limite à une hauteur fixe
+  // (~3 lignes) et devient scrollable plutôt que d'étirer la feuille —
+  // évite qu'un catalogue fourni n'occupe une portion excessive de l'écran.
+  static const _kMaxVisibleItems = 3;
+  static const _kItemHeight = 56.0;
+  static const _kItemGap = 8.0;
+
   @override
   Widget build(BuildContext context) => Container(
     constraints: BoxConstraints(
       maxHeight: MediaQuery.of(context).size.height * 0.75,
     ),
-    decoration: const BoxDecoration(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    decoration: BoxDecoration(
+      gradient: AppColors.gradientSplash,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.3),
+          blurRadius: 20,
+          offset: const Offset(0, -4),
+        ),
+      ],
     ),
     padding: EdgeInsets.fromLTRB(
       20,
@@ -3730,7 +3742,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.primaryDark,
+                color: Colors.white.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -3742,7 +3754,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               child: Text(
                 'Choisir dans mon catalogue',
                 style: ClientText.title.copyWith(
-                  color: AppColors.textPrimary,
+                  color: Colors.white,
                   fontSize: 17,
                 ),
               ),
@@ -3752,8 +3764,10 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               child: Text(
                 'Gérer',
                 style: ClientText.label.copyWith(
-                  color: AppColors.primary,
+                  color: Colors.white,
                   fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
+                  decorationColor: Colors.white.withValues(alpha: 0.5),
                 ),
               ),
             ),
@@ -3764,25 +3778,25 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
           Container(
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primaryDark),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
             ),
             child: TextField(
               controller: _search,
               style: ClientText.body.copyWith(
-                color: AppColors.textPrimary,
+                color: Colors.white,
                 fontSize: 14,
               ),
               decoration: InputDecoration(
                 hintText: 'Rechercher…',
                 hintStyle: ClientText.body.copyWith(
-                  color: AppColors.textSecondary,
+                  color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 14,
                 ),
-                prefixIcon: const Icon(
+                prefixIcon: Icon(
                   Icons.search,
-                  color: AppColors.textSecondary,
+                  color: Colors.white.withValues(alpha: 0.7),
                   size: 18,
                 ),
                 border: InputBorder.none,
@@ -3795,7 +3809,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
                   child: Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
+                    child: CircularProgressIndicator(color: Colors.white),
                   ),
                 )
               : _loadFailed
@@ -3810,60 +3824,64 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                       ? 'Aucun produit enregistré pour l\'instant.\nAjoutez-en un depuis "Gérer".'
                       : 'Aucun résultat.',
                 )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: _filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) {
-                    final p = _filtered[i];
-                    final price = p['defaultPrice'] as num?;
-                    return GestureDetector(
-                      onTap: () => Navigator.pop(context, p),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                p['name'] as String? ?? '',
-                                style: ClientText.bodyStrong.copyWith(
-                                  color: AppColors.textPrimary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (price != null) ...[
-                              const SizedBox(width: 8),
-                              Text(
-                                formatFcfa(price),
-                                style: ClientText.label.copyWith(
-                                  color: AppColors.success,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.chevron_right,
-                              color: AppColors.textSecondary,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+              : _filtered.length > _kMaxVisibleItems
+              ? SizedBox(
+                  height:
+                      _kMaxVisibleItems * _kItemHeight +
+                      (_kMaxVisibleItems - 1) * _kItemGap,
+                  child: _buildProductList(),
+                )
+              : _buildProductList(),
         ),
       ],
     ),
+  );
+
+  Widget _buildProductList() => ListView.separated(
+    shrinkWrap: true,
+    itemCount: _filtered.length,
+    separatorBuilder: (_, __) => const SizedBox(height: _kItemGap),
+    itemBuilder: (_, i) {
+      final p = _filtered[i];
+      final price = p['defaultPrice'] as num?;
+      return GestureDetector(
+        onTap: () => Navigator.pop(context, p),
+        child: Container(
+          height: _kItemHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  p['name'] as String? ?? '',
+                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (price != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  formatFcfa(price),
+                  style: ClientText.label.copyWith(color: AppColors.success),
+                ),
+              ],
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withValues(alpha: 0.7),
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      );
+    },
   );
 
   Widget _buildMessage(IconData icon, String msg) => Padding(
@@ -3871,11 +3889,13 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: AppColors.textSecondary, size: 32),
+        Icon(icon, color: Colors.white.withValues(alpha: 0.7), size: 32),
         const SizedBox(height: 10),
         Text(
           msg,
-          style: ClientText.body.copyWith(color: AppColors.textSecondary),
+          style: ClientText.body.copyWith(
+            color: Colors.white.withValues(alpha: 0.7),
+          ),
           textAlign: TextAlign.center,
         ),
       ],
