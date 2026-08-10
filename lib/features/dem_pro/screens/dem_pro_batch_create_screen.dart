@@ -73,6 +73,14 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
   final _proRepo = DemProRepository(ApiClient.dio);
   final _publicDio = Dio();
 
+  // ── Étapes ───────────────────────────────────────────────────────────────
+  // Un pas par arrêt (0.._stops.length-1), puis un pas récap final
+  // (== _stops.length) — la longueur totale suit dynamiquement le nombre
+  // d'arrêts, contrairement à une commande simple qui a un nombre fixe
+  // d'étapes.
+  int _step = 0;
+  bool get _onRecap => _step >= _stops.length;
+
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapCtrl;
   String? _mapStyle;
@@ -82,11 +90,10 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
   bool _geocoding = false;
   final _sheetCtrl = DraggableScrollableController();
   // Hauteur de la feuille agrandie pendant que le clavier est ouvert — sinon
-  // un champ en bas de liste (notes, arrêt supplémentaire) reste couvert par
-  // le clavier, la feuille elle-même ne grandissant pas par défaut. Modéré
-  // (pas un grand saut fixe façon plein écran) pour ne pas laisser un vide
-  // sous les champs quand la liste est encore courte (2 arrêts minimum).
-  static const _sheetMaxKeyboard = 0.82;
+  // un champ en bas d'étape reste couvert par le clavier, la feuille
+  // elle-même ne grandissant pas par défaut. Modéré (pas un grand saut fixe
+  // façon plein écran) pour ne pas laisser un vide sous les champs.
+  double get _sheetMaxKeyboard => _onRecap ? 0.85 : 0.75;
   double _lastKeyboardInset = 0;
 
   // ── Départ ───────────────────────────────────────────────────────────────
@@ -486,48 +493,6 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     } catch (_) {}
   }
 
-  // ── Sélection d'une suggestion Google Places pour un arrêt ───────────────
-
-  late final _placesService = PlacesAutocompleteService(_publicDio);
-
-  Future<void> _selectStopSuggestion(
-    int index,
-    Map<String, dynamic> place,
-    String sessionToken,
-  ) async {
-    final placeId = place['place_id'] as String?;
-    if (placeId == null) return;
-    try {
-      final result = await _placesService.details(
-        placeId: placeId,
-        sessionToken: sessionToken,
-      );
-      if (result != null) {
-        final loc = result['geometry']['location'];
-        final lat = (loc['lat'] as num).toDouble();
-        final lng = (loc['lng'] as num).toDouble();
-        final name =
-            (place['structured_formatting']?['main_text'] as String?) ??
-            place['description'] as String? ??
-            '';
-        setState(() {
-          _stops[index].lat = lat;
-          _stops[index].lng = lng;
-          _stops[index].address = name;
-        });
-        _recenterMap();
-        _scheduleDraftSave();
-      }
-    } catch (_) {
-      if (mounted)
-        showDemToast(
-          context,
-          'Impossible de charger l\'adresse',
-          isError: true,
-        );
-    }
-  }
-
   // ── Destination récente appliquée à un arrêt ──────────────────────────────
 
   void _applyRecentDestinationToStop(int index, Map<String, dynamic> dest) {
@@ -546,6 +511,70 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     });
     _recenterMap();
     _scheduleDraftSave();
+  }
+
+  void _applyProAddressAsStop(int index, Map<String, dynamic> addr) {
+    final lat = (addr['lat'] as num?)?.toDouble();
+    final lng = (addr['lng'] as num?)?.toDouble();
+    setState(() {
+      _stops[index].address = addr['address'] as String? ?? '';
+      if (lat != null && lng != null) {
+        _stops[index].lat = lat;
+        _stops[index].lng = lng;
+      }
+    });
+    if (lat != null && lng != null) _recenterMap();
+    _scheduleDraftSave();
+  }
+
+  void _applyManualStopAddress(
+    int index,
+    double lat,
+    double lng,
+    String address,
+  ) {
+    setState(() {
+      _stops[index].lat = lat;
+      _stops[index].lng = lng;
+      _stops[index].address = address;
+    });
+    _recenterMap();
+    _scheduleDraftSave();
+  }
+
+  // Feuille de choix d'adresse pour un arrêt — même composant que le départ
+  // (_BatchDepartureSheet), avec en plus les destinations récentes.
+  void _showChangeStopAddress(int index) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _BatchDepartureSheet(
+        title: 'Arrêt ${index + 1}',
+        searchHint: 'Saisir l\'adresse de livraison…',
+        proAddresses: _proAddresses,
+        selectedId: null,
+        loadingGps: false,
+        dio: _publicDio,
+        onSelect: (addr) {
+          Navigator.pop(context);
+          _applyProAddressAsStop(index, addr);
+        },
+        onMap: () {
+          Navigator.pop(context);
+          _enterMapPlacement(index);
+        },
+        onManualAddress: (lat, lng, address) {
+          Navigator.pop(context);
+          _applyManualStopAddress(index, lat, lng, address);
+        },
+        recentAddresses: _recentDestinations,
+        onSelectRecent: (dest) {
+          Navigator.pop(context);
+          _applyRecentDestinationToStop(index, dest);
+        },
+      ),
+    );
   }
 
   // ── Programmation ─────────────────────────────────────────────────────────
@@ -876,7 +905,74 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
   // Le CTA fait maintenant partie du panneau (voir build()) — le minimum
   // doit rester assez grand pour toujours l'accueillir proprement.
   double get _sheetMin => 0.22;
-  double get _sheetMax => 0.62;
+  double get _sheetMax => _onRecap ? 0.66 : 0.55;
+
+  // ── Navigation entre arrêts ──────────────────────────────────────────────
+
+  bool _canAdvanceStop(int index) =>
+      _stops[index].hasLocation &&
+      isValidSenegalMobile(_stops[index].phone.trim());
+
+  void _nextStep() {
+    FocusScope.of(context).unfocus();
+    if (!_onRecap) {
+      if (!_canAdvanceStop(_step)) {
+        showDemToast(
+          context,
+          _stops[_step].hasLocation
+              ? 'Numéro mobile invalide (7X XXX XX XX)'
+              : 'Choisissez l\'adresse de cet arrêt',
+          isError: true,
+        );
+        return;
+      }
+      setState(() => _step++);
+      _syncSheetToStep();
+    }
+  }
+
+  void _backStep() {
+    if (_step == 0) {
+      context.pop();
+      return;
+    }
+    setState(() => _step--);
+    _syncSheetToStep();
+  }
+
+  void _addStop() {
+    setState(() {
+      _stops.add(_Stop());
+      _step = _stops.length - 1;
+    });
+    _syncSheetToStep();
+    _scheduleDraftSave();
+  }
+
+  // N'est proposé que sur l'étape de l'arrêt affiché (index == _step) — après
+  // suppression, `_step` reste valide tel quel (pointe sur l'arrêt qui a
+  // glissé à sa place) sauf s'il dépassait désormais la nouvelle plage
+  // valide (0.._stops.length inclus, où _stops.length == le récap).
+  void _removeStop(int index) {
+    setState(() {
+      _stops.removeAt(index);
+      _step = math.min(_step, _stops.length);
+    });
+    _syncSheetToStep();
+    _scheduleDraftSave();
+  }
+
+  // `_sheetMax` varie selon l'étape (arrêt vs récap) — mais `initialChildSize`
+  // ne s'applique qu'à la création du sheet, il faut donc l'animer
+  // explicitement à chaque changement d'étape.
+  void _syncSheetToStep() {
+    if (!_sheetCtrl.isAttached) return;
+    _sheetCtrl.animateTo(
+      _sheetMax,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
 
   // ── Header ────────────────────────────────────────────────────────────────
 
@@ -885,7 +981,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     child: Row(
       children: [
         IconButton(
-          onPressed: () => context.pop(),
+          onPressed: _backStep,
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -904,36 +1000,64 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.92),
+              gradient: AppColors.gradientSplash,
               borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.route_outlined,
-                  color: AppColors.primary,
-                  size: 18,
+                Row(
+                  children: [
+                    Icon(
+                      _onRecap
+                          ? Icons.check_circle_outline
+                          : Icons.flag_outlined,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _onRecap ? 'Récapitulatif' : 'Arrêt ${_step + 1}',
+                      style: ClientText.subtitle.copyWith(color: Colors.white),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_step + 1}/${_stops.length + 1}',
+                      style: ClientText.label.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Nouvelle tournée',
-                  style: ClientText.subtitle.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '${_stops.length} arrêts',
-                    style: ClientText.micro.copyWith(color: AppColors.primary),
+                const SizedBox(height: 6),
+                Row(
+                  children: List.generate(
+                    _stops.length + 1,
+                    (i) => Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: i < _stops.length ? 4 : 0,
+                        ),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: i <= _step
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1031,256 +1155,244 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.primaryDark,
+                color: Colors.white.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
         ),
 
-        // Bandeau départ
+        // Bandeau départ — persistant sur toutes les étapes (contrairement
+        // au bandeau expédition d'une commande simple, le départ d'une
+        // tournée reste un contexte utile en remplissant chaque arrêt).
         _DepartureBannerBatch(
           label: _selectedAddr?['label'] as String?,
           address: _pickupAddress,
           loading: _loadingGps,
           onTap: () => _showChangeDeparture(),
         ),
-
-        const SizedBox(height: 8),
-
-        ...List.generate(
-          _stops.length,
-          (i) => StaggeredEntrance(
-            index: i,
-            child: _StopCard(
-              index: i,
-              stop: _stops[i],
-              canRemove: _stops.length > 2,
-              onMapTap: () => _enterMapPlacement(i),
-              onRemove: () => setState(() => _stops.removeAt(i)),
-              onChanged: () {
-                setState(() {});
-                _scheduleDraftSave();
-              },
-              onLocationChanged: _recenterMap,
-              publicDio: _publicDio,
-              onSuggestionSelected: _selectStopSuggestion,
-              recentDestinations: _recentDestinations,
-              onApplyRecent: _applyRecentDestinationToStop,
-            ),
-          ),
-        ),
-
-        if (_stops.length < 5)
-          Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 8),
-            child: OutlinedButton.icon(
-              onPressed: () => setState(() => _stops.add(_Stop())),
-              icon: const Icon(Icons.add, color: AppColors.primary, size: 18),
-              label: Text(
-                'Ajouter un arrêt',
-                style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.primary),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-
-        // Notes globales
-        const SizedBox(height: 4),
-        Text(
-          'Instructions pour le livreur (optionnel)',
-          style: ClientText.label.copyWith(color: AppColors.textPrimary),
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: _notesCtrl,
-          maxLines: 2,
-          onChanged: (_) => _scheduleDraftSave(),
-          style: ClientText.body.copyWith(color: AppColors.textPrimary),
-          decoration: InputDecoration(
-            hintText:
-                'ex: Sonner à chaque arrêt, ne pas laisser en gardiennage…',
-            hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
-            filled: true,
-            fillColor: AppColors.card,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.primaryDark),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.primaryDark),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: AppColors.primary,
-                width: 1.5,
-              ),
-            ),
-            contentPadding: const EdgeInsets.all(12),
-          ),
-        ),
-
-        // Programmation
         const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isScheduled
-                  ? AppColors.primary.withValues(alpha: 0.4)
-                  : AppColors.primaryDark,
+
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 260),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.04, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
             ),
           ),
-          child: SwitchListTile(
-            value: _isScheduled,
-            onChanged: (v) {
-              setState(() {
-                _isScheduled = v;
-                if (!v) _scheduledAt = null;
-              });
-              if (v) _pickScheduleDate();
-            },
-            activeTrackColor: AppColors.primary,
-            activeThumbColor: Colors.white,
-            inactiveThumbColor: Colors.white,
-            inactiveTrackColor: AppColors.primaryDark,
-            title: Row(
-              children: [
-                const Icon(Icons.schedule, color: AppColors.primary, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  'Programmer la tournée',
-                  style: ClientText.subtitle.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            subtitle: Text(
-              'Choisir une date et heure',
-              style: ClientText.label.copyWith(color: AppColors.textPrimary),
-            ),
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 4,
-            ),
+          child: KeyedSubtree(
+            key: ValueKey(_step),
+            child: _onRecap ? _buildRecapStep() : _buildArretStep(_step),
           ),
         ),
-        if (_isScheduled && _scheduledAt != null) ...[
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: _pickScheduleDate,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.4),
-                  width: 1.5,
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.calendar_today,
-                    color: AppColors.primary,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _fmtDate(_scheduledAt!),
-                        style: ClientText.bodyStrong.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      Text(
-                        _fmtTime(_scheduledAt!),
-                        style: ClientText.label.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  const Icon(
-                    Icons.edit_outlined,
-                    color: AppColors.textSecondary,
-                    size: 14,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ],
     ),
   );
 
-  Widget _buildLaunchButton() => SafeArea(
-    top: false,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-      child: SizedBox(
-        height: 52,
-        width: double.infinity,
-        child: DecoratedBox(
+  Widget _buildArretStep(int index) => StaggeredEntrance(
+    index: 0,
+    child: _ArretStepContent(
+      key: ValueKey('arret_$index'),
+      index: index,
+      stop: _stops[index],
+      canRemove: _stops.length > 2,
+      onAddressTap: () => _showChangeStopAddress(index),
+      onChanged: () {
+        setState(() {});
+        _scheduleDraftSave();
+      },
+      onRemove: () => _removeStop(index),
+    ),
+  );
+
+  Widget _buildRecapStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      StaggeredEntrance(
+        index: 0,
+        child: Container(
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: _canSubmit ? AppColors.primary : AppColors.card,
+            color: Colors.white.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.35),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.route_outlined,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_stops.length} arrêts configurés',
+                    style: ClientText.bodyStrong.copyWith(color: Colors.white),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ..._stops.asMap().entries.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${e.key + 1}. ${e.value.address.isNotEmpty ? e.value.address : 'Adresse non définie'}',
+                    style: ClientText.label.copyWith(
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             ],
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      StaggeredEntrance(
+        index: 1,
+        child: GestureDetector(
+          onTap: _addStop,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.add, color: Colors.white, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  'Ajouter un arrêt',
+                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      StaggeredEntrance(
+        index: 2,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Instructions pour le livreur (optionnel)',
+              style: ClientText.label.copyWith(color: Colors.white),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _notesCtrl,
+              maxLines: 2,
+              onChanged: (_) => _scheduleDraftSave(),
+              style: ClientText.body.copyWith(color: Colors.white),
+              decoration: InputDecoration(
+                hintText:
+                    'ex: Sonner à chaque arrêt, ne pas laisser en gardiennage…',
+                hintStyle: ClientText.label.copyWith(
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                  borderSide: BorderSide(color: Colors.white, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildLaunchButton() {
+    final onArret = !_onRecap;
+    final enabled = onArret
+        ? true // la validation se fait au tap (voir _nextStep), pas en grisant le bouton
+        : (_canSubmit && !_submitting);
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+        child: SizedBox(
+          height: 52,
+          width: double.infinity,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: enabled ? AppColors.primary : AppColors.card,
               borderRadius: BorderRadius.circular(14),
-              onTap: (_canSubmit && !_submitting) ? _submit : null,
-              child: Center(
-                child: _submitting
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: onArret ? _nextStep : (enabled ? _submit : null),
+                child: Center(
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          onArret
+                              ? 'Passer à l\'arrêt suivant'
+                              : 'Lancer la tournée (${_stops.length} arrêts)',
+                          style: ClientText.button.copyWith(
+                            color: enabled
+                                ? Colors.white
+                                : AppColors.textSecondary,
+                          ),
                         ),
-                      )
-                    : Text(
-                        _isScheduled
-                            ? 'Programmer la tournée'
-                            : 'Lancer la tournée (${_stops.length} arrêts)',
-                        style: ClientText.button.copyWith(
-                          color: _canSubmit
-                              ? Colors.white
-                              : AppColors.textSecondary,
-                        ),
-                      ),
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   // ── Sheet changer départ ──────────────────────────────────────────────────
 
@@ -1348,588 +1460,258 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Carte d'un arrêt
+// Contenu d'une étape "Arrêt N" — adresse (feuille), nom, téléphone, colis.
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _StopCard extends StatefulWidget {
+class _ArretStepContent extends StatefulWidget {
   final int index;
   final _Stop stop;
   final bool canRemove;
-  final VoidCallback onMapTap;
+  final VoidCallback onAddressTap;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
-  final VoidCallback onLocationChanged;
-  final Dio publicDio;
-  final void Function(
-    int index,
-    Map<String, dynamic> place,
-    String sessionToken,
-  )
-  onSuggestionSelected;
-  final List<Map<String, dynamic>> recentDestinations;
-  final void Function(int index, Map<String, dynamic> dest) onApplyRecent;
-  const _StopCard({
+  const _ArretStepContent({
+    super.key,
     required this.index,
     required this.stop,
     required this.canRemove,
-    required this.onMapTap,
-    required this.onRemove,
+    required this.onAddressTap,
     required this.onChanged,
-    required this.onLocationChanged,
-    required this.publicDio,
-    required this.onSuggestionSelected,
-    required this.recentDestinations,
-    required this.onApplyRecent,
+    required this.onRemove,
   });
+
   @override
-  State<_StopCard> createState() => _StopCardState();
+  State<_ArretStepContent> createState() => _ArretStepContentState();
 }
 
-class _StopCardState extends State<_StopCard> {
-  late final TextEditingController _phoneCtrl = TextEditingController(
-    text: widget.stop.phone,
-  );
+class _ArretStepContentState extends State<_ArretStepContent> {
   late final TextEditingController _nameCtrl = TextEditingController(
     text: widget.stop.name,
   );
-  late final TextEditingController _landmarkCtrl = TextEditingController(
-    text: widget.stop.landmark,
+  late final TextEditingController _phoneCtrl = TextEditingController(
+    text: widget.stop.phone,
   );
-  late final TextEditingController _addrCtrl = TextEditingController(
-    text: widget.stop.address,
-  );
-  List<Map<String, dynamic>> _suggestions = [];
-  Timer? _debounce;
-  bool _searching = false;
-  String? _searchError;
-  String? _sessionToken;
-  late final _placesService = PlacesAutocompleteService(widget.publicDio);
 
   @override
   void dispose() {
-    _debounce?.cancel();
-    _phoneCtrl.dispose();
     _nameCtrl.dispose();
-    _landmarkCtrl.dispose();
-    _addrCtrl.dispose();
+    _phoneCtrl.dispose();
     super.dispose();
   }
 
-  // Resynchronise les champs si le stop a été modifié depuis l'extérieur
-  // (destination récente, pointage carte, brouillon restauré, recommander).
+  // Resynchronise si le stop a été modifié depuis l'extérieur (destination
+  // récente appliquée, qui préremplit aussi nom/téléphone).
   @override
-  void didUpdateWidget(covariant _StopCard oldWidget) {
+  void didUpdateWidget(covariant _ArretStepContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     final s = widget.stop;
-    if (_addrCtrl.text != s.address) _addrCtrl.text = s.address;
     if (_nameCtrl.text != s.name) _nameCtrl.text = s.name;
     if (_phoneCtrl.text != s.phone) _phoneCtrl.text = s.phone;
-    if (_landmarkCtrl.text != s.landmark) _landmarkCtrl.text = s.landmark;
   }
-
-  Future<void> _forwardGeocode(String query) async {
-    if (query.trim().length < 3) return;
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _suggestions = [];
-      _searching = true;
-    });
-    try {
-      final locations = await geo
-          .locationFromAddress('$query, Dakar, Sénégal')
-          .timeout(const Duration(seconds: 6));
-      if (locations.isEmpty || !mounted) return;
-      final loc = locations.first;
-      final s = widget.stop;
-      s.lat = loc.latitude;
-      s.lng = loc.longitude;
-      s.address = query.trim();
-      _addrCtrl.text = query.trim();
-      widget.onChanged();
-      widget.onLocationChanged();
-    } catch (_) {}
-    if (mounted) setState(() => _searching = false);
-  }
-
-  void _applyRecent(Map<String, dynamic> dest) {
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _suggestions = [];
-      _addrCtrl.text = dest['address'] as String? ?? '';
-    });
-    widget.onApplyRecent(widget.index, dest);
-  }
-
-  void _onAddrChanged(String query) {
-    _debounce?.cancel();
-    setState(
-      () {},
-    ); // reflète immédiatement l'état vide/non-vide (destinations récentes)
-    if (query.trim().length < 3) {
-      if (_suggestions.isNotEmpty) setState(() => _suggestions = []);
-      return;
-    }
-    _sessionToken ??= PlacesAutocompleteService.newSessionToken();
-    _debounce = Timer(const Duration(milliseconds: 450), () async {
-      setState(() {
-        _searching = true;
-        _searchError = null;
-      });
-      try {
-        final preds = await _placesService.autocomplete(
-          query: query,
-          sessionToken: _sessionToken!,
-        );
-        if (mounted)
-          setState(() {
-            _suggestions = preds;
-            _searching = false;
-          });
-      } catch (e) {
-        if (mounted)
-          setState(() {
-            _searching = false;
-            _searchError = friendlyError(e);
-          });
-      }
-    });
-  }
-
-  void _retrySearch() => _onAddrChanged(_addrCtrl.text);
 
   @override
   Widget build(BuildContext context) {
     final s = widget.stop;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: s.hasLocation
-              ? AppColors.primary.withValues(alpha: 0.25)
-              : AppColors.primaryDark,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (s.hasLocation ? AppColors.primary : Colors.black)
-                .withValues(alpha: s.hasLocation ? 0.18 : 0.22),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Adresse — champ style recherche, tap ouvre la feuille ──────────
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            'ADRESSE DE LIVRAISON',
+            style: ClientText.micro.copyWith(
+              color: Colors.white.withValues(alpha: 0.75),
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header arrêt
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
+        ),
+        GestureDetector(
+          onTap: widget.onAddressTap,
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+            ),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 13,
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                  child: Text(
-                    '${widget.index + 1}',
-                    style: ClientText.label.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                Icon(
+                  s.hasLocation ? Icons.check_circle : Icons.search,
+                  color: s.hasLocation ? AppColors.successBright : Colors.white,
+                  size: 20,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Arrêt ${widget.index + 1}',
-                    style: ClientText.subtitle.copyWith(
-                      color: AppColors.textPrimary,
+                    s.address.isNotEmpty ? s.address : 'Saisir une adresse…',
+                    style: ClientText.body.copyWith(
+                      color: s.address.isNotEmpty
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.65),
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (widget.canRemove)
-                  IconButton(
-                    onPressed: widget.onRemove,
-                    icon: const Icon(
-                      Icons.remove_circle_outline,
-                      color: AppColors.error,
-                      size: 20,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.chevron_right,
+                  color: Colors.white.withValues(alpha: 0.75),
+                  size: 20,
+                ),
               ],
             ),
           ),
+        ),
+        const SizedBox(height: 16),
 
-          // Champ recherche + bouton carte
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _addrCtrl,
-                    style: ClientText.label.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
-                    onChanged: _onAddrChanged,
-                    onSubmitted: (q) => _forwardGeocode(q),
-                    decoration: InputDecoration(
-                      hintText: 'Saisir une adresse…',
-                      hintStyle: ClientText.label.copyWith(
-                        color: AppColors.textPrimary,
-                      ),
-                      prefixIcon: _searching
-                          ? const Padding(
-                              padding: EdgeInsets.all(10),
-                              child: SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  color: AppColors.primary,
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                          : Icon(
-                              s.hasLocation ? Icons.check_circle : Icons.search,
-                              color: s.hasLocation
-                                  ? AppColors.success
-                                  : AppColors.textSecondary,
-                              size: 16,
-                            ),
-                      suffixIcon: _addrCtrl.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(
-                                Icons.clear,
-                                color: AppColors.textSecondary,
-                                size: 14,
-                              ),
-                              onPressed: () {
-                                _addrCtrl.clear();
-                                setState(() => _suggestions = []);
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: AppColors.primaryDark,
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.primaryDark,
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: s.hasLocation
-                              ? AppColors.success.withValues(alpha: 0.5)
-                              : AppColors.primaryDark,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(
-                          color: AppColors.primary,
-                          width: 1.5,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                    ),
-                  ),
+        Text(
+          'Nom destinataire (optionnel)',
+          style: ClientText.label.copyWith(color: Colors.white),
+        ),
+        const SizedBox(height: 6),
+        _MiniField(
+          ctrl: _nameCtrl,
+          hint: 'Nom destinataire',
+          textInputAction: TextInputAction.next,
+          onChanged: (v) {
+            s.name = v;
+            widget.onChanged();
+          },
+        ),
+        const SizedBox(height: 14),
+
+        Text(
+          'Téléphone destinataire *',
+          style: ClientText.label.copyWith(color: Colors.white),
+        ),
+        const SizedBox(height: 6),
+        _MiniField(
+          ctrl: _phoneCtrl,
+          hint: 'Numéro de téléphone',
+          prefix: '+221 ',
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.done,
+          onChanged: (v) {
+            s.phone = v;
+            widget.onChanged();
+          },
+          suffixIcon: _phoneCtrl.text.isEmpty
+              ? null
+              : Icon(
+                  isValidSenegalMobile(_phoneCtrl.text.trim())
+                      ? Icons.check_circle
+                      : Icons.error_outline,
+                  color: isValidSenegalMobile(_phoneCtrl.text.trim())
+                      ? AppColors.success
+                      : AppColors.error,
+                  size: 18,
                 ),
-                const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: widget.onMapTap,
+        ),
+        const SizedBox(height: 16),
+
+        Text(
+          'Type de colis',
+          style: ClientText.label.copyWith(color: Colors.white),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: _pkgTypes.map((t) {
+            final sel = s.pkg == t.$1;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() => s.pkg = t.$1);
+                    widget.onChanged();
+                  },
                   child: Container(
-                    width: 46,
-                    height: 38,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
+                      color: Colors.white.withValues(alpha: sel ? 0.26 : 0.14),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.3),
+                        color: Colors.white.withValues(
+                          alpha: sel ? 0.65 : 0.25,
+                        ),
+                        width: sel ? 1.5 : 1,
                       ),
                     ),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
-                          Icons.map_outlined,
-                          color: AppColors.primary,
-                          size: 15,
-                        ),
+                        Icon(t.$3, color: Colors.white, size: 18),
+                        const SizedBox(height: 4),
                         Text(
-                          'Carte',
-                          style: ClientText.micro.copyWith(
-                            color: AppColors.primary,
-                          ),
+                          t.$2.split(' ').first,
+                          style: ClientText.micro.copyWith(color: Colors.white),
                         ),
                       ],
                     ),
                   ),
                 ),
-              ],
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Checkbox(
+              value: s.fragile,
+              onChanged: (v) {
+                setState(() => s.fragile = v ?? false);
+                widget.onChanged();
+              },
+              activeColor: AppColors.warning,
+              checkColor: AppColors.background,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-          ),
+            const SizedBox(width: 4),
+            Text(
+              'Fragile',
+              style: ClientText.label.copyWith(color: Colors.white),
+            ),
+          ],
+        ),
 
-          // Destinations récentes (avant saisie)
-          if (_addrCtrl.text.isEmpty &&
-              _suggestions.isEmpty &&
-              !s.hasLocation &&
-              widget.recentDestinations.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-              child: Container(
-                constraints: const BoxConstraints(maxHeight: 150),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryDark,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.card),
+        if (widget.canRemove) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: GestureDetector(
+              onTap: widget.onRemove,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 6,
+                  horizontal: 12,
                 ),
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  shrinkWrap: true,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.history,
-                            color: AppColors.textSecondary,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Récentes',
-                            style: ClientText.micro.copyWith(
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
+                    Icon(
+                      Icons.remove_circle_outline,
+                      color: AppColors.error.withValues(alpha: 0.85),
+                      size: 16,
                     ),
-                    ...widget.recentDestinations.map(
-                      (d) => InkWell(
-                        onTap: () => _applyRecent(d),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 7,
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.place_outlined,
-                                color: AppColors.primary,
-                                size: 13,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  d['address'] as String? ?? '',
-                                  style: ClientText.label.copyWith(
-                                    color: AppColors.textPrimary,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Supprimer cet arrêt',
+                      style: ClientText.label.copyWith(
+                        color: AppColors.error.withValues(alpha: 0.85),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-
-          // Suggestions
-          if (_suggestions.isNotEmpty || _searching || _searchError != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-              child: PlaceSuggestionsList(
-                suggestions: _suggestions,
-                loading: _searching,
-                error: _searchError,
-                onRetry: _retrySearch,
-                maxHeight: 150,
-                colors: _placeSuggestionsColors,
-                onSelect: (p) {
-                  final fmt =
-                      p['structured_formatting'] as Map<String, dynamic>?;
-                  final main =
-                      fmt?['main_text'] as String? ??
-                      p['description'] as String? ??
-                      '';
-                  _addrCtrl.text = main;
-                  setState(() => _suggestions = []);
-                  FocusScope.of(context).unfocus();
-                  final token =
-                      _sessionToken ??
-                      PlacesAutocompleteService.newSessionToken();
-                  widget.onSuggestionSelected(widget.index, p, token);
-                  _sessionToken = null;
-                },
-              ),
-            ),
-          const SizedBox(height: 8),
-
-          // Téléphone destinataire
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _MiniField(
-              ctrl: _phoneCtrl,
-              hint: 'Tél destinataire *',
-              prefix: '+221',
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.next,
-              onChanged: (v) {
-                s.phone = v;
-                widget.onChanged();
-              },
-              suffixIcon: _phoneCtrl.text.isEmpty
-                  ? null
-                  : Icon(
-                      isValidSenegalMobile(_phoneCtrl.text.trim())
-                          ? Icons.check_circle
-                          : Icons.error_outline,
-                      color: isValidSenegalMobile(_phoneCtrl.text.trim())
-                          ? AppColors.success
-                          : AppColors.error,
-                      size: 16,
-                    ),
-            ),
-          ),
-          const SizedBox(height: 6),
-
-          // Nom destinataire
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _MiniField(
-              ctrl: _nameCtrl,
-              hint: 'Nom destinataire (optionnel)',
-              textInputAction: TextInputAction.next,
-              onChanged: (v) {
-                s.name = v;
-                widget.onChanged();
-              },
-            ),
-          ),
-          const SizedBox(height: 6),
-
-          // Repère
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _MiniField(
-              ctrl: _landmarkCtrl,
-              hint: 'Repère (optionnel)',
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => FocusScope.of(context).unfocus(),
-              onChanged: (v) {
-                s.landmark = v;
-                widget.onChanged();
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Type de colis
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-            child: Row(
-              children: _pkgTypes.map((t) {
-                final sel = s.pkg == t.$1;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          s.pkg = t.$1;
-                        });
-                        widget.onChanged();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: sel
-                              ? AppColors.primary.withValues(alpha: 0.12)
-                              : AppColors.primaryDark,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: sel
-                                ? AppColors.primary
-                                : AppColors.primaryDark,
-                            width: sel ? 1.5 : 1,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              t.$3,
-                              color: sel
-                                  ? AppColors.primary
-                                  : AppColors.textSecondary,
-                              size: 16,
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              t.$2.split(' ').first,
-                              style: ClientText.micro.copyWith(
-                                color: sel
-                                    ? AppColors.primary
-                                    : AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-          // Fragile
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: s.fragile,
-                  onChanged: (v) {
-                    setState(() {
-                      s.fragile = v ?? false;
-                    });
-                    widget.onChanged();
-                  },
-                  activeColor: AppColors.warning,
-                  side: const BorderSide(color: AppColors.textSecondary),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Fragile',
-                  style: ClientText.label.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -1961,27 +1743,29 @@ class _MiniField extends StatelessWidget {
     onChanged: onChanged,
     textInputAction: textInputAction,
     onSubmitted: onSubmitted,
-    style: ClientText.body.copyWith(color: AppColors.textPrimary),
+    style: ClientText.body.copyWith(color: Colors.white),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: ClientText.label.copyWith(color: AppColors.textPrimary),
+      hintStyle: ClientText.label.copyWith(
+        color: Colors.white.withValues(alpha: 0.7),
+      ),
       prefixText: prefix,
-      prefixStyle: ClientText.label.copyWith(fontSize: 13),
+      prefixStyle: ClientText.label.copyWith(fontSize: 13, color: Colors.white),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: AppColors.primaryDark,
+      fillColor: Colors.white.withValues(alpha: 0.14),
       isDense: true,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.primaryDark),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.primaryDark),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(10)),
+        borderSide: BorderSide(color: Colors.white, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     ),
@@ -2004,61 +1788,63 @@ class _DepartureBannerBatch extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryDark),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 24, bottom: 6),
+        child: Text(
+          'DÉPART',
+          style: ClientText.micro.copyWith(
+            color: Colors.white.withValues(alpha: 0.75),
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+          ),
+        ),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.location_on, color: AppColors.primary, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: loading
-                ? Text(
-                    'Localisation…',
-                    style: ClientText.label.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (label != null)
-                        Text(
-                          label!,
-                          style: ClientText.label.copyWith(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      Text(
-                        address != null && address!.isNotEmpty
-                            ? address!
-                            : 'Aucun départ',
-                        style: ClientText.label.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.search, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: loading
+                    ? Text(
+                        'Localisation…',
+                        style: ClientText.body.copyWith(color: Colors.white),
+                      )
+                    : Text(
+                        label != null
+                            ? '$label — ${address ?? ''}'
+                            : (address != null && address!.isNotEmpty
+                                  ? address!
+                                  : 'Aucun départ'),
+                        style: ClientText.body.copyWith(color: Colors.white),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withValues(alpha: 0.75),
+                size: 18,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            'Changer',
-            style: ClientText.micro.copyWith(color: AppColors.primary),
-          ),
-          const Icon(Icons.chevron_right, color: AppColors.primary, size: 14),
-        ],
+        ),
       ),
-    ),
+    ],
   );
 }
 
@@ -2067,22 +1853,36 @@ class _DepartureBannerBatch extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _BatchDepartureSheet extends StatefulWidget {
+  final String title;
+  final String searchHint;
   final List<Map<String, dynamic>> proAddresses;
   final String? selectedId;
   final bool loadingGps;
   final Dio dio;
   final void Function(Map<String, dynamic>) onSelect;
-  final VoidCallback onGps, onMap;
+  // `onGps` optionnel — n'a pas de sens pour l'adresse d'un arrêt de
+  // livraison (contrairement au départ, où "ma position actuelle" est
+  // pertinent), donc masqué quand null plutôt que forcé partout.
+  final VoidCallback? onGps;
+  final VoidCallback onMap;
   final void Function(double lat, double lng, String address) onManualAddress;
+  // Destinations récentes — uniquement côté arrêt (null côté départ), même
+  // pattern que _ChangeAddressSheet dans order_create_screen.dart.
+  final List<Map<String, dynamic>>? recentAddresses;
+  final void Function(Map<String, dynamic>)? onSelectRecent;
   const _BatchDepartureSheet({
+    this.title = 'Point de départ',
+    this.searchHint = 'Saisir l\'adresse d\'expédition…',
     required this.proAddresses,
     required this.selectedId,
     required this.loadingGps,
     required this.dio,
     required this.onSelect,
-    required this.onGps,
+    this.onGps,
     required this.onMap,
     required this.onManualAddress,
+    this.recentAddresses,
+    this.onSelectRecent,
   });
 
   @override
@@ -2199,9 +1999,16 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        gradient: AppColors.gradientSplash,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       padding: EdgeInsets.fromLTRB(
         20,
@@ -2221,28 +2028,28 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryDark,
+                    color: Colors.white.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
             ),
             Text(
-              'Point de départ',
-              style: ClientText.title.copyWith(color: AppColors.textPrimary),
+              widget.title,
+              style: ClientText.title.copyWith(color: Colors.white),
             ),
             const SizedBox(height: 14),
 
             TextField(
               controller: _searchCtrl,
-              style: ClientText.body.copyWith(color: AppColors.textPrimary),
+              style: ClientText.body.copyWith(color: Colors.white),
               textInputAction: TextInputAction.search,
               onChanged: _onChanged,
               onSubmitted: _submitManual,
               decoration: InputDecoration(
-                hintText: 'Saisir l\'adresse d\'expédition…',
+                hintText: widget.searchHint,
                 hintStyle: ClientText.label.copyWith(
-                  color: AppColors.textPrimary,
+                  color: Colors.white.withValues(alpha: 0.7),
                 ),
                 prefixIcon: _searching
                     ? const Padding(
@@ -2251,32 +2058,33 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                            color: AppColors.primary,
+                            color: Colors.white,
                             strokeWidth: 2,
                           ),
                         ),
                       )
-                    : const Icon(
+                    : Icon(
                         Icons.search,
-                        color: AppColors.textSecondary,
+                        color: Colors.white.withValues(alpha: 0.7),
                         size: 18,
                       ),
                 filled: true,
-                fillColor: AppColors.card,
+                fillColor: Colors.white.withValues(alpha: 0.14),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primaryDark),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primaryDark),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppColors.primary,
-                    width: 1.5,
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.25),
                   ),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                  borderSide: BorderSide(color: Colors.white, width: 1.5),
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -2302,7 +2110,9 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
             if (widget.proAddresses.isNotEmpty) ...[
               Text(
                 'Mes adresses',
-                style: ClientText.micro.copyWith(color: AppColors.textPrimary),
+                style: ClientText.micro.copyWith(
+                  color: Colors.white.withValues(alpha: 0.75),
+                ),
               ),
               const SizedBox(height: 8),
               ...widget.proAddresses.map((a) {
@@ -2316,18 +2126,16 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: sel
-                          ? AppColors.primary.withValues(alpha: 0.10)
-                          : AppColors.card,
+                      color: Colors.white.withValues(alpha: sel ? 0.24 : 0.14),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: sel ? AppColors.primary : AppColors.primaryDark,
+                        color: Colors.white.withValues(alpha: sel ? 0.6 : 0.25),
                         width: sel ? 1.5 : 1,
                       ),
                     ),
                     child: Row(
                       children: [
-                        Icon(icon, color: AppColors.primary, size: 20),
+                        Icon(icon, color: Colors.white, size: 20),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
@@ -2336,13 +2144,13 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
                               Text(
                                 a['label'] as String? ?? '',
                                 style: ClientText.bodyStrong.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white,
                                 ),
                               ),
                               Text(
                                 a['address'] as String? ?? '',
                                 style: ClientText.label.copyWith(
-                                  color: AppColors.textPrimary,
+                                  color: Colors.white.withValues(alpha: 0.75),
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -2353,7 +2161,7 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
                         if (sel)
                           const Icon(
                             Icons.check_circle,
-                            color: AppColors.primary,
+                            color: Colors.white,
                             size: 18,
                           ),
                       ],
@@ -2363,13 +2171,80 @@ class _BatchDepartureSheetState extends State<_BatchDepartureSheet> {
               }),
               const SizedBox(height: 8),
             ],
-            _SheetActionBtn(
-              icon: Icons.my_location,
-              label: 'Ma position actuelle',
-              loading: widget.loadingGps,
-              onTap: widget.onGps,
-            ),
-            const SizedBox(height: 8),
+
+            if (widget.recentAddresses != null &&
+                widget.recentAddresses!.isNotEmpty) ...[
+              Text(
+                'Destinations récentes',
+                style: ClientText.micro.copyWith(
+                  color: Colors.white.withValues(alpha: 0.75),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...widget.recentAddresses!.map((d) {
+                final address = d['address'] as String? ?? '';
+                final name = d['receiverName'] as String?;
+                return GestureDetector(
+                  onTap: () => widget.onSelectRecent?.call(d),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.history,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                address,
+                                style: ClientText.bodyStrong.copyWith(
+                                  color: Colors.white,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (name != null && name.isNotEmpty)
+                                Text(
+                                  name,
+                                  style: ClientText.label.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.75),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+
+            if (widget.onGps != null) ...[
+              _SheetActionBtn(
+                icon: Icons.my_location,
+                label: 'Ma position actuelle',
+                loading: widget.loadingGps,
+                onTap: widget.onGps!,
+              ),
+              const SizedBox(height: 8),
+            ],
             _SheetActionBtn(
               icon: Icons.map_outlined,
               label: 'Pointer sur la carte',
@@ -2400,9 +2275,9 @@ class _SheetActionBtn extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryDark),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
       ),
       child: loading
           ? const Center(
@@ -2410,20 +2285,18 @@ class _SheetActionBtn extends StatelessWidget {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                  color: AppColors.primary,
+                  color: Colors.white,
                   strokeWidth: 2,
                 ),
               ),
             )
           : Row(
               children: [
-                Icon(icon, color: AppColors.textSecondary, size: 18),
+                Icon(icon, color: Colors.white, size: 18),
                 const SizedBox(width: 10),
                 Text(
                   label,
-                  style: ClientText.bodyStrong.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
+                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
                 ),
               ],
             ),
