@@ -83,8 +83,10 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
   final _sheetCtrl = DraggableScrollableController();
   // Hauteur de la feuille agrandie pendant que le clavier est ouvert — sinon
   // un champ en bas de liste (notes, arrêt supplémentaire) reste couvert par
-  // le clavier, la feuille elle-même ne grandissant pas par défaut.
-  static const _sheetMaxKeyboard = 0.94;
+  // le clavier, la feuille elle-même ne grandissant pas par défaut. Modéré
+  // (pas un grand saut fixe façon plein écran) pour ne pas laisser un vide
+  // sous les champs quand la liste est encore courte (2 arrêts minimum).
+  static const _sheetMaxKeyboard = 0.82;
   double _lastKeyboardInset = 0;
 
   // ── Départ ───────────────────────────────────────────────────────────────

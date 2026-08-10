@@ -121,11 +121,6 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
   bool _isMapPlacement = false;
   bool _placingPickup = false; // false = placing delivery
   final _sheetCtrl = DraggableScrollableController();
-  // Hauteur de la feuille agrandie pendant que le clavier est ouvert — sinon
-  // un champ situé en bas d'une étape (ex: "Instructions pour le livreur")
-  // reste couvert par le clavier, la feuille elle-même ne grandissant pas
-  // par défaut (seul son contenu se décale, dans un espace inchangé).
-  static const _sheetMaxKeyboard = 0.94;
   double _lastKeyboardInset = 0;
 
   // ── Départ (auto-rempli depuis ProAddress défaut) ────────────────────────
@@ -1236,6 +1231,21 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     // visibles sans avoir à scroller pour les découvrir.
     4 => 0.80,
     _ => 0.58, // Destination
+  };
+
+  // Taille de la feuille quand le clavier est ouvert — réglée par étape
+  // comme _sheetMax, plutôt qu'une seule grande valeur fixe pour toutes :
+  // une étape courte (Destination, 2 champs) n'a besoin que d'un peu plus
+  // de place, alors qu'une étape dense (Livraison, avec les instructions
+  // tout en bas) en a besoin de beaucoup plus pour ne rien laisser caché
+  // derrière le clavier. Grandir de la même façon pour tout le monde
+  // laissait un grand vide sous les champs des étapes courtes.
+  double get _sheetMaxKeyboard => switch (_step) {
+    1 => 0.68, // Articles
+    2 => 0.66, // Colis
+    3 => 0.88, // Livraison (le champ Instructions est tout en bas)
+    4 => 0.88, // Confirmation
+    _ => 0.62, // Destination
   };
 
   // ── Header ────────────────────────────────────────────────────────────────
