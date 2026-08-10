@@ -840,45 +840,63 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.86,
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: AppColors.gradientSplash,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
+                // `Clip.none` laisse le bouton retour flottant déborder
+                // au-dessus du panneau (dans la zone carte) sans être
+                // rogné par les coins arrondis du panneau lui-même.
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.86,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          offset: const Offset(0, -4),
-                        ),
-                      ],
-                    ),
-                    child: AnimatedPadding(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      padding: EdgeInsets.only(
-                        bottom: MediaQuery.of(context).viewInsets.bottom,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildSheetTopBar(),
-                          Flexible(
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                              child: _buildPanel(),
-                            ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: AppColors.gradientSplash,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(24),
                           ),
-                          _buildLaunchButton(),
-                        ],
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 20,
+                              offset: const Offset(0, -4),
+                            ),
+                          ],
+                        ),
+                        child: AnimatedPadding(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOut,
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildSheetHandle(),
+                              Flexible(
+                                child: SingleChildScrollView(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    0,
+                                    20,
+                                    16,
+                                  ),
+                                  child: _buildPanel(),
+                                ),
+                              ),
+                              _buildLaunchButton(),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    Positioned(
+                      top: -22,
+                      left: 20,
+                      child: _buildFloatingBackButton(),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -887,38 +905,42 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     );
   }
 
-  // Petite barre au sommet du panneau : bouton retour (alternative plus
-  // proche du contenu que la flèche de l'en-tête, en plus de celle-ci) +
-  // poignée décorative centrée.
-  Widget _buildSheetTopBar() => Padding(
-    padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
-    child: Row(
-      children: [
-        GestureDetector(
-          onTap: _backStep,
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.arrow_back, color: Colors.white, size: 18),
-          ),
+  // Poignée décorative centrée en haut du panneau — le bouton retour vit
+  // désormais à part, flottant au-dessus du panneau (plus visible).
+  Widget _buildSheetHandle() => Padding(
+    padding: const EdgeInsets.only(top: 14, bottom: 4),
+    child: Center(
+      child: Container(
+        width: 36,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(2),
         ),
-        Expanded(
-          child: Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+      ),
+    ),
+  );
+
+  // Bouton retour flottant, à cheval sur le bord haut du panneau (dans la
+  // zone carte) pour être plus visible qu'une icône noyée dans l'en-tête
+  // du panneau.
+  Widget _buildFloatingBackButton() => GestureDetector(
+    onTap: _backStep,
+    child: Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-        ),
-        const SizedBox(width: 30),
-      ],
+        ],
+      ),
+      child: const Icon(Icons.arrow_back, color: AppColors.primary, size: 22),
     ),
   );
 
@@ -989,7 +1011,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     child: Row(
       children: [
         IconButton(
-          onPressed: _backStep,
+          onPressed: _resetToStart,
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -997,7 +1019,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.arrow_back,
+              Icons.refresh_rounded,
               color: AppColors.textPrimary,
               size: 20,
             ),
@@ -1041,17 +1063,6 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                       style: ClientText.label.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    GestureDetector(
-                      onTap: _resetToStart,
-                      child: Icon(
-                        Icons.refresh_rounded,
-                        color: Colors.white.withValues(
-                          alpha: _step == 0 ? 0.4 : 1,
-                        ),
-                        size: 18,
                       ),
                     ),
                   ],
@@ -1365,7 +1376,12 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-                onTap: onArret ? _nextStep : (enabled ? _submit : null),
+                // Toujours tappable (sauf pendant l'envoi) même quand
+                // `enabled` est faux visuellement — c'est `_submit()` qui
+                // valide et affiche le toast expliquant ce qui manque
+                // (départ non défini, arrêt sans localisation/numéro), sinon
+                // le bouton reste silencieusement mort sans explication.
+                onTap: onArret ? _nextStep : (_submitting ? null : _submit),
                 child: Center(
                   child: _submitting
                       ? const SizedBox(
