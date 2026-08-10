@@ -353,13 +353,13 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
           Navigator.pop(sheetCtx);
           context.push('/dem-pro/orders/create');
         },
-        onExpress: () {
-          Navigator.pop(sheetCtx);
-          context.push('/dem-pro/orders/create?priority=EXPRESS');
-        },
         onBatch: () {
           Navigator.pop(sheetCtx);
           context.push('/dem-pro/batch/create');
+        },
+        onScheduled: () {
+          Navigator.pop(sheetCtx);
+          context.push('/dem-pro/orders/create?scheduled=true');
         },
       ),
     );
@@ -482,12 +482,12 @@ class _State extends State<DemProHomeScreen> with WidgetsBindingObserver {
 
 class _CreateOrderSheet extends StatelessWidget {
   final VoidCallback onSimple;
-  final VoidCallback onExpress;
   final VoidCallback onBatch;
+  final VoidCallback onScheduled;
   const _CreateOrderSheet({
     required this.onSimple,
-    required this.onExpress,
     required this.onBatch,
+    required this.onScheduled,
   });
 
   @override
@@ -530,14 +530,6 @@ class _CreateOrderSheet extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         _CreateOrderOption(
-          icon: Icons.bolt_rounded,
-          color: AppColors.warning,
-          title: 'Express',
-          subtitle: 'Prioritaire, prise en charge plus rapide',
-          onTap: onExpress,
-        ),
-        const SizedBox(height: 10),
-        _CreateOrderOption(
           icon: Icons.two_wheeler_rounded,
           color: AppColors.primary,
           title: 'Simple',
@@ -551,6 +543,14 @@ class _CreateOrderSheet extends StatelessWidget {
           title: 'Groupée',
           subtitle: 'Plusieurs arrêts avec un seul livreur',
           onTap: onBatch,
+        ),
+        const SizedBox(height: 10),
+        _CreateOrderOption(
+          icon: Icons.schedule_rounded,
+          color: AppColors.accentMint,
+          title: 'Programmée',
+          subtitle: 'Choisissez une date et une heure ultérieures',
+          onTap: onScheduled,
         ),
       ],
     ),
@@ -979,22 +979,6 @@ class _AccueilTab extends StatelessWidget {
                         children: [
                           Expanded(
                             child: _PremiumServiceCard(
-                              icon: Icons.bolt_rounded,
-                              label: 'Express',
-                              color: AppColors.warning,
-                              onTap: () async {
-                                if (!await ensureLocationEnabled(context))
-                                  return;
-                                if (!context.mounted) return;
-                                context.push(
-                                  '/dem-pro/orders/create?priority=EXPRESS',
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _PremiumServiceCard(
                               icon: Icons.two_wheeler_rounded,
                               label: 'Simple',
                               color: AppColors.primary,
@@ -1017,6 +1001,22 @@ class _AccueilTab extends StatelessWidget {
                                   return;
                                 if (!context.mounted) return;
                                 context.push('/dem-pro/batch/create');
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _PremiumServiceCard(
+                              icon: Icons.schedule_rounded,
+                              label: 'Programmée',
+                              color: AppColors.accentMint,
+                              onTap: () async {
+                                if (!await ensureLocationEnabled(context))
+                                  return;
+                                if (!context.mounted) return;
+                                context.push(
+                                  '/dem-pro/orders/create?scheduled=true',
+                                );
                               },
                             ),
                           ),
