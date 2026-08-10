@@ -1,13 +1,23 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/error/app_exception.dart';
 import '../../../core/router/app_startup_notifier.dart';
+import '../../../core/services/socket_service.dart';
+import '../../../core/storage/auth_storage.dart';
+import '../../../core/theme/map_theme_provider.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../deliveries/data/orders_repository.dart';
+import '../../home_driver/navigation/directions_service.dart';
+import '../../home_driver/navigation/map_theme.dart';
+import '../../home_driver/navigation/route_tracker.dart';
 import '../data/dem_pro_repository.dart';
 import '../../../shared/widgets/staggered_entrance.dart';
 import '../../../core/theme/app_theme.dart';
@@ -81,7 +91,7 @@ String _fmtDate(String? iso) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-class DemProBatchTrackingScreen extends StatefulWidget {
+class DemProBatchTrackingScreen extends ConsumerStatefulWidget {
   final String batchId;
   final Map<String, dynamic>? initialBatch;
   const DemProBatchTrackingScreen({
@@ -91,11 +101,12 @@ class DemProBatchTrackingScreen extends StatefulWidget {
   });
 
   @override
-  State<DemProBatchTrackingScreen> createState() =>
+  ConsumerState<DemProBatchTrackingScreen> createState() =>
       _DemProBatchTrackingScreenState();
 }
 
-class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
+class _DemProBatchTrackingScreenState
+    extends ConsumerState<DemProBatchTrackingScreen> {
   final _repo = DemProRepository(ApiClient.dio);
 
   Map<String, dynamic>? _batch;
@@ -103,40 +114,328 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
   bool _cancelling = false;
   Timer? _pollTimer;
 
+  // ── Carte en direct ─────────────────────────────────────────────────────
+  GoogleMapController? _mapCtrl;
+  String? _mapStyle;
+  BitmapDescriptor? _driverIcon;
+  LatLng? _driverPos;
+  List<LatLng> _routePoints = [];
+  List<LatLng> _displayRoute = [];
+  int _lastTrimIdx = 0;
+  DateTime? _lastReroute;
+
+  // ── Sockets ──────────────────────────────────────────────────────────────
+  StreamSubscription<Map<String, dynamic>>? _locationSub;
+  StreamSubscription<Map<String, dynamic>>? _statusSub;
+  StreamSubscription<String>? _completedSub;
+
   @override
   void initState() {
     super.initState();
     if (widget.initialBatch != null) {
       _batch = widget.initialBatch;
       _loading = false;
+      _initDriverPos();
+      _fetchRoute();
     }
+    _loadMapStyle();
+    _buildDriverIcon();
     _load(silent: widget.initialBatch != null);
+    _connectSocket();
     _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       final status = _batch?['status'] as String?;
-      if (status == null || status == 'COMPLETED' || status == 'CANCELLED')
+      if (status == null || status == 'COMPLETED' || status == 'CANCELLED') {
         return;
+      }
       _load(silent: true);
     });
+  }
+
+  void _initDriverPos() {
+    final driver = _batch?['driver'] as Map<String, dynamic>?;
+    final lat = (driver?['latitude'] as num?)?.toDouble();
+    final lng = (driver?['longitude'] as num?)?.toDouble();
+    if (lat != null && lng != null && lat != 0 && lng != 0) {
+      _driverPos = LatLng(lat, lng);
+    }
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _locationSub?.cancel();
+    _statusSub?.cancel();
+    _completedSub?.cancel();
+    _mapCtrl?.dispose();
     super.dispose();
   }
 
+  // Position du livreur + statuts des arrêts en base restent utiles même
+  // avec les sockets branchés — filet de sécurité si la connexion socket
+  // tombe (mobile, réseau instable). Ne relance un fetch d'itinéraire que
+  // si l'arrêt/cible en cours a réellement changé, pour ne pas re-tracer
+  // la route à chaque tick de poll.
   Future<void> _load({bool silent = false}) async {
     if (!silent && mounted) setState(() => _loading = true);
     try {
       final batch = await _repo.getBatchById(widget.batchId);
-      if (mounted)
-        setState(() {
-          _batch = batch;
-          _loading = false;
-        });
+      if (!mounted) return;
+      final prevStopId = _currentStop?['id'];
+      setState(() {
+        _batch = batch;
+        _loading = false;
+      });
+      final driver = batch['driver'] as Map<String, dynamic>?;
+      final lat = (driver?['latitude'] as num?)?.toDouble();
+      final lng = (driver?['longitude'] as num?)?.toDouble();
+      if (lat != null && lng != null && lat != 0 && lng != 0) {
+        final loc = LatLng(lat, lng);
+        setState(() => _driverPos = loc);
+        _matchAndTrimRoute(loc);
+      }
+      if (_currentStop?['id'] != prevStopId) _fetchRoute();
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // ── Carte : setup ────────────────────────────────────────────────────────
+
+  Future<void> _loadMapStyle() async {
+    final isNight = ref.read(mapNightProvider);
+    final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
+    if (mounted) setState(() => _mapStyle = style);
+  }
+
+  Future<void> _buildDriverIcon() async {
+    _driverIcon = await BitmapDescriptor.asset(
+      const ImageConfiguration(size: Size(40, 40)),
+      'assets/images/moto_marker.png',
+    );
+    if (mounted) setState(() {});
+  }
+
+  // ── Arrêt en cours / cible de trajet ─────────────────────────────────────
+  // Premier arrêt (déjà trié par sequenceIndex côté backend) ni livré ni
+  // annulé — c'est vers lui que le livreur se dirige actuellement.
+  Map<String, dynamic>? get _currentStop {
+    final orders =
+        (_batch?['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    for (final o in orders) {
+      final s = o['status'] as String?;
+      if (s != 'DELIVERED' && s != 'CANCELLED') return o;
+    }
+    return null;
+  }
+
+  LatLng? get _routeDestination {
+    final batch = _batch;
+    if (batch == null) return null;
+    final status = batch['status'] as String? ?? 'PENDING';
+    // Avant le premier passage en IN_PROGRESS, le livreur n'a pas encore
+    // récupéré les colis — la cible est le point de départ, pas un arrêt.
+    if (status == 'ACCEPTED') {
+      final lat = (batch['pickupLatitude'] as num?)?.toDouble();
+      final lng = (batch['pickupLongitude'] as num?)?.toDouble();
+      if (lat != null && lng != null) return LatLng(lat, lng);
+    }
+    final stop = _currentStop;
+    final lat = (stop?['deliveryLatitude'] as num?)?.toDouble();
+    final lng = (stop?['deliveryLongitude'] as num?)?.toDouble();
+    if (lat != null && lng != null) return LatLng(lat, lng);
+    return null;
+  }
+
+  // ── Socket ────────────────────────────────────────────────────────────────
+
+  Future<void> _connectSocket() async {
+    final token = await AuthStorage.getToken();
+    if (token == null) return;
+    SocketService.instance.connect(token);
+
+    _locationSub = SocketService.instance.onDriverLocation.listen((data) {
+      if (!mounted) return;
+      // Le payload backend ne porte que `{lat, lng, orderId}` (pas de
+      // driverId) — on recale donc sur l'arrêt actuellement ciblé plutôt
+      // que sur l'identité du livreur.
+      final orderId = data['orderId'] as String?;
+      if (orderId == null || orderId != _currentStop?['id']) return;
+      final lat = (data['lat'] as num?)?.toDouble();
+      final lng = (data['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) return;
+      final loc = LatLng(lat, lng);
+      setState(() => _driverPos = loc);
+      _mapCtrl?.animateCamera(CameraUpdate.newLatLng(loc));
+      _matchAndTrimRoute(loc);
+    });
+
+    _statusSub = SocketService.instance.onOrderStatusUpdated.listen((data) {
+      if (!mounted || _batch == null) return;
+      final orders = (_batch!['orders'] as List?)?.cast<Map<String, dynamic>>();
+      final orderId = data['orderId'] as String?;
+      if (orders == null || orderId == null) return;
+      final idx = orders.indexWhere((o) => o['id'] == orderId);
+      if (idx == -1) return; // pas un arrêt de cette tournée
+      final newStatus = (data['status'] as String? ?? '').toUpperCase();
+      setState(() => orders[idx] = {...orders[idx], 'status': newStatus});
+      if (newStatus == 'DELIVERED') {
+        showDemToast(context, 'Arrêt ${idx + 1} livré');
+      }
+      _fetchRoute();
+    });
+
+    _completedSub = SocketService.instance.onBatchCompleted.listen((batchId) {
+      if (batchId != widget.batchId) return;
+      _load(silent: true);
+    });
+  }
+
+  // ── Trajet ────────────────────────────────────────────────────────────────
+
+  void _matchAndTrimRoute(LatLng driverLoc) {
+    if (_routePoints.isEmpty) return;
+    final match = RouteTracker.closestMatch(
+      _routePoints,
+      driverLoc,
+      _lastTrimIdx,
+    );
+    if (match == null) return;
+
+    if (match.segmentIndex >= _lastTrimIdx) {
+      _lastTrimIdx = match.segmentIndex;
+      if (mounted) {
+        setState(
+          () =>
+              _displayRoute = RouteTracker.remainingRoute(_routePoints, match),
+        );
+      }
+    }
+
+    final now = DateTime.now();
+    if (match.distanceMeters > 70 &&
+        (_lastReroute == null ||
+            now.difference(_lastReroute!).inSeconds >= 15)) {
+      _lastReroute = now;
+      _lastTrimIdx = 0;
+      _fetchRoute();
+    }
+  }
+
+  Future<void> _fetchRoute() async {
+    final destination = _routeDestination;
+    if (destination == null) {
+      if (mounted) {
+        setState(() {
+          _routePoints = [];
+          _displayRoute = [];
+        });
+      }
+      return;
+    }
+    final origin = _driverPos ?? destination;
+    final result = await DirectionsService.getRoute(
+      origin: origin,
+      destination: destination,
+      apiKey: AppConfig.mapsApiKey,
+    );
+    if (!mounted) return;
+    setState(() {
+      _routePoints = result.points;
+      _displayRoute = result.points;
+      _lastTrimIdx = 0;
+    });
+  }
+
+  // ── Marqueurs ────────────────────────────────────────────────────────────
+
+  double _stopMarkerHue(String? status) => switch (status) {
+    'DELIVERED' => BitmapDescriptor.hueGreen,
+    'CANCELLED' => BitmapDescriptor.hueRed,
+    _ => BitmapDescriptor.hueOrange,
+  };
+
+  Set<Marker> _buildMarkers(
+    Map<String, dynamic> batch,
+    List<Map<String, dynamic>> orders,
+  ) {
+    final pLat = (batch['pickupLatitude'] as num?)?.toDouble();
+    final pLng = (batch['pickupLongitude'] as num?)?.toDouble();
+    return {
+      if (pLat != null && pLng != null)
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: LatLng(pLat, pLng),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
+          infoWindow: const InfoWindow(title: 'Récupération'),
+        ),
+      for (int i = 0; i < orders.length; i++)
+        if ((orders[i]['deliveryLatitude'] as num?) != null &&
+            (orders[i]['deliveryLongitude'] as num?) != null)
+          Marker(
+            markerId: MarkerId('stop_$i'),
+            position: LatLng(
+              (orders[i]['deliveryLatitude'] as num).toDouble(),
+              (orders[i]['deliveryLongitude'] as num).toDouble(),
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              _stopMarkerHue(orders[i]['status'] as String?),
+            ),
+            infoWindow: InfoWindow(title: 'Arrêt ${i + 1}'),
+          ),
+      if (_driverPos != null)
+        Marker(
+          markerId: const MarkerId('driver'),
+          position: _driverPos!,
+          icon:
+              _driverIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan),
+        ),
+    };
+  }
+
+  LatLng _initialCameraTarget(Map<String, dynamic> batch) {
+    final pLat = (batch['pickupLatitude'] as num?)?.toDouble();
+    final pLng = (batch['pickupLongitude'] as num?)?.toDouble();
+    if (pLat != null && pLng != null) return LatLng(pLat, pLng);
+    return _driverPos ?? const LatLng(14.6937, -17.4441);
+  }
+
+  void _fitBounds(
+    GoogleMapController c,
+    Map<String, dynamic> batch,
+    List<Map<String, dynamic>> orders,
+  ) {
+    final points = <LatLng>[
+      ?_driverPos,
+      _initialCameraTarget(batch),
+      for (final o in orders)
+        if ((o['deliveryLatitude'] as num?) != null &&
+            (o['deliveryLongitude'] as num?) != null)
+          LatLng(
+            (o['deliveryLatitude'] as num).toDouble(),
+            (o['deliveryLongitude'] as num).toDouble(),
+          ),
+    ];
+    if (points.length < 2) return;
+    var south = points.first.latitude, north = points.first.latitude;
+    var west = points.first.longitude, east = points.first.longitude;
+    for (final p in points.skip(1)) {
+      if (p.latitude < south) south = p.latitude;
+      if (p.latitude > north) north = p.latitude;
+      if (p.longitude < west) west = p.longitude;
+      if (p.longitude > east) east = p.longitude;
+    }
+    c.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(south, west),
+          northeast: LatLng(north, east),
+        ),
+        48,
+      ),
+    );
   }
 
   // Annulation — l'endpoint backend existait déjà (DELETE /dem-pro/batch/:id)
@@ -489,6 +788,61 @@ class _DemProBatchTrackingScreenState extends State<DemProBatchTrackingScreen> {
               ),
             ),
             const SizedBox(height: 16),
+
+            // ── Carte en direct ────────────────────────────────────────────
+            if (driver != null) ...[
+              _SectionLabel(label: 'CARTE EN DIRECT'),
+              const SizedBox(height: 10),
+              StaggeredEntrance(
+                index: 1,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.lightBorder),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: SizedBox(
+                      height: 220,
+                      child: GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: _initialCameraTarget(batch),
+                          zoom: 13,
+                        ),
+                        myLocationEnabled: false,
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled: false,
+                        mapToolbarEnabled: false,
+                        style: _mapStyle,
+                        markers: _buildMarkers(batch, orders),
+                        polylines: _displayRoute.isNotEmpty
+                            ? {
+                                Polyline(
+                                  polylineId: const PolylineId('route'),
+                                  points: _displayRoute,
+                                  color: AppColors.primary,
+                                  width: 4,
+                                ),
+                              }
+                            : {},
+                        onMapCreated: (c) {
+                          _mapCtrl = c;
+                          _fitBounds(c, batch, orders);
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
 
             // ── Livreur ─────────────────────────────────────────────────────
             _SectionLabel(label: 'LIVREUR'),

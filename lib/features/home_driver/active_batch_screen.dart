@@ -322,6 +322,19 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
         now.difference(_lastLocationEmit!).inSeconds >= 10) {
       _lastLocationEmit = now;
       _locationQueue.emit(pos.latitude, pos.longitude);
+      // Publie aussi en direct sur la socket (comme active_order_screen.dart)
+      // — sans ça le DEM Pro n'a la position du livreur qu'au polling REST
+      // de son écran de suivi, jamais en temps réel.
+      if (_currentStopIndex < _stops.length) {
+        final orderId = _stops[_currentStopIndex]['id'] as String?;
+        if (orderId != null) {
+          SocketService.instance.emitDriverLocation(
+            pos.latitude,
+            pos.longitude,
+            orderId,
+          );
+        }
+      }
     }
   }
 
