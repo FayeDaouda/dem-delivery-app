@@ -1324,12 +1324,18 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
             ),
           ),
           // ── BOTTOM PANEL ───────────────────────────────────────────────────
+          // Le fond dégradé reste ancré au bas de l'écran en toutes
+          // circonstances (jamais décalé par un margin lié au clavier) —
+          // sinon un vide apparaît sous le panneau qui révèle la carte
+          // derrière le clavier au lieu de la continuité du dégradé. Seul le
+          // contenu (Column) reçoit un padding animé, ce qui fait aussi
+          // grandir le conteneur (ancré en bas, non explicitement hauteur
+          // fixe) vers le haut quand le clavier s'ouvre.
           Align(
             alignment: Alignment.bottomCenter,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 280),
               curve: Curves.easeInOut,
-              margin: EdgeInsets.only(bottom: keyboardH),
               decoration: BoxDecoration(
                 gradient: AppColors.gradientSplash,
                 borderRadius: const BorderRadius.vertical(
@@ -1343,242 +1349,251 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                   ),
                 ],
               ),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Drag handle
-                    GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onVerticalDragStart: (_) =>
-                          setState(() => _isDragging = true),
-                      onVerticalDragUpdate: (d) {
-                        final maxOffset = (panelH - 20) - _kMinPanelContent;
-                        setState(() {
-                          _panelDragOffset = (_panelDragOffset + d.delta.dy)
-                              .clamp(0.0, max(0.0, maxOffset));
-                        });
-                      },
-                      onVerticalDragEnd: (d) {
-                        final v = d.primaryVelocity ?? 0;
-                        final maxOffset = (panelH - 20) - _kMinPanelContent;
-                        setState(() {
-                          _isDragging = false;
-                          _panelDragOffset =
-                              (v > 200 || _panelDragOffset > maxOffset / 2)
-                              ? maxOffset
-                              : 0.0;
-                        });
-                      },
-                      onTap: () {
-                        final maxOffset = (panelH - 20) - _kMinPanelContent;
-                        setState(() {
-                          _isDragging = false;
-                          _panelDragOffset = _panelDragOffset == 0
-                              ? maxOffset
-                              : 0.0;
-                        });
-                      },
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 22,
-                        child: Center(
-                          child: Container(
-                            width: 36,
-                            height: 3,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.35),
-                              borderRadius: BorderRadius.circular(2),
+              child: AnimatedPadding(
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeInOut,
+                padding: EdgeInsets.only(bottom: keyboardH),
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Drag handle
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onVerticalDragStart: (_) =>
+                            setState(() => _isDragging = true),
+                        onVerticalDragUpdate: (d) {
+                          final maxOffset = (panelH - 20) - _kMinPanelContent;
+                          setState(() {
+                            _panelDragOffset = (_panelDragOffset + d.delta.dy)
+                                .clamp(0.0, max(0.0, maxOffset));
+                          });
+                        },
+                        onVerticalDragEnd: (d) {
+                          final v = d.primaryVelocity ?? 0;
+                          final maxOffset = (panelH - 20) - _kMinPanelContent;
+                          setState(() {
+                            _isDragging = false;
+                            _panelDragOffset =
+                                (v > 200 || _panelDragOffset > maxOffset / 2)
+                                ? maxOffset
+                                : 0.0;
+                          });
+                        },
+                        onTap: () {
+                          final maxOffset = (panelH - 20) - _kMinPanelContent;
+                          setState(() {
+                            _isDragging = false;
+                            _panelDragOffset = _panelDragOffset == 0
+                                ? maxOffset
+                                : 0.0;
+                          });
+                        },
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 22,
+                          child: Center(
+                            child: Container(
+                              width: 36,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
 
-                    // Content via PageView (non scrollable)
-                    AnimatedContainer(
-                      duration: _isDragging
-                          ? Duration.zero
-                          : const Duration(milliseconds: 280),
-                      curve: Curves.easeInOut,
-                      height: _isMapPlacementMode
-                          ? panelH - 20
-                          : max(
-                              _kMinPanelContent,
-                              (panelH - 20) - _panelDragOffset,
-                            ),
-                      child: ClipRect(
-                        child: OverflowBox(
-                          alignment: Alignment.bottomCenter,
-                          maxHeight: panelH - 20,
-                          child: SizedBox(
-                            height: panelH - 20,
-                            child: _isMapPlacementMode
-                                ? MapPlacementConfirmPanel(
-                                    color: _isSelectingPickup
-                                        ? AppColors.success
-                                        : AppColors.error,
-                                    label: _isSelectingPickup
-                                        ? 'Valider ce point de départ'
-                                        : 'Valider cette destination',
-                                    onConfirm: _confirmPlacement,
-                                  )
-                                : PageView(
-                                    controller: _pageCtrl,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    onPageChanged: (i) =>
-                                        setState(() => _step = i),
-                                    children: [
-                                      _Step0Panel(
-                                        priority: widget.priority,
-                                        routeComplete: _routeComplete,
-                                        estimatedPrice: _estimatedPrice,
-                                        demFee: _demFee,
-                                        surgeMultiplier: _surgeMultiplier,
-                                        loadingSurge: _loadingSurge,
-                                        timedOut: _priceTimedOut,
-                                        onRetry: _retryEstimate,
-                                        onNext: () => _goStep(1),
-                                        distanceKm: _routeDistanceKm,
-                                        durationMin: _routeDurationMin,
-                                      ),
-                                      _Step1Panel(
-                                        priority: widget.priority,
-                                        orderType: widget.orderType,
-                                        nameCtrl: _senderNameCtrl,
-                                        phoneCtrl: _senderPhoneCtrl,
-                                        onPickContact: () => pickContact(
-                                          context,
+                      // Content via PageView (non scrollable)
+                      AnimatedContainer(
+                        duration: _isDragging
+                            ? Duration.zero
+                            : const Duration(milliseconds: 280),
+                        curve: Curves.easeInOut,
+                        height: _isMapPlacementMode
+                            ? panelH - 20
+                            : max(
+                                _kMinPanelContent,
+                                (panelH - 20) - _panelDragOffset,
+                              ),
+                        child: ClipRect(
+                          child: OverflowBox(
+                            alignment: Alignment.bottomCenter,
+                            maxHeight: panelH - 20,
+                            child: SizedBox(
+                              height: panelH - 20,
+                              child: _isMapPlacementMode
+                                  ? MapPlacementConfirmPanel(
+                                      color: _isSelectingPickup
+                                          ? AppColors.success
+                                          : AppColors.error,
+                                      label: _isSelectingPickup
+                                          ? 'Valider ce point de départ'
+                                          : 'Valider cette destination',
+                                      onConfirm: _confirmPlacement,
+                                    )
+                                  : PageView(
+                                      controller: _pageCtrl,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      onPageChanged: (i) =>
+                                          setState(() => _step = i),
+                                      children: [
+                                        _Step0Panel(
+                                          priority: widget.priority,
+                                          routeComplete: _routeComplete,
+                                          estimatedPrice: _estimatedPrice,
+                                          demFee: _demFee,
+                                          surgeMultiplier: _surgeMultiplier,
+                                          loadingSurge: _loadingSurge,
+                                          timedOut: _priceTimedOut,
+                                          onRetry: _retryEstimate,
+                                          onNext: () => _goStep(1),
+                                          distanceKm: _routeDistanceKm,
+                                          durationMin: _routeDurationMin,
+                                        ),
+                                        _Step1Panel(
+                                          priority: widget.priority,
+                                          orderType: widget.orderType,
                                           nameCtrl: _senderNameCtrl,
                                           phoneCtrl: _senderPhoneCtrl,
-                                        ),
-                                        onPickMe: () {
-                                          _fillMe(
-                                            _senderNameCtrl,
-                                            _senderPhoneCtrl,
-                                          );
-                                          if (_senderPhoneCtrl.text.length >= 9)
+                                          onPickContact: () => pickContact(
+                                            context,
+                                            nameCtrl: _senderNameCtrl,
+                                            phoneCtrl: _senderPhoneCtrl,
+                                          ),
+                                          onPickMe: () {
+                                            _fillMe(
+                                              _senderNameCtrl,
+                                              _senderPhoneCtrl,
+                                            );
+                                            if (_senderPhoneCtrl.text.length >=
+                                                9)
+                                              _goStep(2);
+                                          },
+                                          onPhoneComplete: () => _goStep(2),
+                                          onNext: () {
+                                            if (!_validatePhone(
+                                              _senderPhoneCtrl,
+                                              'expéditeur',
+                                            ))
+                                              return;
                                             _goStep(2);
-                                        },
-                                        onPhoneComplete: () => _goStep(2),
-                                        onNext: () {
-                                          if (!_validatePhone(
-                                            _senderPhoneCtrl,
-                                            'expéditeur',
-                                          ))
-                                            return;
-                                          _goStep(2);
-                                        },
-                                      ),
-                                      _Step2Panel(
-                                        priority: widget.priority,
-                                        orderType: widget.orderType,
-                                        nameCtrl: _receiverNameCtrl,
-                                        phoneCtrl: _receiverPhoneCtrl,
-                                        descriptionCtrl: _descriptionCtrl,
-                                        onPickContact: () => pickContact(
-                                          context,
+                                          },
+                                        ),
+                                        _Step2Panel(
+                                          priority: widget.priority,
+                                          orderType: widget.orderType,
                                           nameCtrl: _receiverNameCtrl,
                                           phoneCtrl: _receiverPhoneCtrl,
-                                        ),
-                                        onPickMe: () {
-                                          _fillMe(
-                                            _receiverNameCtrl,
-                                            _receiverPhoneCtrl,
-                                          );
-                                          if (_receiverPhoneCtrl.text.length >=
-                                              9) {
+                                          descriptionCtrl: _descriptionCtrl,
+                                          onPickContact: () => pickContact(
+                                            context,
+                                            nameCtrl: _receiverNameCtrl,
+                                            phoneCtrl: _receiverPhoneCtrl,
+                                          ),
+                                          onPickMe: () {
+                                            _fillMe(
+                                              _receiverNameCtrl,
+                                              _receiverPhoneCtrl,
+                                            );
+                                            if (_receiverPhoneCtrl
+                                                    .text
+                                                    .length >=
+                                                9) {
+                                              _updateEstimate();
+                                              _goStep(3);
+                                            }
+                                          },
+                                          onPhoneComplete: () {
                                             _updateEstimate();
                                             _goStep(3);
-                                          }
-                                        },
-                                        onPhoneComplete: () {
-                                          _updateEstimate();
-                                          _goStep(3);
-                                        },
-                                        onNext: () {
-                                          if (!_validatePhone(
-                                            _receiverPhoneCtrl,
-                                            'destinataire',
-                                          ))
-                                            return;
-                                          _updateEstimate();
-                                          _goStep(3);
-                                        },
-                                      ),
-                                      _Step3Panel(
-                                        priority: widget.priority,
-                                        pickupLabel: _pickupCtrl.text.isNotEmpty
-                                            ? _pickupCtrl.text
-                                            : 'Départ',
-                                        deliveryLabel:
-                                            _deliveryCtrl.text.isNotEmpty
-                                            ? _deliveryCtrl.text
-                                            : 'Destination',
-                                        estimatedPrice: _estimatedPrice,
-                                        demFee: _demFee,
-                                        discountAmount: _discountAmount,
-                                        promoLabel: _promoLabel,
-                                        promoCodeCtrl: _promoCodeCtrl,
-                                        promoError: _promoError,
-                                        checkingPromo: _checkingPromo,
-                                        onApplyPromo: _applyPromoCode,
-                                        surgeMultiplier: _surgeMultiplier,
-                                        loadingSurge: _loadingSurge,
-                                        timedOut: _priceTimedOut,
-                                        submitting: _submitting,
-                                        canSubmit:
-                                            _routeComplete &&
-                                            _estimatedPrice != null,
-                                        onRetry: _retryEstimate,
-                                        onSubmit: _submit,
-                                        distanceKm: _routeDistanceKm,
-                                        durationMin: _routeDurationMin,
-                                        isScheduled: _isScheduled,
-                                        scheduledAt: _scheduledAt,
-                                        onToggleScheduled: (v) {
-                                          setState(() {
-                                            _isScheduled = v;
-                                            if (!v) _scheduledAt = null;
-                                          });
-                                          if (v) _pickScheduleDate();
-                                        },
-                                        onPickScheduleDate: _pickScheduleDate,
-                                        onEditPickup: () {
-                                          setState(
-                                            () => _isSelectingPickup = true,
-                                          );
-                                          _goStep(0);
-                                          Future.delayed(
-                                            const Duration(milliseconds: 300),
-                                            () => _pickupFocus.requestFocus(),
-                                          );
-                                        },
-                                        onEditDelivery: () {
-                                          setState(
-                                            () => _isSelectingPickup = false,
-                                          );
-                                          _goStep(0);
-                                          Future.delayed(
-                                            const Duration(milliseconds: 300),
-                                            () => _deliveryFocus.requestFocus(),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                          ), // SizedBox
-                        ), // OverflowBox
-                      ), // ClipRect
-                    ), // AnimatedContainer
-                  ],
-                ),
-              ),
-            ),
-          ),
-
+                                          },
+                                          onNext: () {
+                                            if (!_validatePhone(
+                                              _receiverPhoneCtrl,
+                                              'destinataire',
+                                            ))
+                                              return;
+                                            _updateEstimate();
+                                            _goStep(3);
+                                          },
+                                        ),
+                                        _Step3Panel(
+                                          priority: widget.priority,
+                                          pickupLabel:
+                                              _pickupCtrl.text.isNotEmpty
+                                              ? _pickupCtrl.text
+                                              : 'Départ',
+                                          deliveryLabel:
+                                              _deliveryCtrl.text.isNotEmpty
+                                              ? _deliveryCtrl.text
+                                              : 'Destination',
+                                          estimatedPrice: _estimatedPrice,
+                                          demFee: _demFee,
+                                          discountAmount: _discountAmount,
+                                          promoLabel: _promoLabel,
+                                          promoCodeCtrl: _promoCodeCtrl,
+                                          promoError: _promoError,
+                                          checkingPromo: _checkingPromo,
+                                          onApplyPromo: _applyPromoCode,
+                                          surgeMultiplier: _surgeMultiplier,
+                                          loadingSurge: _loadingSurge,
+                                          timedOut: _priceTimedOut,
+                                          submitting: _submitting,
+                                          canSubmit:
+                                              _routeComplete &&
+                                              _estimatedPrice != null,
+                                          onRetry: _retryEstimate,
+                                          onSubmit: _submit,
+                                          distanceKm: _routeDistanceKm,
+                                          durationMin: _routeDurationMin,
+                                          isScheduled: _isScheduled,
+                                          scheduledAt: _scheduledAt,
+                                          onToggleScheduled: (v) {
+                                            setState(() {
+                                              _isScheduled = v;
+                                              if (!v) _scheduledAt = null;
+                                            });
+                                            if (v) _pickScheduleDate();
+                                          },
+                                          onPickScheduleDate: _pickScheduleDate,
+                                          onEditPickup: () {
+                                            setState(
+                                              () => _isSelectingPickup = true,
+                                            );
+                                            _goStep(0);
+                                            Future.delayed(
+                                              const Duration(milliseconds: 300),
+                                              () => _pickupFocus.requestFocus(),
+                                            );
+                                          },
+                                          onEditDelivery: () {
+                                            setState(
+                                              () => _isSelectingPickup = false,
+                                            );
+                                            _goStep(0);
+                                            Future.delayed(
+                                              const Duration(milliseconds: 300),
+                                              () =>
+                                                  _deliveryFocus.requestFocus(),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                            ), // SizedBox
+                          ), // OverflowBox
+                        ), // ClipRect
+                      ), // AnimatedContainer
+                    ],
+                  ), // Column
+                ), // SafeArea
+              ), // AnimatedPadding
+            ), // AnimatedContainer (gradient)
+          ), // Align
           // ── TOP BAR ────────────────────────────────────────────────────────
           SafeArea(
             child: Padding(

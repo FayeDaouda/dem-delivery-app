@@ -80,6 +80,12 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
   bool _placingMap = false;
   int _placingIndex = -1;
   bool _geocoding = false;
+  final _sheetCtrl = DraggableScrollableController();
+  // Hauteur de la feuille agrandie pendant que le clavier est ouvert — sinon
+  // un champ en bas de liste (notes, arrêt supplémentaire) reste couvert par
+  // le clavier, la feuille elle-même ne grandissant pas par défaut.
+  static const _sheetMaxKeyboard = 0.94;
+  double _lastKeyboardInset = 0;
 
   // ── Départ ───────────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _proAddresses = [];
@@ -127,7 +133,28 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     _mapCtrl?.dispose();
     _notesCtrl.dispose();
     _draftSaveDebounce?.cancel();
+    _sheetCtrl.dispose();
     super.dispose();
+  }
+
+  // `MediaQuery.of(context)` étant lu ici, ce callback se redéclenche à
+  // chaque changement de `viewInsets` (ouverture/fermeture du clavier) —
+  // on agrandit alors la feuille pour que le champ actif ne reste jamais
+  // caché derrière le clavier.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final inset = MediaQuery.of(context).viewInsets.bottom;
+    if (inset != _lastKeyboardInset) {
+      _lastKeyboardInset = inset;
+      if (_sheetCtrl.isAttached) {
+        _sheetCtrl.animateTo(
+          inset > 0 ? _sheetMaxKeyboard : _sheetMax,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
   }
 
   // ── Destinations récentes ────────────────────────────────────────────────
@@ -776,7 +803,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                 child: Container(
                   height: 130 + MediaQuery.of(context).viewPadding.bottom,
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    gradient: AppColors.gradientSplash,
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(24),
                     ),
@@ -792,52 +819,49 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                 ),
               ),
 
-            // Panel bas (infos + CTA) — remontent ensemble de façon fluide
-            // au-dessus du clavier (même logique que le sheet "Changer le
-            // départ") et reviennent à leur position normale à la fermeture
-            // du clavier. Le CTA reste hors du panneau rétractable lui-même
-            // pour ne jamais pousser la poignée hors de l'écran quand celui-ci
-            // est réduit au minimum.
+            // Panel bas (infos + CTA) — le fond du panneau reste ancré au bas
+            // de l'écran en toutes circonstances (jamais décalé par le
+            // clavier), pour que l'arrière-plan visible derrière le clavier
+            // reste la continuité du panneau et non la carte. Seul le
+            // CONTENU interne (liste + bouton CTA) remonte au-dessus du
+            // clavier via un padding animé local — le CTA fait partie du
+            // panneau lui-même (plus de positionnement flottant
+            // indépendant), il ne peut donc plus chevaucher le contenu
+            // quand le panneau est réduit au drag.
             if (!_placingMap)
-              Positioned.fill(
-                child: AnimatedPadding(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).viewInsets.bottom,
-                  ),
-                  child: Stack(
-                    children: [
-                      DraggableScrollableSheet(
-                        initialChildSize: _sheetMax,
-                        minChildSize: _sheetMin,
-                        maxChildSize: _sheetMax,
-                        snap: true,
-                        snapSizes: [_sheetMin, _sheetMax],
-                        builder: (context, scrollCtrl) => Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(24),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 20,
-                                offset: const Offset(0, -4),
-                              ),
-                            ],
-                          ),
-                          child: _buildPanel(scrollCtrl),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: _buildLaunchButton(),
+              DraggableScrollableSheet(
+                controller: _sheetCtrl,
+                initialChildSize: _sheetMax,
+                minChildSize: _sheetMin,
+                maxChildSize: _sheetMaxKeyboard,
+                snap: true,
+                snapSizes: [_sheetMin, _sheetMax],
+                builder: (context, scrollCtrl) => Container(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.gradientSplash,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, -4),
                       ),
                     ],
+                  ),
+                  child: AnimatedPadding(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom,
+                    ),
+                    child: Column(
+                      children: [
+                        Expanded(child: _buildPanel(scrollCtrl)),
+                        _buildLaunchButton(),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -847,7 +871,9 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     );
   }
 
-  double get _sheetMin => 0.12;
+  // Le CTA fait maintenant partie du panneau (voir build()) — le minimum
+  // doit rester assez grand pour toujours l'accueillir proprement.
+  double get _sheetMin => 0.22;
   double get _sheetMax => 0.62;
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -929,7 +955,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.primaryDark,
+              color: Colors.white.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -938,7 +964,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
             _placingIndex == -1
                 ? 'Positionnez le point de départ'
                 : 'Arrêt ${_placingIndex + 1} — Positionnez la destination',
-            style: ClientText.bodyStrong.copyWith(color: AppColors.textPrimary),
+            style: ClientText.bodyStrong.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -946,7 +972,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
             height: 48,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: AppColors.primary,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Material(
@@ -960,14 +986,14 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                              color: Colors.white,
+                              color: AppColors.primary,
                               strokeWidth: 2,
                             ),
                           )
                         : Text(
                             'Confirmer la position',
                             style: ClientText.button.copyWith(
-                              color: AppColors.textPrimary,
+                              color: AppColors.primary,
                             ),
                           ),
                   ),
@@ -994,7 +1020,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     onTap: () => FocusScope.of(context).unfocus(),
     child: ListView(
       controller: scrollCtrl,
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       children: [
         Center(
           child: Padding(
