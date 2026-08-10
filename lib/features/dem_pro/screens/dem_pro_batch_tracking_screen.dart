@@ -610,52 +610,84 @@ class _DemProBatchTrackingScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.lightBg,
-      appBar: AppBar(
-        backgroundColor: AppColors.lightBg,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new,
-            color: AppColors.textDark,
-            size: 18,
+      backgroundColor: AppColors.background,
+      body: Container(
+        decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: _loading && _batch == null
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      )
+                    : _batch == null
+                    ? _buildError()
+                    : _buildContent(),
+              ),
+            ],
           ),
-          onPressed: () => context.pop(),
         ),
-        title: Text(
-          'Suivi de tournée',
-          style: ClientText.title.copyWith(
-            color: AppColors.textDark,
-            fontSize: 17,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh, color: AppColors.primary, size: 22),
-            tooltip: 'Rafraîchir',
-            onPressed: () => _load(),
-          ),
-          const SizedBox(width: 4),
-        ],
       ),
-      body: _loading && _batch == null
-          ? Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _batch == null
-          ? _buildError()
-          : _buildContent(),
     );
   }
+
+  Widget _buildHeader() => Padding(
+    padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+    child: Row(
+      children: [
+        GestureDetector(
+          onTap: () => context.pop(),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.arrow_back_ios_new,
+              color: Colors.white,
+              size: 16,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            'Suivi de tournée',
+            textAlign: TextAlign.center,
+            style: ClientText.title.copyWith(color: Colors.white, fontSize: 17),
+          ),
+        ),
+        GestureDetector(
+          onTap: () => _load(),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.refresh, color: Colors.white, size: 18),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildError() => Center(
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.error_outline, color: AppColors.textMuted, size: 44),
+        Icon(
+          Icons.error_outline,
+          color: Colors.white.withValues(alpha: 0.7),
+          size: 44,
+        ),
         const SizedBox(height: 14),
         Text(
           'Impossible de charger la tournée.',
           style: ClientText.subtitle.copyWith(
-            color: AppColors.textDark,
+            color: Colors.white,
             fontSize: 15,
           ),
         ),
@@ -665,12 +697,12 @@ class _DemProBatchTrackingScreenState
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.primary,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
               'Réessayer',
-              style: ClientText.bodyStrong.copyWith(color: Colors.white),
+              style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
             ),
           ),
         ),
@@ -687,7 +719,15 @@ class _DemProBatchTrackingScreenState
     final total = (batch['totalPrice'] as num?) ?? 0;
     final pickup = batch['pickupAddress'] as String? ?? '';
     final createdAt = batch['createdAt'] as String?;
-    final statusColor = _batchStatusColor(status);
+    // `_batchStatusColor` est pensé pour un fond clair — sur le dégradé,
+    // `primary`/`textMuted` perdent tout contraste (primary est la couleur
+    // du dégradé lui-même).
+    final statusColor = switch (_batchStatusColor(status)) {
+      AppColors.primary => Colors.white,
+      AppColors.textMuted => Colors.white,
+      AppColors.successLight => AppColors.successBright,
+      final c => c,
+    };
     final deliveredCount = orders
         .where((o) => o['status'] == 'DELIVERED')
         .length;
@@ -716,14 +756,14 @@ class _DemProBatchTrackingScreenState
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.08),
+                  color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: statusColor.withValues(alpha: 0.25),
+                    color: Colors.white.withValues(alpha: 0.25),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: statusColor.withValues(alpha: 0.14),
+                      color: Colors.black.withValues(alpha: 0.16),
                       blurRadius: 16,
                       offset: const Offset(0, 6),
                     ),
@@ -746,7 +786,7 @@ class _DemProBatchTrackingScreenState
                         Text(
                           _batchStatusLabel(status),
                           style: ClientText.subtitle.copyWith(
-                            color: statusColor,
+                            color: Colors.white,
                           ),
                         ),
                         const Spacer(),
@@ -756,7 +796,7 @@ class _DemProBatchTrackingScreenState
                             height: 14,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: statusColor.withValues(alpha: 0.6),
+                              color: Colors.white.withValues(alpha: 0.7),
                             ),
                           ),
                       ],
@@ -770,8 +810,8 @@ class _DemProBatchTrackingScreenState
                           value: orders.isEmpty
                               ? 0
                               : deliveredCount / orders.length,
-                          backgroundColor: AppColors.lightFill,
-                          color: AppColors.successLight,
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
+                          color: AppColors.successBright,
                           minHeight: 6,
                         ),
                       ),
@@ -779,7 +819,7 @@ class _DemProBatchTrackingScreenState
                       Text(
                         '$deliveredCount / ${orders.length} arrêts livrés',
                         style: ClientText.label.copyWith(
-                          color: AppColors.textMuted,
+                          color: Colors.white.withValues(alpha: 0.75),
                         ),
                       ),
                     ],
@@ -798,10 +838,12 @@ class _DemProBatchTrackingScreenState
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.lightBorder),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.08),
+                        color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 14,
                         offset: const Offset(0, 6),
                       ),
@@ -853,12 +895,14 @@ class _DemProBatchTrackingScreenState
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Colors.white.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.lightBorder),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.25),
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.08),
+                        color: Colors.black.withValues(alpha: 0.16),
                         blurRadius: 14,
                         offset: const Offset(0, 6),
                       ),
@@ -872,14 +916,14 @@ class _DemProBatchTrackingScreenState
                             width: 42,
                             height: 42,
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: Center(
                               child: Text(
                                 _initials(driver['name'] as String?),
                                 style: ClientText.subtitle.copyWith(
-                                  color: AppColors.primary,
+                                  color: Colors.white,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -893,13 +937,13 @@ class _DemProBatchTrackingScreenState
                                 Text(
                                   driver['name'] as String? ?? 'Livreur DEM',
                                   style: ClientText.subtitle.copyWith(
-                                    color: AppColors.textDark,
+                                    color: Colors.white,
                                   ),
                                 ),
                                 Text(
                                   'Moto · DEM',
                                   style: ClientText.label.copyWith(
-                                    color: AppColors.textMuted,
+                                    color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                 ),
                               ],
@@ -911,9 +955,7 @@ class _DemProBatchTrackingScreenState
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.successLight.withValues(
-                                alpha: 0.12,
-                              ),
+                              color: Colors.white.withValues(alpha: 0.18),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
@@ -921,14 +963,14 @@ class _DemProBatchTrackingScreenState
                               children: [
                                 const Icon(
                                   Icons.check_circle,
-                                  color: AppColors.successLight,
+                                  color: AppColors.successBright,
                                   size: 13,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Assigné',
                                   style: ClientText.label.copyWith(
-                                    color: AppColors.successLight,
+                                    color: AppColors.successBright,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -981,10 +1023,10 @@ class _DemProBatchTrackingScreenState
                 child: Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.06),
+                    color: Colors.white.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: AppColors.warning.withValues(alpha: 0.2),
+                      color: Colors.white.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Row(
@@ -1000,7 +1042,7 @@ class _DemProBatchTrackingScreenState
                               height: 42,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: AppColors.warning.withValues(alpha: 0.5),
+                                color: AppColors.warning.withValues(alpha: 0.7),
                               ),
                             ),
                             const Icon(
@@ -1019,14 +1061,14 @@ class _DemProBatchTrackingScreenState
                             Text(
                               'Recherche en cours…',
                               style: ClientText.subtitle.copyWith(
-                                color: AppColors.textDark,
+                                color: Colors.white,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               'Nous cherchons le livreur le plus proche pour votre tournée.',
                               style: ClientText.label.copyWith(
-                                color: AppColors.textMuted,
+                                color: Colors.white.withValues(alpha: 0.75),
                               ),
                             ),
                           ],
@@ -1046,12 +1088,14 @@ class _DemProBatchTrackingScreenState
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.lightBorder),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.08),
+                      color: Colors.black.withValues(alpha: 0.16),
                       blurRadius: 14,
                       offset: const Offset(0, 6),
                     ),
@@ -1061,16 +1105,14 @@ class _DemProBatchTrackingScreenState
                   children: [
                     const Icon(
                       Icons.radio_button_on,
-                      color: AppColors.primary,
+                      color: Colors.white,
                       size: 16,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         pickup,
-                        style: ClientText.body.copyWith(
-                          color: AppColors.textDark,
-                        ),
+                        style: ClientText.body.copyWith(color: Colors.white),
                       ),
                     ),
                   ],
@@ -1090,13 +1132,13 @@ class _DemProBatchTrackingScreenState
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
+                    color: Colors.white.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     '${orders.length}',
                     style: ClientText.label.copyWith(
-                      color: AppColors.primary,
+                      color: Colors.white,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1109,12 +1151,14 @@ class _DemProBatchTrackingScreenState
               index: 3,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.lightBorder),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.08),
+                      color: Colors.black.withValues(alpha: 0.16),
                       blurRadius: 14,
                       offset: const Offset(0, 6),
                     ),
@@ -1140,8 +1184,11 @@ class _DemProBatchTrackingScreenState
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.lightFill,
+                  color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -1151,14 +1198,14 @@ class _DemProBatchTrackingScreenState
                         Text(
                           'Coût total',
                           style: ClientText.label.copyWith(
-                            color: AppColors.textMuted,
+                            color: Colors.white.withValues(alpha: 0.75),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           formatFcfa(total),
                           style: ClientText.headline.copyWith(
-                            color: AppColors.textDark,
+                            color: Colors.white,
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
                           ),
@@ -1173,14 +1220,14 @@ class _DemProBatchTrackingScreenState
                           Text(
                             'Créée le',
                             style: ClientText.label.copyWith(
-                              color: AppColors.textMuted,
+                              color: Colors.white.withValues(alpha: 0.75),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             _fmtDate(createdAt),
                             style: ClientText.label.copyWith(
-                              color: AppColors.textMuted,
+                              color: Colors.white.withValues(alpha: 0.75),
                             ),
                           ),
                         ],
@@ -1204,12 +1251,12 @@ class _DemProBatchTrackingScreenState
                   label: Text(
                     'Noter le livreur',
                     style: ClientText.subtitle.copyWith(
-                      color: AppColors.textDark,
+                      color: AppColors.primary,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -1228,16 +1275,16 @@ class _DemProBatchTrackingScreenState
                 child: OutlinedButton.icon(
                   onPressed: () =>
                       context.push('/dem-pro/batch/create', extra: batch),
-                  icon: const Icon(Icons.replay, size: 18),
+                  icon: const Icon(Icons.replay, size: 18, color: Colors.white),
                   label: Text(
                     'Recommander cette tournée',
-                    style: ClientText.subtitle.copyWith(
-                      color: AppColors.textDark,
-                    ),
+                    style: ClientText.subtitle.copyWith(color: Colors.white),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
+                    foregroundColor: Colors.white,
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -1254,12 +1301,12 @@ class _DemProBatchTrackingScreenState
                   label: Text(
                     'Retour au tableau de bord',
                     style: ClientText.subtitle.copyWith(
-                      color: AppColors.textDark,
+                      color: AppColors.primary,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -1335,13 +1382,26 @@ class _StopRow extends StatelessWidget {
     final stopColor = _stopStatusColor(status);
     final stopLabel = _stopStatusLabel(status);
 
+    // `_stopStatusColor` donne des teintes pensées pour un fond clair —
+    // sur le dégradé, `successLight`/`primary`/`textMuted` perdent tout
+    // contraste (primary est justement la couleur du dégradé lui-même).
+    final chipColor = switch (stopColor) {
+      AppColors.successLight => AppColors.successBright,
+      AppColors.primary => Colors.white,
+      AppColors.textMuted => Colors.white,
+      _ => stopColor,
+    };
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         border: isLast
             ? null
             : Border(
-                bottom: BorderSide(color: AppColors.lightBorder, width: 0.8),
+                bottom: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  width: 0.8,
+                ),
               ),
       ),
       child: Row(
@@ -1353,21 +1413,21 @@ class _StopRow extends StatelessWidget {
             height: 28,
             decoration: BoxDecoration(
               color: done
-                  ? AppColors.successLight.withValues(alpha: 0.15)
-                  : AppColors.primary.withValues(alpha: 0.10),
+                  ? AppColors.successBright.withValues(alpha: 0.2)
+                  : Colors.white.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
               child: done
                   ? const Icon(
                       Icons.check,
-                      color: AppColors.successLight,
+                      color: AppColors.successBright,
                       size: 14,
                     )
                   : Text(
                       '${index + 1}',
                       style: ClientText.label.copyWith(
-                        color: AppColors.textMuted,
+                        color: Colors.white.withValues(alpha: 0.85),
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1381,9 +1441,9 @@ class _StopRow extends StatelessWidget {
                 Text(
                   address,
                   style: ClientText.bodyStrong.copyWith(
-                    color: AppColors.textDark,
+                    color: Colors.white,
                     decoration: done ? TextDecoration.lineThrough : null,
-                    decorationColor: AppColors.textMuted,
+                    decorationColor: Colors.white.withValues(alpha: 0.7),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1393,7 +1453,7 @@ class _StopRow extends StatelessWidget {
                   Text(
                     receiver,
                     style: ClientText.label.copyWith(
-                      color: AppColors.textMuted,
+                      color: Colors.white.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -1407,19 +1467,21 @@ class _StopRow extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
-                  color: stopColor.withValues(alpha: 0.12),
+                  color: chipColor.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   stopLabel,
-                  style: ClientText.micro.copyWith(color: stopColor),
+                  style: ClientText.micro.copyWith(color: chipColor),
                 ),
               ),
               if (price > 0) ...[
                 const SizedBox(height: 4),
                 Text(
                   formatFcfa(price),
-                  style: ClientText.label.copyWith(color: AppColors.textMuted),
+                  style: ClientText.label.copyWith(
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
                 ),
               ],
             ],
@@ -1440,7 +1502,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     label,
     style: ClientText.label.copyWith(
-      color: AppColors.textMuted,
+      color: Colors.white.withValues(alpha: 0.75),
       fontWeight: FontWeight.w700,
       letterSpacing: 1,
     ),
@@ -1463,18 +1525,18 @@ class _ContactChip extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.10),
+        color: Colors.white.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: AppColors.primary, size: 16),
+          Icon(icon, color: Colors.white, size: 16),
           const SizedBox(width: 6),
           Text(
             label,
-            style: ClientText.bodyStrong.copyWith(color: AppColors.primary),
+            style: ClientText.bodyStrong.copyWith(color: Colors.white),
           ),
         ],
       ),
