@@ -88,13 +88,6 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
   bool _placingMap = false;
   int _placingIndex = -1;
   bool _geocoding = false;
-  final _sheetCtrl = DraggableScrollableController();
-  // Hauteur de la feuille agrandie pendant que le clavier est ouvert — sinon
-  // un champ en bas d'étape reste couvert par le clavier, la feuille
-  // elle-même ne grandissant pas par défaut. Modéré (pas un grand saut fixe
-  // façon plein écran) pour ne pas laisser un vide sous les champs.
-  double get _sheetMaxKeyboard => _onRecap ? 0.85 : 0.75;
-  double _lastKeyboardInset = 0;
 
   // ── Départ ───────────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _proAddresses = [];
@@ -142,28 +135,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     _mapCtrl?.dispose();
     _notesCtrl.dispose();
     _draftSaveDebounce?.cancel();
-    _sheetCtrl.dispose();
     super.dispose();
-  }
-
-  // `MediaQuery.of(context)` étant lu ici, ce callback se redéclenche à
-  // chaque changement de `viewInsets` (ouverture/fermeture du clavier) —
-  // on agrandit alors la feuille pour que le champ actif ne reste jamais
-  // caché derrière le clavier.
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final inset = MediaQuery.of(context).viewInsets.bottom;
-    if (inset != _lastKeyboardInset) {
-      _lastKeyboardInset = inset;
-      if (_sheetCtrl.isAttached) {
-        _sheetCtrl.animateTo(
-          inset > 0 ? _sheetMaxKeyboard : _sheetMax,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    }
   }
 
   // ── Destinations récentes ────────────────────────────────────────────────
@@ -300,10 +272,13 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     ),
   );
 
-  /// Hauteur actuelle du panneau du bas (voir l'`AnimatedContainer` du `build`).
+  /// Hauteur approximative du panneau du bas — le panneau épouse désormais
+  /// son contenu (plus de fraction d'écran fixe), donc ceci n'est qu'une
+  /// estimation suffisante pour cadrer la caméra, pas une valeur exacte.
   double get _panelHeight {
     final h = MediaQuery.of(context).size.height;
-    return _placingMap ? 130 : h * _sheetMax;
+    if (_placingMap) return 130;
+    return h * (_onRecap ? 0.5 : 0.4);
   }
 
   /// Centre la carte sur [pos] de sorte que le point soit visible dans la
@@ -850,48 +825,58 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                 ),
               ),
 
-            // Panel bas (infos + CTA) — le fond du panneau reste ancré au bas
-            // de l'écran en toutes circonstances (jamais décalé par le
-            // clavier), pour que l'arrière-plan visible derrière le clavier
-            // reste la continuité du panneau et non la carte. Seul le
-            // CONTENU interne (liste + bouton CTA) remonte au-dessus du
-            // clavier via un padding animé local — le CTA fait partie du
-            // panneau lui-même (plus de positionnement flottant
-            // indépendant), il ne peut donc plus chevaucher le contenu
-            // quand le panneau est réduit au drag.
+            // Panel bas (infos + CTA) — hauteur qui épouse son contenu au
+            // lieu d'une fraction d'écran fixe (l'ancienne
+            // DraggableScrollableSheet laissait un grand vide entre le
+            // contenu court d'un arrêt et le bouton CTA). Le fond reste
+            // ancré au bas de l'écran en toutes circonstances (jamais
+            // décalé par le clavier) : seul le CONTENU interne remonte
+            // au-dessus du clavier via un padding animé local, ce qui fait
+            // grandir le panneau vers le haut de façon naturelle. Une
+            // hauteur max sert de garde-fou : au-delà, le contenu défile en
+            // interne (récap avec beaucoup d'arrêts) plutôt que de déborder.
             if (!_placingMap)
-              DraggableScrollableSheet(
-                controller: _sheetCtrl,
-                initialChildSize: _sheetMax,
-                minChildSize: _sheetMin,
-                maxChildSize: _sheetMaxKeyboard,
-                snap: true,
-                snapSizes: [_sheetMin, _sheetMax],
-                builder: (context, scrollCtrl) => Container(
-                  decoration: BoxDecoration(
-                    gradient: AppColors.gradientSplash,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(24),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, -4),
-                      ),
-                    ],
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.86,
                   ),
-                  child: AnimatedPadding(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.of(context).viewInsets.bottom,
-                    ),
-                    child: Column(
-                      children: [
-                        Expanded(child: _buildPanel(scrollCtrl)),
-                        _buildLaunchButton(),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: AppColors.gradientSplash,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, -4),
+                        ),
                       ],
+                    ),
+                    child: AnimatedPadding(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.of(context).viewInsets.bottom,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildSheetTopBar(),
+                          Flexible(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                              child: _buildPanel(),
+                            ),
+                          ),
+                          _buildLaunchButton(),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -902,10 +887,40 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     );
   }
 
-  // Le CTA fait maintenant partie du panneau (voir build()) — le minimum
-  // doit rester assez grand pour toujours l'accueillir proprement.
-  double get _sheetMin => 0.22;
-  double get _sheetMax => _onRecap ? 0.66 : 0.55;
+  // Petite barre au sommet du panneau : bouton retour (alternative plus
+  // proche du contenu que la flèche de l'en-tête, en plus de celle-ci) +
+  // poignée décorative centrée.
+  Widget _buildSheetTopBar() => Padding(
+    padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
+    child: Row(
+      children: [
+        GestureDetector(
+          onTap: _backStep,
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.arrow_back, color: Colors.white, size: 18),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 30),
+      ],
+    ),
+  );
 
   // ── Navigation entre arrêts ──────────────────────────────────────────────
 
@@ -927,7 +942,6 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
         return;
       }
       setState(() => _step++);
-      _syncSheetToStep();
     }
   }
 
@@ -937,7 +951,15 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       return;
     }
     setState(() => _step--);
-    _syncSheetToStep();
+  }
+
+  // Retourne directement au premier arrêt — conserve les données déjà
+  // saisies (contrairement à un vrai reset du formulaire), simple
+  // raccourci de navigation.
+  void _resetToStart() {
+    if (_step == 0) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _step = 0);
   }
 
   void _addStop() {
@@ -945,7 +967,6 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       _stops.add(_Stop());
       _step = _stops.length - 1;
     });
-    _syncSheetToStep();
     _scheduleDraftSave();
   }
 
@@ -958,20 +979,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       _stops.removeAt(index);
       _step = math.min(_step, _stops.length);
     });
-    _syncSheetToStep();
     _scheduleDraftSave();
-  }
-
-  // `_sheetMax` varie selon l'étape (arrêt vs récap) — mais `initialChildSize`
-  // ne s'applique qu'à la création du sheet, il faut donc l'animer
-  // explicitement à chaque changement d'étape.
-  void _syncSheetToStep() {
-    if (!_sheetCtrl.isAttached) return;
-    _sheetCtrl.animateTo(
-      _sheetMax,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
   }
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -1033,6 +1041,17 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                       style: ClientText.label.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: _resetToStart,
+                      child: Icon(
+                        Icons.refresh_rounded,
+                        color: Colors.white.withValues(
+                          alpha: _step == 0 ? 0.4 : 1,
+                        ),
+                        size: 18,
                       ),
                     ),
                   ],
@@ -1134,34 +1153,16 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
 
   // ── Panel principal ───────────────────────────────────────────────────────
 
-  // Le CTA (bouton Lancer) n'appartient pas à ce panneau — il flotte en
-  // dehors (voir `build` / `_buildLaunchButton`) pour rester visible même
-  // quand le panneau est réduit à sa taille minimale. La poignée et le
-  // bandeau de départ font partie de la même liste scrollable que le reste
-  // (nécessaire pour que le glissé de redimensionnement fonctionne partout,
-  // pas seulement sur la liste des arrêts). Un tap dans une zone vide
-  // referme le clavier.
-  Widget _buildPanel(ScrollController scrollCtrl) => GestureDetector(
+  // Le CTA (bouton Lancer) n'appartient pas à ce panneau — il est pinné en
+  // dehors, sous le `SingleChildScrollView` qui héberge ce contenu (voir
+  // `build`), pour rester toujours visible même quand le contenu défile en
+  // interne. Un tap dans une zone vide referme le clavier.
+  Widget _buildPanel() => GestureDetector(
     behavior: HitTestBehavior.opaque,
     onTap: () => FocusScope.of(context).unfocus(),
-    child: ListView(
-      controller: scrollCtrl,
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 8),
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        ),
-
         // Bandeau départ — persistant sur toutes les étapes (contrairement
         // au bandeau expédition d'une commande simple, le départ d'une
         // tournée reste un contexte utile en remplissant chaque arrêt).
