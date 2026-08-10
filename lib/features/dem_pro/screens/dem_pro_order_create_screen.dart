@@ -2589,6 +2589,35 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
 
   // ── Picker date/heure livraison programmée ───────────────────────────────
 
+  // Thème dégradé cyan pour les pickers natifs date/heure — `surface`
+  // transparent laisse le dégradé du Container englobant traverser tout
+  // l'intérieur du dialogue (grille du calendrier, cadran de l'heure),
+  // `dialogTheme.backgroundColor` transparent retire le fond uni foncé que
+  // Flutter peint par défaut derrière. Le rayon doit suivre celui du
+  // dialogue Material 3 (28) sinon le dégradé dépasse en carré aux coins
+  // arrondis.
+  Widget _gradientPickerTheme(Widget? child) => Theme(
+    data: ThemeData.dark().copyWith(
+      colorScheme: const ColorScheme.dark(
+        primary: AppColors.primary,
+        onPrimary: Colors.white,
+        surface: Colors.transparent,
+        onSurface: Colors.white,
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+    ),
+    child: Container(
+      decoration: BoxDecoration(
+        gradient: AppColors.gradientSplash,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: child,
+    ),
+  );
+
   Future<void> _pickScheduleDate() async {
     final now = DateTime.now();
     final minDate = now.add(const Duration(minutes: 10));
@@ -2598,20 +2627,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       initialDate: _scheduledAt ?? minDate,
       firstDate: minDate,
       lastDate: now.add(const Duration(days: 30)),
-      builder: (ctx, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppColors.primary,
-            onPrimary: Colors.white,
-            surface: AppColors.surface,
-            onSurface: AppColors.textPrimary,
-          ),
-          dialogTheme: const DialogThemeData(
-            backgroundColor: AppColors.surface,
-          ),
-        ),
-        child: child!,
-      ),
+      builder: (ctx, child) => _gradientPickerTheme(child),
     );
     if (date == null || !mounted) return;
 
@@ -2623,20 +2639,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               hour: minDate.hour,
               minute: (minDate.minute ~/ 15 + 1) * 15 % 60,
             ),
-      builder: (ctx, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppColors.primary,
-            onPrimary: Colors.white,
-            surface: AppColors.surface,
-            onSurface: AppColors.textPrimary,
-          ),
-          dialogTheme: const DialogThemeData(
-            backgroundColor: AppColors.surface,
-          ),
-        ),
-        child: child!,
-      ),
+      builder: (ctx, child) => _gradientPickerTheme(child),
     );
     if (time == null || !mounted) return;
 
