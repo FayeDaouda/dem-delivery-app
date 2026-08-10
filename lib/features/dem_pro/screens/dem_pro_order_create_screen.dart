@@ -932,6 +932,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       _fetchRoute();
     }
     setState(() => _step++);
+    _syncSheetToStep();
   }
 
   void _back() {
@@ -940,6 +941,21 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       return;
     }
     setState(() => _step--);
+    _syncSheetToStep();
+  }
+
+  // `_sheetMax` varie par étape (la Confirmation a besoin de plus de place
+  // que les autres pour montrer le prix sans avoir à scroller) — mais
+  // `initialChildSize` ne s'applique qu'une fois à la création du sheet, il
+  // faut donc l'animer explicitement à chaque changement d'étape pour que
+  // cette taille par étape ait un effet réel.
+  void _syncSheetToStep() {
+    if (!_sheetCtrl.isAttached) return;
+    _sheetCtrl.animateTo(
+      _sheetMax,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   // ── Map markers / polyline ────────────────────────────────────────────────
@@ -1215,7 +1231,10 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     1 => 0.52, // Articles
     2 => 0.50, // Colis
     3 => 0.60, // Livraison (paiement + instructions + programmation)
-    4 => 0.60, // Confirmation
+    // Confirmation — le plus de contenu (trajet, détails, articles, prix,
+    // code promo) : assez grand pour que le prix et le CTA soient toujours
+    // visibles sans avoir à scroller pour les découvrir.
+    4 => 0.80,
     _ => 0.58, // Destination
   };
 
