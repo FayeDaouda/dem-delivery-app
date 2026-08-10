@@ -20,6 +20,7 @@ import '../../home_driver/navigation/map_theme.dart';
 import '../../home_driver/navigation/route_tracker.dart';
 import '../data/dem_pro_repository.dart';
 import '../../../shared/widgets/staggered_entrance.dart';
+import '../../../shared/widgets/support_report_sheet.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/price_format.dart';
 import '../../../core/theme/client_text.dart';
@@ -739,6 +740,24 @@ class _DemProBatchTrackingScreenState
         lastStop != null &&
         lastStop['rating'] == null;
 
+    // Même délai que côté backend (batch.service.js) — au-delà de 2 min
+    // après acceptation, le bouton "Annuler" se désactive plutôt que de
+    // laisser l'utilisateur taper dans le vide et recevoir une erreur.
+    final firstAcceptedAt = orders.isNotEmpty
+        ? orders.first['acceptedAt'] as String?
+        : null;
+    final cancelDeadlinePassed =
+        status == 'ACCEPTED' &&
+        firstAcceptedAt != null &&
+        DateTime.now()
+                .difference(DateTime.parse(firstAcceptedAt).toLocal())
+                .inMinutes >=
+            2;
+
+    final reportTargetId =
+        (_currentStop ?? (orders.isNotEmpty ? orders.first : null))?['id']
+            as String?;
+
     return RefreshIndicator(
       color: AppColors.primary,
       backgroundColor: Colors.white,
@@ -790,6 +809,50 @@ class _DemProBatchTrackingScreenState
                           ),
                         ),
                         const Spacer(),
+                        if (status != 'COMPLETED' &&
+                            status != 'CANCELLED' &&
+                            reportTargetId != null)
+                          GestureDetector(
+                            onTap: () => SupportReportSheet.show(
+                              context,
+                              orderId: reportTargetId,
+                              role: 'DEM_PRO',
+                              repo: OrdersRepository(),
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.flag_outlined,
+                                    size: 13,
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    'Signaler',
+                                    style: ClientText.label.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
                         if (_loading)
                           SizedBox(
                             width: 14,
@@ -1013,6 +1076,41 @@ class _DemProBatchTrackingScreenState
                           ],
                         ),
                       ],
+                    ],
+                  ),
+                ),
+              )
+            else if (status == 'CANCELLED')
+              // Tournée annulée avant qu'un livreur soit trouvé — ne pas
+              // laisser "Recherche en cours" contredire le statut "Annulée"
+              // affiché juste au-dessus.
+              StaggeredEntrance(
+                index: 1,
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.block,
+                        color: Colors.white.withValues(alpha: 0.7),
+                        size: 32,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          'Tournée annulée avant qu\'un livreur ne soit trouvé.',
+                          style: ClientText.label.copyWith(
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1312,6 +1410,44 @@ class _DemProBatchTrackingScreenState
                     ),
                     elevation: 0,
                   ),
+                ),
+              ),
+            ] else if (cancelDeadlinePassed) ...[
+              // Même délai de 2 min que côté backend — passé ce délai, le
+              // livreur est probablement déjà en route, on ne propose plus
+              // d'annuler dans son dos plutôt que de laisser taper dans le
+              // vide pour recevoir une erreur.
+              const SizedBox(height: 24),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.white.withValues(alpha: 0.7),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Délai d\'annulation dépassé — le livreur est en route.',
+                        style: ClientText.label.copyWith(
+                          color: Colors.white.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ] else ...[

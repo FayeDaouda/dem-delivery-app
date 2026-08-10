@@ -17,24 +17,61 @@ class _Problem {
   const _Problem(this.id, this.emoji, this.label, this.severity, this.roles);
 }
 
+// Le DEM Pro occupe exactement le rôle "clientId" d'une commande (comme
+// CLIENT) — mêmes types de problèmes accessibles partout où CLIENT l'est.
 const _kProblems = [
-  _Problem('DRIVER_UNREACHABLE', '📵', 'Driver introuvable',     'critical', ['CLIENT']),
-  _Problem('PARCEL_LOST',        '📦', 'Colis perdu',            'critical', ['CLIENT', 'DRIVER']),
-  _Problem('ACCIDENT',           '🚨', 'Accident / Urgence',     'critical', ['DRIVER']),
-  _Problem('WRONG_DELIVERY',     '❌', 'Mauvaise livraison',     'critical', ['CLIENT']),
-  _Problem('CLIENT_UNREACHABLE', '📞', 'Client injoignable',     'high',     ['DRIVER']),
-  _Problem('MAJOR_DELAY',        '⏱',  'Retard important',       'high',     ['CLIENT', 'DRIVER']),
-  _Problem('WRONG_ADDRESS',      '📍', 'Adresse incorrecte',     'high',     ['CLIENT', 'DRIVER']),
-  _Problem('CONTACT_IMPOSSIBLE', '🔕', 'Impossible de contacter','high',     ['CLIENT']),
-  _Problem('INFO_REQUEST',       '💬', "Demande d'information",  'medium',   ['CLIENT', 'DRIVER']),
-  _Problem('INSTRUCTION_CHANGE', '✏',  'Changement de consigne', 'medium',   ['CLIENT', 'DRIVER']),
-  _Problem('OTHER',              '🔸', 'Autre problème',         'medium',   ['CLIENT', 'DRIVER']),
+  _Problem('DRIVER_UNREACHABLE', '📵', 'Driver introuvable', 'critical', [
+    'CLIENT',
+    'DEM_PRO',
+  ]),
+  _Problem('PARCEL_LOST', '📦', 'Colis perdu', 'critical', [
+    'CLIENT',
+    'DEM_PRO',
+    'DRIVER',
+  ]),
+  _Problem('ACCIDENT', '🚨', 'Accident / Urgence', 'critical', ['DRIVER']),
+  _Problem('WRONG_DELIVERY', '❌', 'Mauvaise livraison', 'critical', [
+    'CLIENT',
+    'DEM_PRO',
+  ]),
+  _Problem('CLIENT_UNREACHABLE', '📞', 'Client injoignable', 'high', [
+    'DRIVER',
+  ]),
+  _Problem('MAJOR_DELAY', '⏱', 'Retard important', 'high', [
+    'CLIENT',
+    'DEM_PRO',
+    'DRIVER',
+  ]),
+  _Problem('WRONG_ADDRESS', '📍', 'Adresse incorrecte', 'high', [
+    'CLIENT',
+    'DEM_PRO',
+    'DRIVER',
+  ]),
+  _Problem('CONTACT_IMPOSSIBLE', '🔕', 'Impossible de contacter', 'high', [
+    'CLIENT',
+    'DEM_PRO',
+  ]),
+  _Problem('INFO_REQUEST', '💬', "Demande d'information", 'medium', [
+    'CLIENT',
+    'DEM_PRO',
+    'DRIVER',
+  ]),
+  _Problem('INSTRUCTION_CHANGE', '✏', 'Changement de consigne', 'medium', [
+    'CLIENT',
+    'DEM_PRO',
+    'DRIVER',
+  ]),
+  _Problem('OTHER', '🔸', 'Autre problème', 'medium', [
+    'CLIENT',
+    'DEM_PRO',
+    'DRIVER',
+  ]),
 ];
 
 Color _sevColor(String sev) => switch (sev) {
   'critical' => const Color(0xFFEF4444),
-  'high'     => const Color(0xFFF97316),
-  _          => const Color(0xFFF59E0B),
+  'high' => const Color(0xFFF97316),
+  _ => const Color(0xFFF59E0B),
 };
 
 // ── Widget principal ──────────────────────────────────────────────────────────
@@ -60,7 +97,8 @@ class SupportReportSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => SupportReportSheet(orderId: orderId, role: role, repo: repo),
+      builder: (_) =>
+          SupportReportSheet(orderId: orderId, role: role, repo: repo),
     );
   }
 
@@ -71,7 +109,7 @@ class SupportReportSheet extends StatefulWidget {
 class _SupportReportSheetState extends State<SupportReportSheet> {
   _Problem? _selected;
   final _msgCtrl = TextEditingController();
-  bool _sending  = false;
+  bool _sending = false;
   Map<String, dynamic>? _result;
 
   @override
@@ -89,14 +127,17 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
     try {
       final result = await widget.repo.reportIssue(
         widget.orderId,
-        type:    _selected!.id,
+        type: _selected!.id,
         message: _msgCtrl.text.trim().isEmpty ? null : _msgCtrl.text.trim(),
       );
       if (mounted) setState(() => _result = result);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyError(e)), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(friendlyError(e)),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -115,7 +156,8 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
       'Type : ${_selected?.label ?? "—"}.',
     );
     final uri = Uri.parse('https://wa.me/$wa?text=$msg');
-    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (await canLaunchUrl(uri))
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   // ── Sections de types groupées par sévérité ───────────────────────────────
@@ -123,53 +165,75 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
     final sections = <Widget>[];
     for (final (sev, label) in [
       ('critical', '🔴 Critique'),
-      ('high',     '🟠 Logistique'),
-      ('medium',   '🟡 Information'),
+      ('high', '🟠 Logistique'),
+      ('medium', '🟡 Information'),
     ]) {
       final filtered = _visible.where((p) => p.severity == sev).toList();
       if (filtered.isEmpty) continue;
 
-      sections.add(Text(
-        label,
-        style: TextStyle(
-          color: _sevColor(sev).withValues(alpha: 0.90),
-          fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5,
+      sections.add(
+        Text(
+          label,
+          style: TextStyle(
+            color: _sevColor(sev).withValues(alpha: 0.90),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
         ),
-      ));
+      );
       sections.add(const SizedBox(height: 8));
-      sections.add(Wrap(
-        spacing: 8, runSpacing: 8,
-        children: filtered.map((p) {
-          final isSelected = _selected?.id == p.id;
-          final col        = _sevColor(p.severity);
-          return GestureDetector(
-            onTap: () => setState(() => _selected = p),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? col.withValues(alpha: 0.25)
-                    : Colors.white.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isSelected ? col : Colors.white.withValues(alpha: 0.25),
-                  width: isSelected ? 1.5 : 1,
+      sections.add(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: filtered.map((p) {
+            final isSelected = _selected?.id == p.id;
+            final col = _sevColor(p.severity);
+            return GestureDetector(
+              onTap: () => setState(() => _selected = p),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? col.withValues(alpha: 0.25)
+                      : Colors.white.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected
+                        ? col
+                        : Colors.white.withValues(alpha: 0.25),
+                    width: isSelected ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(p.emoji, style: const TextStyle(fontSize: 14)),
+                    const SizedBox(width: 6),
+                    Text(
+                      p.label,
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.80),
+                        fontSize: 13,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(p.emoji, style: const TextStyle(fontSize: 14)),
-                const SizedBox(width: 6),
-                Text(p.label, style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.80),
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                )),
-              ]),
-            ),
-          );
-        }).toList(),
-      ));
+            );
+          }).toList(),
+        ),
+      );
       sections.add(const SizedBox(height: 16));
     }
     return sections;
@@ -198,8 +262,8 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
   // ── Écran succès ──────────────────────────────────────────────────────────
   Widget _buildSuccess() {
     final support = _result!['support'] as Map?;
-    final phone   = support?['phone']    as String? ?? AppConfig.supportPhone;
-    final wa      = support?['whatsapp'] as String? ?? AppConfig.supportWhatsapp;
+    final phone = support?['phone'] as String? ?? AppConfig.supportPhone;
+    final wa = support?['whatsapp'] as String? ?? AppConfig.supportWhatsapp;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -207,28 +271,51 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
         const _Handle(),
         const SizedBox(height: 20),
         Container(
-          width: 64, height: 64,
+          width: 64,
+          height: 64,
           decoration: BoxDecoration(
             color: const Color(0xFF22C55E).withValues(alpha: 0.20),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.50)),
+            border: Border.all(
+              color: const Color(0xFF22C55E).withValues(alpha: 0.50),
+            ),
           ),
-          child: const Icon(Icons.check_circle_outline, color: Color(0xFF22C55E), size: 34),
+          child: const Icon(
+            Icons.check_circle_outline,
+            color: Color(0xFF22C55E),
+            size: 34,
+          ),
         ),
         const SizedBox(height: 14),
-        const Text('Signalement reçu',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+        const Text(
+          'Signalement reçu',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         const SizedBox(height: 8),
         Text(
           _result!['message'] as String? ?? 'Notre équipe a été informée.',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13, height: 1.5),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.75),
+            fontSize: 13,
+            height: 1.5,
+          ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 28),
         const Align(
           alignment: Alignment.centerLeft,
-          child: Text('Contacter le support directement',
-              style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+          child: Text(
+            'Contacter le support directement',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
         const SizedBox(height: 10),
         SupportContactTile(
@@ -249,8 +336,13 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
         const SizedBox(height: 20),
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Fermer',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.50), fontSize: 14)),
+          child: Text(
+            'Fermer',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.50),
+              fontSize: 14,
+            ),
+          ),
         ),
       ],
     );
@@ -264,16 +356,28 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
       children: [
         const _Handle(),
         const SizedBox(height: 16),
-        const Row(children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('Signaler un problème',
-              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
-        ]),
+        const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Signaler un problème',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 6),
         Text(
           'Sélectionnez le type de problème. Notre équipe sera immédiatement informée.',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12, height: 1.4),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.65),
+            fontSize: 12,
+            height: 1.4,
+          ),
         ),
         const SizedBox(height: 20),
 
@@ -282,11 +386,14 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
 
         // Message optionnel
         if (_selected != null) ...[
-          Text('Détails (optionnel)',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.70),
-                fontSize: 12, fontWeight: FontWeight.w600,
-              )),
+          Text(
+            'Détails (optionnel)',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.70),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _msgCtrl,
@@ -294,22 +401,32 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
             style: const TextStyle(color: Colors.white, fontSize: 13),
             decoration: InputDecoration(
               hintText: 'Décrivez le problème brièvement…',
-              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.40), fontSize: 13),
+              hintStyle: TextStyle(
+                color: Colors.white.withValues(alpha: 0.40),
+                fontSize: 13,
+              ),
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.10),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                borderSide: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.25),
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+                borderSide: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.25),
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Colors.white, width: 1.5),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -325,19 +442,28 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
               disabledBackgroundColor: Colors.white.withValues(alpha: 0.20),
               foregroundColor: const Color(0xFF0671BA),
               padding: const EdgeInsets.symmetric(vertical: 15),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
               elevation: 0,
             ),
             child: _sending
                 ? const SizedBox(
-                    height: 18, width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0671BA)),
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF0671BA),
+                    ),
                   )
                 : Text(
                     _selected == null
                         ? 'Choisissez un type de problème'
                         : 'Envoyer le signalement',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
           ),
         ),
@@ -345,8 +471,13 @@ class _SupportReportSheetState extends State<SupportReportSheet> {
         Center(
           child: TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Annuler',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 13)),
+            child: Text(
+              'Annuler',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 13,
+              ),
+            ),
           ),
         ),
       ],
@@ -360,7 +491,8 @@ class _Handle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Container(
-      width: 36, height: 3,
+      width: 36,
+      height: 3,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.30),
         borderRadius: BorderRadius.circular(2),
@@ -368,4 +500,3 @@ class _Handle extends StatelessWidget {
     ),
   );
 }
-
