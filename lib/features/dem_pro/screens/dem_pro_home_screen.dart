@@ -23,12 +23,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/client_text.dart';
 import '../../../core/utils/price_format.dart';
 import '../widgets/dem_pro_nav_bar.dart';
+import '../widgets/dem_pro_plan_gate.dart';
 import '../../../core/utils/location_gate.dart';
 import '../../../shared/widgets/swipe_to_confirm.dart';
-import '../../../core/services/socket_service.dart';
-import '../../../core/utils/dem_toast.dart';
-import '../../../shared/widgets/operator_picker_sheet.dart';
-import '../../../shared/widgets/samirpay_payment_sheet.dart';
 import '../../../core/theme/map_theme_provider.dart';
 
 const _sectorLabels = {
@@ -1158,214 +1155,8 @@ class _CompteTabState extends State<_CompteTab>
   }
 
   Future<void> _showPlanSheet() async {
-    final data = _planData;
-    final planLabel = data?['planLabel'] as String? ?? 'Gratuit';
-    final features = (data?['features'] as List?)?.cast<String>() ?? [];
-    final nextTier = data?['nextTier'] as String?;
-    final nextTierFeatures =
-        (data?['nextTierFeatures'] as List?)?.cast<String>() ?? [];
-    final commissionRate = data?['commissionRatePercent'] as num?;
-    final nextTierPrice = (data?['nextTierPrice'] as num?)?.toInt();
-    final nextTierLabel = switch (nextTier) {
-      'PRO' => 'Pro',
-      'BUSINESS' => 'Business',
-      _ => null,
-    };
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Container(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          16,
-          20,
-          MediaQuery.of(sheetCtx).viewPadding.bottom + 24,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: AppColors.lightBorder,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.workspace_premium,
-                      color: AppColors.primary,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Plan $planLabel',
-                    style: ClientText.title.copyWith(
-                      color: AppColors.textDark,
-                      fontSize: 18,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'Ce que vous avez déjà',
-                style: ClientText.label.copyWith(
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (final f in features)
-                _PlanFeatureRow(text: f, included: true),
-              if (nextTierLabel != null) ...[
-                const SizedBox(height: 18),
-                Text(
-                  'Débloquez avec $nextTierLabel',
-                  style: ClientText.label.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final f in nextTierFeatures)
-                  _PlanFeatureRow(text: f, included: false),
-                if (nextTierPrice != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    '${formatFcfa(nextTierPrice)} / mois',
-                    style: ClientText.title.copyWith(
-                      color: AppColors.textDark,
-                      fontSize: 20,
-                    ),
-                  ),
-                ],
-                if (commissionRate != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.info_outline,
-                          color: AppColors.primary,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Le wallet DEM Pro prélève une commission de ${commissionRate.toStringAsFixed(commissionRate % 1 == 0 ? 0 : 1)}% sur la part produit des commandes payées via le paiement intégré.',
-                            style: ClientText.label.copyWith(
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: nextTierPrice == null
-                        ? null
-                        : () {
-                            Navigator.pop(sheetCtx);
-                            _purchasePlan(
-                              nextTier!,
-                              nextTierPrice,
-                              nextTierLabel,
-                            );
-                          },
-                    icon: const Icon(Icons.workspace_premium, size: 18),
-                    label: Text('Passer $nextTierLabel'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Center(
-                  child: TextButton.icon(
-                    onPressed: () {
-                      Navigator.pop(sheetCtx);
-                      launchUrl(
-                        Uri.parse(
-                          'https://wa.me/221710064664?text=${Uri.encodeComponent('Bonjour, j\'ai une question sur le plan $nextTierLabel sur DEM Pro.')}',
-                        ),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                    label: const Text('Une question ? Nous contacter'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.textMuted,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Achète directement le palier via SamirPay — même mécanique que la passe
-  // journalière driver (chooseOperator + SamirpayPaymentSheet), le paiement
-  // active le plan automatiquement dès confirmation (voir samirpay.service.js).
-  Future<void> _purchasePlan(String plan, int amount, String? planLabel) async {
-    final operatorName = await chooseOperator(context, title: 'Payer avec');
-    if (operatorName == null || !mounted) return;
-
-    await SamirpayPaymentSheet.show(
-      context,
-      amount: amount,
-      title: 'Abonnement DEM Pro ${planLabel ?? plan}',
-      initPayment: () async {
-        final result = await _repo.purchasePlan(plan, operatorName);
-        return result;
-      },
-      confirmationStream: SocketService.instance.onWalletUpdated,
-      matchesConfirmation: (event, payment) =>
-          event['orderRef'] == payment['orderRef'],
-      onSuccess: () {
-        showDemToast(context, 'Abonnement ${planLabel ?? plan} activé !');
-        _loadPlan();
-      },
-    );
+    await showDemProPlanSheet(context, planData: _planData);
+    if (mounted) _loadPlan();
   }
 
   Future<void> _loadPendingRequestCount() async {
@@ -2481,35 +2272,6 @@ class _PressScaleState extends State<_PressScale> {
   );
 }
 
-// ── Ligne fonctionnalité dans la feuille d'abonnement ────────────────────────
-class _PlanFeatureRow extends StatelessWidget {
-  final String text;
-  final bool included;
-  const _PlanFeatureRow({required this.text, required this.included});
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          included ? Icons.check_circle : Icons.lock_outline_rounded,
-          color: included ? AppColors.successLight : AppColors.primary,
-          size: 18,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: ClientText.body.copyWith(color: AppColors.textDark),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
 class _ProBadge extends StatelessWidget {
   const _ProBadge();
   @override
@@ -3605,7 +3367,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Aucune tournée',
+                      'Aucune livraison groupée',
                       style: ClientText.title.copyWith(
                         color: t.text,
                         fontSize: 17,
@@ -3613,7 +3375,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Créez une tournée pour regrouper plusieurs livraisons avec un seul livreur.',
+                      'Créez une livraison groupée pour regrouper plusieurs livraisons avec un seul livreur.',
                       style: ClientText.body.copyWith(
                         color: t.muted,
                         height: 1.5,
@@ -3642,7 +3404,7 @@ class _LivraisonsTabState extends State<_LivraisonsTab>
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Créer une tournée',
+                              'Créer une livraison groupée',
                               style: ClientText.button.copyWith(fontSize: 14),
                             ),
                           ],
@@ -4392,7 +4154,7 @@ class _ViewToggleBar extends StatelessWidget {
                 SizedBox(
                   width: btnWidth,
                   child: _ToggleTapZone(
-                    label: 'Tournées',
+                    label: 'Groupé',
                     icon: Icons.route_outlined,
                     active: viewType == _ViewType.batches,
                     onTap: () => onChanged(_ViewType.batches),
@@ -6328,6 +6090,15 @@ class _FinancesTabState extends State<_FinancesTab>
   }
 
   Future<void> _exportCsv() async {
+    if (!await requireProPlan(
+      context,
+      plan: widget.user?['proPlan'] as String?,
+      title: 'Export réservé aux plans Pro',
+      message: 'L\'export CSV comptable est réservé aux plans Pro et Business.',
+    )) {
+      return;
+    }
+    if (!mounted) return;
     final orders = _filteredOrders;
     if (orders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6414,7 +6185,7 @@ class _FinancesTabState extends State<_FinancesTab>
   // getMyFinances()/getBusinessInsights() utilisent côté serveur pour ces
   // mêmes indicateurs. Avant ce correctif, une commande créée un jour et
   // livrée le lendemain pouvait apparaître dans une période différente
-  // selon la vue (Ventes vs Livraisons/Pilotage), pour un même total
+  // selon la vue (Ventes vs Livraisons/Activité), pour un même total
   // affiché deux fois différemment — gênant pour la compta du commerçant.
   List<Map<String, dynamic>> get _filteredOrders {
     final now = DateTime.now();
@@ -6598,7 +6369,7 @@ class _FinancesTabState extends State<_FinancesTab>
           ),
         ),
 
-        // ── Filtre 2 — Ventes / Livraisons / Pilotage ────────────────────
+        // ── Filtre 2 — Ventes / Livraisons / Activité ────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
           child: _FinanceToggleBar(
@@ -6902,26 +6673,15 @@ class _FinancesTabState extends State<_FinancesTab>
   // ── Vue PILOTAGE ───────────────────────────────────────────────────────────
   // Indicateurs de pilotage business — jusqu'ici l'onglet Finances ne
   // montrait qu'un historique de transactions, jamais de quoi vraiment
-  // suivre son activité (délai de livraison, fiabilité, destinataires
-  // récurrents, tendance). Toutes ces données existaient déjà côté
-  // serveur (Order.acceptedAt/deliveredAt, Rating, cancelReason...), il
-  // ne manquait que l'agrégation et cet écran.
-  String _formatMinutes(int minutes) {
-    if (minutes < 60) return '$minutes min';
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    return m == 0 ? '${h}h' : '${h}h${m.toString().padLeft(2, '0')}';
-  }
-
+  // suivre son activité (destinataires récurrents, produit vedette,
+  // tendance). Toutes ces données existaient déjà côté serveur, il ne
+  // manquait que l'agrégation et cet écran.
   List<Widget> _buildInsightsContent() {
     final data = _insightsData;
     if (data == null) return [_buildEmpty('Aucune donnée sur cette période')];
 
-    final avgMinutes = (data['avgDeliveryMinutes'] as num?)?.toInt();
-    final topDriver = data['topDriver'] as Map<String, dynamic>?;
-    final cancellationRate =
-        (data['cancellationRate'] as num?)?.toDouble() ?? 0;
-    final totalCreated = (data['totalOrdersCreated'] as num?)?.toInt() ?? 0;
+    final topProduct = data['topProduct'] as Map<String, dynamic>?;
+    final topProductLocked = data['topProductLocked'] as bool? ?? false;
     final topDestinations =
         (data['topDestinations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final trend = data['trend'] as Map<String, dynamic>? ?? {};
@@ -7068,99 +6828,113 @@ class _FinancesTabState extends State<_FinancesTab>
       ),
       const SizedBox(height: 16),
 
-      // ── Délai moyen + Taux d'annulation ──────────────────────────────────
-      Row(
-        children: [
-          Expanded(
-            child: _InsightCard(
-              icon: Icons.timer_outlined,
-              label: 'Délai moyen',
-              value: avgMinutes != null ? _formatMinutes(avgMinutes) : '—',
-              t: t,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _InsightCard(
-              icon: Icons.cancel_outlined,
-              label: 'Annulations',
-              value: totalCreated > 0
-                  ? '${cancellationRate.toStringAsFixed(0)}%'
-                  : '—',
-              valueColor: cancellationRate > 15 ? AppColors.error : null,
-              t: t,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 16),
-
-      // ── Livreur habituel ──────────────────────────────────────────────────
-      Text(
-        'Livreur habituel',
-        style: ClientText.bodyStrong.copyWith(color: t.text),
-      ),
-      const SizedBox(height: 10),
-      if (topDriver == null)
-        _buildEmpty('Aucune livraison sur cette période')
-      else
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: t.cardBg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: t.border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.two_wheeler,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      topDriver['name'] as String? ?? 'Livreur DEM',
-                      style: ClientText.bodyStrong.copyWith(color: t.text),
-                    ),
-                    Text(
-                      '${topDriver['count']} livraison(s) sur la période',
-                      style: ClientText.label.copyWith(color: t.muted),
-                    ),
-                  ],
-                ),
-              ),
-              if (topDriver['avgRating'] != null)
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.star_rounded,
-                      color: AppColors.warning,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      (topDriver['avgRating'] as num).toStringAsFixed(1),
-                      style: ClientText.bodyStrong.copyWith(color: t.text),
-                    ),
-                  ],
-                ),
-            ],
-          ),
+      // ── Produit vedette — verrouillé en gratuit, réel en Pro/Business ────
+      if (topProduct != null || topProductLocked) ...[
+        Text(
+          'Produit vedette',
+          style: ClientText.bodyStrong.copyWith(color: t.text),
         ),
-      const SizedBox(height: 16),
+        const SizedBox(height: 10),
+        if (topProductLocked)
+          GestureDetector(
+            onTap: () => showDemProPlanSheet(context),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.lock_outline_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Votre produit le plus vendu',
+                          style: ClientText.bodyStrong.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        Text(
+                          'Débloquez cet aperçu avec Pro',
+                          style: ClientText.label.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: t.cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: t.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.star_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        topProduct!['name'] as String? ?? '—',
+                        style: ClientText.bodyStrong.copyWith(color: t.text),
+                      ),
+                      Text(
+                        '${topProduct['totalQty']} vendu(s) sur la période',
+                        style: ClientText.label.copyWith(color: t.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 16),
+      ],
 
       // ── Top destinataires ────────────────────────────────────────────────
       Text(
@@ -7350,7 +7124,7 @@ class _FinancesTabState extends State<_FinancesTab>
 
 // ── Toggle Ventes / Livraisons ──────────────────────────────────────────────
 
-// ── Toggle Ventes / Livraisons / Pilotage — pastille glissante animée,
+// ── Toggle Ventes / Livraisons / Activité — pastille glissante animée,
 // même famille que le toggle Livraisons/Tournées, généralisée à 3
 // segments via LayoutBuilder plutôt qu'un partage strict de code (le
 // découpage à 2 segments de _ViewToggleBar ne se généralise pas
@@ -7369,7 +7143,7 @@ class _FinanceToggleBar extends StatelessWidget {
   static const _items = [
     (_FinanceView.sales, 'Ventes', Icons.shopping_bag_outlined),
     (_FinanceView.deliveries, 'Livraisons', Icons.two_wheeler),
-    (_FinanceView.insights, 'Pilotage', Icons.insights_rounded),
+    (_FinanceView.insights, 'Activité', Icons.insights_rounded),
   ];
 
   @override
@@ -7494,45 +7268,6 @@ class _MiniStat extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(value, style: ClientText.title.copyWith(color: color)),
-        const SizedBox(height: 2),
-        Text(label, style: ClientText.label.copyWith(color: t.muted)),
-      ],
-    ),
-  );
-}
-
-// ── Carte indicateur pilotage (délai moyen, taux d'annulation...) ───────────
-class _InsightCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-  final _T t;
-  const _InsightCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.valueColor,
-    required this.t,
-  });
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: t.cardBg,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: t.border),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: AppColors.primary, size: 18),
-        const SizedBox(height: 10),
-        Text(
-          value,
-          style: ClientText.title.copyWith(color: valueColor ?? t.text),
-        ),
         const SizedBox(height: 2),
         Text(label, style: ClientText.label.copyWith(color: t.muted)),
       ],

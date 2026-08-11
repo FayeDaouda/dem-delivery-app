@@ -7,6 +7,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/client_text.dart';
 import '../../../core/utils/price_format.dart';
 import '../data/dem_pro_repository.dart';
+import '../widgets/dem_pro_plan_gate.dart';
+
+/// Nombre de clients visibles en version gratuite — au-delà, une ligne
+/// verrouillée invite à passer Pro plutôt que de bloquer tout l'écran.
+const _kFreeClientLimit = 3;
 
 String _initials(String? name) {
   if (name == null || name.trim().isEmpty) return '?';
@@ -20,8 +25,18 @@ String _fmtDate(String? iso) {
   final dt = iso != null ? DateTime.tryParse(iso)?.toLocal() : null;
   if (dt == null) return '—';
   const m = [
-    'jan.', 'fév.', 'mars', 'avr.', 'mai', 'juin',
-    'juil.', 'août', 'sep.', 'oct.', 'nov.', 'déc.',
+    'jan.',
+    'fév.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'août',
+    'sep.',
+    'oct.',
+    'nov.',
+    'déc.',
   ];
   return '${dt.day} ${m[dt.month - 1]} ${dt.year}';
 }
@@ -40,11 +55,20 @@ class _DemProClientsScreenState extends State<DemProClientsScreen> {
   String? _error;
   List<Map<String, dynamic>> _clients = [];
   String _query = '';
+  Map<String, dynamic>? _planData;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadPlan();
+  }
+
+  Future<void> _loadPlan() async {
+    try {
+      final plan = await _repo.getMyPlan();
+      if (mounted) setState(() => _planData = plan);
+    } catch (_) {}
   }
 
   @override
@@ -84,6 +108,14 @@ class _DemProClientsScreenState extends State<DemProClientsScreen> {
     }).toList();
   }
 
+  bool get _isFree => !isProPlan(_planData?['plan'] as String?);
+
+  List<Map<String, dynamic>> get _visibleClients =>
+      _isFree ? _filtered.take(_kFreeClientLimit).toList() : _filtered;
+
+  int get _hiddenClientCount =>
+      _isFree ? (_filtered.length - _kFreeClientLimit).clamp(0, 999999) : 0;
+
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: () => FocusScope.of(context).unfocus(),
@@ -115,12 +147,18 @@ class _DemProClientsScreenState extends State<DemProClientsScreen> {
                         Expanded(
                           child: Text(
                             'Mes clients',
-                            style: ClientText.title.copyWith(color: Colors.white, fontSize: 18),
+                            style: ClientText.title.copyWith(
+                              color: Colors.white,
+                              fontSize: 18,
+                            ),
                           ),
                         ),
                         if (!_loading && _clients.isNotEmpty)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.20),
                               borderRadius: BorderRadius.circular(20),
@@ -148,18 +186,28 @@ class _DemProClientsScreenState extends State<DemProClientsScreen> {
                           controller: _searchCtrl,
                           onChanged: (v) => setState(() => _query = v.trim()),
                           cursorColor: AppColors.primary,
-                          style: ClientText.body.copyWith(color: AppColors.textDark),
+                          style: ClientText.body.copyWith(
+                            color: AppColors.textDark,
+                          ),
                           decoration: InputDecoration(
                             isDense: true,
                             filled: false,
                             hintText: 'Rechercher un client…',
-                            hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
-                            prefixIcon: const Icon(Icons.search, color: AppColors.primary, size: 20),
+                            hintStyle: ClientText.body.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
                             disabledBorder: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                            ),
                           ),
                         ),
                       ),
@@ -171,25 +219,42 @@ class _DemProClientsScreenState extends State<DemProClientsScreen> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
                 : _error != null
                 ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.wifi_off_rounded, color: AppColors.textMuted, size: 36),
+                        Icon(
+                          Icons.wifi_off_rounded,
+                          color: AppColors.textMuted,
+                          size: 36,
+                        ),
                         const SizedBox(height: 12),
-                        Text(_error!, style: ClientText.body.copyWith(color: AppColors.textMuted)),
+                        Text(
+                          _error!,
+                          style: ClientText.body.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         GestureDetector(
                           onTap: _load,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.primary,
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text('Réessayer', style: ClientText.button.copyWith(fontSize: 14)),
+                            child: Text(
+                              'Réessayer',
+                              style: ClientText.button.copyWith(fontSize: 14),
+                            ),
                           ),
                         ),
                       ],
@@ -203,13 +268,16 @@ class _DemProClientsScreenState extends State<DemProClientsScreen> {
                             physics: const AlwaysScrollableScrollPhysics(),
                             children: [
                               SizedBox(
-                                height: MediaQuery.of(context).size.height * 0.5,
+                                height:
+                                    MediaQuery.of(context).size.height * 0.5,
                                 child: Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Icon(
-                                        _clients.isEmpty ? Icons.people_outline : Icons.search_off_rounded,
+                                        _clients.isEmpty
+                                            ? Icons.people_outline
+                                            : Icons.search_off_rounded,
                                         color: AppColors.textMuted,
                                         size: 40,
                                       ),
@@ -218,15 +286,23 @@ class _DemProClientsScreenState extends State<DemProClientsScreen> {
                                         _clients.isEmpty
                                             ? 'Aucun client pour le moment'
                                             : 'Aucun résultat',
-                                        style: ClientText.subtitle.copyWith(color: AppColors.textDark, fontSize: 15),
+                                        style: ClientText.subtitle.copyWith(
+                                          color: AppColors.textDark,
+                                          fontSize: 15,
+                                        ),
                                       ),
                                       const SizedBox(height: 6),
                                       if (_clients.isEmpty)
                                         Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 40),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 40,
+                                          ),
                                           child: Text(
                                             'Vos clients apparaîtront ici après leurs premières livraisons.',
-                                            style: ClientText.body.copyWith(color: AppColors.textMuted, height: 1.4),
+                                            style: ClientText.body.copyWith(
+                                              color: AppColors.textMuted,
+                                              height: 1.4,
+                                            ),
                                             textAlign: TextAlign.center,
                                           ),
                                         ),
@@ -239,12 +315,26 @@ class _DemProClientsScreenState extends State<DemProClientsScreen> {
                         : ListView.separated(
                             physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                            itemCount: _filtered.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
-                            itemBuilder: (context, i) => _ClientRow(
-                              client: _filtered[i],
-                              onTap: () => context.push('/dem-pro/clients/detail', extra: _filtered[i]),
-                            ),
+                            itemCount:
+                                _visibleClients.length +
+                                (_hiddenClientCount > 0 ? 1 : 0),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, i) {
+                              if (i >= _visibleClients.length) {
+                                return _LockedClientsRow(
+                                  hiddenCount: _hiddenClientCount,
+                                  onTap: () => showDemProPlanSheet(context),
+                                );
+                              }
+                              return _ClientRow(
+                                client: _visibleClients[i],
+                                onTap: () => context.push(
+                                  '/dem-pro/clients/detail',
+                                  extra: _visibleClients[i],
+                                ),
+                              );
+                            },
                           ),
                   ),
           ),
@@ -301,14 +391,18 @@ class _ClientRow extends StatelessWidget {
                 children: [
                   Text(
                     name?.isNotEmpty == true ? name! : phone,
-                    style: ClientText.bodyStrong.copyWith(color: AppColors.textDark),
+                    style: ClientText.bodyStrong.copyWith(
+                      color: AppColors.textDark,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '$orderCount commande${orderCount > 1 ? 's' : ''}',
-                    style: ClientText.label.copyWith(color: AppColors.textMuted),
+                    style: ClientText.label.copyWith(
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ],
               ),
@@ -318,10 +412,16 @@ class _ClientRow extends StatelessWidget {
               children: [
                 Text(
                   formatFcfa(totalSpent),
-                  style: ClientText.bodyStrong.copyWith(color: AppColors.successLight),
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.successLight,
+                  ),
                 ),
                 const SizedBox(height: 2),
-                const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 18),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                  size: 18,
+                ),
               ],
             ),
           ],
@@ -329,6 +429,70 @@ class _ClientRow extends StatelessWidget {
       ),
     );
   }
+}
+
+// Ligne finale en version gratuite — remplace la suite de la liste plutôt
+// que de bloquer l'écran entier : montre qu'il y a bien plus à voir, tap
+// ouvre directement la feuille des plans (pas besoin du dialogue
+// intermédiaire, la ligne elle-même communique déjà "c'est verrouillé").
+class _LockedClientsRow extends StatelessWidget {
+  final int hiddenCount;
+  final VoidCallback onTap;
+  const _LockedClientsRow({required this.hiddenCount, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.lock_outline_rounded,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '+$hiddenCount autre${hiddenCount > 1 ? 's' : ''} client${hiddenCount > 1 ? 's' : ''}',
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Débloquez la liste complète avec Pro',
+                  style: ClientText.label.copyWith(color: AppColors.primary),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.primary,
+            size: 18,
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -339,7 +503,8 @@ class DemProClientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> client;
   const DemProClientDetailScreen({super.key, required this.client});
   @override
-  State<DemProClientDetailScreen> createState() => _DemProClientDetailScreenState();
+  State<DemProClientDetailScreen> createState() =>
+      _DemProClientDetailScreenState();
 }
 
 class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
@@ -360,7 +525,9 @@ class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
       if (!mounted) return;
       setState(() {
         _orders = all
-            .where((o) => o['receiverPhone'] == phone && o['status'] == 'DELIVERED')
+            .where(
+              (o) => o['receiverPhone'] == phone && o['status'] == 'DELIVERED',
+            )
             .toList();
         _loading = false;
       });
@@ -442,7 +609,10 @@ class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
                             child: Center(
                               child: Text(
                                 _initials(name),
-                                style: ClientText.title.copyWith(color: Colors.white, fontSize: 18),
+                                style: ClientText.title.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                ),
                               ),
                             ),
                           ),
@@ -453,13 +623,18 @@ class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
                               children: [
                                 Text(
                                   name?.isNotEmpty == true ? name! : phone,
-                                  style: ClientText.title.copyWith(color: Colors.white, fontSize: 18),
+                                  style: ClientText.title.copyWith(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
                                   phone,
-                                  style: ClientText.micro.copyWith(color: Colors.white.withValues(alpha: 0.75)),
+                                  style: ClientText.micro.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.75),
+                                  ),
                                 ),
                               ],
                             ),
@@ -473,11 +648,17 @@ class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: _StatChip(label: 'Commandes', value: '$orderCount'),
+                            child: _StatChip(
+                              label: 'Commandes',
+                              value: '$orderCount',
+                            ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: _StatChip(label: 'Total dépensé', value: formatFcfa(totalSpent)),
+                            child: _StatChip(
+                              label: 'Total dépensé',
+                              value: formatFcfa(totalSpent),
+                            ),
                           ),
                         ],
                       ),
@@ -521,7 +702,9 @@ class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                   ),
                 ),
@@ -529,7 +712,10 @@ class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
                 if (lastAddress != null && lastAddress.isNotEmpty) ...[
                   Text(
                     'Dernière adresse',
-                    style: ClientText.label.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w700),
+                    style: ClientText.label.copyWith(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -539,26 +725,36 @@ class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'Dernière commande : ${_fmtDate(lastOrderAt)}',
-                    style: ClientText.micro.copyWith(color: AppColors.textMuted),
+                    style: ClientText.micro.copyWith(
+                      color: AppColors.textMuted,
+                    ),
                   ),
                   const SizedBox(height: 20),
                 ],
                 Text(
                   'Historique',
-                  style: ClientText.bodyStrong.copyWith(color: AppColors.textDark),
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.textDark,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    ),
                   )
                 else if (_orders.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
                       'Aucune commande livrée trouvée dans les 100 dernières.',
-                      style: ClientText.body.copyWith(color: AppColors.textMuted),
+                      style: ClientText.body.copyWith(
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   )
                 else
@@ -571,7 +767,10 @@ class _DemProClientDetailScreenState extends State<DemProClientDetailScreen> {
                     child: Column(
                       children: [
                         for (int i = 0; i < _orders.length; i++)
-                          _HistoryRow(order: _orders[i], isLast: i == _orders.length - 1),
+                          _HistoryRow(
+                            order: _orders[i],
+                            isLast: i == _orders.length - 1,
+                          ),
                       ],
                     ),
                   ),
@@ -601,11 +800,16 @@ class _StatChip extends StatelessWidget {
       children: [
         Text(
           value,
-          style: ClientText.subtitle.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+          style: ClientText.subtitle.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         Text(
           label,
-          style: ClientText.micro.copyWith(color: Colors.white.withValues(alpha: 0.75)),
+          style: ClientText.micro.copyWith(
+            color: Colors.white.withValues(alpha: 0.75),
+          ),
         ),
       ],
     ),
@@ -616,7 +820,11 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _ActionButton({required this.icon, required this.label, required this.onTap});
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -650,19 +858,26 @@ class _HistoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final address = (order['deliveryAddress'] as String? ?? '').split(',').first.trim();
+    final address = (order['deliveryAddress'] as String? ?? '')
+        .split(',')
+        .first
+        .trim();
     final price = (order['price'] as num?) ?? 0;
     final items = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     int productTotal = 0;
     for (final it in items) {
-      productTotal += ((it['price'] as num?)?.toInt() ?? 0) * ((it['quantity'] as num?)?.toInt() ?? 1);
+      productTotal +=
+          ((it['price'] as num?)?.toInt() ?? 0) *
+          ((it['quantity'] as num?)?.toInt() ?? 1);
     }
     final total = price + productTotal;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        border: isLast ? null : Border(bottom: BorderSide(color: AppColors.lightBorder)),
+        border: isLast
+            ? null
+            : Border(bottom: BorderSide(color: AppColors.lightBorder)),
       ),
       child: Row(
         children: [
@@ -672,12 +887,17 @@ class _HistoryRow extends StatelessWidget {
               children: [
                 Text(
                   address.isEmpty ? '—' : address,
-                  style: ClientText.bodyStrong.copyWith(color: AppColors.textDark),
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.textDark,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  _fmtDate(order['deliveredAt'] as String? ?? order['createdAt'] as String?),
+                  _fmtDate(
+                    order['deliveredAt'] as String? ??
+                        order['createdAt'] as String?,
+                  ),
                   style: ClientText.label.copyWith(color: AppColors.textMuted),
                 ),
               ],

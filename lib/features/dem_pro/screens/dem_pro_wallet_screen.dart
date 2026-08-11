@@ -8,6 +8,7 @@ import '../../../core/theme/client_text.dart';
 import '../../../core/utils/dem_toast.dart';
 import '../../../core/utils/price_format.dart';
 import '../data/dem_pro_repository.dart';
+import '../widgets/dem_pro_plan_gate.dart';
 
 String _txLabel(String type) => switch (type) {
   'CREDIT_PRO_SALE' => 'Vente',
@@ -34,6 +35,28 @@ class _DemProWalletScreenState extends State<DemProWalletScreen> {
   void initState() {
     super.initState();
     _load();
+    _checkPlan();
+  }
+
+  // Le wallet reste consultable en gratuit (voir plan) — un popup incite à
+  // passer Pro dès l'arrivée sur la page plutôt que de bloquer l'accès.
+  Future<void> _checkPlan() async {
+    try {
+      final plan = await _repo.getMyPlan();
+      if (!mounted || isProPlan(plan['plan'] as String?)) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          requireProPlan(
+            context,
+            plan: plan['plan'] as String?,
+            title: 'Wallet réservé aux plans Pro',
+            message:
+                'Le Wallet DEM Pro et le paiement intégré sont réservés aux '
+                'plans Pro et Business.',
+          );
+        }
+      });
+    } catch (_) {}
   }
 
   Future<void> _load() async {
@@ -67,7 +90,8 @@ class _DemProWalletScreenState extends State<DemProWalletScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CashoutSheet(repo: _repo, maxAmount: withdrawable.toInt()),
+      builder: (_) =>
+          _CashoutSheet(repo: _repo, maxAmount: withdrawable.toInt()),
     );
     if (refreshed == true) _load();
   }
@@ -77,7 +101,8 @@ class _DemProWalletScreenState extends State<DemProWalletScreen> {
     final balance = (_summary?['balance'] as num?) ?? 0;
     final withdrawable = (_summary?['withdrawableBalance'] as num?) ?? 0;
     final transactions =
-        (_summary?['recentTransactions'] as List?)?.cast<Map<String, dynamic>>() ??
+        (_summary?['recentTransactions'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
         [];
 
     return Scaffold(
@@ -191,11 +216,17 @@ class _DemProWalletScreenState extends State<DemProWalletScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.wifi_off_rounded, color: AppColors.textMuted, size: 36),
+                        Icon(
+                          Icons.wifi_off_rounded,
+                          color: AppColors.textMuted,
+                          size: 36,
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           _error!,
-                          style: ClientText.body.copyWith(color: AppColors.textMuted),
+                          style: ClientText.body.copyWith(
+                            color: AppColors.textMuted,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         GestureDetector(
@@ -226,7 +257,8 @@ class _DemProWalletScreenState extends State<DemProWalletScreen> {
                             physics: const AlwaysScrollableScrollPhysics(),
                             children: [
                               SizedBox(
-                                height: MediaQuery.of(context).size.height * 0.4,
+                                height:
+                                    MediaQuery.of(context).size.height * 0.4,
                                 child: Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -253,7 +285,8 @@ class _DemProWalletScreenState extends State<DemProWalletScreen> {
                             physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                             itemCount: transactions.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
                             itemBuilder: (context, i) =>
                                 _TransactionRow(tx: transactions[i]),
                           ),
@@ -275,7 +308,9 @@ class _TransactionRow extends StatelessWidget {
     final amount = (tx['amount'] as num?) ?? 0;
     final isCredit = amount >= 0;
     final description = tx['description'] as String? ?? _txLabel(type);
-    final createdAt = DateTime.tryParse(tx['createdAt'] as String? ?? '')?.toLocal();
+    final createdAt = DateTime.tryParse(
+      tx['createdAt'] as String? ?? '',
+    )?.toLocal();
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -295,7 +330,9 @@ class _TransactionRow extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+              isCredit
+                  ? Icons.arrow_downward_rounded
+                  : Icons.arrow_upward_rounded,
               color: isCredit ? AppColors.successLight : AppColors.error,
               size: 18,
             ),
@@ -307,7 +344,9 @@ class _TransactionRow extends StatelessWidget {
               children: [
                 Text(
                   description,
-                  style: ClientText.bodyStrong.copyWith(color: AppColors.textDark),
+                  style: ClientText.bodyStrong.copyWith(
+                    color: AppColors.textDark,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -315,7 +354,9 @@ class _TransactionRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}/${createdAt.year} à ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}',
-                    style: ClientText.label.copyWith(color: AppColors.textMuted),
+                    style: ClientText.label.copyWith(
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ],
               ],
@@ -361,7 +402,9 @@ class _CashoutSheetState extends State<_CashoutSheet> {
       return;
     }
     if (amount > widget.maxAmount) {
-      setState(() => _error = 'Maximum retirable : ${formatFcfa(widget.maxAmount)}.');
+      setState(
+        () => _error = 'Maximum retirable : ${formatFcfa(widget.maxAmount)}.',
+      );
       return;
     }
     setState(() {
@@ -372,15 +415,17 @@ class _CashoutSheetState extends State<_CashoutSheet> {
       await widget.repo.requestCashout(amount: amount, operatorName: _operator);
       if (mounted) Navigator.pop(context, true);
     } on AppException catch (e) {
-      if (mounted) setState(() {
-        _error = e.message;
-        _submitting = false;
-      });
+      if (mounted)
+        setState(() {
+          _error = e.message;
+          _submitting = false;
+        });
     } catch (_) {
-      if (mounted) setState(() {
-        _error = 'Le retrait a échoué.';
-        _submitting = false;
-      });
+      if (mounted)
+        setState(() {
+          _error = 'Le retrait a échoué.';
+          _submitting = false;
+        });
     }
   }
 
@@ -390,7 +435,9 @@ class _CashoutSheetState extends State<_CashoutSheet> {
       20,
       16,
       20,
-      MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).viewPadding.bottom + 24,
+      MediaQuery.of(context).viewInsets.bottom +
+          MediaQuery.of(context).viewPadding.bottom +
+          24,
     ),
     decoration: const BoxDecoration(
       color: Colors.white,
@@ -414,7 +461,10 @@ class _CashoutSheetState extends State<_CashoutSheet> {
           ),
           Text(
             'Retirer mon solde',
-            style: ClientText.title.copyWith(color: AppColors.textDark, fontSize: 18),
+            style: ClientText.title.copyWith(
+              color: AppColors.textDark,
+              fontSize: 18,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -422,7 +472,10 @@ class _CashoutSheetState extends State<_CashoutSheet> {
             style: ClientText.label.copyWith(color: AppColors.textMuted),
           ),
           const SizedBox(height: 18),
-          Text('Montant (FCFA)', style: ClientText.label.copyWith(color: AppColors.textMuted)),
+          Text(
+            'Montant (FCFA)',
+            style: ClientText.label.copyWith(color: AppColors.textMuted),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _amountCtrl,
@@ -436,11 +489,17 @@ class _CashoutSheetState extends State<_CashoutSheet> {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
             ),
           ),
           const SizedBox(height: 16),
-          Text('Opérateur', style: ClientText.label.copyWith(color: AppColors.textMuted)),
+          Text(
+            'Opérateur',
+            style: ClientText.label.copyWith(color: AppColors.textMuted),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -463,7 +522,10 @@ class _CashoutSheetState extends State<_CashoutSheet> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!, style: ClientText.label.copyWith(color: AppColors.error)),
+            Text(
+              _error!,
+              style: ClientText.label.copyWith(color: AppColors.error),
+            ),
           ],
           const SizedBox(height: 20),
           SizedBox(
@@ -474,13 +536,18 @@ class _CashoutSheetState extends State<_CashoutSheet> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               child: _submitting
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
                     )
                   : const Text('Confirmer le retrait'),
             ),
@@ -495,7 +562,11 @@ class _OperatorChip extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
-  const _OperatorChip({required this.label, required this.active, required this.onTap});
+  const _OperatorChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
