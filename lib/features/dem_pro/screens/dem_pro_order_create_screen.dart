@@ -149,7 +149,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
   String _packageType = 'small';
   final _instructionsCtrl = TextEditingController();
   bool _isFragile = false;
-  late bool _isScheduled = widget.scheduled;
+  late final bool _isScheduled = widget.scheduled;
   DateTime? _scheduledAt;
 
   // ── Route polyline ────────────────────────────────────────────────────
@@ -1925,120 +1925,89 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       ),
 
       // ── Livraison programmée (uniquement si lancé depuis "Programmer") ──
+      // Un interrupteur marche/arrêt n'a pas de sens ici — cet écran n'est
+      // atteint QUE via l'entrée "Programmée", programmer n'est donc jamais
+      // optionnel dans ce flux (contrairement à Simple/Express, qui n'a pas
+      // cette section du tout). On affiche directement la date choisie,
+      // modifiable au tap.
       if (widget.scheduled) ...[
         const SizedBox(height: 16),
         Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
         const SizedBox(height: 14),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isScheduled
-                  ? AppColors.primary.withValues(alpha: 0.4)
-                  : Colors.white.withValues(alpha: 0.25),
+        Row(
+          children: [
+            const Icon(Icons.schedule, color: AppColors.primary, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Livraison programmée',
+              style: ClientText.subtitle.copyWith(color: Colors.white),
             ),
-          ),
-          child: SwitchListTile(
-            value: _isScheduled,
-            onChanged: (v) {
-              setState(() {
-                _isScheduled = v;
-                if (!v) _scheduledAt = null;
-              });
-              if (v) _pickScheduleDate();
-            },
-            activeTrackColor: AppColors.primary,
-            activeThumbColor: Colors.white,
-            inactiveThumbColor: Colors.white,
-            inactiveTrackColor: Colors.white.withValues(alpha: 0.25),
-            title: Row(
-              children: [
-                const Icon(Icons.schedule, color: AppColors.primary, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  'Programmer la livraison',
-                  style: ClientText.subtitle.copyWith(color: Colors.white),
-                ),
-              ],
-            ),
-            subtitle: Text(
-              'Choisir une date et heure précise',
-              style: ClientText.label.copyWith(color: Colors.white),
-            ),
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 4,
-            ),
-          ),
+          ],
         ),
-        if (_isScheduled) ...[
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: _pickScheduleDate,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: _pickScheduleDate,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _scheduledAt != null
+                    ? AppColors.primary
+                    : AppColors.warning,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today,
                   color: _scheduledAt != null
                       ? AppColors.primary
                       : AppColors.warning,
-                  width: 1.5,
+                  size: 18,
                 ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    color: _scheduledAt != null
-                        ? AppColors.primary
-                        : AppColors.warning,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _scheduledAt != null
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _fmtDate(_scheduledAt!),
-                                style: ClientText.subtitle.copyWith(
-                                  color: Colors.white,
-                                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _scheduledAt != null
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _fmtDate(_scheduledAt!),
+                              style: ClientText.subtitle.copyWith(
+                                color: Colors.white,
                               ),
-                              Text(
-                                _fmtTime(_scheduledAt!),
-                                style: ClientText.label.copyWith(
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Text(
-                            'Appuyez pour choisir la date',
-                            style: ClientText.bodyStrong.copyWith(
-                              color: AppColors.warning,
                             ),
+                            Text(
+                              _fmtTime(_scheduledAt!),
+                              style: ClientText.label.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          'Appuyez pour choisir la date',
+                          style: ClientText.bodyStrong.copyWith(
+                            color: AppColors.warning,
                           ),
-                  ),
-                  Icon(
-                    Icons.edit_outlined,
-                    color: _scheduledAt != null
-                        ? Colors.white.withValues(alpha: 0.75)
-                        : AppColors.warning,
-                    size: 16,
-                  ),
-                ],
-              ),
+                        ),
+                ),
+                Icon(
+                  Icons.edit_outlined,
+                  color: _scheduledAt != null
+                      ? Colors.white.withValues(alpha: 0.75)
+                      : AppColors.warning,
+                  size: 16,
+                ),
+              ],
             ),
           ),
-        ],
-      ], // end if (widget.scheduled)
+        ),
+      ],
     ],
   );
 
