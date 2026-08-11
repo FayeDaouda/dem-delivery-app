@@ -913,6 +913,15 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     setState(() => _step--);
   }
 
+  // Retourne directement à la première étape — conserve les données déjà
+  // saisies (contrairement à un vrai reset du formulaire), simple
+  // raccourci de navigation.
+  void _resetToStart() {
+    if (_step == 0) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _step = 0);
+  }
+
   // ── Map markers / polyline ────────────────────────────────────────────────
 
   Set<Marker> get _markers {
@@ -1144,41 +1153,57 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.86,
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: AppColors.gradientSplash,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
+                // `Clip.none` laisse le bouton retour flottant déborder
+                // au-dessus du panneau (dans la zone carte) sans être
+                // rogné par les coins arrondis du panneau lui-même.
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.86,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          offset: const Offset(0, -4),
-                        ),
-                      ],
-                    ),
-                    child: AnimatedPadding(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      padding: EdgeInsets.only(
-                        bottom: MediaQuery.of(context).viewInsets.bottom,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: SingleChildScrollView(child: _buildPanel()),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: AppColors.gradientSplash,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(24),
                           ),
-                          _buildNavButtons(),
-                        ],
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 20,
+                              offset: const Offset(0, -4),
+                            ),
+                          ],
+                        ),
+                        child: AnimatedPadding(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOut,
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildSheetHandle(),
+                              Flexible(
+                                child: SingleChildScrollView(
+                                  child: _buildPanel(),
+                                ),
+                              ),
+                              _buildNavButtons(),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    Positioned(
+                      top: -22,
+                      left: 20,
+                      child: _buildFloatingBackButton(),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -1187,6 +1212,45 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     );
   }
 
+  // Poignée décorative centrée en haut du panneau — le bouton retour vit
+  // à part, flottant au-dessus du panneau (plus visible).
+  Widget _buildSheetHandle() => Padding(
+    padding: const EdgeInsets.only(top: 14, bottom: 4),
+    child: Center(
+      child: Container(
+        width: 36,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    ),
+  );
+
+  // Bouton retour flottant, à cheval sur le bord haut du panneau (dans la
+  // zone carte) pour être plus visible qu'une icône noyée dans l'en-tête
+  // du panneau.
+  Widget _buildFloatingBackButton() => GestureDetector(
+    onTap: _back,
+    child: Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: const Icon(Icons.arrow_back, color: AppColors.primary, size: 22),
+    ),
+  );
+
   // ── Header ────────────────────────────────────────────────────────────────
 
   Widget _buildHeader() => Padding(
@@ -1194,7 +1258,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     child: Row(
       children: [
         IconButton(
-          onPressed: _back,
+          onPressed: _resetToStart,
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -1202,7 +1266,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.arrow_back,
+              Icons.refresh_rounded,
               color: AppColors.textPrimary,
               size: 20,
             ),
@@ -1353,21 +1417,6 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Poignée décorative ──────────────────────────────────────────────
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 8),
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        ),
-
         // ── Bandeau départ ───────────────────────────────────────────────────
         // Uniquement à l'étape Destination — répété sur chaque étape suivante,
         // c'était redondant (le récap final montre déjà le trajet complet).
