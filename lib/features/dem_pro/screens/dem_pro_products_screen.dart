@@ -107,7 +107,12 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ProductFormSheet(repo: _repo, existing: existing),
+      builder: (_) => _ProductFormSheet(
+        repo: _repo,
+        existing: existing,
+        isPro: _isPro,
+        existingCategories: _categories,
+      ),
     );
     if (saved == true) _load();
   }
@@ -157,132 +162,181 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
     }
   }
 
+  bool get _isPro => isProPlan(_planData?['plan'] as String?);
+
+  List<String> get _categories =>
+      _products
+          .map((p) => (p['category'] as String?)?.trim())
+          .whereType<String>()
+          .where((c) => c.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.lightBg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Header ────────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 20, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => context.pop(),
-                    icon: const Icon(
-                      Icons.arrow_back_ios_new,
-                      color: AppColors.textDark,
-                      size: 18,
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      body: Column(
+        children: [
+          // ── Header ──────────────────────────────────────────────────────
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Text(
-                          'Mes produits',
-                          style: ClientText.headline.copyWith(
-                            color: AppColors.textDark,
-                            fontSize: 20,
+                        IconButton(
+                          onPressed: () => context.pop(),
+                          icon: const Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: Colors.white,
+                            size: 20,
                           ),
                         ),
-                        Text(
-                          'Réutilisez-les à chaque commande',
-                          style: ClientText.label.copyWith(
-                            color: AppColors.textMuted,
+                        Expanded(
+                          child: Text(
+                            'Mes produits',
+                            style: ClientText.title.copyWith(
+                              color: Colors.white,
+                              fontSize: 18,
+                            ),
                           ),
+                        ),
+                        if (!_loading && _products.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.20),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${_products.length}',
+                              style: ClientText.micro.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          onPressed: () => _showForm(),
+                          icon: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.20),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          tooltip: 'Ajouter un produit',
                         ),
                       ],
                     ),
-                  ),
-                  IconButton(
-                    onPressed: () => _showForm(),
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.add,
-                        color: AppColors.primary,
-                        size: 22,
+                    const SizedBox(height: 2),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Text(
+                        'Réutilisez-les à chaque commande',
+                        style: ClientText.label.copyWith(
+                          color: Colors.white.withValues(alpha: 0.8),
+                        ),
                       ),
                     ),
-                    tooltip: 'Ajouter un produit',
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Recherche ─────────────────────────────────────────────────────
-            if (_products.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.lightBorder),
-                  ),
-                  child: TextField(
-                    controller: _search,
-                    style: ClientText.body.copyWith(
-                      color: AppColors.textDark,
-                      fontSize: 14,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Rechercher un produit…',
-                      hintStyle: ClientText.body.copyWith(
-                        color: AppColors.textMuted,
-                        fontSize: 14,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.search,
-                        color: AppColors.textMuted,
-                        size: 20,
-                      ),
-                      suffixIcon: _query.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(
-                                Icons.close,
+                    if (_products.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.88),
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                          child: TextField(
+                            controller: _search,
+                            cursorColor: AppColors.primary,
+                            style: ClientText.body.copyWith(
+                              color: AppColors.textDark,
+                              fontSize: 14,
+                            ),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              filled: false,
+                              hintText: 'Rechercher un produit…',
+                              hintStyle: ClientText.body.copyWith(
                                 color: AppColors.textMuted,
-                                size: 18,
+                                fontSize: 14,
                               ),
-                              onPressed: () {
-                                _search.clear();
-                                setState(() => _query = '');
-                              },
-                            )
-                          : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                color: AppColors.primary,
+                                size: 20,
+                              ),
+                              suffixIcon: _query.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(
+                                        Icons.close,
+                                        color: AppColors.textMuted,
+                                        size: 18,
+                                      ),
+                                      onPressed: () {
+                                        _search.clear();
+                                        setState(() => _query = '');
+                                      },
+                                    )
+                                  : null,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-
-            // ── Contenu ───────────────────────────────────────────────────────
-            Expanded(
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
-                      ),
-                    )
-                  : _loadFailed
-                  ? _buildError()
-                  : RefreshIndicator(
-                      color: AppColors.primary,
-                      backgroundColor: Colors.white,
-                      onRefresh: _load,
-                      child: _filtered.isEmpty ? _buildEmpty() : _buildList(),
-                    ),
             ),
-          ],
-        ),
+          ),
+
+          // ── Contenu ─────────────────────────────────────────────────────
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
+                : _loadFailed
+                ? _buildError()
+                : RefreshIndicator(
+                    color: AppColors.primary,
+                    backgroundColor: Colors.white,
+                    onRefresh: _load,
+                    child: _filtered.isEmpty
+                        ? _buildEmpty()
+                        : (_isPro && _categories.isNotEmpty)
+                        ? _buildGroupedList()
+                        : _buildList(),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -297,6 +351,43 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
       onDelete: () => _delete(_filtered[i]),
     ),
   );
+
+  // Regroupe la liste déjà filtrée par catalogue — "Sans catalogue" en
+  // dernier quel que soit l'ordre alphabétique, les catalogues nommés
+  // passent avant (l'utilisateur les a explicitement créés, ils méritent
+  // la priorité visuelle).
+  Widget _buildGroupedList() {
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final p in _filtered) {
+      final cat = (p['category'] as String?)?.trim();
+      final key = (cat == null || cat.isEmpty) ? 'Sans catalogue' : cat;
+      grouped.putIfAbsent(key, () => []).add(p);
+    }
+    final keys = grouped.keys.toList()
+      ..sort((a, b) {
+        if (a == 'Sans catalogue') return 1;
+        if (b == 'Sans catalogue') return -1;
+        return a.compareTo(b);
+      });
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        for (final key in keys) ...[
+          _CategoryHeader(name: key, count: grouped[key]!.length),
+          const SizedBox(height: 10),
+          for (final p in grouped[key]!)
+            _ProductCard(
+              product: p,
+              onEdit: () => _showForm(existing: p),
+              onDelete: () => _delete(p),
+            ),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
 
   Widget _buildEmpty() => ListView(
     physics: const AlwaysScrollableScrollPhysics(),
@@ -399,6 +490,47 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
         ),
       ],
     ),
+  );
+}
+
+// ── En-tête de catalogue ─────────────────────────────────────────────────────
+
+class _CategoryHeader extends StatelessWidget {
+  final String name;
+  final int count;
+  const _CategoryHeader({required this.name, required this.count});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(
+        name == 'Sans catalogue'
+            ? Icons.inventory_2_outlined
+            : Icons.folder_outlined,
+        color: AppColors.primary,
+        size: 16,
+      ),
+      const SizedBox(width: 8),
+      Text(
+        name,
+        style: ClientText.bodyStrong.copyWith(color: AppColors.textDark),
+      ),
+      const SizedBox(width: 8),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          '$count',
+          style: ClientText.micro.copyWith(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    ],
   );
 }
 
@@ -596,7 +728,14 @@ class _ProductCard extends StatelessWidget {
 class _ProductFormSheet extends StatefulWidget {
   final DemProRepository repo;
   final Map<String, dynamic>? existing;
-  const _ProductFormSheet({required this.repo, this.existing});
+  final bool isPro;
+  final List<String> existingCategories;
+  const _ProductFormSheet({
+    required this.repo,
+    this.existing,
+    required this.isPro,
+    required this.existingCategories,
+  });
   @override
   State<_ProductFormSheet> createState() => _ProductFormSheetState();
 }
@@ -606,6 +745,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   late final TextEditingController _name;
   late final TextEditingController _price;
   late final TextEditingController _quantity;
+  late final TextEditingController _category;
   bool _saving = false;
 
   // Multi-point de vente — null = disponible partout (comportement
@@ -631,6 +771,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _quantity = TextEditingController(
       text: quantity != null ? quantity.toInt().toString() : '',
     );
+    _category = TextEditingController(text: e?['category'] as String? ?? '');
     _proAddressId = e?['proAddressId'] as String?;
     _loadAddresses();
   }
@@ -653,6 +794,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _name.dispose();
     _price.dispose();
     _quantity.dispose();
+    _category.dispose();
     super.dispose();
   }
 
@@ -662,11 +804,14 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     try {
       final priceText = _price.text.trim();
       final quantityText = _quantity.text.trim();
+      final categoryText = _category.text.trim();
       final data = {
         'name': _name.text.trim(),
         'defaultPrice': priceText.isEmpty ? null : num.tryParse(priceText),
         'quantity': quantityText.isEmpty ? null : int.tryParse(quantityText),
         'proAddressId': _proAddressId,
+        if (widget.isPro)
+          'category': categoryText.isEmpty ? null : categoryText,
       };
       if (_isEdit) {
         await widget.repo.updateProduct(widget.existing!['id'] as String, data);
@@ -913,6 +1058,114 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                 style: ClientText.micro.copyWith(color: AppColors.textMuted),
               ),
               const SizedBox(height: 14),
+
+              // ── Catalogue — regroupement des produits, réservé Pro/Business.
+              // En gratuit, une incitation remplace le champ plutôt que de le
+              // masquer silencieusement.
+              if (widget.isPro) ...[
+                Text(
+                  'Catalogue (optionnel)',
+                  style: ClientText.label.copyWith(color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _category,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: ClientText.body.copyWith(
+                    color: AppColors.textDark,
+                    fontSize: 14,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'ex: Boissons, Plats, Vêtements…',
+                    hintStyle: ClientText.body.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                    filled: true,
+                    fillColor: AppColors.lightFill,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppColors.lightBorder,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppColors.lightBorder,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 1.5,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+                if (widget.existingCategories.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final c in widget.existingCategories)
+                        _ProAddressChip(
+                          label: c,
+                          active: _category.text.trim() == c,
+                          onTap: () => setState(
+                            () => _category.text = _category.text.trim() == c
+                                ? ''
+                                : c,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 14),
+              ] else ...[
+                GestureDetector(
+                  onTap: () => showDemProPlanSheet(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.folder_outlined,
+                          color: AppColors.primary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Organisez vos produits par catalogue (Boissons, Plats…) avec Pro',
+                            style: ClientText.label.copyWith(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.primary,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
 
               // ── Point de vente (multi-site) — masqué tant qu'aucune adresse
               // n'est enregistrée : rien à choisir, pas la peine d'encombrer.
