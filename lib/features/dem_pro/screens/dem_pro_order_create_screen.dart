@@ -207,6 +207,16 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     _deliveryAddress = request['deliveryAddress'] as String? ?? '';
     _addressSearchCtrl.text = _deliveryAddress;
 
+    // La boutique publique capture désormais activement les coordonnées
+    // (GPS ou géocodage côté web) — auparavant ce champ existait déjà mais
+    // n'était jamais rempli en pratique par l'ancien formulaire texte.
+    final lat = (request['deliveryLatitude'] as num?)?.toDouble();
+    final lng = (request['deliveryLongitude'] as num?)?.toDouble();
+    if (lat != null && lng != null) {
+      _deliveryLat = lat;
+      _deliveryLng = lng;
+    }
+
     final name = request['customerName'] as String?;
     if (name != null && name.isNotEmpty) _recipientNameCtrl.text = name;
 
@@ -225,6 +235,27 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
 
     final notes = request['notes'] as String?;
     if (notes != null && notes.isNotEmpty) _instructionsCtrl.text = notes;
+
+    // Panier déjà choisi par le client sur la boutique publique — évite au
+    // DEM Pro de tout retaper à la main (voir Order.items pour le même
+    // format de snapshot {name, quantity, price, productId}).
+    final items =
+        (request['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (items.isNotEmpty) {
+      for (final a in _articles) {
+        a.dispose();
+      }
+      _articles.clear();
+      for (final item in items) {
+        final a = _Article();
+        a.nameCtrl.text = item['name'] as String? ?? '';
+        a.qtyCtrl.text = '${item['quantity'] ?? 1}';
+        final price = item['price'] as num?;
+        if (price != null) a.priceCtrl.text = price.toInt().toString();
+        a.productId = item['productId'] as String?;
+        _articles.add(a);
+      }
+    }
   }
 
   @override

@@ -1138,6 +1138,17 @@ class _CompteTabState extends State<_CompteTab>
   }
 
   Future<void> _toggleInAppPayment(bool value) async {
+    if (value &&
+        !await requireProPlan(
+          context,
+          plan: _planData?['plan'] as String?,
+          title: 'Paiement intégré réservé aux plans Pro',
+          message:
+              'Le paiement intégré (wallet DEM Pro) est réservé aux plans '
+              'Pro et Business.',
+        )) {
+      return;
+    }
     setState(() => _planData = {...?_planData, 'inAppPaymentEnabled': value});
     try {
       await _repo.setInAppPaymentEnabled(value);
@@ -1166,7 +1177,17 @@ class _CompteTabState extends State<_CompteTab>
     } catch (_) {}
   }
 
-  void _shareOrderLink() {
+  Future<void> _shareOrderLink() async {
+    if (!await requireProPlan(
+      context,
+      plan: _planData?['plan'] as String?,
+      title: 'Lien de commande réservé aux plans Pro',
+      message:
+          'Le partage de votre boutique en ligne est réservé aux plans '
+          'Pro et Business.',
+    )) {
+      return;
+    }
     final id = widget.user?['id'] as String?;
     if (id == null) return;
     final businessName = (widget.user?['proBusinessName'] as String?)?.trim();
