@@ -60,6 +60,7 @@ import '../../features/dem_pro/screens/dem_pro_promo_code_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_wallet_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_clients_screen.dart';
 import '../../features/guest_tracking/guest_tracking_screen.dart';
+import '../../features/public_storefront/screens/storefront_screen.dart';
 
 final routeObserver = RouteObserver<ModalRoute<void>>();
 
@@ -99,6 +100,9 @@ final appRouter = GoRouter(
 
     // ── Suivi invité : accessible sans auth ─────────────────────────────────
     if (path.startsWith('/track/')) return null;
+
+    // ── Boutique publique DEM Pro : accessible sans auth ────────────────────
+    if (path.startsWith('/commander/')) return null;
 
     // ── 1. Utilisateur connecté ──────────────────────────────────────────────
     if (n.isLoggedIn) {
@@ -148,6 +152,13 @@ final appRouter = GoRouter(
       path: '/track/:id',
       builder: (context, state) =>
           GuestTrackingScreen(orderId: state.pathParameters['id']!),
+    ),
+
+    // ── Boutique publique DEM Pro (public, sans auth) ──
+    GoRoute(
+      path: '/commander/:merchantId',
+      builder: (context, state) =>
+          StorefrontScreen(merchantId: state.pathParameters['merchantId']!),
     ),
 
     // ── Auth ──
@@ -320,9 +331,8 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/dem-pro/clients/detail',
-      builder: (context, state) => DemProClientDetailScreen(
-        client: state.extra as Map<String, dynamic>,
-      ),
+      builder: (context, state) =>
+          DemProClientDetailScreen(client: state.extra as Map<String, dynamic>),
     ),
     GoRoute(
       path: '/orders/confirmation',

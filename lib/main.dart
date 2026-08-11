@@ -9,6 +9,7 @@ import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platf
 import 'core/config/app_config.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/router/app_router.dart';
+import 'core/services/deep_link_service.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 
@@ -35,7 +36,9 @@ void main() async {
   }
 
   // ── Push notifications (canaux + listeners uniquement, sans dialog de permission) ─
-  NotificationService.setup().timeout(const Duration(seconds: 5)).catchError((_) {});
+  NotificationService.setup()
+      .timeout(const Duration(seconds: 5))
+      .catchError((_) {});
 
   // ── Google Maps (Android) ──────────────────────────────────────────────────
   final mapsImplementation = GoogleMapsFlutterPlatform.instance;
@@ -79,11 +82,13 @@ class _DemAppState extends State<DemApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    DeepLinkService.init();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    DeepLinkService.dispose();
     super.dispose();
   }
 
