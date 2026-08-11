@@ -235,6 +235,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
           );
       }
     });
+    _syncMapToStep();
   }
 
   Future<void> _maybeShowDraftPrompt() async {
@@ -335,7 +336,8 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     _mapCtrl?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 56));
   }
 
-  /// Recadre la carte sur l'ensemble des points définis (départ + arrêts).
+  /// Recadre la carte sur l'ensemble des points définis (départ + arrêts) —
+  /// la vue d'ensemble, réservée au récap une fois tous les arrêts saisis.
   void _recenterMap() {
     final points = <LatLng>[
       if (_pickupLat != null) LatLng(_pickupLat!, _pickupLng!),
@@ -343,6 +345,25 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
         if (s.hasLocation) LatLng(s.lat!, s.lng!),
     ];
     _fitBoundsVisible(points);
+  }
+
+  /// Centre la carte sur le point pertinent pour l'étape actuellement
+  /// affichée — l'arrêt en cours s'il a déjà une localisation, sinon le
+  /// départ — ou la vue d'ensemble une fois sur le récap. Appelé à chaque
+  /// changement d'étape (Suivant/Précédent/ajout/suppression d'arrêt),
+  /// pour que le point concerné par l'étape affichée reste visible
+  /// au-dessus du panneau sans avoir à ressaisir son adresse.
+  void _syncMapToStep() {
+    if (_onRecap) {
+      _recenterMap();
+      return;
+    }
+    final stop = _stops[_step];
+    if (stop.hasLocation) {
+      _centerMapVisible(LatLng(stop.lat!, stop.lng!));
+    } else if (_pickupLat != null) {
+      _centerMapVisible(LatLng(_pickupLat!, _pickupLng!));
+    }
   }
 
   // ── Adresses Pro ─────────────────────────────────────────────────────────
@@ -377,7 +398,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
         _pickupLng = lng;
       }
     });
-    if (lat != null && lng != null) _recenterMap();
+    if (lat != null && lng != null) _centerMapVisible(LatLng(lat, lng));
     _scheduleDraftSave();
   }
 
@@ -399,7 +420,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       }
       _pickupLat = pos.latitude;
       _pickupLng = pos.longitude;
-      _recenterMap();
+      _centerMapVisible(LatLng(pos.latitude, pos.longitude));
       await _reverseGeocode(LatLng(pos.latitude, pos.longitude), stopIndex: -1);
       _scheduleDraftSave();
     } catch (_) {
@@ -441,7 +462,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
         _placingMap = false;
         _geocoding = false;
       });
-      _recenterMap();
+      _centerMapVisible(pos);
       _scheduleDraftSave();
     }
   }
@@ -485,7 +506,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       if (phone != null && phone.isNotEmpty)
         _stops[index].phone = phone.replaceFirst('+221', '');
     });
-    _recenterMap();
+    _centerMapVisible(LatLng(lat, lng));
     _scheduleDraftSave();
   }
 
@@ -499,7 +520,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
         _stops[index].lng = lng;
       }
     });
-    if (lat != null && lng != null) _recenterMap();
+    if (lat != null && lng != null) _centerMapVisible(LatLng(lat, lng));
     _scheduleDraftSave();
   }
 
@@ -514,7 +535,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       _stops[index].lng = lng;
       _stops[index].address = address;
     });
-    _recenterMap();
+    _centerMapVisible(LatLng(lat, lng));
     _scheduleDraftSave();
   }
 
@@ -750,7 +771,14 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
             // Carte
             Positioned.fill(
               child: GoogleMap(
-                onMapCreated: (c) => _mapCtrl = c,
+                // Recale sur le point courant dès que le contrôleur devient
+                // disponible — nécessaire pour le préremplissage "Recommander
+                // cette tournée" (_applyReorder), qui a lieu en synchrone dans
+                // initState, bien avant que la carte existe.
+                onMapCreated: (c) {
+                  _mapCtrl = c;
+                  _syncMapToStep();
+                },
                 style: _mapStyle,
                 initialCameraPosition: CameraPosition(target: _dakar, zoom: 13),
                 myLocationEnabled: false,
@@ -965,6 +993,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
         return;
       }
       setState(() => _step++);
+      _syncMapToStep();
     }
   }
 
@@ -981,6 +1010,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       return;
     }
     setState(() => _step--);
+    _syncMapToStep();
   }
 
   // Retourne directement au premier arrêt — conserve les données déjà
@@ -990,6 +1020,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     if (_step == 0) return;
     FocusScope.of(context).unfocus();
     setState(() => _step = 0);
+    _syncMapToStep();
   }
 
   void _addStop() {
@@ -997,6 +1028,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       _stops.add(_Stop());
       _step = _stops.length - 1;
     });
+    _syncMapToStep();
     _scheduleDraftSave();
   }
 
@@ -1009,6 +1041,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       _stops.removeAt(index);
       _step = math.min(_step, _stops.length);
     });
+    _syncMapToStep();
     _scheduleDraftSave();
   }
 
@@ -1458,7 +1491,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
       _pickupLng = lng;
       _pickupAddress = address;
     });
-    _recenterMap();
+    _centerMapVisible(LatLng(lat, lng));
     _scheduleDraftSave();
   }
 

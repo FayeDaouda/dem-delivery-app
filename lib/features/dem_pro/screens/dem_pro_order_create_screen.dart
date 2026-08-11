@@ -271,7 +271,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         _recipientPhoneCtrl.text = phone.replaceFirst('+221', '');
       }
     });
-    _recenterMap();
+    if (_step == 4) {
+      _recenterMap();
+    } else {
+      _centerMapVisible(LatLng(lat, lng));
+    }
     _scheduleDraftSave();
   }
 
@@ -468,12 +472,13 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         _pickupLng = lng;
       }
     });
-    if (lat != null && lng != null) _recenterMap();
     if (lat == null || lng == null) {
       _geocodePickupAddress(address);
     } else if (_step == 4) {
       _fetchEstimate();
       _fetchRoute();
+    } else {
+      _centerMapVisible(LatLng(lat, lng));
     }
   }
 
@@ -490,10 +495,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       }
     });
     if (lat != null && lng != null) {
-      _recenterMap();
       if (_step == 4) {
         _fetchEstimate();
         _fetchRoute();
+      } else {
+        _centerMapVisible(LatLng(lat, lng));
       }
     }
     _scheduleDraftSave();
@@ -514,10 +520,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         _pickupLat = loc.latitude;
         _pickupLng = loc.longitude;
       });
-      _recenterMap();
       if (_step == 4) {
         _fetchEstimate();
         _fetchRoute();
+      } else {
+        _centerMapVisible(LatLng(loc.latitude, loc.longitude));
       }
     } catch (_) {
       _fetchGps();
@@ -550,7 +557,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         _deliveryLat = ll.latitude;
         _deliveryLng = ll.longitude;
       }
-      _recenterMap();
+      if (_step == 4) {
+        _recenterMap();
+      } else {
+        _centerMapVisible(ll);
+      }
       _reverseGeocode(ll, forPickup: forPickup);
     } catch (_) {
       if (mounted) showDemToast(context, 'GPS indisponible', isError: true);
@@ -596,7 +607,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         _fetchEstimate();
         _fetchRoute();
       } else {
-        _recenterMap();
+        _centerMapVisible(pos);
       }
       _scheduleDraftSave();
     }
@@ -1069,7 +1080,18 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
             // Carte
             Positioned.fill(
               child: GoogleMap(
-                onMapCreated: (c) => _mapCtrl = c,
+                // Recale sur le point pertinent dès que le contrôleur devient
+                // disponible — nécessaire pour "Recommander cette commande"
+                // (_applyReorder), qui préremplit la destination en
+                // synchrone dans initState, bien avant que la carte existe.
+                onMapCreated: (c) {
+                  _mapCtrl = c;
+                  if (_deliveryLat != null) {
+                    _centerMapVisible(LatLng(_deliveryLat!, _deliveryLng!));
+                  } else if (_pickupLat != null) {
+                    _centerMapVisible(LatLng(_pickupLat!, _pickupLng!));
+                  }
+                },
                 style: _mapStyle,
                 initialCameraPosition: CameraPosition(target: _dakar, zoom: 13),
                 myLocationEnabled: false,
@@ -2720,10 +2742,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       _pickupLng = lng;
       _pickupAddress = address;
     });
-    _recenterMap();
     if (_step == 4) {
       _fetchEstimate();
       _fetchRoute();
+    } else {
+      _centerMapVisible(LatLng(lat, lng));
     }
     _scheduleDraftSave();
   }
@@ -2735,10 +2758,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       _deliveryAddress = address;
       _addressSearchCtrl.text = address;
     });
-    _recenterMap();
     if (_step == 4) {
       _fetchEstimate();
       _fetchRoute();
+    } else {
+      _centerMapVisible(LatLng(lat, lng));
     }
     _scheduleDraftSave();
   }
