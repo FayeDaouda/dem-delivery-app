@@ -11,6 +11,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/error/app_exception.dart';
+import '../../../core/router/app_startup_notifier.dart';
 import '../../../core/services/places_autocomplete_service.dart';
 import '../../../core/storage/dem_pro_draft_storage.dart';
 import '../../../core/theme/map_theme_provider.dart';
@@ -967,9 +968,16 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     }
   }
 
+  // Sur la première étape, un simple `pop()` laisserait l'utilisateur sans
+  // sortie s'il n'y a rien à dépiler (écran atteint sans pile de navigation,
+  // ex. lien profond) — on retombe alors sur le tableau de bord DEM Pro.
   void _backStep() {
     if (_step == 0) {
-      context.pop();
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(appStartupNotifier.homeForRole);
+      }
       return;
     }
     setState(() => _step--);
