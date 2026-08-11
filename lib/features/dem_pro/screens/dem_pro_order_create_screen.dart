@@ -120,8 +120,6 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
   LatLng _cameraPos = _dakar;
   bool _isMapPlacement = false;
   bool _placingPickup = false; // false = placing delivery
-  final _sheetCtrl = DraggableScrollableController();
-  double _lastKeyboardInset = 0;
 
   // ── Départ (auto-rempli depuis ProAddress défaut) ────────────────────────
   List<Map<String, dynamic>> _proAddresses = [];
@@ -198,27 +196,6 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     }
   }
 
-  // `MediaQuery.of(context)` étant lu ici, ce callback se redéclenche à
-  // chaque changement de `viewInsets` (ouverture/fermeture du clavier) —
-  // on agrandit alors la feuille pour que le champ actif ne reste jamais
-  // caché derrière le clavier, plutôt que de compter uniquement sur le
-  // padding interne (qui ne libère pas plus d'espace, juste décale).
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final inset = MediaQuery.of(context).viewInsets.bottom;
-    if (inset != _lastKeyboardInset) {
-      _lastKeyboardInset = inset;
-      if (_sheetCtrl.isAttached) {
-        _sheetCtrl.animateTo(
-          inset > 0 ? _sheetMaxKeyboard : _sheetMax,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    }
-  }
-
   /// Préremplit destinataire/adresse (texte) + repère/instructions depuis une
   /// demande reçue via la page publique. Ne fournit jamais de coordonnées —
   /// le client final n'en donne pas — donc `_deliveryLat/_deliveryLng`
@@ -252,7 +229,6 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
   @override
   void dispose() {
     _mapCtrl?.dispose();
-    _sheetCtrl.dispose();
     _searchDebounce?.cancel();
     _draftSaveDebounce?.cancel();
     _recipientNameCtrl.dispose();
@@ -927,7 +903,6 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       _fetchRoute();
     }
     setState(() => _step++);
-    _syncSheetToStep();
   }
 
   void _back() {
@@ -936,21 +911,6 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
       return;
     }
     setState(() => _step--);
-    _syncSheetToStep();
-  }
-
-  // `_sheetMax` varie par étape (la Confirmation a besoin de plus de place
-  // que les autres pour montrer le prix sans avoir à scroller) — mais
-  // `initialChildSize` ne s'applique qu'une fois à la création du sheet, il
-  // faut donc l'animer explicitement à chaque changement d'étape pour que
-  // cette taille par étape ait un effet réel.
-  void _syncSheetToStep() {
-    if (!_sheetCtrl.isAttached) return;
-    _sheetCtrl.animateTo(
-      _sheetMax,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
   }
 
   // ── Map markers / polyline ────────────────────────────────────────────────
@@ -1062,9 +1022,17 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     _fitBoundsVisible(points);
   }
 
+  // Hauteur approximative du panneau du bas — il épouse désormais son
+  // contenu (plus de fraction d'écran fixe), donc ceci n'est qu'une
+  // estimation suffisante pour cadrer la caméra, pas une valeur exacte.
   double get _panelHeight {
     final h = MediaQuery.of(context).size.height;
-    return h * _sheetMax;
+    return h *
+        switch (_step) {
+          3 => 0.5, // Livraison
+          4 => 0.62, // Confirmation
+          _ => 0.4,
+        };
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -1161,28 +1129,26 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                 ),
               ),
 
-            // Panel bas (infos + CTA) — le fond dégradé du panneau reste
+            // Panel bas (infos + CTA) — hauteur qui épouse son contenu au
+            // lieu d'une fraction d'écran fixe (l'ancienne
+            // DraggableScrollableSheet laissait un grand vide entre le
+            // contenu court d'une étape et le bouton CTA). Le fond reste
             // ancré au bas de l'écran en toutes circonstances (jamais
-            // décalé par le clavier), pour que l'arrière-plan visible
-            // derrière le clavier reste la continuité du dégradé et non
-            // la carte. Seul le CONTENU interne (liste + bouton CTA)
-            // remonte au-dessus du clavier via un padding animé local —
-            // le CTA fait maintenant partie du panneau lui-même (plus de
-            // positionnement flottant indépendant), il ne peut donc plus
-            // chevaucher le contenu quand le panneau est réduit au drag.
+            // décalé par le clavier) : seul le CONTENU interne remonte
+            // au-dessus du clavier via un padding animé local, ce qui fait
+            // grandir le panneau vers le haut de façon naturelle. Une
+            // hauteur max sert de garde-fou : au-delà, le contenu défile en
+            // interne (étape Confirmation) plutôt que de déborder.
             if (!_isMapPlacement)
-              DraggableScrollableSheet(
-                controller: _sheetCtrl,
-                initialChildSize: _sheetMax,
-                minChildSize: _sheetMin,
-                // Le max réel autorise l'agrandissement clavier (voir
-                // didChangeDependencies) — snapSizes garde le comportement de
-                // repli normal (sans clavier) borné à _sheetMax.
-                maxChildSize: _sheetMaxKeyboard,
-                snap: true,
-                snapSizes: [_sheetMin, _sheetMax],
-                builder: (context, scrollCtrl) {
-                  return Container(
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.86,
+                  ),
+                  child: Container(
                     decoration: BoxDecoration(
                       gradient: AppColors.gradientSplash,
                       borderRadius: const BorderRadius.vertical(
@@ -1203,50 +1169,23 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                         bottom: MediaQuery.of(context).viewInsets.bottom,
                       ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(child: _buildPanel(scrollCtrl)),
+                          Flexible(
+                            child: SingleChildScrollView(child: _buildPanel()),
+                          ),
                           _buildNavButtons(),
                         ],
                       ),
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
           ],
         ),
       ),
     );
   }
-
-  // Le CTA fait maintenant partie du panneau (voir build()) — le minimum
-  // doit rester assez grand pour toujours l'accueillir proprement, sans
-  // jamais le couper ni le faire chevaucher le contenu au-dessus.
-  double get _sheetMin => 0.22;
-  double get _sheetMax => switch (_step) {
-    1 => 0.52, // Articles
-    2 => 0.50, // Colis
-    3 => 0.60, // Livraison (paiement + instructions + programmation)
-    // Confirmation — le plus de contenu (trajet, détails, articles, prix,
-    // code promo) : assez grand pour que le prix et le CTA soient toujours
-    // visibles sans avoir à scroller pour les découvrir.
-    4 => 0.80,
-    _ => 0.58, // Destination
-  };
-
-  // Taille de la feuille quand le clavier est ouvert — réglée par étape
-  // comme _sheetMax, plutôt qu'une seule grande valeur fixe pour toutes :
-  // une étape courte (Destination, 2 champs) n'a besoin que d'un peu plus
-  // de place, alors qu'une étape dense (Livraison, avec les instructions
-  // tout en bas) en a besoin de beaucoup plus pour ne rien laisser caché
-  // derrière le clavier. Grandir de la même façon pour tout le monde
-  // laissait un grand vide sous les champs des étapes courtes.
-  double get _sheetMaxKeyboard => switch (_step) {
-    1 => 0.68, // Articles
-    2 => 0.66, // Colis
-    3 => 0.88, // Livraison (le champ Instructions est tout en bas)
-    4 => 0.88, // Confirmation
-    _ => 0.62, // Destination
-  };
 
   // ── Header ────────────────────────────────────────────────────────────────
 
@@ -1404,29 +1343,26 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
 
   // ── Panel principal ───────────────────────────────────────────────────────
 
-  // Le CTA (bouton Suivant/Confirmer) n'appartient pas à ce panneau — il
-  // flotte en dehors (voir `build`) pour rester visible même quand le
-  // panneau est réduit à sa taille minimale (poignée + bandeau uniquement).
-  // Un tap dans une zone vide referme le clavier (au lieu d'obliger à
-  // scroller pour retrouver un bouton).
-  Widget _buildPanel(ScrollController scrollCtrl) => GestureDetector(
+  // Le CTA (bouton Suivant/Confirmer) n'appartient pas à ce panneau — il est
+  // pinné en dehors, sous le `SingleChildScrollView` qui héberge ce contenu
+  // (voir `build`), pour rester toujours visible même quand le contenu
+  // défile en interne. Un tap dans une zone vide referme le clavier.
+  Widget _buildPanel() => GestureDetector(
     behavior: HitTestBehavior.opaque,
     onTap: () => FocusScope.of(context).unfocus(),
-    child: CustomScrollView(
-      controller: scrollCtrl,
-      slivers: [
-        // ── Handle drag ──────────────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 8),
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Poignée décorative ──────────────────────────────────────────────
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 8),
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
@@ -1436,62 +1372,56 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         // Uniquement à l'étape Destination — répété sur chaque étape suivante,
         // c'était redondant (le récap final montre déjà le trajet complet).
         if (_step == 0)
-          SliverToBoxAdapter(
-            child: _DepartureBanner(
-              fixedLabel: 'EXPÉDITION',
-              placeholder: 'Choisir le lieu d\'expédition',
-              proLabel: _selectedProAddr?['label'] as String?,
-              address: _pickupAddress,
-              loading: _loadingGps,
-              onTap: () => _showChangeDeparture(),
-            ),
+          _DepartureBanner(
+            fixedLabel: 'EXPÉDITION',
+            placeholder: 'Choisir le lieu d\'expédition',
+            proLabel: _selectedProAddr?['label'] as String?,
+            address: _pickupAddress,
+            loading: _loadingGps,
+            onTap: () => _showChangeDeparture(),
           ),
 
         // ── Titre étape ───────────────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-            child: Row(
-              children: [
-                Icon(_stepMeta[_step].$1, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  _stepMeta[_step].$2,
-                  style: ClientText.title.copyWith(color: Colors.white),
-                ),
-              ],
-            ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+          child: Row(
+            children: [
+              Icon(_stepMeta[_step].$1, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                _stepMeta[_step].$2,
+                style: ClientText.title.copyWith(color: Colors.white),
+              ),
+            ],
           ),
         ),
 
         // ── Contenu ──────────────────────────────────────────────────────────
-        SliverPadding(
+        Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          sliver: SliverToBoxAdapter(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.04, 0),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.04, 0),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
               ),
-              child: KeyedSubtree(
-                key: ValueKey(_step),
-                child: switch (_step) {
-                  0 => _buildStep0(),
-                  1 => _buildStepArticles(),
-                  2 => _buildStepColis(),
-                  3 => _buildStepLivraison(),
-                  _ => _buildStep2(),
-                },
-              ),
+            ),
+            child: KeyedSubtree(
+              key: ValueKey(_step),
+              child: switch (_step) {
+                0 => _buildStep0(),
+                1 => _buildStepArticles(),
+                2 => _buildStepColis(),
+                3 => _buildStepLivraison(),
+                _ => _buildStep2(),
+              },
             ),
           ),
         ),
