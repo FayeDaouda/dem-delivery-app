@@ -2042,6 +2042,16 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     final dist = (_estimate?['distanceKm'] as num?)?.toStringAsFixed(1);
     final dur = (_estimate?['durationMin'] as num?)?.toInt();
     final total = totalClient ?? (price != null ? price + demFee : null);
+    // Valeur totale des articles (prix unitaire × quantité, additionnés) —
+    // distincte du prix de la livraison ci-dessous : la livraison peut être
+    // payée par le client final à la réception, la valeur des articles
+    // reste une information pour le commerçant (facturation/suivi).
+    final articlesTotal = _articles.fold<int>(0, (sum, a) {
+      final unitPrice = int.tryParse(a.priceCtrl.text.trim());
+      if (unitPrice == null) return sum;
+      final qty = int.tryParse(a.qtyCtrl.text.trim()) ?? 1;
+      return sum + unitPrice * qty;
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2257,7 +2267,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                       .where((a) => a.nameCtrl.text.trim().isNotEmpty)
                       .map((a) {
                         final qty = int.tryParse(a.qtyCtrl.text.trim()) ?? 1;
-                        final price = int.tryParse(a.priceCtrl.text.trim());
+                        final unitPrice = int.tryParse(a.priceCtrl.text.trim());
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Row(
@@ -2276,9 +2286,9 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                                   ),
                                 ),
                               ),
-                              if (price != null)
+                              if (unitPrice != null)
                                 Text(
-                                  '$price FCFA',
+                                  formatFcfa(unitPrice * qty),
                                   style: ClientText.label.copyWith(
                                     color: Colors.white,
                                   ),
@@ -2287,6 +2297,31 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                           ),
                         );
                       }),
+                  if (articlesTotal > 0) ...[
+                    const SizedBox(height: 6),
+                    Divider(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      height: 1,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(
+                          'Total articles',
+                          style: ClientText.bodyStrong.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          formatFcfa(articlesTotal),
+                          style: ClientText.bodyStrong.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2373,6 +2408,20 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               ),
               child: Column(
                 children: [
+                  // Ne s'affiche que si une valeur d'articles est montrée
+                  // juste au-dessus — sinon ce prix est la seule somme à
+                  // l'écran, pas besoin de préciser de quoi il s'agit.
+                  if (articlesTotal > 0) ...[
+                    Text(
+                      'FRAIS DE LIVRAISON',
+                      style: ClientText.label.copyWith(
+                        color: AppColors.textMuted,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                   // Le livreur touche toujours `total` en entier — la réduction ne
                   // change que ce que DEM Pro/le destinataire paie réellement (voir
                   // orders.service.js:confirmPayment côté serveur).
