@@ -552,161 +552,193 @@ class _ProductCard extends StatelessWidget {
     final price = product['defaultPrice'] as num?;
     final quantity = (product['quantity'] as num?)?.toInt();
     final usageCount = (product['usageCount'] as num?)?.toInt() ?? 0;
+    final locked = product['locked'] == true;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.lightFill),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    return Opacity(
+      opacity: locked ? 0.55 : 1,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          onTap: onEdit,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.lightFill),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onEdit,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      locked ? Icons.lock_outline : Icons.inventory_2_outlined,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.inventory_2_outlined,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: ClientText.subtitle.copyWith(
-                          color: AppColors.textDark,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Text(
-                            price != null
-                                ? formatFcfa(price)
-                                : 'Prix non défini',
-                            style: ClientText.label.copyWith(
-                              color: price != null
-                                  ? AppColors.successLight
-                                  : AppColors.textMuted,
-                            ),
-                          ),
-                          if (usageCount > 0) ...[
-                            Text(
-                              '  ·  ',
-                              style: ClientText.label.copyWith(
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                            Text(
-                              '$usageCount vente${usageCount > 1 ? 's' : ''}',
-                              style: ClientText.label.copyWith(
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (quantity != null) ...[
-                        const SizedBox(height: 3),
-                        Builder(
-                          builder: (context) {
-                            // Mêmes seuils que le décrément côté serveur (voir
-                            // orders.service.js:LOW_STOCK_THRESHOLD) — la carte
-                            // catalogue doit refléter l'urgence de la même façon
-                            // que l'alerte push.
-                            final isOut = quantity <= 0;
-                            final isLow = !isOut && quantity <= 3;
-                            final color = isOut
-                                ? AppColors.error
-                                : isLow
-                                ? AppColors.warning
-                                : AppColors.textMuted;
-                            final label = isOut
-                                ? 'Rupture de stock'
-                                : isLow
-                                ? 'Stock faible — $quantity restant${quantity > 1 ? 's' : ''}'
-                                : '$quantity en stock';
-                            return Row(
-                              children: [
-                                Icon(
-                                  isOut
-                                      ? Icons.error_outline
-                                      : isLow
-                                      ? Icons.warning_amber_rounded
-                                      : Icons.inventory_outlined,
-                                  size: 12,
-                                  color: color,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                name,
+                                style: ClientText.subtitle.copyWith(
+                                  color: AppColors.textDark,
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (locked) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.warning.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Pro',
                                   style: ClientText.micro.copyWith(
-                                    color: color,
-                                    fontWeight: isOut || isLow
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
+                                    color: AppColors.warning,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                              ],
-                            );
-                          },
+                              ),
+                            ],
+                          ],
                         ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Text(
+                              price != null
+                                  ? formatFcfa(price)
+                                  : 'Prix non défini',
+                              style: ClientText.label.copyWith(
+                                color: price != null
+                                    ? AppColors.successLight
+                                    : AppColors.textMuted,
+                              ),
+                            ),
+                            if (usageCount > 0) ...[
+                              Text(
+                                '  ·  ',
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                              Text(
+                                '$usageCount vente${usageCount > 1 ? 's' : ''}',
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (quantity != null) ...[
+                          const SizedBox(height: 3),
+                          Builder(
+                            builder: (context) {
+                              // Mêmes seuils que le décrément côté serveur (voir
+                              // orders.service.js:LOW_STOCK_THRESHOLD) — la carte
+                              // catalogue doit refléter l'urgence de la même façon
+                              // que l'alerte push.
+                              final isOut = quantity <= 0;
+                              final isLow = !isOut && quantity <= 3;
+                              final color = isOut
+                                  ? AppColors.error
+                                  : isLow
+                                  ? AppColors.warning
+                                  : AppColors.textMuted;
+                              final label = isOut
+                                  ? 'Rupture de stock'
+                                  : isLow
+                                  ? 'Stock faible — $quantity restant${quantity > 1 ? 's' : ''}'
+                                  : '$quantity en stock';
+                              return Row(
+                                children: [
+                                  Icon(
+                                    isOut
+                                        ? Icons.error_outline
+                                        : isLow
+                                        ? Icons.warning_amber_rounded
+                                        : Icons.inventory_outlined,
+                                    size: 12,
+                                    color: color,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    label,
+                                    style: ClientText.micro.copyWith(
+                                      color: color,
+                                      fontWeight: isOut || isLow
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
                       ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(
+                      Icons.more_vert,
+                      color: AppColors.textMuted,
+                      size: 20,
+                    ),
+                    color: AppColors.lightFill,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onSelected: (v) {
+                      if (v == 'edit') onEdit();
+                      if (v == 'delete') onDelete();
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: _menuItem(
+                          Icons.edit_outlined,
+                          'Modifier',
+                          AppColors.textDark,
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: _menuItem(
+                          Icons.delete_outline,
+                          'Supprimer',
+                          AppColors.error,
+                        ),
+                      ),
                     ],
                   ),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(
-                    Icons.more_vert,
-                    color: AppColors.textMuted,
-                    size: 20,
-                  ),
-                  color: AppColors.lightFill,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  onSelected: (v) {
-                    if (v == 'edit') onEdit();
-                    if (v == 'delete') onDelete();
-                  },
-                  itemBuilder: (_) => [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: _menuItem(
-                        Icons.edit_outlined,
-                        'Modifier',
-                        AppColors.textDark,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: _menuItem(
-                        Icons.delete_outline,
-                        'Supprimer',
-                        AppColors.error,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
