@@ -15,11 +15,14 @@ import '../../../shared/widgets/product_thumb.dart';
 import '../../../shared/widgets/staggered_entrance.dart';
 import '../../home_driver/navigation/navigation_service.dart';
 
-const List<(String, String, String)> _paymentMethods = [
-  ('CASH', '💵', 'Espèces'),
-  ('WAVE', '🌊', 'Wave'),
-  ('ORANGE_MONEY', '🟠', 'Orange Money'),
-  ('FREE_MONEY', '🔵', 'Free Money'),
+// Pas de logos de marque (Wave/Orange Money/Free Money) — un badge de
+// couleur + le nom suffit à identifier le moyen de paiement, plus sobre
+// qu'un emoji et sans dépendre d'assets de marque.
+const List<(String, Color, String)> _paymentMethods = [
+  ('CASH', Color(0xFF00E08C), 'Espèces'),
+  ('WAVE', Color(0xFF1DC8CE), 'Wave'),
+  ('ORANGE_MONEY', Color(0xFFFF7A00), 'Orange Money'),
+  ('FREE_MONEY', Color(0xFF7B61FF), 'Free Money'),
 ];
 
 const List<String> _stepLabels = ['Catalogue', 'Adresse', 'Paiement', 'Résumé'];
@@ -62,6 +65,8 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
 
   int _step = 0;
   String? _selectedCategory;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   String _deliveryAddress = '';
   double? _deliveryLat, _deliveryLng;
@@ -88,6 +93,7 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
     _phoneCtrl.dispose();
     _landmarkCtrl.dispose();
     _notesCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -552,7 +558,7 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
         ),
       );
     }
-    final visible = _selectedCategory == null
+    var visible = _selectedCategory == null
         ? _products
         : _products
               .where(
@@ -563,10 +569,55 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
                     _selectedCategory,
               )
               .toList();
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      visible = visible
+          .where(
+            (p) => (p['name'] as String? ?? '').toLowerCase().contains(query),
+          )
+          .toList();
+    }
+    final showSearch = _products.length >= 8;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (showSearch) ...[
+          TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _searchQuery = v),
+            style: ClientText.body.copyWith(color: AppColors.textDark),
+            decoration: InputDecoration(
+              hintText: 'Rechercher un produit…',
+              hintStyle: ClientText.body.copyWith(color: AppColors.textMuted),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: AppColors.textMuted,
+                size: 20,
+              ),
+              filled: true,
+              fillColor: AppColors.lightFill,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 1.5,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (_categories.isNotEmpty) ...[
           SizedBox(
             height: 36,
@@ -582,9 +633,17 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
           const SizedBox(height: 12),
         ],
         Expanded(
-          child: ListView(
-            children: [for (final p in visible) _buildProductRow(p)],
-          ),
+          child: visible.isEmpty
+              ? Center(
+                  child: Text(
+                    'Aucun produit ne correspond à votre recherche.',
+                    style: ClientText.body.copyWith(color: AppColors.textMuted),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : ListView(
+                  children: [for (final p in visible) _buildProductRow(p)],
+                ),
         ),
         if (_cartItems.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -863,7 +922,7 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
     ],
   );
 
-  Widget _paymentChip(String value, String emoji, String label) {
+  Widget _paymentChip(String value, Color dotColor, String label) {
     final active = _paymentMethod == value;
     return GestureDetector(
       onTap: () => setState(() => _paymentMethod = value),
@@ -878,12 +937,26 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
             color: active ? AppColors.primary : AppColors.lightBorder,
           ),
         ),
-        child: Text(
-          '$emoji  $label',
-          style: ClientText.body.copyWith(
-            color: active ? AppColors.primary : AppColors.textDark,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: dotColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: ClientText.body.copyWith(
+                color: active ? AppColors.primary : AppColors.textDark,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -988,9 +1061,22 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
             children: [
               _sectionTitle(Icons.payments_outlined, 'Paiement & contact'),
               const SizedBox(height: 8),
-              Text(
-                '${paymentLabel.$2} ${paymentLabel.$3} — à la livraison',
-                style: ClientText.body.copyWith(color: AppColors.textDark),
+              Row(
+                children: [
+                  Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: paymentLabel.$2,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${paymentLabel.$3} — à la livraison',
+                    style: ClientText.body.copyWith(color: AppColors.textDark),
+                  ),
+                ],
               ),
               if (_nameCtrl.text.trim().isNotEmpty) ...[
                 const SizedBox(height: 6),
