@@ -37,6 +37,10 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
   String _query = '';
   Map<String, dynamic>? _planData;
 
+  // null = "Tous". Autrement, un nom de catalogue réel ou 'Sans catalogue'
+  // (même clé de regroupement que _buildGroupedList).
+  String? _selectedCategory;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +80,14 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
       setState(() {
         _products = products;
         _loading = false;
+        // Le catalogue sélectionné a pu disparaître (dernier produit
+        // supprimé/reclassé) — revient sur "Tous" plutôt que de laisser un
+        // filtre actif qui ne correspond plus à rien.
+        if (_selectedCategory != null &&
+            _selectedCategory != 'Sans catalogue' &&
+            !_categoriesFrom(products).contains(_selectedCategory)) {
+          _selectedCategory = null;
+        }
       });
     } catch (_) {
       if (mounted)
@@ -86,13 +98,24 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
     }
   }
 
+  String _categoryKeyOf(Map<String, dynamic> p) {
+    final cat = (p['category'] as String?)?.trim();
+    return (cat == null || cat.isEmpty) ? 'Sans catalogue' : cat;
+  }
+
   List<Map<String, dynamic>> get _filtered {
-    if (_query.isEmpty) return _products;
-    return _products
-        .where(
-          (p) => (p['name'] as String? ?? '').toLowerCase().contains(_query),
-        )
-        .toList();
+    var list = _products;
+    if (_query.isNotEmpty) {
+      list = list
+          .where(
+            (p) => (p['name'] as String? ?? '').toLowerCase().contains(_query),
+          )
+          .toList();
+    }
+    if (_selectedCategory != null) {
+      list = list.where((p) => _categoryKeyOf(p) == _selectedCategory).toList();
+    }
+    return list;
   }
 
   Future<void> _showForm({Map<String, dynamic>? existing}) async {
@@ -168,14 +191,16 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
 
   bool get _isPro => isProPlan(_planData?['plan'] as String?);
 
-  List<String> get _categories =>
-      _products
+  List<String> _categoriesFrom(List<Map<String, dynamic>> products) =>
+      products
           .map((p) => (p['category'] as String?)?.trim())
           .whereType<String>()
           .where((c) => c.isNotEmpty)
           .toSet()
           .toList()
         ..sort();
+
+  List<String> get _categories => _categoriesFrom(_products);
 
   @override
   Widget build(BuildContext context) {
@@ -329,16 +354,101 @@ class _DemProProductsScreenState extends State<DemProProductsScreen> {
                   )
                 : _loadFailed
                 ? _buildError()
+                : (_isPro && _categories.isNotEmpty)
+                ? Column(
+                    children: [
+                      _buildCategoryTabs(),
+                      Expanded(
+                        child: RefreshIndicator(
+                          color: AppColors.primary,
+                          backgroundColor: Colors.white,
+                          onRefresh: _load,
+                          child: _filtered.isEmpty
+                              ? _buildEmpty()
+                              : _selectedCategory == null
+                              ? _buildGroupedList()
+                              : _buildList(),
+                        ),
+                      ),
+                    ],
+                  )
                 : RefreshIndicator(
                     color: AppColors.primary,
                     backgroundColor: Colors.white,
                     onRefresh: _load,
-                    child: _filtered.isEmpty
-                        ? _buildEmpty()
-                        : (_isPro && _categories.isNotEmpty)
-                        ? _buildGroupedList()
-                        : _buildList(),
+                    child: _filtered.isEmpty ? _buildEmpty() : _buildList(),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Onglets catalogue — "Tous" (vue groupée existante) + un onglet par
+  // catalogue réel, "Sans catalogue" en dernier s'il y a des produits non
+  // classés. Défile horizontalement : tient à l'échelle même avec des
+  // dizaines de catalogues, un fondu au bord signale qu'il y en a d'autres
+  // (même traitement que la boutique publique).
+  Widget _buildCategoryTabs() {
+    final counts = <String, int>{};
+    for (final p in _products) {
+      counts.update(_categoryKeyOf(p), (v) => v + 1, ifAbsent: () => 1);
+    }
+    final hasUncategorized = counts.containsKey('Sans catalogue');
+
+    return SizedBox(
+      height: 44,
+      child: Stack(
+        children: [
+          ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(20, 4, 32, 4),
+            children: [
+              _CategoryTabChip(
+                label: 'Tous',
+                count: _products.length,
+                active: _selectedCategory == null,
+                onTap: () => setState(() => _selectedCategory = null),
+              ),
+              const SizedBox(width: 8),
+              for (final c in _categories) ...[
+                _CategoryTabChip(
+                  label: c,
+                  count: counts[c] ?? 0,
+                  active: _selectedCategory == c,
+                  onTap: () => setState(() => _selectedCategory = c),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (hasUncategorized)
+                _CategoryTabChip(
+                  label: 'Sans catalogue',
+                  count: counts['Sans catalogue']!,
+                  active: _selectedCategory == 'Sans catalogue',
+                  onTap: () =>
+                      setState(() => _selectedCategory = 'Sans catalogue'),
+                ),
+            ],
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 28,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      AppColors.lightBg.withValues(alpha: 0),
+                      AppColors.lightBg,
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1321,6 +1431,60 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
       ),
     );
   }
+}
+
+// ── Onglet catalogue (filtre) — même famille visuelle que _ProAddressChip,
+// avec un compteur pour situer d'un coup d'œil la taille de chaque catalogue.
+class _CategoryTabChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool active;
+  final VoidCallback onTap;
+  const _CategoryTabChip({
+    required this.label,
+    required this.count,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: active ? AppColors.primary : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: active ? AppColors.primary : AppColors.lightBorder,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: ClientText.body.copyWith(
+              color: active ? Colors.white : AppColors.textDark,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$count',
+            style: ClientText.micro.copyWith(
+              color: active
+                  ? Colors.white.withValues(alpha: 0.85)
+                  : AppColors.textMuted,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ProAddressChip extends StatelessWidget {
