@@ -761,40 +761,11 @@ class _AccueilTab extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                   ],
-                  GestureDetector(
-                    onTap: () => context.push('/dem-pro/wallet'),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.20),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.account_balance_wallet_outlined,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
+                  _HeaderShortcuts(user: user),
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.20),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'DEM PRO',
-                      style: ClientText.micro.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
+                  _AccueilIconButton(
+                    icon: Icons.account_balance_wallet_outlined,
+                    onTap: () => context.push('/dem-pro/wallet'),
                   ),
                 ],
               ),
@@ -1883,220 +1854,6 @@ class _CompteTabState extends State<_CompteTab>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionLabel(label: 'INFORMATIONS', t: t),
-                const SizedBox(height: 12),
-                _InfoCard(
-                  t: t,
-                  children: [
-                    _EditableInfoRow(
-                      icon: Icons.person_outline,
-                      label: 'Responsable',
-                      value: name ?? '—',
-                      t: t,
-                      onTap: () =>
-                          _editField('Responsable', name ?? '', 'name'),
-                    ),
-                    _EditableInfoRow(
-                      icon: Icons.phone_outlined,
-                      label: 'Téléphone',
-                      value: phone ?? '—',
-                      t: t,
-                      onTap: () => _requestPhoneChange(phone ?? ''),
-                    ),
-                    _EditableInfoRow(
-                      icon: Icons.email_outlined,
-                      label: 'Email',
-                      value: email?.isNotEmpty == true
-                          ? email!
-                          : 'Ajouter un email',
-                      isPlaceholder: email == null || email.isEmpty,
-                      t: t,
-                      onTap: () => _editField('Email', email ?? '', 'email'),
-                    ),
-                    _EditableInfoRow(
-                      icon: Icons.category_outlined,
-                      label: 'Secteur',
-                      value: _sectorLabels[sector] ?? '—',
-                      t: t,
-                      onTap: () => _showSectorPicker(sector),
-                    ),
-                    _EditableInfoRow(
-                      icon: Icons.bar_chart_outlined,
-                      label: 'Volume hebdo',
-                      value: _volumeLabels[volume] ?? '—',
-                      t: t,
-                      onTap: () => _showVolumePicker(volume),
-                    ),
-                    _EditableInfoRow(
-                      icon: Icons.badge_outlined,
-                      label: 'NINEA',
-                      value: ninea?.isNotEmpty == true
-                          ? ninea!
-                          : 'Ajouter (pour vos factures)',
-                      isPlaceholder: ninea == null || ninea.isEmpty,
-                      t: t,
-                      isLast: true,
-                      onTap: () => _editField('NINEA', ninea ?? '', 'proNinea'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // ── Catalogue ────────────────────────────────────────────────
-                _SectionLabel(label: 'CATALOGUE', t: t),
-                const SizedBox(height: 12),
-                _InfoCard(
-                  t: t,
-                  children: [
-                    _TapRow(
-                      icon: Icons.inventory_2_outlined,
-                      label: 'Mes produits',
-                      subtitle: 'Réutilisez-les à chaque commande',
-                      t: t,
-                      isLast: true,
-                      onTap: () => context.push('/dem-pro/products'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // ── Wallet & paiement intégré ────────────────────────────────
-                _SectionLabel(label: 'WALLET & PAIEMENT', t: t),
-                const SizedBox(height: 12),
-                _InfoCard(
-                  t: t,
-                  children: [
-                    _TapRow(
-                      icon: Icons.account_balance_wallet_outlined,
-                      label: 'Wallet DEM Pro',
-                      subtitle: 'Solde, retraits, historique des ventes',
-                      t: t,
-                      onTap: () => context.push('/dem-pro/wallet'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  decoration: BoxDecoration(
-                    color: t.cardBg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: t.border),
-                  ),
-                  child: SwitchListTile(
-                    value: _planData?['inAppPaymentEnabled'] as bool? ?? false,
-                    onChanged: _toggleInAppPayment,
-                    activeTrackColor: AppColors.primary,
-                    activeThumbColor: Colors.white,
-                    inactiveThumbColor: Colors.white,
-                    inactiveTrackColor: t.border,
-                    title: Text(
-                      'Paiement intégré',
-                      style: ClientText.subtitle.copyWith(color: t.text),
-                    ),
-                    subtitle: Text(
-                      'Le client paie le produit et la livraison en une fois dans l\'app — le produit est crédité sur votre wallet.',
-                      style: ClientText.label.copyWith(
-                        color: t.muted,
-                        height: 1.4,
-                      ),
-                    ),
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 4,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // ── Clients (CRM léger) ────────────────────────────────────────
-                _SectionLabel(label: 'CLIENTS', t: t),
-                const SizedBox(height: 12),
-                _InfoCard(
-                  t: t,
-                  children: [
-                    _TapRow(
-                      icon: Icons.people_outline,
-                      label: 'Mes clients',
-                      subtitle: 'Historique, contact, fidélisation',
-                      t: t,
-                      isLast: true,
-                      onTap: () => context.push('/dem-pro/clients'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // ── Lien de commande ───────────────────────────────────────────
-                _SectionLabel(label: 'LIEN DE COMMANDE', t: t),
-                const SizedBox(height: 12),
-                _InfoCard(
-                  t: t,
-                  children: [
-                    _TapRow(
-                      icon: Icons.share_outlined,
-                      label: 'Partager mon lien de commande',
-                      subtitle:
-                          'Vos clients commandent directement, sans compte',
-                      t: t,
-                      onTap: _shareOrderLink,
-                    ),
-                    _TapRow(
-                      icon: Icons.inbox_outlined,
-                      label: 'Demandes reçues',
-                      subtitle: _pendingRequestCount > 0
-                          ? '$_pendingRequestCount en attente de confirmation'
-                          : 'Aucune demande en attente',
-                      t: t,
-                      isLast: true,
-                      trailing: _pendingRequestCount > 0
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.warning.withValues(
-                                  alpha: 0.15,
-                                ),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '$_pendingRequestCount',
-                                style: ClientText.label.copyWith(
-                                  color: AppColors.warning,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            )
-                          : null,
-                      onTap: () async {
-                        await context.push('/dem-pro/order-requests');
-                        _loadPendingRequestCount();
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // ── Promotions ───────────────────────────────────────────────
-                _SectionLabel(label: 'PROMOTIONS', t: t),
-                const SizedBox(height: 12),
-                _InfoCard(
-                  t: t,
-                  children: [
-                    _TapRow(
-                      icon: Icons.local_offer_outlined,
-                      label: 'Code promo',
-                      subtitle: 'Réduction sur votre prochaine commande',
-                      t: t,
-                      isLast: true,
-                      onTap: () => context.push('/dem-pro/promo-code'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
                 // ── Abonnement ───────────────────────────────────────────────
                 _SectionLabel(label: 'ABONNEMENT', t: t),
                 const SizedBox(height: 12),
@@ -2201,7 +1958,220 @@ class _CompteTabState extends State<_CompteTab>
                 ),
                 const SizedBox(height: 24),
 
-                // ── Support ──────────────────────────────────────────────────
+                // ── Catalogue ────────────────────────────────────────────────
+                _SectionLabel(label: 'CATALOGUE', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
+                  t: t,
+                  children: [
+                    _TapRow(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Mes produits',
+                      subtitle: 'Réutilisez-les à chaque commande',
+                      t: t,
+                      isLast: true,
+                      onTap: () => context.push('/dem-pro/products'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // ── Wallet & paiement intégré ────────────────────────────────
+                _SectionLabel(label: 'WALLET & PAIEMENT', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
+                  t: t,
+                  children: [
+                    _TapRow(
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: 'Wallet DEM Pro',
+                      subtitle: 'Solde, retraits, historique des ventes',
+                      t: t,
+                      onTap: () => context.push('/dem-pro/wallet'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: t.cardBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: t.border),
+                  ),
+                  child: SwitchListTile(
+                    value: _planData?['inAppPaymentEnabled'] as bool? ?? false,
+                    onChanged: _toggleInAppPayment,
+                    activeTrackColor: AppColors.primary,
+                    activeThumbColor: Colors.white,
+                    inactiveThumbColor: Colors.white,
+                    inactiveTrackColor: t.border,
+                    title: Text(
+                      'Paiement intégré',
+                      style: ClientText.subtitle.copyWith(color: t.text),
+                    ),
+                    subtitle: Text(
+                      'Le client paie le produit et la livraison en une fois dans l\'app — le produit est crédité sur votre wallet.',
+                      style: ClientText.label.copyWith(
+                        color: t.muted,
+                        height: 1.4,
+                      ),
+                    ),
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // ── Lien de commande ───────────────────────────────────────────
+                _SectionLabel(label: 'LIEN DE COMMANDE', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
+                  t: t,
+                  children: [
+                    _TapRow(
+                      icon: Icons.share_outlined,
+                      label: 'Partager mon lien de commande',
+                      subtitle:
+                          'Vos clients commandent directement, sans compte',
+                      t: t,
+                      onTap: _shareOrderLink,
+                    ),
+                    _TapRow(
+                      icon: Icons.inbox_outlined,
+                      label: 'Demandes reçues',
+                      subtitle: _pendingRequestCount > 0
+                          ? '$_pendingRequestCount en attente de confirmation'
+                          : 'Aucune demande en attente',
+                      t: t,
+                      isLast: true,
+                      trailing: _pendingRequestCount > 0
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withValues(
+                                  alpha: 0.15,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '$_pendingRequestCount',
+                                style: ClientText.label.copyWith(
+                                  color: AppColors.warning,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            )
+                          : null,
+                      onTap: () async {
+                        await context.push('/dem-pro/order-requests');
+                        _loadPendingRequestCount();
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // ── Promotions ───────────────────────────────────────────────
+                _SectionLabel(label: 'PROMOTIONS', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
+                  t: t,
+                  children: [
+                    _TapRow(
+                      icon: Icons.local_offer_outlined,
+                      label: 'Code promo',
+                      subtitle: 'Réduction sur votre prochaine commande',
+                      t: t,
+                      isLast: true,
+                      onTap: () => context.push('/dem-pro/promo-code'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                _SectionLabel(label: 'INFORMATIONS', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
+                  t: t,
+                  children: [
+                    _EditableInfoRow(
+                      icon: Icons.person_outline,
+                      label: 'Responsable',
+                      value: name ?? '—',
+                      t: t,
+                      onTap: () =>
+                          _editField('Responsable', name ?? '', 'name'),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.phone_outlined,
+                      label: 'Téléphone',
+                      value: phone ?? '—',
+                      t: t,
+                      onTap: () => _requestPhoneChange(phone ?? ''),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.email_outlined,
+                      label: 'Email',
+                      value: email?.isNotEmpty == true
+                          ? email!
+                          : 'Ajouter un email',
+                      isPlaceholder: email == null || email.isEmpty,
+                      t: t,
+                      onTap: () => _editField('Email', email ?? '', 'email'),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.category_outlined,
+                      label: 'Secteur',
+                      value: _sectorLabels[sector] ?? '—',
+                      t: t,
+                      onTap: () => _showSectorPicker(sector),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.bar_chart_outlined,
+                      label: 'Volume hebdo',
+                      value: _volumeLabels[volume] ?? '—',
+                      t: t,
+                      onTap: () => _showVolumePicker(volume),
+                    ),
+                    _EditableInfoRow(
+                      icon: Icons.badge_outlined,
+                      label: 'NINEA',
+                      value: ninea?.isNotEmpty == true
+                          ? ninea!
+                          : 'Ajouter (pour vos factures)',
+                      isPlaceholder: ninea == null || ninea.isEmpty,
+                      t: t,
+                      isLast: true,
+                      onTap: () => _editField('NINEA', ninea ?? '', 'proNinea'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // ── Clients (CRM léger) ────────────────────────────────────────
+                _SectionLabel(label: 'CLIENTS', t: t),
+                const SizedBox(height: 12),
+                _InfoCard(
+                  t: t,
+                  children: [
+                    _TapRow(
+                      icon: Icons.people_outline,
+                      label: 'Mes clients',
+                      subtitle: 'Historique, contact, fidélisation',
+                      t: t,
+                      isLast: true,
+                      onTap: () => context.push('/dem-pro/clients'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
                 // ── Affichage carte ─────────────────────────────────────────────
                 _SectionLabel(label: 'AFFICHAGE', t: t),
                 const SizedBox(height: 12),
@@ -2468,6 +2438,139 @@ class _ActiveOrderIconState extends State<_ActiveOrderIcon>
                     style: ClientText.micro.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+// ── Raccourcis header Accueil : demandes reçues (badge) + partage du lien
+// de commande — remplace le badge statique "DEM PRO", plus utile ici que
+// juste à côté du wallet. Charge son propre plan/compteur (même esprit que
+// _ActiveOrderIcon), indépendant de _CompteTab qui garde le sien.
+class _HeaderShortcuts extends StatefulWidget {
+  final Map<String, dynamic>? user;
+  const _HeaderShortcuts({required this.user});
+  @override
+  State<_HeaderShortcuts> createState() => _HeaderShortcutsState();
+}
+
+class _HeaderShortcutsState extends State<_HeaderShortcuts> {
+  final _repo = DemProRepository(ApiClient.dio);
+  int _pendingCount = 0;
+  Map<String, dynamic>? _planData;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final results = await Future.wait([
+        _repo.getOrderRequests(status: 'PENDING'),
+        _repo.getMyPlan(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _pendingCount = (results[0] as List).length;
+        _planData = results[1] as Map<String, dynamic>;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _shareOrderLink() async {
+    if (!await requireProPlan(
+      context,
+      plan: _planData?['plan'] as String?,
+      title: 'Lien de commande réservé aux plans Pro',
+      message:
+          'Le partage de votre boutique en ligne est réservé aux plans '
+          'Pro et Business.',
+    )) {
+      return;
+    }
+    final id = widget.user?['id'] as String?;
+    if (id == null) return;
+    final businessName = (widget.user?['proBusinessName'] as String?)?.trim();
+    final link = 'https://www.dem.sn/commander/$id';
+    final label = businessName?.isNotEmpty == true
+        ? businessName!
+        : 'ma boutique';
+    SharePlus.instance.share(
+      ShareParams(
+        text: 'Commandez chez $label et faites-vous livrer par DEM : $link',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      _AccueilIconButton(
+        icon: Icons.inbox_outlined,
+        badgeCount: _pendingCount,
+        onTap: () async {
+          await context.push('/dem-pro/order-requests');
+          _load();
+        },
+      ),
+      const SizedBox(width: 8),
+      _AccueilIconButton(icon: Icons.share_outlined, onTap: _shareOrderLink),
+    ],
+  );
+}
+
+// ── Bouton icône circulaire du header Accueil — même style que l'ancien
+// bouton wallet (cercle blanc translucide), avec badge de compte optionnel.
+class _AccueilIconButton extends StatelessWidget {
+  final IconData icon;
+  final int badgeCount;
+  final VoidCallback onTap;
+  const _AccueilIconButton({
+    required this.icon,
+    this.badgeCount = 0,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.20),
+        shape: BoxShape.circle,
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(icon, color: Colors.white, size: 20),
+          if (badgeCount > 0)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: const BoxDecoration(
+                  color: AppColors.warning,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    badgeCount > 9 ? '9+' : '$badgeCount',
+                    style: ClientText.micro.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 8,
                     ),
                   ),
                 ),
