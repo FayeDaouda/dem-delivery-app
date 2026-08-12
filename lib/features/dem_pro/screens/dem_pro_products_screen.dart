@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../data/dem_pro_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/client_text.dart';
 import '../../../core/utils/price_format.dart';
+import '../../../shared/widgets/product_thumb.dart';
 import '../widgets/dem_pro_button.dart';
 import '../widgets/dem_pro_plan_gate.dart';
 
@@ -572,18 +576,11 @@ class _ProductCard extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      locked ? Icons.lock_outline : Icons.inventory_2_outlined,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
+                  ProductThumb(
+                    imageUrl: product['image'] as String?,
+                    fallbackIcon: locked
+                        ? Icons.lock_outline
+                        : Icons.inventory_2_outlined,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -787,6 +784,12 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   List<Map<String, dynamic>> _addresses = [];
   bool _loadingAddresses = true;
 
+  // Photo — soit un fichier local fraîchement choisi (pas encore envoyé),
+  // soit l'URL déjà en base pour un produit existant. L'upload se fait après
+  // la création/modification (il faut un id de produit, voir _submit).
+  File? _imageFile;
+  String? _existingImageUrl;
+
   bool get _isEdit =>
       widget.existing != null && widget.existing!.containsKey('id');
 
@@ -805,7 +808,19 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     );
     _category = TextEditingController(text: e?['category'] as String? ?? '');
     _proAddressId = e?['proAddressId'] as String?;
+    _existingImageUrl = e?['image'] as String?;
     _loadAddresses();
+  }
+
+  Future<void> _pickImage() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      setState(() => _imageFile = File(picked.path));
+    }
   }
 
   Future<void> _loadAddresses() async {
@@ -845,10 +860,20 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
         if (widget.isPro)
           'category': categoryText.isEmpty ? null : categoryText,
       };
+      String productId;
       if (_isEdit) {
-        await widget.repo.updateProduct(widget.existing!['id'] as String, data);
+        productId = widget.existing!['id'] as String;
+        await widget.repo.updateProduct(productId, data);
       } else {
-        await widget.repo.createProduct(data);
+        final created = await widget.repo.createProduct(data);
+        productId = created['id'] as String;
+      }
+      if (_imageFile != null) {
+        // Best-effort — le produit est déjà créé/modifié à ce stade, un
+        // échec d'upload ne doit pas faire perdre les champs déjà saisis.
+        try {
+          await widget.repo.uploadProductImage(productId, _imageFile!.path);
+        } catch (_) {}
       }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -894,6 +919,55 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                 style: ClientText.title.copyWith(
                   color: AppColors.textDark,
                   fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              Center(
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: _imageFile != null
+                            ? Image.file(
+                                _imageFile!,
+                                width: 84,
+                                height: 84,
+                                fit: BoxFit.cover,
+                              )
+                            : ProductThumb(
+                                imageUrl: _existingImageUrl,
+                                size: 84,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                      ),
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt_rounded,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Center(
+                child: Text(
+                  'Photo (optionnel)',
+                  style: ClientText.label.copyWith(color: AppColors.textMuted),
                 ),
               ),
               const SizedBox(height: 20),

@@ -11,6 +11,7 @@ import '../../../core/utils/dem_toast.dart';
 import '../../../core/utils/price_format.dart';
 import '../../../core/utils/senegal_phone.dart';
 import '../../../shared/widgets/place_suggestions_list.dart';
+import '../../../shared/widgets/product_thumb.dart';
 import '../../../shared/widgets/staggered_entrance.dart';
 import '../../home_driver/navigation/navigation_service.dart';
 
@@ -127,6 +128,7 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
           'name': product['name'],
           'price': (product['defaultPrice'] as num?) ?? 0,
           'quantity': e.value,
+          'image': product['image'],
         };
       })
       .whereType<Map<String, dynamic>>()
@@ -454,6 +456,8 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
+          ProductThumb(imageUrl: product['image'] as String?),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,9 +518,11 @@ class _StorefrontScreenState extends State<StorefrontScreen> {
         const SizedBox(height: 10),
         for (final item in _cartItems)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
+                ProductThumb(imageUrl: item['image'] as String?, size: 32),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     '${item['name']} × ${item['quantity']}',

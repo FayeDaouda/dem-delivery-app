@@ -15,30 +15,41 @@ class DemProRepository {
     required String weeklyVolume,
   }) async {
     try {
-      final res = await _dio.post('/dem-pro/onboarding', data: {
-        'firstName': firstName,
-        'lastName': lastName,
-        'businessName': businessName,
-        'sector': sector,
-        if (email != null && email.isNotEmpty) 'email': email,
-        'weeklyVolume': weeklyVolume,
-      });
+      final res = await _dio.post(
+        '/dem-pro/onboarding',
+        data: {
+          'firstName': firstName,
+          'lastName': lastName,
+          'businessName': businessName,
+          'sector': sector,
+          if (email != null && email.isNotEmpty) 'email': email,
+          'weeklyVolume': weeklyVolume,
+        },
+      );
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Erreur lors de l\'envoi du profil entreprise.',
+        e.response?.data?['message'] ??
+            'Erreur lors de l\'envoi du profil entreprise.',
         e.response?.statusCode,
       );
     }
   }
 
   /// Liste complète des commandes du compte DEM Pro (clientId = userId).
-  Future<List<Map<String, dynamic>>> getMyOrders({int page = 1, int limit = 50}) async {
+  Future<List<Map<String, dynamic>>> getMyOrders({
+    int page = 1,
+    int limit = 50,
+  }) async {
     try {
-      final res = await _dio.get('/orders/my', queryParameters: {'page': page, 'limit': limit});
+      final res = await _dio.get(
+        '/orders/my',
+        queryParameters: {'page': page, 'limit': limit},
+      );
       final data = res.data;
       if (data is List) return data.cast<Map<String, dynamic>>();
-      if (data is Map && data['orders'] is List) return (data['orders'] as List).cast<Map<String, dynamic>>();
+      if (data is Map && data['orders'] is List)
+        return (data['orders'] as List).cast<Map<String, dynamic>>();
       return [];
     } on DioException catch (e) {
       throw AppException(
@@ -97,7 +108,8 @@ class DemProRepository {
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible de mettre à jour ce réglage.',
+        e.response?.data?['message'] ??
+            'Impossible de mettre à jour ce réglage.',
         e.response?.statusCode,
       );
     }
@@ -130,7 +142,8 @@ class DemProRepository {
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible de charger le portefeuille.',
+        e.response?.data?['message'] ??
+            'Impossible de charger le portefeuille.',
         e.response?.statusCode,
       );
     }
@@ -152,7 +165,9 @@ class DemProRepository {
   }
 
   /// Requis uniquement si [destinationPhone] diffère du numéro du compte.
-  Future<Map<String, dynamic>> requestCashoutOtp(String destinationPhone) async {
+  Future<Map<String, dynamic>> requestCashoutOtp(
+    String destinationPhone,
+  ) async {
     try {
       final res = await _dio.post(
         '/users/dem-pro/wallet/cashout/request-otp',
@@ -161,7 +176,8 @@ class DemProRepository {
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible d\'envoyer le code de confirmation.',
+        e.response?.data?['message'] ??
+            'Impossible d\'envoyer le code de confirmation.',
         e.response?.statusCode,
       );
     }
@@ -176,13 +192,16 @@ class DemProRepository {
     String? otp,
   }) async {
     try {
-      final res = await _dio.post('/users/dem-pro/wallet/cashout', data: {
-        'amount': amount,
-        'operatorName': operatorName,
-        if (destinationPhone != null) 'destinationPhone': destinationPhone,
-        if (destinationName != null) 'destinationName': destinationName,
-        if (otp != null) 'otp': otp,
-      });
+      final res = await _dio.post(
+        '/users/dem-pro/wallet/cashout',
+        data: {
+          'amount': amount,
+          'operatorName': operatorName,
+          if (destinationPhone != null) 'destinationPhone': destinationPhone,
+          if (destinationName != null) 'destinationName': destinationName,
+          if (otp != null) 'otp': otp,
+        },
+      );
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
@@ -199,7 +218,8 @@ class DemProRepository {
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible de charger les statistiques.',
+        e.response?.data?['message'] ??
+            'Impossible de charger les statistiques.',
         e.response?.statusCode,
       );
     }
@@ -231,7 +251,10 @@ class DemProRepository {
     }
   }
 
-  Future<Map<String, dynamic>> updateAddress(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateAddress(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final res = await _dio.patch('/dem-pro/addresses/$id', data: data);
       return res.data as Map<String, dynamic>;
@@ -260,7 +283,8 @@ class DemProRepository {
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible de définir l\'adresse par défaut.',
+        e.response?.data?['message'] ??
+            'Impossible de définir l\'adresse par défaut.',
         e.response?.statusCode,
       );
     }
@@ -298,13 +322,37 @@ class DemProRepository {
     }
   }
 
-  Future<Map<String, dynamic>> updateProduct(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateProduct(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final res = await _dio.patch('/dem-pro/products/$id', data: data);
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible de modifier le produit.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadProductImage(
+    String id,
+    String filePath,
+  ) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath),
+      });
+      final res = await _dio.post(
+        '/dem-pro/products/$id/image',
+        data: formData,
+      );
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? "Impossible d'envoyer la photo.",
         e.response?.statusCode,
       );
     }
@@ -331,8 +379,10 @@ class DemProRepository {
 
   Future<List<Map<String, dynamic>>> getOrderRequests({String? status}) async {
     try {
-      final res = await _dio.get('/dem-pro/order-requests',
-          queryParameters: status != null ? {'status': status} : null);
+      final res = await _dio.get(
+        '/dem-pro/order-requests',
+        queryParameters: status != null ? {'status': status} : null,
+      );
       return (res.data as List).cast<Map<String, dynamic>>();
     } on DioException catch (e) {
       throw AppException(
@@ -342,9 +392,15 @@ class DemProRepository {
     }
   }
 
-  Future<Map<String, dynamic>> confirmOrderRequest(String id, String orderId) async {
+  Future<Map<String, dynamic>> confirmOrderRequest(
+    String id,
+    String orderId,
+  ) async {
     try {
-      final res = await _dio.post('/dem-pro/order-requests/$id/confirm', data: {'orderId': orderId});
+      final res = await _dio.post(
+        '/dem-pro/order-requests/$id/confirm',
+        data: {'orderId': orderId},
+      );
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
@@ -367,7 +423,10 @@ class DemProRepository {
 
   Future<Map<String, dynamic>> getMyFinances(String period) async {
     try {
-      final res = await _dio.get('/dem-pro/me/finances', queryParameters: {'period': period});
+      final res = await _dio.get(
+        '/dem-pro/me/finances',
+        queryParameters: {'period': period},
+      );
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
@@ -379,11 +438,15 @@ class DemProRepository {
 
   Future<Map<String, dynamic>> getBusinessInsights(String period) async {
     try {
-      final res = await _dio.get('/dem-pro/me/insights', queryParameters: {'period': period});
+      final res = await _dio.get(
+        '/dem-pro/me/insights',
+        queryParameters: {'period': period},
+      );
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible de charger les indicateurs.',
+        e.response?.data?['message'] ??
+            'Impossible de charger les indicateurs.',
         e.response?.statusCode,
       );
     }
@@ -442,7 +505,8 @@ class DemProRepository {
       return (res.data as List).cast<Map<String, dynamic>>();
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible de charger les adresses récentes.',
+        e.response?.data?['message'] ??
+            'Impossible de charger les adresses récentes.',
         e.response?.statusCode,
       );
     }
@@ -454,7 +518,8 @@ class DemProRepository {
       return (res.data as List).cast<Map<String, dynamic>>();
     } on DioException catch (e) {
       throw AppException(
-        e.response?.data?['message'] ?? 'Impossible de charger les destinations récentes.',
+        e.response?.data?['message'] ??
+            'Impossible de charger les destinations récentes.',
         e.response?.statusCode,
       );
     }

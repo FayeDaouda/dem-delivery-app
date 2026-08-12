@@ -7,6 +7,7 @@ import '../data/dem_pro_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/client_text.dart';
 import '../../../core/utils/price_format.dart';
+import '../../../shared/widgets/product_thumb.dart';
 
 String _timeAgo(String? iso) {
   if (iso == null) return '';
@@ -509,13 +510,20 @@ class _RequestCard extends StatelessWidget {
                   ...items.map((item) {
                     final itemName = item['name'] as String? ?? '—';
                     final qty = (item['quantity'] as num?)?.toInt() ?? 1;
+                    final image = item['image'] as String?;
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        '•  $itemName × $qty',
-                        style: ClientText.label.copyWith(
-                          color: AppColors.textDark,
-                        ),
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          ProductThumb(imageUrl: image, size: 26),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$itemName × $qty',
+                            style: ClientText.label.copyWith(
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }),
