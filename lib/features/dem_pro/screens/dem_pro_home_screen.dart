@@ -66,6 +66,8 @@ const _monthNames = [
   'décembre',
 ];
 
+String _fmtShortDate(DateTime dt) => '${dt.day} ${_monthNames[dt.month - 1]}';
+
 // ── Filtre livraisons ─────────────────────────────────────────────────────────
 enum _OrderFilter {
   all('Toutes'),
@@ -700,6 +702,23 @@ class _AccueilTab extends StatelessWidget {
     final dateStr =
         '${_dayNames[now.weekday - 1]} ${now.day} ${_monthNames[now.month - 1]}';
 
+    // Alerte proactive d'expiration — jusqu'ici seule une notification push
+    // (facile à manquer/désactivée) signalait un abonnement qui touche à sa
+    // fin ; ce bandeau reste visible tant que ce n'est pas renouvelé, quel
+    // que soit l'état des notifications. Couvre aussi TRIAL (offre promo
+    // admin) — une offre gratuite doit se signaler comme un abonnement payant.
+    final planStatus = user?['proPlanStatus'] as String?;
+    final planExpiresAt = (user?['proPlanExpiresAt'] as String?) != null
+        ? DateTime.tryParse(user!['proPlanExpiresAt'] as String)?.toLocal()
+        : null;
+    final daysUntilExpiry = planExpiresAt
+        ?.difference(DateTime(now.year, now.month, now.day))
+        .inDays;
+    final showExpiryBanner =
+        (planStatus == 'ACTIVE' || planStatus == 'TRIAL') &&
+        daysUntilExpiry != null &&
+        daysUntilExpiry <= 7;
+
     return Column(
       children: [
         // ── Header dégradé cyan — plein-bleed jusqu'en haut de l'écran,
@@ -796,6 +815,67 @@ class _AccueilTab extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // ── Alerte abonnement bientôt expiré ──────────────────
+                      if (showExpiryBanner)
+                        Builder(
+                          builder: (context) {
+                            final urgent = daysUntilExpiry <= 1;
+                            final color = urgent
+                                ? AppColors.error
+                                : AppColors.warning;
+                            return GestureDetector(
+                              onTap: () => showDemProPlanSheet(context),
+                              child: Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 14),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline_rounded,
+                                      color: color,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            daysUntilExpiry <= 0
+                                                ? 'Votre abonnement expire aujourd\'hui'
+                                                : 'Votre abonnement expire dans $daysUntilExpiry jour${daysUntilExpiry > 1 ? 's' : ''}',
+                                            style: ClientText.bodyStrong
+                                                .copyWith(color: t.text),
+                                          ),
+                                          Text(
+                                            'Renouvelez pour garder vos fonctionnalités Pro',
+                                            style: ClientText.label.copyWith(
+                                              color: t.muted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: color,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+
                       // ── Carte résumé — tableau de bord ────────────────────
                       if (loading)
                         Padding(
@@ -2031,6 +2111,11 @@ class _CompteTabState extends State<_CompteTab>
                       _ => AppColors.textMuted,
                     };
                     final isFree = planCode == 'FREE';
+                    final isGifted = _planData?['status'] == 'TRIAL';
+                    final expiresAtStr = _planData?['expiresAt'] as String?;
+                    final expiresAt = expiresAtStr != null
+                        ? DateTime.tryParse(expiresAtStr)?.toLocal()
+                        : null;
                     return GestureDetector(
                       onTap: _showPlanSheet,
                       child: Container(
@@ -2073,7 +2158,11 @@ class _CompteTabState extends State<_CompteTab>
                                   Text(
                                     isFree
                                         ? 'Plan $planLabel'
-                                        : 'Plan $planLabel actif',
+                                        : [
+                                            'Plan $planLabel${isGifted ? ' · offert' : ''}',
+                                            if (expiresAt != null)
+                                              'expire le ${_fmtShortDate(expiresAt)}',
+                                          ].join(' — '),
                                     style: ClientText.label.copyWith(
                                       color: planColor,
                                     ),
