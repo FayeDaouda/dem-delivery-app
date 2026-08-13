@@ -164,7 +164,7 @@ class ChefDeFlotteRepository {
   Future<Map<String, dynamic>> getDriverDetail(String id) async {
     try {
       final res = await _dio.get('/chefs-de-flotte/me/drivers/$id');
-      return res.data as Map<String, dynamic>;
+      return res.data['driver'] as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible de charger ce livreur.',
@@ -268,7 +268,7 @@ class ChefDeFlotteRepository {
   Future<List<Map<String, dynamic>>> getMyDriversLive() async {
     try {
       final res = await _dio.get('/chefs-de-flotte/me/drivers/live');
-      return (res.data as List).cast<Map<String, dynamic>>();
+      return (res.data['drivers'] as List).cast<Map<String, dynamic>>();
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ??
@@ -281,7 +281,7 @@ class ChefDeFlotteRepository {
   Future<List<Map<String, dynamic>>> getMyFleetExtensions() async {
     try {
       final res = await _dio.get('/chefs-de-flotte/me/fleet-extension');
-      return (res.data as List).cast<Map<String, dynamic>>();
+      return (res.data['requests'] as List).cast<Map<String, dynamic>>();
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ??
@@ -294,7 +294,7 @@ class ChefDeFlotteRepository {
   Future<List<Map<String, dynamic>>> getMyIncidents() async {
     try {
       final res = await _dio.get('/chefs-de-flotte/me/incidents');
-      return (res.data as List).cast<Map<String, dynamic>>();
+      return (res.data['incidents'] as List).cast<Map<String, dynamic>>();
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible de charger les incidents.',
