@@ -42,6 +42,10 @@ import '../../features/chef_de_flotte/screens/chef_de_flotte_add_driver_screen.d
 import '../../features/chef_de_flotte/screens/chef_de_flotte_rejected_screen.dart';
 import '../../features/chef_de_flotte/screens/chef_de_flotte_suspended_screen.dart';
 import '../../features/chef_de_flotte/screens/chef_de_flotte_profile_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_driver_detail_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_fleet_map_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_fleet_extensions_screen.dart';
+import '../../features/chef_de_flotte/screens/chef_de_flotte_incidents_screen.dart';
 import '../../features/profile/screens/driver_suspended_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_onboarding_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_pending_screen.dart';
@@ -446,6 +450,23 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/chef-de-flotte/profile',
       builder: (context, state) => const ChefDeFlotteProfileScreen(),
+    ),
+    GoRoute(
+      path: '/chef-de-flotte/drivers/:id',
+      builder: (context, state) =>
+          ChefDeFlotteDriverDetailScreen(driverId: state.pathParameters['id']!),
+    ),
+    GoRoute(
+      path: '/chef-de-flotte/fleet-map',
+      builder: (context, state) => const ChefDeFlotteFleetMapScreen(),
+    ),
+    GoRoute(
+      path: '/chef-de-flotte/fleet-extensions',
+      builder: (context, state) => const ChefDeFlotteFleetExtensionsScreen(),
+    ),
+    GoRoute(
+      path: '/chef-de-flotte/incidents',
+      builder: (context, state) => const ChefDeFlotteIncidentsScreen(),
     ),
 
     // ── DEM Pro ──

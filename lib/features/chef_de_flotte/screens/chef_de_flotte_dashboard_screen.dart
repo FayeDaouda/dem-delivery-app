@@ -12,17 +12,19 @@ class ChefDeFlotteDashboardScreen extends StatefulWidget {
   @override
   State<ChefDeFlotteDashboardScreen> createState() => _State();
 }
-class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProviderStateMixin {
-  final _repo     = ChefDeFlotteRepository(ApiClient.dio);
+
+class _State extends State<ChefDeFlotteDashboardScreen>
+    with SingleTickerProviderStateMixin {
+  final _repo = ChefDeFlotteRepository(ApiClient.dio);
   late TabController _tabs;
 
   Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _drivers = [];
-  bool    _loadingStats   = true;
-  bool    _loadingDrivers = true;
+  bool _loadingStats = true;
+  bool _loadingDrivers = true;
   String? _statsError;
   String? _driversError;
-  String  _driverFilter   = 'all';
+  String _driverFilter = 'all';
 
   @override
   void initState() {
@@ -33,26 +35,53 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
   }
 
   @override
-  void dispose() { _tabs.dispose(); super.dispose(); }
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
 
   Future<void> _loadStats() async {
-    if (mounted) setState(() { _loadingStats = true; _statsError = null; });
+    if (mounted)
+      setState(() {
+        _loadingStats = true;
+        _statsError = null;
+      });
     try {
       final s = await _repo.getStats();
-      if (mounted) setState(() { _stats = s; _loadingStats = false; });
+      if (mounted)
+        setState(() {
+          _stats = s;
+          _loadingStats = false;
+        });
     } catch (e) {
-      if (mounted) setState(() { _loadingStats = false; _statsError = friendlyError(e); });
+      if (mounted)
+        setState(() {
+          _loadingStats = false;
+          _statsError = friendlyError(e);
+        });
     }
   }
 
   Future<void> _loadDrivers() async {
-    if (mounted) setState(() { _loadingDrivers = true; _driversError = null; });
+    if (mounted)
+      setState(() {
+        _loadingDrivers = true;
+        _driversError = null;
+      });
     try {
       final filter = _driverFilter == 'all' ? null : _driverFilter;
       final list = await _repo.getDrivers(status: filter);
-      if (mounted) setState(() { _drivers = list; _loadingDrivers = false; });
+      if (mounted)
+        setState(() {
+          _drivers = list;
+          _loadingDrivers = false;
+        });
     } catch (e) {
-      if (mounted) setState(() { _loadingDrivers = false; _driversError = friendlyError(e); });
+      if (mounted)
+        setState(() {
+          _loadingDrivers = false;
+          _driversError = friendlyError(e);
+        });
     }
   }
 
@@ -77,14 +106,32 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Text('Mon espace Chef de flotte', style: TextStyle(color: Colors.white70, fontSize: DemLayout.isTablet(context) ? 13.0 : 12.0)),
+                    Text(
+                      'Mon espace Chef de flotte',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: DemLayout.isTablet(context) ? 13.0 : 12.0,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text('DEM Chef de flotte', style: TextStyle(color: Colors.white, fontSize: DemLayout.isTablet(context) ? 26.0 : 22.0, fontWeight: FontWeight.w800)),
+                    Text(
+                      'DEM Chef de flotte',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: DemLayout.isTablet(context) ? 26.0 : 22.0,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.map_outlined),
+                tooltip: 'Carte de la flotte',
+                onPressed: () => context.push('/chef-de-flotte/fleet-map'),
+              ),
               IconButton(
                 icon: const Icon(Icons.person_outline),
                 tooltip: 'Mon profil',
@@ -93,7 +140,9 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
               IconButton(
                 icon: const Icon(Icons.add_circle_outline),
                 tooltip: 'Ajouter un livreur',
-                onPressed: () => context.push('/chef-de-flotte/add-driver').then((_) => _loadDrivers()),
+                onPressed: () => context
+                    .push('/chef-de-flotte/add-driver')
+                    .then((_) => _loadDrivers()),
               ),
             ],
           ),
@@ -101,21 +150,40 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
           // Stats cards
           SliverToBoxAdapter(
             child: _loadingStats
-                ? const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: AppColors.primaryMid)))
+                ? const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primaryMid,
+                      ),
+                    ),
+                  )
                 : _statsError != null
-                    ? NetworkErrorWidget(message: _statsError!, onRetry: _loadStats)
-                    : _buildStats(),
+                ? NetworkErrorWidget(message: _statsError!, onRetry: _loadStats)
+                : _buildStats(),
           ),
 
           // Drivers section header
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(children: [
-                Text('Mes livreurs', style: TextStyle(color: const Color.fromARGB(179, 0, 143, 252), fontSize: DemLayout.isTablet(context) ? 18.0 : 16.0, fontWeight: FontWeight.w800)),
-                const Spacer(),
-                IconButton(icon: const Icon(Icons.refresh, size: 18), onPressed: _loadDrivers),
-              ]),
+              child: Row(
+                children: [
+                  Text(
+                    'Mes livreurs',
+                    style: TextStyle(
+                      color: const Color.fromARGB(179, 0, 143, 252),
+                      fontSize: DemLayout.isTablet(context) ? 18.0 : 16.0,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 18),
+                    onPressed: _loadDrivers,
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -128,22 +196,32 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
                   for (final f in [
-                    ('all',       'Tous'),
-                    ('active',    'Actifs'),
-                    ('pending',   'En attente'),
-                    ('rejected',  'Refusés'),
+                    ('all', 'Tous'),
+                    ('active', 'Actifs'),
+                    ('pending', 'En attente'),
+                    ('rejected', 'Refusés'),
                     ('suspended', 'Suspendus'),
                   ])
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
-                        label: Text(f.$2, style: TextStyle(
-                          fontSize: 12,
-                          color: _driverFilter == f.$1 ? Colors.white : AppColors.primaryMid,
-                          fontWeight: _driverFilter == f.$1 ? FontWeight.w700 : FontWeight.w500,
-                        )),
+                        label: Text(
+                          f.$2,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _driverFilter == f.$1
+                                ? Colors.white
+                                : AppColors.primaryMid,
+                            fontWeight: _driverFilter == f.$1
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                        ),
                         selected: _driverFilter == f.$1,
-                        onSelected: (_) { setState(() => _driverFilter = f.$1); _loadDrivers(); },
+                        onSelected: (_) {
+                          setState(() => _driverFilter = f.$1);
+                          _loadDrivers();
+                        },
                         selectedColor: AppColors.primaryMid,
                         backgroundColor: Colors.white,
                         showCheckmark: false,
@@ -164,61 +242,114 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
 
           // Driver list
           _loadingDrivers
-              ? const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(color: AppColors.primaryMid))))
-              : _driversError != null
-                  ? NetworkErrorWidget(message: _driversError!, onRetry: _loadDrivers, sliver: true)
-                  : _drivers.isEmpty
-                  ? SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(children: [
-                          const Icon(Icons.group_outlined, color: Colors.grey, size: 48),
-                          const SizedBox(height: 12),
-                          const Text('Aucun livreur', style: TextStyle(color: Colors.grey)),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.add),
-                            label: const Text('Ajouter un livreur'),
-                            onPressed: () => context.push('/chef-de-flotte/add-driver').then((_) => _loadDrivers()),
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMid, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
-                          ),
-                        ]),
-                      ),
-                    )
-                  : SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (ctx, i) => _DriverTile(driver: _drivers[i]),
-                          childCount: _drivers.length,
-                        ),
+              ? const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primaryMid,
                       ),
                     ),
+                  ),
+                )
+              : _driversError != null
+              ? NetworkErrorWidget(
+                  message: _driversError!,
+                  onRetry: _loadDrivers,
+                  sliver: true,
+                )
+              : _drivers.isEmpty
+              ? SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.group_outlined,
+                          color: Colors.grey,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Aucun livreur',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.add),
+                          label: const Text('Ajouter un livreur'),
+                          onPressed: () => context
+                              .push('/chef-de-flotte/add-driver')
+                              .then((_) => _loadDrivers()),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryMid,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) => _DriverTile(driver: _drivers[i]),
+                      childCount: _drivers.length,
+                    ),
+                  ),
+                ),
         ],
       ),
       floatingActionButton: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [AppColors.primary, AppColors.primaryMid, AppColors.primaryDark],
+            colors: [
+              AppColors.primary,
+              AppColors.primaryMid,
+              AppColors.primaryDark,
+            ],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.40), blurRadius: 12, offset: const Offset(0, 4))],
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.40),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => context.push('/chef-de-flotte/add-driver').then((_) => _loadDrivers()),
+            onTap: () => context
+                .push('/chef-de-flotte/add-driver')
+                .then((_) => _loadDrivers()),
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.add, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text('Ajouter livreur', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-              ]),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Ajouter livreur',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -232,80 +363,127 @@ class _State extends State<ChefDeFlotteDashboardScreen> with SingleTickerProvide
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         children: [
-          Row(children: [
-            _StatCard(label: 'Flotte active',   value: '${s['activeCount'] ?? 0}', icon: Icons.check_circle_outline, color: Colors.green),
-            const SizedBox(width: 10),
-            _StatCard(label: 'En attente',      value: '${s['pendingCount'] ?? 0}', icon: Icons.hourglass_top_rounded, color: Colors.orange),
-            const SizedBox(width: 10),
-            _StatCard(label: 'Courses total',   value: '${s['totalCourses'] ?? 0}', icon: Icons.motorcycle, color: AppColors.primaryMid),
-          ]),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)]),
-            child: Row(children: [
-              const Icon(Icons.directions_bike, color: AppColors.primaryMid, size: 20),
+          Row(
+            children: [
+              _StatCard(
+                label: 'Flotte active',
+                value: '${s['activeCount'] ?? 0}',
+                icon: Icons.check_circle_outline,
+                color: Colors.green,
+              ),
               const SizedBox(width: 10),
-              Text('Flotte : ${s['fleetSize'] ?? 0} / ${s['fleetMax'] ?? 10} motos', style: const TextStyle(fontWeight: FontWeight.w700)),
-              const Spacer(),
-              if ((s['fleetSize'] ?? 0) >= (s['fleetMax'] ?? 10))
-                GestureDetector(
-                  onTap: _showFleetExtensionDialog,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: AppColors.primaryMid.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                    child: const Text('+ Extension', style: TextStyle(color: AppColors.primaryMid, fontWeight: FontWeight.w700, fontSize: 12)),
+              _StatCard(
+                label: 'En attente',
+                value: '${s['pendingCount'] ?? 0}',
+                icon: Icons.hourglass_top_rounded,
+                color: Colors.orange,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _StatCard(
+                label: 'Courses total',
+                value: '${s['totalCourses'] ?? 0}',
+                icon: Icons.motorcycle,
+                color: AppColors.primaryMid,
+              ),
+              const SizedBox(width: 10),
+              _StatCard(
+                label: 'Alertes',
+                value: '${s['alertsCount'] ?? 0}',
+                icon: Icons.warning_amber_rounded,
+                color: ((s['alertsCount'] as num?) ?? 0) > 0
+                    ? Colors.red
+                    : Colors.grey,
+                onTap: () => context.push('/chef-de-flotte/incidents'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => context.push('/chef-de-flotte/fleet-extensions'),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
                   ),
-                ),
-            ]),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.directions_bike,
+                    color: AppColors.primaryMid,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Flotte : ${s['fleetSize'] ?? 0} / ${s['fleetMax'] ?? 10} motos',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const Spacer(),
+                  if ((s['fleetSize'] ?? 0) >= (s['fleetMax'] ?? 10))
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryMid.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        '+ Extension',
+                        style: TextStyle(
+                          color: AppColors.primaryMid,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    )
+                  else
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.primaryMid,
+                    ),
+                ],
+              ),
+            ),
           ),
           if (!((s['isFleetReady'] as bool?) ?? true))
             Container(
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.orange.shade200)),
-              child: Row(children: [
-                const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
-                const SizedBox(width: 8),
-                const Expanded(child: Text('Minimum 3 livreurs actifs requis pour être opérationnel.', style: TextStyle(fontSize: 12, color: Colors.orange))),
-              ]),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Minimum 3 livreurs actifs requis pour être opérationnel.',
+                      style: TextStyle(fontSize: 12, color: Colors.orange),
+                    ),
+                  ),
+                ],
+              ),
             ),
-        ],
-      ),
-    );
-  }
-
-  void _showFleetExtensionDialog() {
-    final sizeCtrl = TextEditingController();
-    final justCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Demander une extension'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: sizeCtrl, keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Nombre de motos demandé', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          TextField(controller: justCtrl, maxLines: 3,
-            decoration: const InputDecoration(labelText: 'Justification', border: OutlineInputBorder())),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMid, foregroundColor: Colors.white),
-            onPressed: () async {
-              final size = int.tryParse(sizeCtrl.text.trim());
-              if (size == null || justCtrl.text.trim().isEmpty) return;
-              try {
-                await _repo.requestFleetExtension(requestedSize: size, justification: justCtrl.text.trim());
-                if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Demande envoyée !'))); }
-              } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyError(e))));
-              }
-            },
-            child: const Text('Envoyer'),
-          ),
         ],
       ),
     );
@@ -317,18 +495,62 @@ class _StatCard extends StatelessWidget {
   final String label, value;
   final IconData icon;
   final Color color;
-  const _StatCard({required this.label, required this.value, required this.icon, required this.color});
+  final VoidCallback? onTap;
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    this.onTap,
+  });
   @override
   Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)]),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 6),
-        Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
-        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-      ]),
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                if (onTap != null) ...[
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.grey.shade300,
+                    size: 16,
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }
@@ -343,7 +565,9 @@ class _DriverTile extends StatelessWidget {
   String get _avatarLetter {
     if (_hasName) return (driver['name'] as String).trim()[0].toUpperCase();
     final phone = driver['phone'] as String?;
-    return (phone != null && phone.isNotEmpty) ? phone[phone.startsWith('+') ? 1 : 0] : '?';
+    return (phone != null && phone.isNotEmpty)
+        ? phone[phone.startsWith('+') ? 1 : 0]
+        : '?';
   }
 
   Color get _statusColor {
@@ -368,39 +592,116 @@ class _DriverTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final courses = (driver['deliveredCourses'] as num?)?.toInt() ?? 0;
-    final rating  = (driver['avgRating'] as num?)?.toDouble();
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)]),
-      child: Row(children: [
-        CircleAvatar(
-          backgroundColor: AppColors.primaryMid.withValues(alpha: 0.12),
-          child: Text(_avatarLetter, style: const TextStyle(color: AppColors.primaryMid, fontWeight: FontWeight.w700)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(
-            _hasName ? driver['name'].toString() : (driver['phone'] ?? '—').toString(),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          ),
-          if (_hasName) Text(driver['phone'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 3),
-          Row(children: [
-            Text('$courses courses', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-            if (rating != null) ...[
-              const SizedBox(width: 8),
-              const Icon(Icons.star, size: 12, color: Colors.amber),
-              Text(rating.toStringAsFixed(1), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+    final rating = (driver['avgRating'] as num?)?.toDouble();
+    final id = driver['id'] as String?;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: id == null
+            ? null
+            : () => context.push('/chef-de-flotte/drivers/$id'),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+              ),
             ],
-          ]),
-        ])),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: _statusColor.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(20)),
-          child: Text(_statusLabel, style: TextStyle(color: _statusColor, fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: AppColors.primaryMid.withValues(alpha: 0.12),
+                child: Text(
+                  _avatarLetter,
+                  style: const TextStyle(
+                    color: AppColors.primaryMid,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _hasName
+                          ? driver['name'].toString()
+                          : (driver['phone'] ?? '—').toString(),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (_hasName)
+                      Text(
+                        driver['phone'] ?? '',
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Text(
+                          '$courses courses',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        if (rating != null) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.star, size: 12, color: Colors.amber),
+                          Text(
+                            rating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: _statusColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _statusLabel,
+                  style: TextStyle(
+                    color: _statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.grey.shade300,
+                size: 18,
+              ),
+            ],
+          ),
         ),
-      ]),
+      ),
     );
   }
 }
