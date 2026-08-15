@@ -1629,6 +1629,11 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                     minPanelContent: _mode == ClientHomeMode.home
                         ? _homeMinPanelContent
                         : _kMinPanelContent,
+                    // La navbar (mode accueil) réserve déjà elle-même
+                    // l'encoche bas — la feuille ne doit pas l'ajouter une
+                    // deuxième fois (ça créait le vide rapporté en test
+                    // entre les boutons de service et la navbar).
+                    addBottomSafeArea: isWizard,
                     onDraggingChanged: (v) => setState(() => _isDragging = v),
                     onDragOffsetChanged: (v) => setState(() => _dragOffset = v),
                     onTapDismissKeyboard: () =>

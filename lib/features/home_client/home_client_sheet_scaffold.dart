@@ -42,6 +42,14 @@ class HomeClientSheetScaffold extends StatelessWidget {
   /// refermer ; l'accueil (pas de champ texte) peut passer un no-op.
   final VoidCallback onTapDismissKeyboard;
 
+  /// Si une navbar suit juste en dessous (mode accueil), elle réserve déjà
+  /// elle-même l'encoche bas de l'écran (voir _ClientNavBar) — inutile que
+  /// la feuille l'ajoute une seconde fois, ça ne ferait qu'écarter les
+  /// boutons de service de la navbar sans raison. À mettre à false dans ce
+  /// cas ; laissé à true (par défaut) pour l'assistant, qui n'a pas de
+  /// navbar sous lui et doit donc respecter l'encoche lui-même.
+  final bool addBottomSafeArea;
+
   const HomeClientSheetScaffold({
     super.key,
     required this.sheetKey,
@@ -54,6 +62,7 @@ class HomeClientSheetScaffold extends StatelessWidget {
     required this.child,
     required this.onTapDismissKeyboard,
     this.minPanelContent = 66.0,
+    this.addBottomSafeArea = true,
   });
 
   @override
@@ -90,6 +99,7 @@ class HomeClientSheetScaffold extends StatelessWidget {
         padding: EdgeInsets.only(bottom: keyboardHeight),
         child: SafeArea(
           top: false,
+          bottom: addBottomSafeArea,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
