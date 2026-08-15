@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../shared/widgets/address_row.dart';
+import '../../shared/widgets/cancel_reason_sheet.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/share_tracking_sheet.dart';
@@ -645,9 +646,17 @@ class _OrderConfirmationScreenState
 
     if (confirmed != true || !mounted) return;
 
+    final reason = await showCancelReasonSheet(
+      context,
+      reasons: kClientCancelReasons,
+    );
+    if (!mounted) return;
+
     setState(() => _cancelling = true);
     try {
-      await ref.read(ordersRepositoryProvider).cancelOrder(orderId);
+      await ref
+          .read(ordersRepositoryProvider)
+          .cancelOrder(orderId, reason: reason);
       if (mounted) {
         showDemToast(context, 'Commande annulée avec succès');
         context.pop();

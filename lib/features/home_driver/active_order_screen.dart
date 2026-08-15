@@ -32,6 +32,7 @@ import 'navigation/voice_nav_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../shared/widgets/address_row.dart';
 import '../../shared/widgets/call_button.dart';
+import '../../shared/widgets/cancel_reason_sheet.dart';
 import '../../shared/widgets/gradient_dialog.dart';
 import '../../shared/widgets/operator_picker_sheet.dart';
 import '../../shared/widgets/payment_collection_dialog.dart';
@@ -215,11 +216,19 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       confirmLabel: 'Annuler',
     );
     if (confirmed != true || !mounted) return;
+
+    final reason = await showCancelReasonSheet(
+      context,
+      title: 'Pourquoi annulez-vous cette course ?',
+      reasons: kDriverCancelReasons,
+    );
+    if (!mounted) return;
+
     setState(() => _driverCancelling = true);
     try {
       await ref
           .read(ordersRepositoryProvider)
-          .driverCancelOrder(_order['id'] as String);
+          .driverCancelOrder(_order['id'] as String, reason: reason);
       if (!mounted) return;
       ref.read(availableOrdersProvider.notifier).clear();
       context.go('/driver/home');

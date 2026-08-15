@@ -517,9 +517,12 @@ class OrdersRepository {
     }
   }
 
-  Future<Map<String, dynamic>> cancelOrder(String id) async {
+  Future<Map<String, dynamic>> cancelOrder(String id, {String? reason}) async {
     try {
-      final response = await _dio.patch('/orders/$id/cancel');
+      final response = await _dio.patch(
+        '/orders/$id/cancel',
+        data: {'reason': reason},
+      );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(
@@ -550,9 +553,15 @@ class OrdersRepository {
     }
   }
 
-  Future<Map<String, dynamic>> driverCancelOrder(String id) async {
+  Future<Map<String, dynamic>> driverCancelOrder(
+    String id, {
+    String? reason,
+  }) async {
     try {
-      final response = await _dio.patch('/orders/$id/driver-cancel');
+      final response = await _dio.patch(
+        '/orders/$id/driver-cancel',
+        data: {'reason': reason},
+      );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw AppException(

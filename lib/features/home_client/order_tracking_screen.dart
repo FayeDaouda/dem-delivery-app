@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/widgets/address_row.dart';
 import '../../shared/widgets/call_button.dart';
+import '../../shared/widgets/cancel_reason_sheet.dart';
 import '../../shared/widgets/driver_rating_dialog.dart';
 import '../../shared/widgets/map_location_mode_button.dart';
 import '../../shared/widgets/map_theme_toggle_button.dart';
@@ -194,9 +195,20 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
   }
 
   Future<void> _clientCancelOrder() async {
+    // Le swipe qui déclenche cet appel est déjà la confirmation d'intention
+    // — cette feuille ne demande plus que le motif (facultatif, "Ignorer"
+    // toujours possible), pas une seconde confirmation.
+    final reason = await showCancelReasonSheet(
+      context,
+      reasons: kClientCancelReasons,
+    );
+    if (!mounted) return;
+
     setState(() => _clientCancelling = true);
     try {
-      await ref.read(ordersRepositoryProvider).cancelOrder(widget.orderId);
+      await ref
+          .read(ordersRepositoryProvider)
+          .cancelOrder(widget.orderId, reason: reason);
       if (!mounted) return;
       context.go('/client/home');
     } catch (e) {
