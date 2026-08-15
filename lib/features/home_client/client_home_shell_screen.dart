@@ -1224,7 +1224,12 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                   _programmaticMove = false;
                   if (_mode == ClientHomeMode.expressSimpleWizard &&
                       _orderWizard!.pickupLat != null) {
-                    _orderWizard!.maybeUpdatePickupScreenPos(
+                    // Sans condition (pas la variante "maybe") — le point
+                    // suivi n'a pas forcément changé, mais après un
+                    // pan/zoom/animation de caméra, sa position à l'écran
+                    // si. Bug d'anneau de pulsation mal positionné repéré en
+                    // test, corrigé ici.
+                    _orderWizard!.forceUpdatePickupScreenPos(
                       LatLng(
                         _orderWizard!.pickupLat!,
                         _orderWizard!.pickupLng!,

@@ -139,7 +139,14 @@ class OrderWizardController {
   ScreenCoordinate? pickupScreenPos;
   LatLng? _pickupScreenPosSource;
 
-  Future<void> _updatePickupScreenPos(LatLng target) async {
+  /// Recalcule sans condition — nécessaire après un pan/zoom manuel ou une
+  /// animation de caméra : le POINT suivi n'a pas changé, mais sa position à
+  /// L'ÉCRAN si, et c'est elle que l'anneau de pulsation doit suivre. Utilisé
+  /// par le socle sur `onCameraIdle` (voir client_home_shell_screen.dart) —
+  /// la variante "maybe" ci-dessous ne suffit pas ici : elle ignore tout
+  /// appel où seule la caméra a bougé (raison du bug d'anneau mal positionné
+  /// repéré en test).
+  Future<void> forceUpdatePickupScreenPos(LatLng target) async {
     final controller = mapHost.mapController;
     if (controller == null) return;
     final coord = await controller.getScreenCoordinate(target);
@@ -148,18 +155,18 @@ class OrderWizardController {
   }
 
   /// À appeler à chaque frame par le socle (comme l'ancien build()) — ne
-  /// recalcule que si le point suivi a changé, pour éviter de spammer
-  /// getScreenCoordinate().
+  /// recalcule que si le POINT suivi a changé (pas la caméra), pour éviter
+  /// de spammer getScreenCoordinate() à chaque frame de build.
   void maybeUpdatePickupScreenPos(LatLng current) {
     if (_pickupScreenPosSource == current) return;
     _pickupScreenPosSource = current;
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _updatePickupScreenPos(current),
+      (_) => forceUpdatePickupScreenPos(current),
     );
   }
 
   void _init() {
-    _fetchGpsInit();
+    _seedInitialPickup();
     _loadUser();
     _loadFavorites();
     _loadMarkerIcons();
@@ -292,7 +299,26 @@ class OrderWizardController {
   }
 
   // ── GPS ──────────────────────────────────────────────────────────────────
-  Future<void> _fetchGpsInit() async {
+  // La position est déjà connue du socle (flux GPS continu actif depuis
+  // l'accueil) — on la reprend telle quelle, SANS jamais déplacer la caméra
+  // : c'est justement ce qui cassait la continuité "une seule carte" entre
+  // l'accueil et l'assistant (la caméra sautait à un autre zoom/tilt dès
+  // l'entrée dans Express/Simple, repéré en test). Le point de collecte
+  // apparaît là où l'utilisateur le voyait déjà — seule l'animation de
+  // "chute" du marqueur (pickupReveal) joue, sur place.
+  Future<void> _seedInitialPickup() async {
+    final known = mapHost.currentPosition;
+    if (known != null) {
+      pickupLat = known.latitude;
+      pickupLng = known.longitude;
+      pickupReveal.reveal();
+      onChanged();
+      await _reverseGeocode(known, forPickup: true);
+      return;
+    }
+    // Repli — le socle n'a pas encore de position connue (cas rare : GPS
+    // pas encore résolu au moment où l'utilisateur ouvre l'assistant).
+    // Seul ce chemin déplace la caméra, faute de mieux.
     loadingGps = true;
     onChanged();
     try {
@@ -312,7 +338,27 @@ class OrderWizardController {
     }
   }
 
-  void refreshGps() => _fetchGpsInit();
+  /// Recentrage explicite (bouton "ma position") — celui-ci DOIT déplacer la
+  /// caméra, contrairement à la saisie initiale silencieuse ci-dessus.
+  Future<void> refreshGps() async {
+    loadingGps = true;
+    onChanged();
+    try {
+      final pos = await NavigationService.requestAndGetPosition();
+      if (pos != null) {
+        final ll = LatLng(pos.latitude, pos.longitude);
+        mapHost.centerOn(ll);
+        pickupLat = ll.latitude;
+        pickupLng = ll.longitude;
+        pickupReveal.reveal();
+        await _reverseGeocode(ll, forPickup: true);
+      }
+    } catch (_) {
+    } finally {
+      loadingGps = false;
+      onChanged();
+    }
+  }
 
   // ── Reverse geocoding ────────────────────────────────────────────────────
   Future<void> _reverseGeocode(LatLng pos, {required bool forPickup}) async {
