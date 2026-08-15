@@ -22,13 +22,18 @@ class NotificationService {
   static Future<void> setup() async {
     try {
       // Local notifications — pas de demande de permission ici (false sur iOS)
-      const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidInitSettings = AndroidInitializationSettings(
+        '@mipmap/ic_launcher',
+      );
       const iosInitSettings = DarwinInitializationSettings(
         requestAlertPermission: false,
         requestBadgePermission: false,
         requestSoundPermission: false,
       );
-      const initSettings = InitializationSettings(android: androidInitSettings, iOS: iosInitSettings);
+      const initSettings = InitializationSettings(
+        android: androidInitSettings,
+        iOS: iosInitSettings,
+      );
       await _localNotificationsPlugin.initialize(settings: initSettings);
 
       // Canal Android haute importance (alertes, nouvelles courses)
@@ -42,7 +47,9 @@ class NotificationService {
         sound: RawResourceAndroidNotificationSound('dem_order_alert'),
       );
       await _localNotificationsPlugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.createNotificationChannel(channel);
 
       // Canal Android notifications générales (broadcast, statut commande, etc.)
@@ -56,7 +63,9 @@ class NotificationService {
         sound: RawResourceAndroidNotificationSound('dem_notify'),
       );
       await _localNotificationsPlugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.createNotificationChannel(notifyChannel);
 
       // Canal Android discret (notification persistante GPS pendant la course)
@@ -72,12 +81,16 @@ class NotificationService {
         enableVibration: false,
       );
       await _localNotificationsPlugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.createNotificationChannel(ongoingChannel);
 
       // iOS : affiche en foreground nativement via Firebase
       await _messaging.setForegroundNotificationPresentationOptions(
-        alert: true, badge: true, sound: true,
+        alert: true,
+        badge: true,
+        sound: true,
       );
 
       // Handler background
@@ -94,7 +107,6 @@ class NotificationService {
       if (initial != null) _handleTap(initial);
 
       clearBadge();
-
     } catch (_) {
       // Silencieux sur émulateur sans Google Play Services
     }
@@ -106,9 +118,15 @@ class NotificationService {
       await _localNotificationsPlugin.cancelAll();
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         await _localNotificationsPlugin.show(
-          id: 0, title: null, body: null,
+          id: 0,
+          title: null,
+          body: null,
           notificationDetails: const NotificationDetails(
-            iOS: DarwinNotificationDetails(presentAlert: false, presentSound: false, badgeNumber: 0),
+            iOS: DarwinNotificationDetails(
+              presentAlert: false,
+              presentSound: false,
+              badgeNumber: 0,
+            ),
           ),
         );
         await _localNotificationsPlugin.cancel(id: 0);
@@ -119,23 +137,25 @@ class NotificationService {
   /// À appeler après l'onboarding : demande la permission et enregistre le token FCM.
   static Future<void> requestPermissionAndToken() async {
     try {
-      await _messaging.requestPermission(
-        alert: true, badge: true, sound: true,
-      ).timeout(const Duration(seconds: 5));
+      await _messaging
+          .requestPermission(alert: true, badge: true, sound: true)
+          .timeout(const Duration(seconds: 5));
 
       // iOS : attendre le token APNs avant le token FCM (obligatoire v15+)
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         String? apnsToken;
         for (int i = 0; i < 10 && apnsToken == null; i++) {
           apnsToken = await _messaging.getAPNSToken();
-          if (apnsToken == null) await Future.delayed(const Duration(seconds: 1));
+          if (apnsToken == null)
+            await Future.delayed(const Duration(seconds: 1));
         }
       }
 
-      final token = await _messaging.getToken().timeout(const Duration(seconds: 10));
+      final token = await _messaging.getToken().timeout(
+        const Duration(seconds: 10),
+      );
       if (token != null) await _saveToken(token);
       _messaging.onTokenRefresh.listen(_saveToken);
-
     } catch (_) {
       // Silencieux si pas de Google Play Services ou refus utilisateur
     }
@@ -144,28 +164,33 @@ class NotificationService {
   // ── Navigation ───────────────────────────────────────────────────────────────
 
   static void _handleTap(RemoteMessage message) {
-    final type     = message.data['type'] as String?;
-    final orderId  = message.data['orderId'] as String?;
+    final type = message.data['type'] as String?;
+    final orderId = message.data['orderId'] as String?;
     final driverId = message.data['driverId'] as String?;
-    final batchId  = message.data['batchId'] as String?;
+    final batchId = message.data['batchId'] as String?;
 
     Future.delayed(const Duration(milliseconds: 300), () {
       final role = appStartupNotifier.role;
       final isDemPro = role == 'DEM_PRO';
 
-      if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP' || type == 'DRIVER_NEARBY') &&
-          orderId != null && driverId != null) {
-        appRouter.push(isDemPro ? '/dem-pro/orders/tracking' : '/orders/tracking', extra: {
-          'orderId': orderId,
-          'driverId': driverId,
-        });
+      if ((type == 'ORDER_ACCEPTED' ||
+              type == 'ORDER_PICKED_UP' ||
+              type == 'DRIVER_NEARBY') &&
+          orderId != null &&
+          driverId != null) {
+        appRouter.push(
+          isDemPro ? '/dem-pro/orders/tracking' : '/orders/tracking',
+          extra: {'orderId': orderId, 'driverId': driverId},
+        );
         return;
       }
-      if ((type == 'BATCH_ACCEPTED' || type == 'BATCH_COMPLETED') && batchId != null) {
+      if ((type == 'BATCH_ACCEPTED' || type == 'BATCH_COMPLETED') &&
+          batchId != null) {
         appRouter.push('/dem-pro/batch/tracking', extra: {'batchId': batchId});
         return;
       }
-      if (isDemPro && (type == 'ORDER_DELIVERED' || type == 'ORDER_AUTO_CANCELLED')) {
+      if (isDemPro &&
+          (type == 'ORDER_DELIVERED' || type == 'ORDER_AUTO_CANCELLED')) {
         appRouter.go('/dem-pro/home');
         return;
       }
@@ -182,10 +207,10 @@ class NotificationService {
     final context = appRouter.routerDelegate.navigatorKey.currentContext;
     if (context == null) return;
 
-    final title    = message.notification?.title ?? '';
-    final body     = message.notification?.body  ?? '';
-    final type     = message.data['type'] as String?;
-    final orderId  = message.data['orderId'] as String?;
+    final title = message.notification?.title ?? '';
+    final body = message.notification?.body ?? '';
+    final type = message.data['type'] as String?;
+    final orderId = message.data['orderId'] as String?;
     final driverId = message.data['driverId'] as String?;
 
     // Retire l'éventuelle bannière précédente
@@ -203,18 +228,24 @@ class NotificationService {
 
     void onTap() {
       dismiss();
-      if ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP' || type == 'DRIVER_NEARBY') &&
-          orderId != null && driverId != null) {
+      if ((type == 'ORDER_ACCEPTED' ||
+              type == 'ORDER_PICKED_UP' ||
+              type == 'DRIVER_NEARBY') &&
+          orderId != null &&
+          driverId != null) {
         final role = appStartupNotifier.role;
-        final path = role == 'DEM_PRO' ? '/dem-pro/orders/tracking' : '/orders/tracking';
-        appRouter.push(path, extra: {
-          'orderId': orderId,
-          'driverId': driverId,
-        });
+        final path = role == 'DEM_PRO'
+            ? '/dem-pro/orders/tracking'
+            : '/orders/tracking';
+        appRouter.push(path, extra: {'orderId': orderId, 'driverId': driverId});
       } else {
         final batchId = message.data['batchId'] as String?;
-        if ((type == 'BATCH_ACCEPTED' || type == 'BATCH_COMPLETED') && batchId != null) {
-          appRouter.push('/dem-pro/batch/tracking', extra: {'batchId': batchId});
+        if ((type == 'BATCH_ACCEPTED' || type == 'BATCH_COMPLETED') &&
+            batchId != null) {
+          appRouter.push(
+            '/dem-pro/batch/tracking',
+            extra: {'batchId': batchId},
+          );
         } else {
           final route = _routeForType(type);
           if (route != null) appRouter.go(route);
@@ -226,9 +257,11 @@ class NotificationService {
       builder: (_) => _TopBanner(
         title: title,
         body: body,
-        hasAction: _routeForType(type) != null ||
+        hasAction:
+            _routeForType(type) != null ||
             ((type == 'ORDER_ACCEPTED' || type == 'ORDER_PICKED_UP') &&
-                orderId != null && driverId != null),
+                orderId != null &&
+                driverId != null),
         onTap: onTap,
         onDismiss: dismiss,
       ),
@@ -236,7 +269,7 @@ class NotificationService {
 
     _activeBanner = entry;
     Overlay.of(context).insert(entry);
-    playAlertSound();
+    playAlertSound(title: title, body: body);
     Future.delayed(const Duration(seconds: 6), dismiss);
   }
 
@@ -244,43 +277,47 @@ class NotificationService {
 
   static String? _routeForType(String? type) => switch (type) {
     // ── Admin / validation ──────────────────────────────────────────────────
-    'CHEF_DE_FLOTTE_VALIDATED'      => '/chef-de-flotte/dashboard',
-    'CHEF_DE_FLOTTE_REJECTED'       => '/chef-de-flotte/rejected',
-    'CHEF_DE_FLOTTE_SUSPENDED'      => '/chef-de-flotte/suspended',
-    'DRIVER_VALIDATED_FOR_AM'   => '/chef-de-flotte/dashboard',
-    'DRIVER_REJECTED_FOR_AM'    => '/chef-de-flotte/dashboard',
-    'FLEET_EXTENSION_APPROVED'  => '/chef-de-flotte/dashboard',
-    'FLEET_EXTENSION_REJECTED'  => '/chef-de-flotte/dashboard',
-    'DRIVER_VALIDATED'          => '/driver/home',
-    'DRIVER_REJECTED'           => '/phone',
-    'DRIVER_SUSPENDED'          => '/driver/suspended',
+    'CHEF_DE_FLOTTE_VALIDATED' => '/chef-de-flotte/dashboard',
+    'CHEF_DE_FLOTTE_REJECTED' => '/chef-de-flotte/rejected',
+    'CHEF_DE_FLOTTE_SUSPENDED' => '/chef-de-flotte/suspended',
+    'DRIVER_VALIDATED_FOR_AM' => '/chef-de-flotte/dashboard',
+    'DRIVER_REJECTED_FOR_AM' => '/chef-de-flotte/dashboard',
+    'FLEET_EXTENSION_APPROVED' => '/chef-de-flotte/dashboard',
+    'FLEET_EXTENSION_REJECTED' => '/chef-de-flotte/dashboard',
+    'DEM_PRO_VALIDATED' => '/dem-pro/home',
+    'DEM_PRO_REJECTED' => '/dem-pro/rejected',
+    'DEM_PRO_SUSPENDED' => '/dem-pro/suspended',
+    'DRIVER_VALIDATED' => '/driver/home',
+    'DRIVER_REJECTED' => '/phone',
+    'DRIVER_SUSPENDED' => '/driver/suspended',
     // ── Vérification documents (KYC) — driver ──────────────────────────────
-    'DOCUMENT_REJECTED'         => '/driver/documents',
-    'DOCUMENT_REQUIRED'         => '/driver/documents',
-    'DOCUMENTS_SUBMITTED'       => '/driver/home',
-    'ACCOUNT_SUSPENDED_DOCS'    => '/driver/suspended',
+    'DOCUMENT_REJECTED' => '/driver/documents',
+    'DOCUMENT_REQUIRED' => '/driver/documents',
+    'DOCUMENTS_SUBMITTED' => '/driver/home',
+    'ACCOUNT_SUSPENDED_DOCS' => '/driver/suspended',
     // ── Orders — driver ─────────────────────────────────────────────────────
-    'ORDER_OFFER'               => '/driver/home',     // socket affiche le modal d'offre
-    'ORDER_CANCELLED'           => '/driver/home',     // client a annulé avant acceptation
-    'ORDER_ADMIN_ASSIGNED'      => '/driver/home',     // socket order:admin_assigned recharge la course active
+    'ORDER_OFFER' => '/driver/home', // socket affiche le modal d'offre
+    'ORDER_CANCELLED' => '/driver/home', // client a annulé avant acceptation
+    'ORDER_ADMIN_ASSIGNED' =>
+      '/driver/home', // socket order:admin_assigned recharge la course active
     // ── Orders — client / DEM Pro ──────────────────────────────────────────
-    'ORDER_ACCEPTED'            => null, // géré dans _handleTap avec role-aware routing
-    'ORDER_PICKED_UP'           => null,
-    'ORDER_DELIVERED'           => '/orders/my',
-    'ORDER_SEARCHING'           => '/client/home',
-    'ORDER_AUTO_CANCELLED'      => '/orders/my',
-    'BATCH_ACCEPTED'            => null, // géré dans _handleTap
-    'BATCH_COMPLETED'           => null,
-    'DRIVER_NEARBY'             => null, // géré dans _handleTap
-    'DISPUTE_OPENED'            => '/orders/my',
+    'ORDER_ACCEPTED' => null, // géré dans _handleTap avec role-aware routing
+    'ORDER_PICKED_UP' => null,
+    'ORDER_DELIVERED' => '/orders/my',
+    'ORDER_SEARCHING' => '/client/home',
+    'ORDER_AUTO_CANCELLED' => '/orders/my',
+    'BATCH_ACCEPTED' => null, // géré dans _handleTap
+    'BATCH_COMPLETED' => null,
+    'DRIVER_NEARBY' => null, // géré dans _handleTap
+    'DISPUTE_OPENED' => '/orders/my',
     // ── Pilotage / stock — DEM Pro ──────────────────────────────────────────
-    'DEM_PRO_WEEKLY_DIGEST'     => '/dem-pro/home',
-    'DEM_PRO_LOW_STOCK'         => '/dem-pro/home',
-    'DEM_PRO_PLAN_EXPIRED'      => '/dem-pro/home',
-    'DEM_PRO_PLAN_EXPIRING'     => '/dem-pro/home',
-    'DEM_PRO_PLAN_GIFTED'       => '/dem-pro/home',
+    'DEM_PRO_WEEKLY_DIGEST' => '/dem-pro/home',
+    'DEM_PRO_LOW_STOCK' => '/dem-pro/home',
+    'DEM_PRO_PLAN_EXPIRED' => '/dem-pro/home',
+    'DEM_PRO_PLAN_EXPIRING' => '/dem-pro/home',
+    'DEM_PRO_PLAN_GIFTED' => '/dem-pro/home',
     // ── Paiement — driver ───────────────────────────────────────────────────
-    'PAYMENT_RESOLVED'          => '/driver/home',     // admin confirme paiement
+    'PAYMENT_RESOLVED' => '/driver/home', // admin confirme paiement
     _ => null,
   };
 
@@ -293,7 +330,10 @@ class NotificationService {
   }
 
   // ── Notifications système locales ─────────────────────────────────────────
-  static Future<void> showSystemNotification({required String title, required String body}) async {
+  static Future<void> showSystemNotification({
+    required String title,
+    required String body,
+  }) async {
     final androidDetails = AndroidNotificationDetails(
       'dem_notify',
       'Notifications DEM',
@@ -310,7 +350,10 @@ class NotificationService {
       presentSound: true,
       sound: 'dem_notify.wav',
     );
-    final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
     await _localNotificationsPlugin.show(
       id: DateTime.now().millisecond,
       title: title,
@@ -320,10 +363,13 @@ class NotificationService {
   }
 
   // ── Son d'alerte (accompagne la bannière in-app) ─────────────────────────
-  static Future<void> playAlertSound() async {
+  static Future<void> playAlertSound({
+    String title = '',
+    String body = '',
+  }) async {
     HapticFeedback.mediumImpact();
-    // iOS : notification silencieuse (pas de bannière) qui joue juste le son
     if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // iOS : notification silencieuse (pas de bannière) qui joue juste le son
       await _localNotificationsPlugin.show(
         id: 6666,
         title: '',
@@ -333,6 +379,26 @@ class NotificationService {
             presentAlert: false,
             presentBadge: false,
             presentSound: true,
+          ),
+        ),
+      );
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      // Android n'a pas d'équivalent "son seul sans bannière", et Firebase
+      // n'affiche déjà rien nativement en foreground — sans ça, la bannière
+      // in-app custom restait muette. Canal dem_notify (son déjà configuré
+      // à sa création, voir setup()).
+      await _localNotificationsPlugin.show(
+        id: 6666,
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'dem_notify',
+            'Notifications DEM',
+            channelDescription: 'Notifications générales DEM',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
           ),
         ),
       );
@@ -377,7 +443,10 @@ class NotificationService {
       presentSound: true,
       sound: 'dem_order_alert.wav',
     );
-    final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
     await _localNotificationsPlugin.show(
       id: 7777,
       title: 'Nouvelle course disponible !',
@@ -387,7 +456,11 @@ class NotificationService {
   }
 
   // ── Notifications système persistantes (en cours) ─────────────────────────
-  static Future<void> showOngoingNotification({required int id, required String title, required String body}) async {
+  static Future<void> showOngoingNotification({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
     // iOS ne supporte pas les notifications "ongoing" — on ne les affiche que sur Android
     if (defaultTargetPlatform != TargetPlatform.android) return;
 
@@ -405,7 +478,9 @@ class NotificationService {
       ),
     );
     await _localNotificationsPlugin.show(
-      id: id, title: title, body: body,
+      id: id,
+      title: title,
+      body: body,
       notificationDetails: details,
     );
   }
@@ -493,11 +568,16 @@ class _TopBannerState extends State<_TopBanner>
                     ],
                   ),
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Row(
                     children: [
-                      const Icon(Icons.notifications_rounded,
-                          color: Colors.white, size: 22),
+                      const Icon(
+                        Icons.notifications_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -505,39 +585,48 @@ class _TopBannerState extends State<_TopBanner>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (widget.title.isNotEmpty)
-                              Text(widget.title,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  )),
+                              Text(
+                                widget.title,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
                             if (widget.body.isNotEmpty)
-                              Text(widget.body,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis),
+                              Text(
+                                widget.body,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                           ],
                         ),
                       ),
                       if (widget.hasAction) ...[
                         const SizedBox(width: 8),
-                        const Text('Voir',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            )),
+                        const Text(
+                          'Voir',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
                         const SizedBox(width: 4),
                       ],
                       GestureDetector(
                         onTap: widget.onDismiss,
                         child: const Padding(
                           padding: EdgeInsets.all(4),
-                          child: Icon(Icons.close,
-                              color: Colors.white70, size: 18),
+                          child: Icon(
+                            Icons.close,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
                         ),
                       ),
                     ],

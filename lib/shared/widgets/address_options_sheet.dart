@@ -41,7 +41,8 @@ class _AddressOptionsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: AppColors.card,
+        // Dégradé cyan (comme DEM Pro) au lieu d'un bleu marine uni.
+        gradient: AppColors.gradientSplash,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.fromLTRB(

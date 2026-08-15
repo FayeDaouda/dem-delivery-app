@@ -26,6 +26,12 @@ import 'swipe_to_confirm.dart';
 /// [simulate] : pour les commandes de démo ("dev-...") — confirme le
 /// paiement cash instantanément sans appeler l'API (l'ordre n'existe pas
 /// vraiment côté serveur).
+/// [isSplitInApp] : commande DEM Pro en paiement intégré (produit + livraison
+/// réglés en une fois) — le cash direct est alors exclu (DEM n'a rien
+/// collecté à reverser au commerçant, voir orders.service.js:confirmPayment)
+/// au profit de Mobile Money (montant complet) ou d'une déclaration "le
+/// client a payé le commerçant directement", qui ne laisse plus alors que la
+/// livraison à encaisser normalement.
 Future<void> showPaymentCollectionDialog(
   BuildContext context,
   WidgetRef ref, {
@@ -35,11 +41,18 @@ Future<void> showPaymentCollectionDialog(
   String? successMessage,
   VoidCallback? onDispute,
   bool simulate = false,
+  bool isSplitInApp = false,
 }) {
   return _showChooseModeSheet(
-    context, ref,
-    orderId: orderId, price: price,
-    onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
+    context,
+    ref,
+    orderId: orderId,
+    price: price,
+    onPaid: onPaid,
+    successMessage: successMessage,
+    onDispute: onDispute,
+    simulate: simulate,
+    isSplitInApp: isSplitInApp,
   );
 }
 
@@ -52,67 +65,202 @@ Future<void> _showChooseModeSheet(
   String? successMessage,
   VoidCallback? onDispute,
   bool simulate = false,
+  bool isSplitInApp = false,
 }) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (sheetCtx) => GradientSheet(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(sheetCtx).viewPadding.bottom + 24),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        MediaQuery.of(sheetCtx).viewPadding.bottom + 24,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(children: [
-            const SizedBox(width: 32),
-            const Spacer(),
-            const SheetDragHandle(),
-            const Spacer(),
-            _CloseButton(onTap: () => Navigator.of(sheetCtx).pop()),
-          ]),
+          Row(
+            children: [
+              const SizedBox(width: 32),
+              const Spacer(),
+              const SheetDragHandle(),
+              const Spacer(),
+              _CloseButton(onTap: () => Navigator.of(sheetCtx).pop()),
+            ],
+          ),
           Container(
-            width: 56, height: 56,
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle),
-            child: const Icon(Icons.payments_outlined, color: Colors.white, size: 28),
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.payments_outlined,
+              color: Colors.white,
+              size: 28,
+            ),
           ),
           const SizedBox(height: 14),
-          Text('Comment le client règle-t-il ?', textAlign: TextAlign.center,
-              style: ClientText.title.copyWith(color: Colors.white)),
-          const SizedBox(height: 4),
-          Text('$price FCFA',
-              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white)),
+          Text(
+            'Comment le client règle-t-il ?',
+            textAlign: TextAlign.center,
+            style: ClientText.title.copyWith(color: Colors.white),
+          ),
+          // Pas de montant unique affiché en paiement intégré : Mobile Money
+          // encaisse produit + livraison (montant confirmé par le serveur,
+          // voir SamirpayPaymentSheet), "déjà payé" ne concerne ensuite plus
+          // que la livraison seule — deux totaux différents, pas un.
+          if (!isSplitInApp) ...[
+            const SizedBox(height: 4),
+            Text(
+              '$price FCFA',
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+          ],
           const SizedBox(height: 22),
-          _PaymentMethodCard(
-            icon: Icons.payments_outlined,
-            title: 'Espèces',
-            subtitle: 'Le client règle en main propre',
-            color: AppColors.success,
-            onTap: () {
-              Navigator.of(sheetCtx).pop();
-              _showCashConfirmSheet(
-                context, ref,
-                orderId: orderId, price: price,
-                onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          _PaymentMethodCard(
-            icon: Icons.account_balance_wallet_outlined,
-            title: 'Mobile Money',
-            subtitle: 'Wave ou Orange Money — QR ou lien',
-            color: AppColors.primary,
-            onTap: () {
-              Navigator.of(sheetCtx).pop();
-              _payOnline(
-                context, ref,
-                orderId: orderId, price: price,
-                onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
-              );
-            },
-          ),
+          if (isSplitInApp) ...[
+            _PaymentMethodCard(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Mobile Money',
+              subtitle: 'Produit + livraison — Wave ou Orange Money',
+              color: AppColors.primary,
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _payOnline(
+                  context,
+                  ref,
+                  orderId: orderId,
+                  price: price,
+                  onPaid: onPaid,
+                  successMessage: successMessage,
+                  onDispute: onDispute,
+                  simulate: simulate,
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _PaymentMethodCard(
+              icon: Icons.storefront_outlined,
+              title: 'Le client a déjà payé le commerçant',
+              subtitle: 'Virement direct hors app — reste la livraison',
+              color: AppColors.success,
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _markPaidDirectly(
+                  context,
+                  ref,
+                  orderId: orderId,
+                  price: price,
+                  onPaid: onPaid,
+                  successMessage: successMessage,
+                  onDispute: onDispute,
+                  simulate: simulate,
+                );
+              },
+            ),
+          ] else ...[
+            _PaymentMethodCard(
+              icon: Icons.payments_outlined,
+              title: 'Espèces',
+              subtitle: 'Le client règle en main propre',
+              color: AppColors.success,
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _showCashConfirmSheet(
+                  context,
+                  ref,
+                  orderId: orderId,
+                  price: price,
+                  onPaid: onPaid,
+                  successMessage: successMessage,
+                  onDispute: onDispute,
+                  simulate: simulate,
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _PaymentMethodCard(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Mobile Money',
+              subtitle: 'Wave ou Orange Money — QR ou lien',
+              color: AppColors.primary,
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _payOnline(
+                  context,
+                  ref,
+                  orderId: orderId,
+                  price: price,
+                  onPaid: onPaid,
+                  successMessage: successMessage,
+                  onDispute: onDispute,
+                  simulate: simulate,
+                );
+              },
+            ),
+          ],
         ],
       ),
     ),
+  );
+}
+
+// Bascule la commande hors paiement intégré (voir
+// orders.service.js:markOrderPaidDirectly) puis rouvre le choix de
+// règlement — redevenu un simple encaissement de la livraison (cash ou en
+// ligne), sans plus aucune particularité "paiement intégré" à gérer.
+Future<void> _markPaidDirectly(
+  BuildContext context,
+  WidgetRef ref, {
+  required String orderId,
+  required int price,
+  required VoidCallback onPaid,
+  String? successMessage,
+  VoidCallback? onDispute,
+  bool simulate = false,
+}) async {
+  if (!simulate) {
+    try {
+      await ref.read(ordersRepositoryProvider).markPaidDirectly(orderId);
+    } catch (e) {
+      if (context.mounted) {
+        showDemToast(
+          context,
+          'Impossible de mettre à jour la commande. Réessayez.',
+          isError: true,
+        );
+        _showChooseModeSheet(
+          context,
+          ref,
+          orderId: orderId,
+          price: price,
+          onPaid: onPaid,
+          successMessage: successMessage,
+          onDispute: onDispute,
+          simulate: simulate,
+          isSplitInApp: true,
+        );
+      }
+      return;
+    }
+  }
+  if (!context.mounted) return;
+  _showChooseModeSheet(
+    context,
+    ref,
+    orderId: orderId,
+    price: price,
+    onPaid: onPaid,
+    successMessage: successMessage,
+    onDispute: onDispute,
+    simulate: simulate,
   );
 }
 
@@ -139,7 +287,10 @@ void _showCashConfirmSheet(
     builder: (sheetCtx) => StatefulBuilder(
       builder: (sheetCtx, setSheet) {
         void confirm() async {
-          setSheet(() { confirming = true; errorMsg = null; });
+          setSheet(() {
+            confirming = true;
+            errorMsg = null;
+          });
           final nav = Navigator.of(sheetCtx);
           bool ok = false;
           if (simulate) {
@@ -148,7 +299,9 @@ void _showCashConfirmSheet(
             for (int i = 0; i < 2; i++) {
               if (i > 0) await Future.delayed(const Duration(seconds: 2));
               try {
-                await ref.read(ordersRepositoryProvider).confirmPayment(orderId, 'PAID');
+                await ref
+                    .read(ordersRepositoryProvider)
+                    .confirmPayment(orderId, 'PAID');
                 ok = true;
                 break;
               } catch (_) {}
@@ -172,43 +325,85 @@ void _showCashConfirmSheet(
         return PopScope(
           canPop: false,
           child: GradientSheet(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(sheetCtx).viewPadding.bottom + 24),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              MediaQuery.of(sheetCtx).viewPadding.bottom + 24,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SheetDragHandle(),
                 Container(
-                  width: 56, height: 56,
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle),
-                  child: const Icon(Icons.payments_outlined, color: Colors.white, size: 28),
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.payments_outlined,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(height: 14),
-                Text('Confirmez la réception', textAlign: TextAlign.center,
-                    style: ClientText.title.copyWith(color: Colors.white)),
+                Text(
+                  'Confirmez la réception',
+                  textAlign: TextAlign.center,
+                  style: ClientText.title.copyWith(color: Colors.white),
+                ),
                 const SizedBox(height: 4),
-                Text('$price FCFA en espèces',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+                Text(
+                  '$price FCFA en espèces',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 TextButton(
-                  onPressed: confirming ? null : () {
-                    Navigator.of(sheetCtx).pop();
-                    _showChooseModeSheet(
-                      context, ref,
-                      orderId: orderId, price: price,
-                      onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
-                    );
-                  },
+                  onPressed: confirming
+                      ? null
+                      : () {
+                          Navigator.of(sheetCtx).pop();
+                          _showChooseModeSheet(
+                            context,
+                            ref,
+                            orderId: orderId,
+                            price: price,
+                            onPaid: onPaid,
+                            successMessage: successMessage,
+                            onDispute: onDispute,
+                            simulate: simulate,
+                          );
+                        },
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text('‹ Changer de mode de paiement',
-                      style: TextStyle(fontSize: 12.5, color: Colors.white60, decoration: TextDecoration.underline)),
+                  child: const Text(
+                    '‹ Changer de mode de paiement',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.white60,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
                 ),
                 if (errorMsg != null) ...[
                   const SizedBox(height: 10),
-                  Text(errorMsg!, style: const TextStyle(color: Colors.orangeAccent, fontSize: 12), textAlign: TextAlign.center),
+                  Text(
+                    errorMsg!,
+                    style: const TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
                 const SizedBox(height: 26),
                 SwipeToConfirm(
@@ -224,12 +419,21 @@ void _showCashConfirmSheet(
                 if (onDispute != null) ...[
                   const SizedBox(height: 14),
                   TextButton.icon(
-                    onPressed: confirming ? null : () {
-                      Navigator.of(sheetCtx).pop();
-                      onDispute();
-                    },
-                    icon: const Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.surge),
-                    label: const Text('Signaler un problème', style: TextStyle(color: AppColors.surge, fontSize: 13)),
+                    onPressed: confirming
+                        ? null
+                        : () {
+                            Navigator.of(sheetCtx).pop();
+                            onDispute();
+                          },
+                    icon: const Icon(
+                      Icons.warning_amber_outlined,
+                      size: 16,
+                      color: AppColors.surge,
+                    ),
+                    label: const Text(
+                      'Signaler un problème',
+                      style: TextStyle(color: AppColors.surge, fontSize: 13),
+                    ),
                   ),
                 ],
               ],
@@ -251,15 +455,23 @@ Future<void> _payOnline(
   VoidCallback? onDispute,
   bool simulate = false,
 }) async {
-  final operatorName = await chooseOperator(context, title: 'Le client paie avec');
+  final operatorName = await chooseOperator(
+    context,
+    title: 'Le client paie avec',
+  );
   if (operatorName == null) {
     // Choix de l'opérateur annulé — on rouvre le choix du mode de paiement
     // plutôt que de laisser le driver sans aucun dialogue à l'écran.
     if (context.mounted) {
       _showChooseModeSheet(
-        context, ref,
-        orderId: orderId, price: price,
-        onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
+        context,
+        ref,
+        orderId: orderId,
+        price: price,
+        onPaid: onPaid,
+        successMessage: successMessage,
+        onDispute: onDispute,
+        simulate: simulate,
       );
     }
     return;
@@ -275,9 +487,11 @@ Future<void> _payOnline(
     context,
     amount: price,
     title: 'Paiement de la livraison',
-    initPayment: () => ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
-    confirmationStream: SocketService.instance.onOrderPaymentConfirmed
-        .where((event) => event['orderId'] == orderId),
+    initPayment: () =>
+        ref.read(ordersRepositoryProvider).payOnline(orderId, operatorName),
+    confirmationStream: SocketService.instance.onOrderPaymentConfirmed.where(
+      (event) => event['orderId'] == orderId,
+    ),
     onSuccess: () {
       succeeded = true;
       showDemToast(context, successMessage ?? 'Livraison encaissée !');
@@ -290,9 +504,14 @@ Future<void> _payOnline(
   // rouvre le choix pour que le driver puisse réessayer ou passer en cash.
   if (!succeeded && context.mounted) {
     _showChooseModeSheet(
-      context, ref,
-      orderId: orderId, price: price,
-      onPaid: onPaid, successMessage: successMessage, onDispute: onDispute, simulate: simulate,
+      context,
+      ref,
+      orderId: orderId,
+      price: price,
+      onPaid: onPaid,
+      successMessage: successMessage,
+      onDispute: onDispute,
+      simulate: simulate,
     );
   }
 }
@@ -325,25 +544,48 @@ class _PaymentMethodCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
           ),
-          child: Row(children: [
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.20), shape: BoxShape.circle),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
-                ],
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.20),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 22),
               ),
-            ),
-            Icon(Icons.arrow_forward_ios, color: Colors.white.withValues(alpha: 0.5), size: 14),
-          ]),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.65),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.white.withValues(alpha: 0.5),
+                size: 14,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -359,8 +601,12 @@ class _CloseButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 32, height: 32,
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), shape: BoxShape.circle),
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
         child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
       ),
     );

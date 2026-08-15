@@ -174,7 +174,7 @@ class _DemProOrderRequestsScreenState extends State<DemProOrderRequestsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Demandes reçues',
+                            'Commandes reçues',
                             style: ClientText.title.copyWith(
                               color: Colors.white,
                               fontSize: 18,

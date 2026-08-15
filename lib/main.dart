@@ -23,7 +23,17 @@ void main() async {
   debugPrint('[DEM] Firebase.initializeApp starting...');
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[DEM] Firebase.initializeApp done');
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  final defaultOnError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    // ── TEMPORAIRE — diagnostic panneau invisible ──────────────────────────
+    // `recordFlutterFatalError` seul avale l'erreur : rien ne s'affiche dans
+    // la console, rien à l'écran (pas de boîte rouge/jaune). On l'imprime
+    // nous-même AVANT de la transmettre à Crashlytics et au handler par
+    // défaut (qui dessine la boîte d'erreur standard en debug).
+    debugPrint('[DEM WIDGET ERROR] ${details.exception}\n${details.stack}');
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    defaultOnError?.call(details);
+  };
   PlatformDispatcher.instance.onError = (error, stack) {
     debugPrint('[DEM FATAL ERROR] $error\n$stack');
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);

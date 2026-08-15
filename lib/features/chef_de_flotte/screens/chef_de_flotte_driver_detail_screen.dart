@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/network_error_widget.dart';
 import '../../../shared/widgets/staggered_entrance.dart';
 import '../data/chef_de_flotte_repository.dart';
+import '../utils/format.dart';
 import '../widgets/driver_doc_picker_field.dart';
 
 const Map<String, String> _kDocLabels = {
@@ -102,11 +103,12 @@ class _State extends State<ChefDeFlotteDriverDetailScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => Padding(
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: const BoxDecoration(
+          gradient: AppColors.gradientSplash,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         padding: EdgeInsets.fromLTRB(
           20,
           20,
@@ -117,24 +119,56 @@ class _State extends State<ChefDeFlotteDriverDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              width: 36,
+              height: 3,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const Text(
               'Modifier le nom',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+              ),
             ),
             const SizedBox(height: 14),
             TextField(
               controller: ctrl,
               autofocus: true,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
+              style: const TextStyle(color: Colors.white),
+              cursorColor: Colors.white,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryMid,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primaryMid,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -338,6 +372,18 @@ class _State extends State<ChefDeFlotteDriverDetailScreen> {
     final periodStats =
         statsByPeriod[_period] as Map? ?? {'courses': 0, 'earnings': 0};
 
+    final insuranceDate =
+        _pendingInsuranceExpiry ??
+        (d['insuranceExpiry'] != null
+            ? DateTime.tryParse(d['insuranceExpiry'] as String)
+            : null);
+    final insuranceDaysLeft = insuranceDate?.difference(DateTime.now()).inDays;
+    final insuranceExpired = insuranceDaysLeft != null && insuranceDaysLeft < 0;
+    final insuranceExpiringSoon =
+        insuranceDaysLeft != null &&
+        insuranceDaysLeft >= 0 &&
+        insuranceDaysLeft <= 30;
+
     return CustomScrollView(
       slivers: [
         SliverAppBar(
@@ -470,6 +516,15 @@ class _State extends State<ChefDeFlotteDriverDetailScreen> {
                             : '—',
                         icon: Icons.star_rounded,
                         color: Colors.amber.shade700,
+                      ),
+                      const SizedBox(width: 10),
+                      _StatCard(
+                        label: 'Actif aujourd\'hui',
+                        value: formatActiveDuration(
+                          (d['activeSecondsToday'] as num?)?.toInt() ?? 0,
+                        ),
+                        icon: Icons.timer_outlined,
+                        color: Colors.blueGrey,
                       ),
                     ],
                   ),
@@ -607,13 +662,44 @@ class _State extends State<ChefDeFlotteDriverDetailScreen> {
                     ),
                   )),
                   const SizedBox(height: 4),
-                  Text(
-                    'Expiration assurance',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Expiration assurance',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      if (insuranceExpired || insuranceExpiringSoon) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                (insuranceExpired ? Colors.red : Colors.orange)
+                                    .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            insuranceExpired
+                                ? 'Expirée'
+                                : 'Expire dans $insuranceDaysLeft j',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: insuranceExpired
+                                  ? Colors.red.shade700
+                                  : Colors.orange.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 6),
                   GestureDetector(
@@ -644,27 +730,37 @@ class _State extends State<ChefDeFlotteDriverDetailScreen> {
                         vertical: 14,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
+                        color: insuranceExpired
+                            ? Colors.red.withValues(alpha: 0.06)
+                            : insuranceExpiringSoon
+                            ? Colors.orange.withValues(alpha: 0.08)
+                            : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(
+                          color: insuranceExpired
+                              ? Colors.red.shade200
+                              : insuranceExpiringSoon
+                              ? Colors.orange.shade200
+                              : Colors.grey.shade200,
+                        ),
                       ),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.event_outlined,
-                            color: Color(0xFF9CA3AF),
+                          Icon(
+                            insuranceExpired || insuranceExpiringSoon
+                                ? Icons.warning_amber_rounded
+                                : Icons.event_outlined,
+                            color: insuranceExpired
+                                ? Colors.red.shade400
+                                : insuranceExpiringSoon
+                                ? Colors.orange.shade400
+                                : const Color(0xFF9CA3AF),
                             size: 18,
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            _pendingInsuranceExpiry != null
-                                ? _fmtDate(_pendingInsuranceExpiry!)
-                                : d['insuranceExpiry'] != null
-                                ? _fmtDate(
-                                    DateTime.parse(
-                                      d['insuranceExpiry'] as String,
-                                    ),
-                                  )
+                            insuranceDate != null
+                                ? _fmtDate(insuranceDate)
                                 : 'Non renseignée',
                             style: const TextStyle(
                               fontSize: 13,

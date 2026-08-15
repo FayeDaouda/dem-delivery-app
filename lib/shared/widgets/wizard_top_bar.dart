@@ -9,12 +9,15 @@ class WizardTopBar extends StatelessWidget {
   final String title;
   final int step;
   final int stepCount;
-  final VoidCallback onBack;
+  // Retour à l'étape 1 (pas "reculer d'une étape") — ce rôle-là vit
+  // maintenant dans le bouton retour flottant au-dessus du panneau (même
+  // position que DEM Pro), plus accessible au pouce que ce bouton d'en-tête.
+  final VoidCallback onReset;
   const WizardTopBar({
     super.key,
     required this.title,
     required this.step,
-    required this.onBack,
+    required this.onReset,
     this.stepCount = 4,
   });
 
@@ -35,7 +38,7 @@ class WizardTopBar extends StatelessWidget {
       child: Row(
         children: [
           GestureDetector(
-            onTap: onBack,
+            onTap: onReset,
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
@@ -43,9 +46,9 @@ class WizardTopBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
-                Icons.arrow_back_ios_new,
+                Icons.refresh_rounded,
                 color: AppColors.textPrimary,
-                size: 14,
+                size: 16,
               ),
             ),
           ),

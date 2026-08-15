@@ -79,10 +79,13 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Canal FCM par défaut — doit correspondre au channelId envoyé par le backend -->
+        <!-- Canal FCM par défaut — doit correspondre à un canal réellement créé côté
+             Flutter (voir notification_service.dart : dem_order_alert / dem_notify /
+             dem_ongoing_course). "dem_orders" n'existe nulle part : Android retombait
+             sur un canal générique sans son pour toute notif sans channelId explicite. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="dem_orders" />
+            android:value="dem_notify" />
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${GOOGLE_MAPS_API_KEY}" />

@@ -87,9 +87,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   // ── Guidage vocal ──────────────────────────────────────────────────────────
   bool _voiceNavEnabled = true;
 
-  // ── Annulation livreur (1 min 30) ─────────────────────────────────────────
+  // ── Annulation livreur (2 min — aligné sur le client) ─────────────────────
+  static const _cancelWindowSeconds = 120;
   Timer? _cancelWindowTimer;
-  int _cancelSecondsLeft = 90;
+  int _cancelSecondsLeft = _cancelWindowSeconds;
   bool _driverCancelling = false;
 
   // ── Preuve de livraison (photo optionnelle) ───────────────────────────────
@@ -191,7 +192,10 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       final elapsed = DateTime.now()
           .difference(DateTime.parse(acceptedAt))
           .inSeconds;
-      _cancelSecondsLeft = (90 - elapsed).clamp(0, 90);
+      _cancelSecondsLeft = (_cancelWindowSeconds - elapsed).clamp(
+        0,
+        _cancelWindowSeconds,
+      );
     }
     if (_cancelSecondsLeft <= 0 || _isPickedUp) return;
     _cancelWindowTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -652,14 +656,96 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
     }
   }
 
-  // ── Après livraison : déjà payé (en ligne/DEM Pro merchant) → juste
-  // informer ; sinon demander comment le client règle (cash ou en ligne).
+  // ── Après livraison : déjà payé → juste informer ; commande prise en
+  // charge par le commerçant DEM Pro (paymentMode 'merchant') mais pas
+  // encore payée → informer sans jamais proposer de collecter auprès du
+  // destinataire ; sinon demander comment le client règle (cash ou en ligne).
   void _showPaymentDialog() {
     if (_order['paymentStatus'] == 'PAID') {
       _showAlreadyPaidDialog();
+    } else if (_order['paymentMode'] == 'merchant') {
+      _showMerchantHandlesPaymentDialog();
     } else {
       _showChoosePaymentModeDialog();
     }
+  }
+
+  // Le backend refuse de toute façon une confirmation cash sur ces
+  // commandes (voir orders.service.js:confirmPayment) — ce dialogue évite
+  // surtout de présenter à tort le choix "Comment le client règle-t-il ?" à
+  // l'écran, alors que le badge affiché plus haut disait déjà de ne rien
+  // demander au destinataire.
+  void _showMerchantHandlesPaymentDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (dialogCtx) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: AppColors.gradientDialog,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.20),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.storefront_outlined,
+                  color: AppColors.success,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Livraison prise en charge',
+                style: ClientText.title.copyWith(color: Colors.white),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Le commerçant règle cette livraison directement — ne rien demander au destinataire.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.white70),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryButton(
+                  label: 'OK',
+                  leadingIcon: Icons.check_circle_outline,
+                  color: AppColors.success,
+                  height: 48,
+                  onTap: () {
+                    Navigator.of(dialogCtx).pop();
+                    showDemToast(context, 'Livraison effectuée !');
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      if (mounted) context.go(_homeRoute);
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showAlreadyPaidDialog() {
@@ -745,6 +831,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       orderId: orderId,
       price: clientChargeFor(_order),
       simulate: _isDevOrder,
+      isSplitInApp: _order['proPaymentMode'] == 'SPLIT_IN_APP',
       successMessage: 'Livraison effectuée — paiement confirmé !',
       onDispute: _showDisputeDialog,
       onPaid: () {
@@ -1078,9 +1165,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       Marker(
         markerId: const MarkerId('pickup'),
         position: _pickupLatLng,
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-          BitmapDescriptor.hueGreen,
-        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
         infoWindow: InfoWindow(
           title: 'Collecte',
           snippet: _order['pickupAddress'],
@@ -1671,7 +1756,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                     ],
                   ),
 
-                  // Bouton annuler livreur (1 min 30)
+                  // Bouton annuler livreur (2 min)
                   if (!_isPickedUp && !_isDelivered && _cancelSecondsLeft > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 8, bottom: 4),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/error/app_exception.dart';
@@ -60,12 +61,13 @@ class _State extends State<ChefDeFlotteFleetExtensionsScreen> {
     final sent = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetCtx) => StatefulBuilder(
-        builder: (sheetCtx, setSheetState) => Padding(
+        builder: (sheetCtx, setSheetState) => Container(
+          decoration: const BoxDecoration(
+            gradient: AppColors.gradientSplash,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
           padding: EdgeInsets.fromLTRB(
             20,
             20,
@@ -76,40 +78,54 @@ class _State extends State<ChefDeFlotteFleetExtensionsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                width: 36,
+                height: 3,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const Text(
                 'Demander une extension',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 17,
+                ),
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Précisez la nouvelle taille souhaitée et la raison — un admin DEM validera votre demande.',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: sizeCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre de motos demandé',
-                  border: OutlineInputBorder(),
-                ),
+                style: const TextStyle(color: Colors.white),
+                cursorColor: Colors.white,
+                decoration: _sheetFieldDecoration('Nombre de motos demandé'),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: justCtrl,
                 maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Justification',
-                  border: OutlineInputBorder(),
-                ),
+                style: const TextStyle(color: Colors.white),
+                cursorColor: Colors.white,
+                decoration: _sheetFieldDecoration('Justification'),
               ),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryMid,
-                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primaryMid,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -146,12 +162,12 @@ class _State extends State<ChefDeFlotteFleetExtensionsScreen> {
                           }
                         },
                   child: submitting
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: AppColors.primaryMid,
                           ),
                         )
                       : const Text('Envoyer la demande'),
@@ -170,181 +186,303 @@ class _State extends State<ChefDeFlotteFleetExtensionsScreen> {
     }
   }
 
-  (Color, String) _statusInfo(String status) => switch (status) {
-    'APPROVED' => (Colors.green, 'Validée'),
-    'REJECTED' => (Colors.red, 'Refusée'),
-    _ => (Colors.orange, 'En attente'),
-  };
+  InputDecoration _sheetFieldDecoration(String label) => InputDecoration(
+    labelText: label,
+    labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+    filled: true,
+    fillColor: Colors.white.withValues(alpha: 0.12),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide.none,
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.white, width: 1.5),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9FF),
-      appBar: AppBar(
-        backgroundColor: AppColors.primaryDark,
-        foregroundColor: Colors.white,
-        title: const Text('Extensions de flotte'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline),
-            tooltip: 'Nouvelle demande',
-            onPressed: _newRequest,
-          ),
-        ],
-      ),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primaryMid),
-            )
-          : _error != null
-          ? NetworkErrorWidget(message: _error!, onRetry: _load)
-          : _requests.isEmpty
-          ? Center(
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+            child: SafeArea(
+              bottom: false,
               child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                padding: const EdgeInsets.fromLTRB(8, 8, 12, 20),
+                child: Row(
                   children: [
-                    const Icon(
-                      Icons.expand_circle_down_outlined,
-                      color: Colors.grey,
-                      size: 44,
+                    IconButton(
+                      onPressed: () => context.pop(),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Aucune demande d\'extension',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Envoyez une demande si votre flotte a atteint sa limite actuelle.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: const Text('Nouvelle demande'),
-                      onPressed: _newRequest,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryMid,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    const Expanded(
+                      child: Text(
+                        'Extensions de flotte',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
                         ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _newRequest,
+                      tooltip: 'Nouvelle demande',
+                      icon: const Icon(
+                        Icons.add_circle_outline,
+                        color: Colors.white,
                       ),
                     ),
                   ],
                 ),
               ),
-            )
-          : RefreshIndicator(
-              color: AppColors.primaryMid,
-              onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                itemCount: _requests.length,
-                itemBuilder: (ctx, i) {
-                  final r = _requests[i];
-                  final (color, label) = _statusInfo(
-                    r['status'] as String? ?? 'PENDING',
-                  );
-                  final createdAt = DateTime.tryParse(
-                    r['createdAt'] as String? ?? '',
-                  );
-                  return StaggeredEntrance(
-                    index: i,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 8,
-                          ),
-                        ],
-                      ),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primaryMid,
+                    ),
+                  )
+                : _error != null
+                ? NetworkErrorWidget(message: _error!, onRetry: _load)
+                : _requests.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.directions_bike,
-                                size: 16,
-                                color: AppColors.primaryMid,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${r['requestedSize']} motos',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const Spacer(),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  label,
-                                  style: TextStyle(
-                                    color: color,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          const Icon(
+                            Icons.expand_circle_down_outlined,
+                            color: Colors.grey,
+                            size: 44,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            r['justification'] as String? ?? '',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.black87,
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Aucune demande d\'extension',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Envoyez une demande si votre flotte a atteint sa limite actuelle.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey, fontSize: 13),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.add),
+                            label: const Text('Nouvelle demande'),
+                            onPressed: _newRequest,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryMid,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
-                          if ((r['adminNotes'] as String?)?.isNotEmpty ==
-                              true) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              'Réponse admin : ${r['adminNotes']}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade700,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ],
-                          if (createdAt != null) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              _fmtDate(createdAt),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
+                  )
+                : RefreshIndicator(
+                    color: AppColors.primaryMid,
+                    onRefresh: _load,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                      itemCount: _requests.length,
+                      itemBuilder: (ctx, i) {
+                        final r = _requests[i];
+                        final status = r['status'] as String? ?? 'PENDING';
+                        final createdAt = DateTime.tryParse(
+                          r['createdAt'] as String? ?? '',
+                        );
+                        final updatedAt = DateTime.tryParse(
+                          r['updatedAt'] as String? ?? '',
+                        );
+                        // updatedAt ne bouge que si l'admin a touché la
+                        // demande (statut/notes) — s'il est toujours égal à
+                        // createdAt, la décision n'est pas encore tombée.
+                        final decidedAt =
+                            (status != 'PENDING' &&
+                                updatedAt != null &&
+                                createdAt != null &&
+                                updatedAt.isAfter(createdAt))
+                            ? updatedAt
+                            : null;
+                        return StaggeredEntrance(
+                          index: i,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.directions_bike,
+                                      size: 16,
+                                      color: AppColors.primaryMid,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '${r['requestedSize']} motos',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  r['justification'] as String? ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                if ((r['adminNotes'] as String?)?.isNotEmpty ==
+                                    true) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Réponse admin : ${r['adminNotes']}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade700,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 14),
+                                _RequestTimeline(
+                                  status: status,
+                                  createdAt: createdAt,
+                                  decidedAt: decidedAt,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
+}
 
-  String _fmtDate(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+String _fmtDate(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+/// Mini-timeline "Envoyée → En revue → Décision" — un badge de statut ponctuel
+/// ne dit rien du parcours de la demande ; ces 3 jalons donnent une sensation
+/// de suivi sans champ backend supplémentaire (la 3ᵉ date vient de `updatedAt`,
+/// qui ne bouge que quand l'admin tranche).
+class _RequestTimeline extends StatelessWidget {
+  final String status;
+  final DateTime? createdAt;
+  final DateTime? decidedAt;
+  const _RequestTimeline({
+    required this.status,
+    this.createdAt,
+    this.decidedAt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = status != 'PENDING';
+    final isApproved = status == 'APPROVED';
+    final decisionColor = !resolved
+        ? Colors.grey.shade300
+        : (isApproved ? Colors.green : Colors.red);
+    const activeColor = AppColors.primaryMid;
+
+    Widget dot(Color color) => Container(
+      width: 9,
+      height: 9,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+    );
+    Widget line(Color color) =>
+        Expanded(child: Container(height: 2, color: color));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            dot(activeColor),
+            line(activeColor),
+            dot(activeColor),
+            line(resolved ? decisionColor : Colors.grey.shade300),
+            dot(resolved ? decisionColor : Colors.grey.shade300),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                createdAt != null
+                    ? 'Envoyée\n${_fmtDate(createdAt!)}'
+                    : 'Envoyée',
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                'En revue',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: !resolved ? activeColor : Colors.grey,
+                  fontWeight: !resolved ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                resolved
+                    ? '${isApproved ? 'Validée' : 'Refusée'}${decidedAt != null ? '\n${_fmtDate(decidedAt!)}' : ''}'
+                    : 'Décision',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: resolved ? decisionColor : Colors.grey,
+                  fontWeight: resolved ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }

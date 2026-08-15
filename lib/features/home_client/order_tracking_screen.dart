@@ -507,6 +507,26 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     double deliveryLng,
   ) {
     _beginProgrammaticMove();
+    // Garde-fou : si l'écart dépasse ce qui est plausible pour une
+    // livraison (~55km), une des deux coordonnées est probablement
+    // corrompue (adresse mal géocodée) — ajuster le zoom aux deux points
+    // afficherait alors un continent entier au lieu de la ville. On
+    // recentre simplement sur le départ à un zoom normal plutôt que de
+    // faire confiance à des bornes aberrantes.
+    const maxPlausibleSpanDeg = 0.5;
+    if ((pickupLat - deliveryLat).abs() > maxPlausibleSpanDeg ||
+        (pickupLng - deliveryLng).abs() > maxPlausibleSpanDeg) {
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(pickupLat, pickupLng),
+            zoom: 14,
+            tilt: 40,
+          ),
+        ),
+      );
+      return;
+    }
     _mapController?.animateCamera(
       CameraUpdate.newLatLngBounds(
         LatLngBounds(
@@ -933,7 +953,16 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
       final dLng = (order?['deliveryLongitude'] as num?)?.toDouble();
       if (dLat != null && dLng != null) destination = LatLng(dLat, dLng);
     }
-    if (destination != null) {
+    // Garde-fou : coordonnée corrompue (GPS livreur ou géocodage) → écart
+    // énorme, on ignore le fit-bounds plutôt que de zoomer sur un continent.
+    const maxPlausibleSpanDeg = 0.5;
+    final boundsLookPlausible =
+        destination != null &&
+        (driverLoc.latitude - destination.latitude).abs() <=
+            maxPlausibleSpanDeg &&
+        (driverLoc.longitude - destination.longitude).abs() <=
+            maxPlausibleSpanDeg;
+    if (boundsLookPlausible) {
       _mapController!.animateCamera(
         CameraUpdate.newLatLngBounds(
           LatLngBounds(

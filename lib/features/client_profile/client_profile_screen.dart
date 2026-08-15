@@ -5,6 +5,7 @@ import '../../core/router/app_startup_notifier.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -14,6 +15,7 @@ import '../../core/config/app_config.dart';
 import '../../core/storage/auth_storage.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/client_text.dart';
+import '../../core/theme/map_theme_provider.dart';
 import '../../core/utils/dem_toast.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/referral_card.dart';
@@ -1017,6 +1019,64 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                           onTap: _requestProUpgrade,
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── 4bis. Affichage ──────────────────────────────────────────
+                    // Mode nuit de la carte — déplacé depuis Paramètres &
+                    // aide, directement accessible sur la page Profil au
+                    // lieu d'un niveau de navigation supplémentaire.
+                    _SectionLabel(label: 'AFFICHAGE'),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: AppShadows.card,
+                      ),
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final isNight = ref.watch(mapNightProvider);
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () =>
+                                ref.read(mapNightProvider.notifier).toggle(),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 6,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isNight
+                                        ? Icons.dark_mode_outlined
+                                        : Icons.light_mode_outlined,
+                                    color: AppColors.primary,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Expanded(
+                                    child: Text(
+                                      'Mode nuit de la carte',
+                                      style: TextStyle(
+                                        color: AppColors.textDark,
+                                        fontSize: 13.5,
+                                      ),
+                                    ),
+                                  ),
+                                  Switch.adaptive(
+                                    value: isNight,
+                                    activeTrackColor: AppColors.primary,
+                                    onChanged: (_) => ref
+                                        .read(mapNightProvider.notifier)
+                                        .toggle(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                     const SizedBox(height: 20),
 

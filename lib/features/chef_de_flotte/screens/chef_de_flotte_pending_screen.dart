@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
+import '../../../core/router/app_startup_notifier.dart';
+import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/chef_de_flotte_repository.dart';
 import '../../../core/utils/dem_layout.dart';
@@ -27,6 +29,12 @@ class _State extends State<ChefDeFlottePendingScreen> {
       final s = await _repo.getStats();
       if (mounted) setState(() => _stats = s);
     } catch (_) {}
+  }
+
+  Future<void> _logout() async {
+    await AuthStorage.clear();
+    appStartupNotifier.markLoggedOut();
+    if (mounted) context.go('/phone');
   }
 
   @override
@@ -240,6 +248,18 @@ class _State extends State<ChefDeFlottePendingScreen> {
                     label: 'Gérer mes livreurs',
                     icon: Icons.group_add_outlined,
                     onTap: () => context.push('/chef-de-flotte/dashboard'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _logout,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey,
+                      minimumSize: const Size(double.infinity, 44),
+                    ),
+                    child: const Text(
+                      'Se déconnecter',
+                      style: TextStyle(fontSize: 13),
+                    ),
                   ),
                 ],
               ),

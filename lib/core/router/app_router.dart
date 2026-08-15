@@ -51,6 +51,7 @@ import '../../features/profile/screens/driver_suspended_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_onboarding_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_pending_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_rejected_screen.dart';
+import '../../features/dem_pro/screens/dem_pro_suspended_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_home_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_order_create_screen.dart';
 import '../../features/dem_pro/screens/dem_pro_batch_create_screen.dart';
@@ -489,6 +490,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/dem-pro/rejected',
       builder: (context, state) => const DemProRejectedScreen(),
+    ),
+    GoRoute(
+      path: '/dem-pro/suspended',
+      builder: (context, state) => const DemProSuspendedScreen(),
     ),
     GoRoute(
       path: '/dem-pro/home',

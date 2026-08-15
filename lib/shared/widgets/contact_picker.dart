@@ -12,9 +12,7 @@ Future<void> pickContact(
   required TextEditingController nameCtrl,
   required TextEditingController phoneCtrl,
 }) async {
-  final status = await FlutterContacts.permissions.request(
-    PermissionType.read,
-  );
+  final status = await FlutterContacts.permissions.request(PermissionType.read);
   final granted =
       status == PermissionStatus.granted || status == PermissionStatus.limited;
 
@@ -27,7 +25,12 @@ Future<void> pickContact(
     properties: {ContactProperty.name, ContactProperty.phone},
   );
   if (!context.mounted) return;
-  _showContactPicker(context, contacts, nameCtrl: nameCtrl, phoneCtrl: phoneCtrl);
+  _showContactPicker(
+    context,
+    contacts,
+    nameCtrl: nameCtrl,
+    phoneCtrl: phoneCtrl,
+  );
 }
 
 void _showContactPicker(
@@ -56,7 +59,8 @@ void _showContactPicker(
           minChildSize: 0.4,
           builder: (_, sc) => Container(
             decoration: const BoxDecoration(
-              color: AppColors.surface,
+              // Dégradé cyan (comme DEM Pro) au lieu d'un bleu marine uni.
+              gradient: AppColors.gradientSplash,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(
@@ -66,7 +70,7 @@ void _showContactPicker(
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.card,
+                    color: Colors.white.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -76,7 +80,7 @@ void _showContactPicker(
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: AppColors.textPrimary,
+                    color: Colors.white,
                   ),
                 ),
                 Padding(
@@ -86,10 +90,17 @@ void _showContactPicker(
                   ),
                   child: TextField(
                     autofocus: true,
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Rechercher...',
-                      prefixIcon: const Icon(Icons.search),
-                      fillColor: AppColors.card,
+                      hintStyle: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.65),
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: Colors.white.withValues(alpha: 0.65),
+                      ),
+                      fillColor: Colors.white.withValues(alpha: 0.14),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),

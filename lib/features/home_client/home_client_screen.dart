@@ -26,7 +26,6 @@ import '../../core/utils/price_format.dart';
 import '../../core/utils/dem_toast.dart';
 import '../notifications/data/notifications_repository.dart';
 import '../../shared/widgets/map_location_mode_button.dart';
-import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/pressable.dart';
 import '../../shared/widgets/staggered_entrance.dart';
 import '../deliveries/data/orders_repository.dart';
@@ -176,6 +175,9 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     // Appelée lorsque l'écran courant redevient le premier plan (au dessus est poppé)
     _checkPendingOrder();
     _loadUnreadNotifCount();
+    // Le mode nuit de la carte se change maintenant depuis la page Profil —
+    // recharge le style au retour pour refléter un éventuel changement.
+    _loadMapStyle();
   }
 
   StreamSubscription<void>? _reconnectSub;
@@ -267,11 +269,6 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
     final bool isNight = ref.read(mapNightProvider);
     final style = await rootBundle.loadString(MapTheme.styleAssetFor(isNight));
     if (mounted) setState(() => _mapStyle = style);
-  }
-
-  Future<void> _toggleMapTheme() async {
-    await ref.read(mapNightProvider.notifier).toggle();
-    await _loadMapStyle();
   }
 
   // ── Icône dot GPS (mode libre — marker natif, suit la carte sans lag) ──────
@@ -1145,8 +1142,32 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      // ── GAUCHE : Nuit/Jour ────────────────────────────────
-                      MapThemeToggleButton(onTap: _toggleMapTheme),
+                      // ── GAUCHE : Adresses favorites ──────────────────────
+                      // Le mode jour/nuit de la carte a migré vers la page
+                      // Profil (voir _ClientNavBar / paramètres) — cet
+                      // emplacement devient un accès direct aux adresses
+                      // favorites, plus utile au quotidien sur l'accueil.
+                      Pressable(
+                        onTap: () => context.push('/client/favorite-addresses'),
+                        child: Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.card,
+                              width: 1.5,
+                            ),
+                            boxShadow: AppShadows.floating,
+                          ),
+                          child: const Icon(
+                            Icons.bookmark_outline_rounded,
+                            color: AppColors.primary,
+                            size: 24,
+                          ),
+                        ),
+                      ),
 
                       // ── DROITE : Badge + Recenter ────────────────────────
                       Column(
@@ -1230,32 +1251,18 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
           style: ClientText.title.copyWith(color: AppColors.textPrimary),
         ),
         const SizedBox(height: AppSpacing.l),
+        // Ordre Express → Simple → Groupée : le service le plus demandé
+        // (rapide) en premier, au lieu de l'ordre alphabétique précédent.
         Row(
           children: [
             Expanded(
               child: StaggeredEntrance(
                 index: 0,
                 child: _ServiceTile(
-                  icon: Icons.inventory_2_outlined,
-                  label: 'Simple',
-                  valueLabel: 'Standard',
-                  onTap: () async {
-                    if (!await ensureLocationEnabled(context)) return;
-                    if (!mounted) return;
-                    await context.push('/orders/create?type=DELIVERY');
-                    _checkPendingOrder();
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.s),
-            Expanded(
-              child: StaggeredEntrance(
-                index: 1,
-                child: _ServiceTile(
                   icon: Icons.bolt_rounded,
                   label: 'Express',
                   valueLabel: 'Rapide',
+                  color: AppColors.warning,
                   onTap: () async {
                     if (!await ensureLocationEnabled(context)) return;
                     if (!mounted) return;
@@ -1270,11 +1277,30 @@ class _HomeClientScreenState extends ConsumerState<HomeClientScreen>
             const SizedBox(width: AppSpacing.s),
             Expanded(
               child: StaggeredEntrance(
+                index: 1,
+                child: _ServiceTile(
+                  icon: Icons.inventory_2_outlined,
+                  label: 'Simple',
+                  valueLabel: 'Standard',
+                  color: AppColors.primary,
+                  onTap: () async {
+                    if (!await ensureLocationEnabled(context)) return;
+                    if (!mounted) return;
+                    await context.push('/orders/create?type=DELIVERY');
+                    _checkPendingOrder();
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s),
+            Expanded(
+              child: StaggeredEntrance(
                 index: 2,
                 child: _ServiceTile(
                   icon: Icons.route_outlined,
                   label: 'Groupée',
                   valueLabel: 'Économique',
+                  color: AppColors.accentIndigo,
                   onTap: () async {
                     if (!await ensureLocationEnabled(context)) return;
                     if (!mounted) return;
@@ -1592,10 +1618,12 @@ class _BreathingBadge extends StatefulWidget {
   final IconData icon;
   final double size;
   final double iconSize;
+  final Color color;
   const _BreathingBadge({
     required this.icon,
     this.size = 48,
     this.iconSize = 24,
+    this.color = AppColors.primary,
   });
 
   @override
@@ -1637,7 +1665,7 @@ class _BreathingBadgeState extends State<_BreathingBadge>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.25 + t * 0.35),
+                  color: widget.color.withValues(alpha: 0.25 + t * 0.35),
                   blurRadius: 14,
                   spreadRadius: 1,
                 ),
@@ -1647,7 +1675,7 @@ class _BreathingBadgeState extends State<_BreathingBadge>
           ),
         );
       },
-      child: Icon(widget.icon, color: AppColors.primary, size: widget.iconSize),
+      child: Icon(widget.icon, color: widget.color, size: widget.iconSize),
     );
   }
 }
@@ -1660,12 +1688,14 @@ class _ServiceTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String valueLabel;
+  final Color color;
   final VoidCallback onTap;
 
   const _ServiceTile({
     required this.icon,
     required this.label,
     required this.valueLabel,
+    required this.color,
     required this.onTap,
   });
 
@@ -1688,12 +1718,20 @@ class _ServiceTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
+              // Liseré teinté par service (au lieu d'un blanc générique
+              // identique sur les 3 tuiles) — lisibilité immédiate du type
+              // de livraison sans lire le texte, façon DEM Pro.
+              border: Border.all(color: color.withValues(alpha: 0.45)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _BreathingBadge(icon: icon, size: 36, iconSize: 18),
+                _BreathingBadge(
+                  icon: icon,
+                  size: 36,
+                  iconSize: 18,
+                  color: color,
+                ),
                 const SizedBox(height: 6),
                 Text(
                   label,

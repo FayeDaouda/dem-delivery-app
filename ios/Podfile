@@ -57,13 +57,16 @@ post_install do |installer|
     end
   end
 
-  # Désactiver Crashlytics upload-symbols dans le Runner target
+  # Désactiver Crashlytics upload-symbols dans le Runner target — le output
+  # déclaré évite aussi l'avertissement Xcode "will run during every build
+  # because it does not specify any outputs".
   main_project = installer.aggregate_targets.first.user_project
   main_project.targets.each do |t|
     next unless t.name == 'Runner'
     t.build_phases.each do |phase|
       if phase.respond_to?(:name) && phase.name&.include?('Crashlytics')
-        phase.shell_script = 'echo "Crashlytics upload-symbols disabled"'
+        phase.shell_script = "echo \"Crashlytics upload-symbols disabled\" > \"${DERIVED_FILE_DIR}/crashlytics_upload_symbols_disabled.log\"\n"
+        phase.output_paths = ['$(DERIVED_FILE_DIR)/crashlytics_upload_symbols_disabled.log']
       end
     end
   end

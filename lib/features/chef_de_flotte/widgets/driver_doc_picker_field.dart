@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Champ document pour un livreur existant — même look que
 /// [DocPickerField] (feuille caméra/galerie, vignette) mais sans
@@ -115,7 +116,7 @@ class _DriverDocPickerFieldState extends State<DriverDocPickerField> {
           ),
         ),
         const SizedBox(height: 6),
-        GestureDetector(
+        Pressable(
           onTap: _showPicker,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
