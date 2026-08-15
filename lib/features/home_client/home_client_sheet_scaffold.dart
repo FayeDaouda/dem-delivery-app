@@ -147,23 +147,21 @@ class HomeClientSheetScaffold extends StatelessWidget {
               // étape/un mode change (voir _measureSheetHeightFrame côté
               // ClientHomeShellScreen) — donc sa cible bouge en continu
               // pendant ~200-300ms à chaque changement de contenu, PAS
-              // seulement pendant un glissé. Avec une durée longue (280ms,
-              // valeur d'origine) cet AnimatedContainer se relance sur
-              // chaque frame avant d'avoir eu le temps de rattraper sa
-              // cible précédente : la feuille "traîne" visiblement derrière
-              // le contenu (déjà lissé, lui, par AnimatedSize) au lieu de
-              // le suivre — lenteur perçue rapportée en test sur les 3
-              // modes (accueil, Express/Simple, Groupée, qui partagent tous
-              // ce socle). Une durée courte laisse cet habillage EXTÉRIEUR
-              // suivre de près la vraie animation (celle d'AnimatedSize,
-              // déjà la source du mouvement perçu comme fluide) au lieu de
-              // lui imposer sa propre course en plus — tout en gardant un
-              // vrai fondu pour l'ouverture/fermeture au glissé.
+              // seulement pendant un glissé. Une durée longue (280ms,
+              // valeur d'origine) faisait "traîner" visiblement cet
+              // AnimatedContainer derrière le contenu (repéré en test, sur
+              // les 3 modes qui partagent ce socle) : relancé sur
+              // quasiment chaque frame, il n'avait jamais le temps de
+              // rattraper sa cible précédente avant qu'elle ne bouge à
+              // nouveau. Ni trop long (ce défaut) ni trop court (un simple
+              // "snap" instantané, pas premium) — même courbe qu'AnimatedSize
+              // ci-dessous pour que les deux animations bougent comme UN
+              // seul mouvement fluide plutôt que deux caractères différents.
               AnimatedContainer(
                 duration: isDragging
                     ? Duration.zero
-                    : const Duration(milliseconds: 120),
-                curve: Curves.easeOut,
+                    : const Duration(milliseconds: 190),
+                curve: Curves.easeOutCubic,
                 height: max(minPanelContent, panelHeight - dragOffset),
                 child: ClipRect(
                   child: OverflowBox(
