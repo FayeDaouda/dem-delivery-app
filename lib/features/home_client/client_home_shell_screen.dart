@@ -136,6 +136,36 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
   double get _panelHeight =>
       _sheetHeight ?? MediaQuery.of(context).size.height * 0.62;
 
+  // ── Hauteur repliée du mode accueil ─────────────────────────────────────
+  // La feuille repliée au glissé doit montrer la rangée Express/Simple/
+  // Groupée EN ENTIER (jamais les icônes coupées) sans miette de padding
+  // vide en dessous (les deux symptômes rapportés en test venaient de la
+  // même cause : la constante générique _kMinPanelContent (66) était plus
+  // petite que la rangée, donc la fenêtre visible mordait dedans PUIS
+  // débordait sur le padding bas vide de _buildHomeSheet). Mesurée (pas une
+  // constante devinée) pour rester juste quelle que soit la taille de
+  // police/langue de l'utilisateur.
+  final _tilesRowKey = GlobalKey();
+  double? _tilesRowHeight;
+  static const _kHomeSheetBottomPadding = 20.0; // fromLTRB(20,4,20,20)
+
+  void _measureTilesRowHeight({int framesLeft = 24}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final h = _tilesRowKey.currentContext?.size?.height;
+      if (h != null &&
+          (_tilesRowHeight == null || (h - _tilesRowHeight!).abs() > 0.5)) {
+        setState(() => _tilesRowHeight = h);
+      }
+      if (framesLeft > 0) {
+        _measureTilesRowHeight(framesLeft: framesLeft - 1);
+      }
+    });
+  }
+
+  double get _homeMinPanelContent =>
+      (_tilesRowHeight ?? 96.0) + _kHomeSheetBottomPadding;
+
   // ── Polling de secours ──────────────────────────────────────────────────
   Timer? _pollTimer;
   bool _checkingOrders = false;
@@ -1056,6 +1086,7 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
             ),
             const SizedBox(height: AppSpacing.l),
             Row(
+              key: _tilesRowKey,
               children: [
                 Expanded(
                   child: StaggeredEntrance(
@@ -1162,6 +1193,7 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
   @override
   Widget build(BuildContext context) {
     _measureSheetHeight();
+    if (_mode == ClientHomeMode.home) _measureTilesRowHeight();
     MapStyleService.listen(ref, (style) => setState(() => _mapStyle = style));
     if (_mapStyle == null) {
       MapStyleService.load(ref).then((s) {
@@ -1594,7 +1626,9 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                     dragOffset: _dragOffset,
                     isDragging: _isDragging,
                     keyboardHeight: keyboardH,
-                    minPanelContent: _kMinPanelContent,
+                    minPanelContent: _mode == ClientHomeMode.home
+                        ? _homeMinPanelContent
+                        : _kMinPanelContent,
                     onDraggingChanged: (v) => setState(() => _isDragging = v),
                     onDragOffsetChanged: (v) => setState(() => _dragOffset = v),
                     onTapDismissKeyboard: () =>
