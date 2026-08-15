@@ -23,6 +23,7 @@ import '../../../shared/widgets/swipe_to_confirm.dart';
 import '../data/profile_repository.dart';
 import 'document_upload_screen.dart';
 import 'driver_order_history_screen.dart';
+import 'driver_scheduled_orders_screen.dart';
 import 'driver_settings_screen.dart';
 import 'driver_wallet_screen.dart';
 
@@ -32,24 +33,24 @@ class DriverProfileScreen extends StatefulWidget {
   State<DriverProfileScreen> createState() => _DriverProfileScreenState();
 }
 
+// ── Même architecture que ClientProfileScreen : header gradient qui se
+// replie au scroll (AnimatedSize, pas de SliverAppBar à hauteur fixe) +
+// corps en cartes groupées. Évite par construction toute la classe de bug
+// "overflow de hauteur figée" qu'avait l'ancien SliverAppBar/expandedHeight
+// dès que la carte badge grandissait (plusieurs critères restants).
 class _DriverProfileScreenState extends State<DriverProfileScreen> {
   Map<String, dynamic>? _user;
   List<Map<String, dynamic>>? _badgesConfig;
   String? _photoPath;
   static const _photoKey = 'driver_profile_photo';
-  final _profileRepo    = ProfileRepository();
-  final _scrollCtrl     = ScrollController();
+  final _profileRepo = ProfileRepository();
+  final _scrollCtrl = ScrollController();
 
-  // ── Transition photo grande → petite pendant le scroll ────────────────────
-  // 0 = en haut (grande photo visible, petite invisible) → 1 = replié (petite
-  // photo dans la barre, grande masquée) : évite le chevauchement des deux
-  // photos qu'on avait quand la petite était affichée en permanence.
-  double _headerCollapseT = 0.0;
-  static const _headerFadeDistance = 150.0;
+  bool _headerCollapsed = false;
 
   void _onScroll() {
-    final t = (_scrollCtrl.offset / _headerFadeDistance).clamp(0.0, 1.0);
-    if (t != _headerCollapseT) setState(() => _headerCollapseT = t);
+    final collapsed = _scrollCtrl.offset > 70;
+    if (collapsed != _headerCollapsed) setState(() => _headerCollapsed = collapsed);
   }
 
   // ── Confirmation déconnexion/suppression (glisser pour confirmer) ────────
@@ -74,8 +75,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   void _onLangChange() => setState(() {});
-
-
 
   Future<void> _load() async {
     final user  = await AuthStorage.getUser();
@@ -741,306 +740,334 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     }
     final pending  = _user?['pendingPhone'] as String?;
     final phoneChangeStatus = _user?['phoneChangeStatus'] as String?;
+    final hasPhoto = _photoPath != null && File(_photoPath!).existsSync();
 
     return Scaffold(
       backgroundColor: AppColors.lightBg,
-      body: CustomScrollView(
-        controller: _scrollCtrl,
-        slivers: [
-          SliverAppBar(
-            expandedHeight: _user != null ? 500 : 280,
-            pinned: true,
-            floating: false,
-            stretch: true,
-            backgroundColor: AppColors.primaryMid,
-            leading: IconButton(
-              onPressed: () => context.pop(),
-              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-            ),
-            title: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (_photoPath != null && File(_photoPath!).existsSync())
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  // Apparaît seulement une fois la grande photo repliée —
-                  // sinon les deux photos se chevauchent en haut de l'écran.
-                  child: Opacity(
-                    opacity: _headerCollapseT,
-                    child: Transform.scale(
-                      scale: 0.6 + 0.4 * _headerCollapseT,
-                      child: Container(
-                        width: 28, height: 28,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Header gradient FULL WIDTH — même structure que le profil client ──
+          Container(
+            decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Top bar — toujours visible
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => context.pop(),
+                          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                         ),
-                        child: ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover)),
-                      ),
+                        // Petite photo affichée uniquement quand le header est replié
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.easeInOut,
+                          child: _headerCollapsed
+                              ? Padding(
+                                  padding: const EdgeInsets.only(left: 4, right: 6),
+                                  child: ClipOval(
+                                    child: Container(
+                                      width: 30,
+                                      height: 30,
+                                      color: Colors.white.withValues(alpha: 0.15),
+                                      child: hasPhoto
+                                          ? Image.file(File(_photoPath!), fit: BoxFit.cover, width: 30, height: 30)
+                                          : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
+                                              color: Colors.white, size: 16),
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        const Spacer(),
+                        Text(s.myProfile, style: ClientText.subtitle.copyWith(color: Colors.white)),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: _showSupportSheet,
+                          icon: const Icon(Icons.headset_mic_outlined, color: Colors.white, size: 22),
+                          tooltip: 'Support',
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              Text(s.myProfile, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-            ]),
-            centerTitle: true,
-            actions: [
-              IconButton(onPressed: _showSupportSheet, icon: const Icon(Icons.headset_mic_outlined, color: Colors.white, size: 22)),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(gradient: AppColors.gradientSplash),
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 56),
-                    child: Column(children: [
-                      const SizedBox(height: 4),
-                      // Se rétrécit et s'estompe pendant le scroll, en même
-                      // temps que la petite photo de la barre apparaît — évite
-                      // que les deux se chevauchent en haut de l'écran.
-                      Opacity(
-                        opacity: 1 - _headerCollapseT,
-                        child: Transform.scale(
-                          scale: 1 - (_headerCollapseT * 0.35),
-                          child: GestureDetector(
-                            onTap: _pickProfilePhoto,
-                            child: Stack(children: [
-                              Container(
-                                width: 88, height: 88,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2.5),
-                                ),
-                                child: _photoPath != null && File(_photoPath!).existsSync()
-                                    ? ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover))
-                                    : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined, color: Colors.white, size: 40),
-                              ),
-                              Positioned(
-                                right: 0, bottom: 0,
-                                child: Container(
-                                  width: 28, height: 28,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary, shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 2),
+
+                  // Section dépliable : photo + nom + badge "Livreur-DEM" + carte badge
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    child: _headerCollapsed
+                        ? const SizedBox.shrink()
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: _pickProfilePhoto,
+                                child: Stack(children: [
+                                  Container(
+                                    width: 88, height: 88,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.2),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 2.5),
+                                    ),
+                                    child: hasPhoto
+                                        ? ClipOval(child: Image.file(File(_photoPath!), fit: BoxFit.cover))
+                                        : Icon(_isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
+                                            color: Colors.white, size: 40),
                                   ),
-                                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                                ),
+                                  Positioned(
+                                    right: 0, bottom: 0,
+                                    child: Container(
+                                      width: 28, height: 28,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary, shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                      ),
+                                      child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                                    ),
+                                  ),
+                                ]),
                               ),
-                            ]),
+                              const SizedBox(height: 10),
+                              Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text('Livreur-DEM',
+                                    style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                              ),
+                              if (_user != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                                  child: _BadgeCard(user: _user!, badgesConfig: _badgesConfig),
+                                )
+                              else
+                                const SizedBox(height: 16),
+                            ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text('Livreur-DEM',
-                            style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
-                      ),
-                      if (_user != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                          child: _BadgeCard(user: _user!, badgesConfig: _badgesConfig),
-                        )
-                      else
-                        const SizedBox(height: 16),
-                    ]),
                   ),
-                ),
+                ],
               ),
             ),
           ),
 
-          // ── Corps ──
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // ── Corps scrollable pleine largeur ──────────────────────────────────
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              color: AppColors.primary,
+              child: SingleChildScrollView(
+                controller: _scrollCtrl,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── 1. Parrainage ────────────────────────────────────────────
+                    const _SectionLabel(label: 'PARRAINAGE'),
+                    ReferralCard(referralCode: _user?['referralCode'] as String?),
+                    const SizedBox(height: 20),
 
-                  // Parrainage
-                  Text('PARRAINAGE',
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 11,
-                          fontWeight: FontWeight.w700, letterSpacing: 1.2)),
-                  const SizedBox(height: 8),
-                  ReferralCard(referralCode: _user?['referralCode'] as String?),
-                  const SizedBox(height: 16),
-
-                  // Informations
-                  _Section(title: s.information, children: [
-                    _InfoRow(icon: Icons.phone_outlined, label: s.phoneNumber, value: phone),
-                    _divider(),
-                    _EditableInfoRow(
-                      icon: _isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
-                      label: s.plate,
-                      value: plate,
-                      onTap: _showEditPlate,
-                    ),
-                    _divider(),
-                    _InfoRow(icon: Icons.verified_outlined, label: s.statusLabel,
-                        value: statusLabel, valueColor: statusColor),
-                    _divider(),
-                    _EditableInfoRow(
-                      icon: Icons.emergency_outlined,
-                      label: 'Contact d\'urgence',
-                      value: (_user?['emergencyContactPhone'] as String?)?.isNotEmpty == true
-                          ? (_user?['emergencyContactName'] as String?)?.isNotEmpty == true
-                              ? _user!['emergencyContactName'] as String
-                              : _user!['emergencyContactPhone'] as String
-                          : 'Non configuré',
-                      onTap: _showEditEmergencyContact,
-                    ),
-                    // Mes Documents — ligne unique avec barre de progression
-                    _divider(),
-                    _DocsProgressRow(
-                      uploaded: _docsUploaded,
-                      total:    _docsTotal,
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentUploadScreen())).then((_) => _load()),
-                    ),
-                    // Badge numéro en attente
-                    if (pending != null && phoneChangeStatus == 'PENDING') ...[
-                      _divider(),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.schedule_outlined, color: AppColors.pending, size: 18),
-                            const SizedBox(width: 10),
-                            Expanded(child: Text(s.phonePending,
-                                style: const TextStyle(color: AppColors.pending, fontSize: 13))),
-                            Text(pending, style: const TextStyle(
-                                color: AppColors.pending, fontSize: 12, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
+                    // ── 2. Informations ──────────────────────────────────────────
+                    const _SectionLabel(label: 'INFORMATIONS'),
+                    _MenuCard(children: [
+                      _InfoTile(icon: Icons.phone_outlined, label: s.phoneNumber, value: phone),
+                      _menuDivider(),
+                      _EditTile(
+                        icon: _isMoto ? Icons.motorcycle : Icons.directions_car_outlined,
+                        label: s.plate,
+                        value: plate,
+                        onTap: _showEditPlate,
                       ),
-                    ],
-                  ]),
-                  const SizedBox(height: 16),
+                      _menuDivider(),
+                      _InfoTile(icon: Icons.verified_outlined, label: s.statusLabel,
+                          value: statusLabel, valueColor: statusColor),
+                      _menuDivider(),
+                      _EditTile(
+                        icon: Icons.emergency_outlined,
+                        label: 'Contact d\'urgence',
+                        value: (_user?['emergencyContactPhone'] as String?)?.isNotEmpty == true
+                            ? (_user?['emergencyContactName'] as String?)?.isNotEmpty == true
+                                ? _user!['emergencyContactName'] as String
+                                : _user!['emergencyContactPhone'] as String
+                            : 'Non configuré',
+                        onTap: _showEditEmergencyContact,
+                      ),
+                      _menuDivider(),
+                      _DocsProgressTile(
+                        uploaded: _docsUploaded,
+                        total:    _docsTotal,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentUploadScreen())).then((_) => _load()),
+                      ),
+                      if (pending != null && phoneChangeStatus == 'PENDING') ...[
+                        _menuDivider(),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.schedule_outlined, color: AppColors.pending, size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(child: Text(s.phonePending,
+                                  style: const TextStyle(color: AppColors.pending, fontSize: 13))),
+                              Text(pending, style: const TextStyle(
+                                  color: AppColors.pending, fontSize: 12, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ]),
+                    const SizedBox(height: 20),
 
-                  // Activité
-                  _Section(title: s.activity, children: [
-                    _ActionRow(
+                    // ── 3. Activité ──────────────────────────────────────────────
+                    const _SectionLabel(label: 'ACTIVITÉ'),
+                    _MenuCard(children: [
+                      _NavTile(
                         icon: Icons.account_balance_wallet_outlined,
                         label: 'Portefeuille',
                         trailing: '${((_user?['balance'] as num?)?.toInt() ?? 0)} FCFA',
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverWalletScreen()))
-                            .then((_) => _load())),
-                    _divider(),
-                    _ActionRow(icon: Icons.history, label: s.historyTitle,
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverOrderHistoryScreen()))),
-                  ]),
-                  const SizedBox(height: 16),
+                            .then((_) => _load()),
+                      ),
+                      _menuDivider(),
+                      _NavTile(icon: Icons.history, label: s.historyTitle,
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverOrderHistoryScreen()))),
+                      _menuDivider(),
+                      _NavTile(icon: Icons.event_available_outlined, label: 'Courses programmées',
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverScheduledOrdersScreen()))),
+                    ]),
+                    const SizedBox(height: 20),
 
-                  // Paramètres
-                  _Section(title: s.settings, children: [
-                    _ActionRow(icon: Icons.edit_outlined,     label: s.editPhone, onTap: _showEditPhone),
-                    _divider(),
-                    _ActionRow(icon: Icons.language_outlined, label: s.language,
-                        trailing: LocaleService.current == 'en' ? 'EN' : 'FR',
-                        onTap: _showLanguageSheet),
-                    _divider(),
-                    _ActionRow(icon: Icons.support_agent_outlined, label: s.support, onTap: _showSupportSheet),
-                    _divider(),
-                    _ActionRow(icon: Icons.help_outline, label: 'Questions fréquentes',
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverSettingsScreen()))),
-                    _divider(),
-                    _ActionRow(icon: Icons.privacy_tip_outlined, label: s.privacyPolicy,
-                        onTap: () => _launch(AppConfig.privacyPolicyUrl)),
-                    _divider(),
-                    _ActionRow(icon: Icons.description_outlined, label: s.termsOfService,
-                        onTap: () => _launch(AppConfig.termsUrl)),
-                  ]),
-                  const SizedBox(height: 16),
+                    // ── 4. Paramètres ────────────────────────────────────────────
+                    const _SectionLabel(label: 'PARAMÈTRES'),
+                    _MenuCard(children: [
+                      _NavTile(icon: Icons.edit_outlined, label: s.editPhone, onTap: _showEditPhone),
+                      _menuDivider(),
+                      _NavTile(icon: Icons.language_outlined, label: s.language,
+                          trailing: LocaleService.current == 'en' ? 'EN' : 'FR',
+                          onTap: _showLanguageSheet),
+                      _menuDivider(),
+                      _NavTile(icon: Icons.support_agent_outlined, label: s.support, onTap: _showSupportSheet),
+                      _menuDivider(),
+                      _NavTile(icon: Icons.help_outline, label: 'Questions fréquentes',
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverSettingsScreen()))),
+                      _menuDivider(),
+                      _NavTile(icon: Icons.privacy_tip_outlined, label: s.privacyPolicy,
+                          onTap: () => _launch(AppConfig.privacyPolicyUrl)),
+                      _menuDivider(),
+                      _NavTile(icon: Icons.description_outlined, label: s.termsOfService,
+                          onTap: () => _launch(AppConfig.termsUrl)),
+                    ]),
+                    const SizedBox(height: 20),
 
-                  // Compte
-                  _Section(title: 'Gestion du compte', children: [
-                    _ActionRow(icon: Icons.logout, label: s.logout,
-                        color: AppColors.error, onTap: _logout),
-                    _divider(),
-                    _ActionRow(icon: Icons.delete_outline, label: s.deleteAccount,
-                        color: AppColors.error, onTap: _deleteAccount),
-                  ]),
-                  const SizedBox(height: 12),
-              ]),
+                    // ── 5. Compte ────────────────────────────────────────────────
+                    const _SectionLabel(label: 'COMPTE'),
+                    _MenuCard(children: [
+                      _NavTile(icon: Icons.logout_outlined, label: s.logout, danger: true, onTap: _logout),
+                    ]),
+                    const SizedBox(height: 12),
+                    _MenuCard(children: [
+                      _NavTile(icon: Icons.delete_outline, label: s.deleteAccount, danger: true, onTap: _deleteAccount),
+                    ]),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _divider() => Divider(
-    height: 1, indent: 52, endIndent: 16,
-    color: AppColors.primary.withValues(alpha: 0.08),
-  );
 }
+
+Widget _menuDivider() => const Divider(height: 1, indent: 52, color: AppColors.lightBorder);
 
 // ── Widgets helpers ───────────────────────────────────────────────────────────
+// Même langage visuel que ClientProfileScreen (_SectionLabel/_MenuGroup/_MenuItem) :
+// cartes blanches à coins arrondis, icône dans un rond translucide, divider indenté.
 
-class _Section extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-  const _Section({required this.title, required this.children});
-
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel({required this.label});
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(title.toUpperCase(),
-          style: const TextStyle(color: AppColors.textMuted, fontSize: 11,
-              fontWeight: FontWeight.w700, letterSpacing: 1.2)),
-      const SizedBox(height: 8),
-      Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
-        ),
-        child: Column(children: children),
-      ),
-    ],
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 4, bottom: 8),
+    child: Text(
+      label,
+      style: ClientText.caption.copyWith(color: AppColors.textMuted, letterSpacing: 0.8),
+    ),
   );
 }
 
-class _InfoRow extends StatelessWidget {
+class _MenuCard extends StatelessWidget {
+  final List<Widget> children;
+  const _MenuCard({required this.children});
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: AppShadows.card,
+    ),
+    child: Column(children: children),
+  );
+}
+
+// Ligne d'information statique (non éditable) — valeur affichée à droite.
+class _InfoTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final Color? valueColor;
-  const _InfoRow({required this.icon, required this.label, required this.value, this.valueColor});
+  const _InfoTile({required this.icon, required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
     child: Row(children: [
-      Icon(icon, color: AppColors.primary, size: 20),
+      Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.10), shape: BoxShape.circle),
+        child: Icon(icon, color: AppColors.primary, size: 18),
+      ),
       const SizedBox(width: 14),
       Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
       const Spacer(),
-      Text(value, style: TextStyle(
-          color: valueColor ?? AppColors.textDark, fontSize: 14, fontWeight: FontWeight.w600)),
+      Text(value, style: TextStyle(color: valueColor ?? AppColors.textDark, fontSize: 14, fontWeight: FontWeight.w600)),
     ]),
   );
 }
 
-class _EditableInfoRow extends StatelessWidget {
+// Ligne éditable — tape pour ouvrir la modification, valeur + icône crayon.
+class _EditTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final VoidCallback onTap;
-  const _EditableInfoRow({required this.icon, required this.label, required this.value, required this.onTap});
+  const _EditTile({required this.icon, required this.label, required this.value, required this.onTap});
 
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
     borderRadius: BorderRadius.circular(16),
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       child: Row(children: [
-        Icon(icon, color: AppColors.primary, size: 20),
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.10), shape: BoxShape.circle),
+          child: Icon(icon, color: AppColors.primary, size: 18),
+        ),
         const SizedBox(width: 14),
         Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
         const SizedBox(width: 8),
@@ -1058,12 +1085,53 @@ class _EditableInfoRow extends StatelessWidget {
   );
 }
 
+// Ligne de navigation — même comportement que _MenuItem côté client, avec en
+// plus un texte "trailing" optionnel (solde, langue) et une variante danger
+// (déconnexion/suppression de compte).
+class _NavTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final String? trailing;
+  final bool danger;
+  const _NavTile({required this.icon, required this.label, required this.onTap, this.trailing, this.danger = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final titleColor = danger ? AppColors.error : AppColors.textDark;
+    final iconColor  = danger ? AppColors.error : AppColors.primary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.10), shape: BoxShape.circle),
+            child: Icon(icon, color: iconColor, size: 18),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(label, style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.w500)),
+          ),
+          if (trailing != null) ...[
+            Text(trailing!, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+            const SizedBox(width: 6),
+          ],
+          const Icon(Icons.chevron_right, color: AppColors.lightIconMuted, size: 20),
+        ]),
+      ),
+    );
+  }
+}
+
 // ── Ligne "Mes Documents" avec barre de progression ───────────────────────────
-class _DocsProgressRow extends StatelessWidget {
+class _DocsProgressTile extends StatelessWidget {
   final int uploaded;
   final int total;
   final VoidCallback onTap;
-  const _DocsProgressRow({required this.uploaded, required this.total, required this.onTap});
+  const _DocsProgressTile({required this.uploaded, required this.total, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1073,9 +1141,13 @@ class _DocsProgressRow extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         child: Row(children: [
-          Icon(Icons.folder_open_outlined, color: AppColors.primary, size: 20),
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.10), shape: BoxShape.circle),
+            child: Icon(Icons.folder_open_outlined, color: AppColors.primary, size: 18),
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -1107,38 +1179,7 @@ class _DocsProgressRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Icon(Icons.arrow_forward_ios, color: AppColors.textMuted, size: 12),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final Color? color;
-  final String? trailing;
-  const _ActionRow({required this.icon, required this.label, required this.onTap, this.color, this.trailing});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = color ?? AppColors.textDark;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(children: [
-          Icon(icon, color: color ?? AppColors.primary, size: 20),
-          const SizedBox(width: 14),
-          Expanded(child: Text(label, style: TextStyle(color: c, fontSize: 14, fontWeight: FontWeight.w500))),
-          if (trailing != null) ...[
-            Text(trailing!, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-            const SizedBox(width: 6),
-          ],
-          Icon(Icons.arrow_forward_ios, color: c.withValues(alpha: 0.4), size: 14),
+          const Icon(Icons.chevron_right, color: AppColors.lightIconMuted, size: 20),
         ]),
       ),
     );
@@ -1516,4 +1557,3 @@ class _StatChip extends StatelessWidget {
     ),
   );
 }
-

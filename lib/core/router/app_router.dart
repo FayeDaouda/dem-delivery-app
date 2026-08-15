@@ -11,6 +11,7 @@ import '../../features/auth/screens/client_onboarding_screen.dart';
 import '../../features/home_client/home_client_screen.dart';
 import '../../features/home_client/order_create_screen.dart';
 import '../../features/home_client/batch_create_screen.dart';
+import '../../features/home_client/batch_confirmation_screen.dart';
 import '../../features/home_client/batch_tracking_screen.dart';
 import '../../features/home_client/order_confirmation_screen.dart';
 import '../../features/home_driver/home_driver_screen.dart';
@@ -226,6 +227,13 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/orders/batch/create',
       builder: (context, state) => const BatchCreateScreen(),
+    ),
+    GoRoute(
+      path: '/orders/batch/confirmation',
+      builder: (context, state) {
+        final batch = state.extra as Map<String, dynamic>;
+        return BatchConfirmationScreen(batch: batch);
+      },
     ),
     GoRoute(
       path: '/orders/batch/mine',

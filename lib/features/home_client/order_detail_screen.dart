@@ -9,6 +9,7 @@ import '../deliveries/providers/orders_provider.dart';
 import '../../shared/widgets/address_row.dart';
 
 const _kStatusLabel = {
+  'SCHEDULED': 'Programmée',
   'PENDING': 'En attente',
   'ACCEPTED': 'Acceptée',
   'PICKED_UP': 'En route',
@@ -18,6 +19,7 @@ const _kStatusLabel = {
 };
 
 const _kStatusColor = {
+  'SCHEDULED': AppColors.pending,
   'PENDING': AppColors.warning,
   'ACCEPTED': AppColors.accentIndigo,
   'PICKED_UP': Color(0xFF9C27B0),
@@ -25,6 +27,16 @@ const _kStatusColor = {
   'DELIVERED': AppColors.successBright,
   'CANCELLED': AppColors.error,
 };
+
+String _fmtScheduled(dynamic raw) {
+  final date = DateTime.tryParse(raw as String? ?? '')?.toLocal();
+  if (date == null) return '';
+  const jours = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+  final j = jours[date.weekday - 1];
+  final hh = date.hour.toString().padLeft(2, '0');
+  final mm = date.minute.toString().padLeft(2, '0');
+  return '$j ${date.day}/${date.month} à $hh:$mm';
+}
 
 /// Détail d'une commande passée — écran "reçu", pas de suivi temps réel
 /// (contrairement à order_tracking_screen.dart, pensé pour une course en
@@ -182,6 +194,58 @@ class _OrderDetailBody extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
+        // ── Créneau programmé ──
+        if (status == 'SCHEDULED' && order['scheduledAt'] != null) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.schedule_outlined, size: 16, color: Colors.white70),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Livraison programmée — ${_fmtScheduled(order['scheduledAt'])}',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Tant qu'aucun livreur n'a réservé le créneau — recherche en
+          // cours en tâche de fond côté serveur (voir scheduled-dispatch.service.js).
+          if (driverName == null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.pending.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.pending),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Recherche d\'un livreur pour ce créneau…',
+                      style: TextStyle(color: AppColors.pending, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (driverName == null) const SizedBox(height: 14),
+        ],
+
         // ── Carte livreur ──
         if (driverName != null) ...[
           Container(
@@ -236,6 +300,15 @@ class _OrderDetailBody extends StatelessWidget {
                               ),
                             ),
                           ],
+                        ),
+                      ],
+                      // Distingue d'un livreur "en route" — celui-ci est
+                      // engagé pour le créneau programmé, pas encore en course.
+                      if (status == 'SCHEDULED') ...[
+                        const SizedBox(height: 3),
+                        const Text(
+                          'Assigné pour votre créneau',
+                          style: TextStyle(color: Colors.white54, fontSize: 11),
                         ),
                       ],
                     ],

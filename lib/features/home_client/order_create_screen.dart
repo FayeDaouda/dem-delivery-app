@@ -27,10 +27,9 @@ import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/contact_mini_field.dart';
 import '../../shared/widgets/contact_picker.dart';
 import '../../shared/widgets/favorite_address_chips.dart';
+import '../../shared/widgets/floating_back_button.dart';
 import '../../shared/widgets/floating_map_button.dart';
-import '../../shared/widgets/gradient_dialog.dart';
 import '../../shared/widgets/map_placement_pin.dart';
-import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -49,7 +48,9 @@ const _kMinPanelContent =
     66.0; // button (52) + bottom padding (12) + 2px margin
 
 const _placeSuggestionsColors = PlaceSuggestionsColors(
-  background: Color(0xFF1A2540),
+  // AppColors.card (au lieu d'un bleu marine codé en dur légèrement
+  // différent) — même fond que le reste de l'app (DEM Pro compris).
+  background: AppColors.card,
   border: Colors.white24,
   divider: AppColors.primary,
   iconBg: AppColors.primary,
@@ -140,12 +141,6 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
   bool _priceTimedOut = false;
   bool _loadingGps = false;
   bool _submitting = false;
-
-  // ── Livraison programmée ─────────────────────────────────────────────────
-  // Manquait côté client (déjà disponible pour DEM Pro) — écart concurrentiel
-  // réel face à Uber Eats/Glovo/Jumia, qui permettent tous de programmer.
-  bool _isScheduled = false;
-  DateTime? _scheduledAt;
 
   // Tant que false, la bulle départ/destination affiche son texte mais
   // s'ouvre sur le menu de choix (position actuelle / favoris / carte /
@@ -251,7 +246,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
       }
       _suggestions = [];
     });
-    _centerMap(LatLng(lat, lng));
+    _centerMapVisible(LatLng(lat, lng));
     _updateEstimate();
   }
 
@@ -373,11 +368,6 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     if (mounted) setState(() => _mapStyle = style);
   }
 
-  Future<void> _toggleMapTheme() async {
-    await ref.read(mapNightProvider.notifier).toggle();
-    await _loadMapStyle();
-  }
-
   // ── GPS ──────────────────────────────────────────────────────────────────
   Future<void> _fetchGpsInit() async {
     setState(() => _loadingGps = true);
@@ -386,7 +376,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
       if (pos != null && mounted) {
         final ll = LatLng(pos.latitude, pos.longitude);
         _currentCameraPos = ll;
-        _centerMap(ll);
+        _centerMapVisible(ll);
         _pickupLat = ll.latitude;
         _pickupLng = ll.longitude;
         _pickupReveal.reveal();
@@ -398,10 +388,35 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     }
   }
 
-  void _centerMap(LatLng pos) {
+  // Estimation de la hauteur du panneau du bas pour la step courante — sert
+  // uniquement à cadrer la caméra (pas la vraie valeur exacte utilisée par
+  // le layout, cf. `panelH` dans build(), qui inclut aussi `stepExtra` —
+  // trop de détail pour ce seul besoin). Même principe que DEM Pro
+  // (_panelHeight, dem_pro_order_create_screen.dart).
+  double get _estimatedPanelHeight {
+    if (_isMapPlacementMode) return 106.0;
+    final isTablet = MediaQuery.of(context).size.width > 600;
+    final heights = isTablet ? _kPanelHeightsTablet : _kPanelHeightsPhone;
+    final bottomSafeArea = MediaQuery.of(context).viewPadding.bottom;
+    final extraH = bottomSafeArea > 20 ? 24.0 : 0.0;
+    return heights[_step] + extraH;
+  }
+
+  // Centre la caméra sur [pos] en la décalant vers le SUD d'une distance
+  // équivalente à la moitié de la hauteur du panneau (convertie en degrés
+  // via la résolution Mercator au zoom utilisé) — [pos] apparaît alors plus
+  // au nord que le centre de l'écran, donc visible au-dessus du panneau au
+  // lieu d'être caché dessous. Même technique que DEM Pro
+  // (_centerMapVisible, dem_pro_order_create_screen.dart).
+  void _centerMapVisible(LatLng pos, {double zoom = 14, double tilt = 30}) {
+    final panelH = _estimatedPanelHeight;
+    final metersPerPixel =
+        156543.03392 * cos(pos.latitude * pi / 180) / pow(2, zoom);
+    final latShift = (panelH / 2) * metersPerPixel / 111320.0;
+    final adjusted = LatLng(pos.latitude - latShift, pos.longitude);
     _mapController?.animateCamera(
       CameraUpdate.newCameraPosition(
-        CameraPosition(target: pos, zoom: 14, tilt: 30),
+        CameraPosition(target: adjusted, zoom: zoom, tilt: tilt),
       ),
     );
   }
@@ -467,7 +482,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
         }
         _isMapPlacementMode = false;
       });
-      _centerMap(ll);
+      _centerMapVisible(ll);
       await _reverseGeocode(ll, forPickup: forPickup);
       _updateEstimate();
     } catch (_) {
@@ -493,10 +508,14 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
       case AddressOptionChoice.currentLocation:
         await _useCurrentLocationFor(forPickup: forPickup);
       case AddressOptionChoice.favorites:
-        setState(() {
-          _isSelectingPickup = forPickup;
-          _isMapPlacementMode = false;
-        });
+        final fav = await pickFavoriteAddress(
+          context,
+          favorites: _favorites,
+          forPickup: forPickup,
+        );
+        if (fav == null || !mounted) return;
+        setState(() => _isSelectingPickup = forPickup);
+        _applyFavorite(fav);
       case AddressOptionChoice.map:
         FocusScope.of(context).unfocus();
         setState(() {
@@ -603,7 +622,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
             _deliveryCtrl.text = name;
           }
         });
-        _centerMap(LatLng(lat, lng));
+        _centerMapVisible(LatLng(lat, lng));
         _updateEstimate();
 
         // Départ confirmé et destination encore vide -> avance directement
@@ -882,19 +901,34 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     }
   }
 
+  // Ajuste le zoom pour que départ ET destination soient visibles
+  // au-dessus du panneau — un padding uniforme (90px sur les 4 côtés) ne
+  // suffit pas : le panneau occupe souvent bien plus que ça en bas d'écran,
+  // ce qui y cachait le point le plus au sud. On étend artificiellement la
+  // borne sud, proportionnellement à la part d'écran cachée par le
+  // panneau — même technique que DEM Pro (_fitBoundsVisible,
+  // dem_pro_order_create_screen.dart) : ça remonte visuellement le couple
+  // de points dans la portion haute, visible, de l'écran.
   void _fitBothPoints() {
-    final sw = LatLng(
-      min(_pickupLat!, _deliveryLat!),
-      min(_pickupLng!, _deliveryLng!),
-    );
-    final ne = LatLng(
-      max(_pickupLat!, _deliveryLat!),
-      max(_pickupLng!, _deliveryLng!),
-    );
+    final south = min(_pickupLat!, _deliveryLat!);
+    final north = max(_pickupLat!, _deliveryLat!);
+    final west = min(_pickupLng!, _deliveryLng!);
+    final east = max(_pickupLng!, _deliveryLng!);
+
+    final screenH = MediaQuery.of(context).size.height;
+    final panelH = _estimatedPanelHeight;
+    final hiddenFrac = (panelH / screenH).clamp(0.05, 0.85);
+    final visibleFrac = (1 - hiddenFrac).clamp(0.15, 0.95);
+    final latSpan = (north - south).clamp(0.0015, 1.0);
+    final extraSouth = latSpan * (hiddenFrac / visibleFrac);
+
     _mapController?.animateCamera(
       CameraUpdate.newLatLngBounds(
-        LatLngBounds(southwest: sw, northeast: ne),
-        90,
+        LatLngBounds(
+          southwest: LatLng(south - extraSouth, west),
+          northeast: LatLng(north, east),
+        ),
+        56,
       ),
     );
   }
@@ -903,100 +937,6 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
   // Voir shared/widgets/contact_picker.dart (partagé avec Livraison groupée).
 
   // ── Submit ────────────────────────────────────────────────────────────────
-  // ── Picker date/heure livraison programmée ───────────────────────────────
-  Future<void> _pickScheduleDate() async {
-    final now = DateTime.now();
-    final minDate = now.add(const Duration(minutes: 10));
-
-    final date = await showDatePicker(
-      context: context,
-      initialDate: _scheduledAt ?? minDate,
-      firstDate: minDate,
-      lastDate: now.add(const Duration(days: 30)),
-      builder: (ctx, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppColors.primary,
-            onPrimary: Colors.white,
-            surface: AppColors.surface,
-            onSurface: Colors.white,
-          ),
-          dialogTheme: const DialogThemeData(
-            backgroundColor: AppColors.surface,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (date == null || !mounted) return;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: _scheduledAt != null
-          ? TimeOfDay(hour: _scheduledAt!.hour, minute: _scheduledAt!.minute)
-          : TimeOfDay(
-              hour: minDate.hour,
-              minute: (minDate.minute ~/ 15 + 1) * 15 % 60,
-            ),
-      builder: (ctx, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppColors.primary,
-            onPrimary: Colors.white,
-            surface: AppColors.surface,
-            onSurface: Colors.white,
-          ),
-          dialogTheme: const DialogThemeData(
-            backgroundColor: AppColors.surface,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (time == null || !mounted) return;
-
-    final picked = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-    if (picked.isBefore(minDate)) {
-      showDemToast(
-        context,
-        'Choisissez un créneau au moins 10 min dans le futur',
-        isError: true,
-      );
-      return;
-    }
-    setState(() => _scheduledAt = picked);
-  }
-
-  static String _fmtScheduleDate(DateTime dt) {
-    const months = [
-      'jan',
-      'fév',
-      'mar',
-      'avr',
-      'mai',
-      'jun',
-      'jul',
-      'aoû',
-      'sep',
-      'oct',
-      'nov',
-      'déc',
-    ];
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
-  }
-
-  static String _fmtScheduleTime(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '$h:$m';
-  }
-
   Future<void> _submit() async {
     if (_pickupCtrl.text.trim().isEmpty) {
       _pickupCtrl.text =
@@ -1039,33 +979,13 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
         // la retrouve tout seul (voir promo.service.js:resolveOrderPromo).
         if (_promoError == null && _promoCodeCtrl.text.trim().isNotEmpty)
           'promoCode': _promoCodeCtrl.text.trim(),
-        if (_isScheduled && _scheduledAt != null)
-          'scheduledAt': _scheduledAt!.toUtc().toIso8601String(),
       });
 
       if (_estimatedPrice != null) order['price'] = _estimatedPrice;
       if (_demFee > 0) order['demFee'] = _demFee;
 
       if (!mounted) return;
-      if (_isScheduled && _scheduledAt != null) {
-        // Une commande programmée n'a rien à chercher maintenant (le cron
-        // dispatcher s'en charge à l'heure voulue) — l'écran de confirmation
-        // habituel ("Recherche d'un livreur…") n'aurait aucun sens ici.
-        await showGradientInfoDialog(
-          context,
-          icon: Icons.event_available_rounded,
-          iconColor: AppColors.primary,
-          title: 'Livraison programmée !',
-          message:
-              'Votre livraison est prévue le ${_fmtScheduleDate(_scheduledAt!)} à ${_fmtScheduleTime(_scheduledAt!)}. '
-              'Un livreur sera recherché automatiquement à l\'approche de l\'heure.',
-          actionLabel: 'OK',
-          onAction: () => Navigator.of(context).pop(),
-        );
-        if (mounted) context.go('/client/home');
-      } else {
-        context.pushReplacement('/orders/confirmation', extra: order);
-      }
+      context.pushReplacement('/orders/confirmation', extra: order);
     } catch (e) {
       if (mounted) {
         showDemToast(context, friendlyError(e), isError: true);
@@ -1109,7 +1029,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
       }
     }
     final panelH = _isMapPlacementMode
-        ? 90.0
+        // 90 ne suffisait pas au contenu réel de MapPlacementConfirmPanel
+        // (bouton + marges ≈ 98px) — dépassement de 8px en bas ("BOTTOM
+        // OVERFLOWED BY 8.0 PIXELS"). +16 de marge de sécurité au lieu de
+        // combler pile la valeur mesurée sur un seul appareil.
+        ? 106.0
         : heights[_step] + extraH + stepExtra;
 
     // Polyline + inactive markers
@@ -1176,7 +1100,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
               _isSelectingPickup = true;
               _isMapPlacementMode = true;
             });
-            _centerMap(LatLng(_pickupLat!, _pickupLng!));
+            _centerMapVisible(LatLng(_pickupLat!, _pickupLng!));
           },
         ),
       );
@@ -1207,7 +1131,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
               _isSelectingPickup = false;
               _isMapPlacementMode = true;
             });
-            _centerMap(LatLng(_deliveryLat!, _deliveryLng!));
+            _centerMapVisible(LatLng(_deliveryLat!, _deliveryLng!));
           },
         ),
       );
@@ -1303,24 +1227,22 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
               ),
             ),
 
-          // ── MAP THEME (gauche) + RECENTER (droite) — même niveau ─────────
+          // ── RECENTER ───────────────────────────────────────────────────────
+          // Le mode nuit de la carte a migré vers Réglages (préférence
+          // globale, voir mapNightProvider) — le bouton retour qui occupait
+          // l'autre bout de cette rangée vit maintenant au-dessus du
+          // panneau (voir plus bas), à cheval sur son bord haut, même
+          // position que DEM Pro.
           Positioned(
-            left: 16,
             right: 16,
             bottom:
                 max(_kMinPanelContent + 22.0, panelH - _panelDragOffset) +
                 60 +
                 keyboardH,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
-                FloatingMapButton(
-                  icon: _loadingGps ? null : Icons.my_location,
-                  loading: _loadingGps,
-                  onTap: _fetchGpsInit,
-                ),
-              ],
+            child: FloatingMapButton(
+              icon: _loadingGps ? null : Icons.my_location,
+              loading: _loadingGps,
+              onTap: _fetchGpsInit,
             ),
           ),
           // ── BOTTOM PANEL ───────────────────────────────────────────────────
@@ -1434,156 +1356,162 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                           : 'Valider cette destination',
                                       onConfirm: _confirmPlacement,
                                     )
-                                  : PageView(
-                                      controller: _pageCtrl,
-                                      physics:
-                                          const NeverScrollableScrollPhysics(),
-                                      onPageChanged: (i) =>
-                                          setState(() => _step = i),
-                                      children: [
-                                        _Step0Panel(
-                                          priority: widget.priority,
-                                          routeComplete: _routeComplete,
-                                          estimatedPrice: _estimatedPrice,
-                                          demFee: _demFee,
-                                          surgeMultiplier: _surgeMultiplier,
-                                          loadingSurge: _loadingSurge,
-                                          timedOut: _priceTimedOut,
-                                          onRetry: _retryEstimate,
-                                          onNext: () => _goStep(1),
-                                          distanceKm: _routeDistanceKm,
-                                          durationMin: _routeDurationMin,
-                                        ),
-                                        _Step1Panel(
-                                          priority: widget.priority,
-                                          orderType: widget.orderType,
-                                          nameCtrl: _senderNameCtrl,
-                                          phoneCtrl: _senderPhoneCtrl,
-                                          onPickContact: () => pickContact(
-                                            context,
+                                  // Un tap dans une zone vide referme le
+                                  // clavier — même comportement que DEM Pro
+                                  // et Livraison groupée.
+                                  : GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () =>
+                                          FocusScope.of(context).unfocus(),
+                                      child: PageView(
+                                        controller: _pageCtrl,
+                                        physics:
+                                            const NeverScrollableScrollPhysics(),
+                                        onPageChanged: (i) =>
+                                            setState(() => _step = i),
+                                        children: [
+                                          _Step0Panel(
+                                            priority: widget.priority,
+                                            routeComplete: _routeComplete,
+                                            estimatedPrice: _estimatedPrice,
+                                            demFee: _demFee,
+                                            surgeMultiplier: _surgeMultiplier,
+                                            loadingSurge: _loadingSurge,
+                                            timedOut: _priceTimedOut,
+                                            onRetry: _retryEstimate,
+                                            onNext: () => _goStep(1),
+                                            distanceKm: _routeDistanceKm,
+                                            durationMin: _routeDurationMin,
+                                          ),
+                                          _Step1Panel(
+                                            priority: widget.priority,
+                                            orderType: widget.orderType,
                                             nameCtrl: _senderNameCtrl,
                                             phoneCtrl: _senderPhoneCtrl,
-                                          ),
-                                          onPickMe: () {
-                                            _fillMe(
-                                              _senderNameCtrl,
-                                              _senderPhoneCtrl,
-                                            );
-                                            if (_senderPhoneCtrl.text.length >=
-                                                9)
+                                            onPickContact: () => pickContact(
+                                              context,
+                                              nameCtrl: _senderNameCtrl,
+                                              phoneCtrl: _senderPhoneCtrl,
+                                            ),
+                                            onPickMe: () {
+                                              _fillMe(
+                                                _senderNameCtrl,
+                                                _senderPhoneCtrl,
+                                              );
+                                              if (_senderPhoneCtrl
+                                                      .text
+                                                      .length >=
+                                                  9)
+                                                _goStep(2);
+                                            },
+                                            onPhoneComplete: () => _goStep(2),
+                                            onNext: () {
+                                              if (!_validatePhone(
+                                                _senderPhoneCtrl,
+                                                'expéditeur',
+                                              ))
+                                                return;
                                               _goStep(2);
-                                          },
-                                          onPhoneComplete: () => _goStep(2),
-                                          onNext: () {
-                                            if (!_validatePhone(
-                                              _senderPhoneCtrl,
-                                              'expéditeur',
-                                            ))
-                                              return;
-                                            _goStep(2);
-                                          },
-                                        ),
-                                        _Step2Panel(
-                                          priority: widget.priority,
-                                          orderType: widget.orderType,
-                                          nameCtrl: _receiverNameCtrl,
-                                          phoneCtrl: _receiverPhoneCtrl,
-                                          descriptionCtrl: _descriptionCtrl,
-                                          onPickContact: () => pickContact(
-                                            context,
+                                            },
+                                          ),
+                                          _Step2Panel(
+                                            priority: widget.priority,
+                                            orderType: widget.orderType,
                                             nameCtrl: _receiverNameCtrl,
                                             phoneCtrl: _receiverPhoneCtrl,
-                                          ),
-                                          onPickMe: () {
-                                            _fillMe(
-                                              _receiverNameCtrl,
-                                              _receiverPhoneCtrl,
-                                            );
-                                            if (_receiverPhoneCtrl
-                                                    .text
-                                                    .length >=
-                                                9) {
+                                            descriptionCtrl: _descriptionCtrl,
+                                            onPickContact: () => pickContact(
+                                              context,
+                                              nameCtrl: _receiverNameCtrl,
+                                              phoneCtrl: _receiverPhoneCtrl,
+                                            ),
+                                            onPickMe: () {
+                                              _fillMe(
+                                                _receiverNameCtrl,
+                                                _receiverPhoneCtrl,
+                                              );
+                                              if (_receiverPhoneCtrl
+                                                      .text
+                                                      .length >=
+                                                  9) {
+                                                _updateEstimate();
+                                                _goStep(3);
+                                              }
+                                            },
+                                            onPhoneComplete: () {
                                               _updateEstimate();
                                               _goStep(3);
-                                            }
-                                          },
-                                          onPhoneComplete: () {
-                                            _updateEstimate();
-                                            _goStep(3);
-                                          },
-                                          onNext: () {
-                                            if (!_validatePhone(
-                                              _receiverPhoneCtrl,
-                                              'destinataire',
-                                            ))
-                                              return;
-                                            _updateEstimate();
-                                            _goStep(3);
-                                          },
-                                        ),
-                                        _Step3Panel(
-                                          priority: widget.priority,
-                                          pickupLabel:
-                                              _pickupCtrl.text.isNotEmpty
-                                              ? _pickupCtrl.text
-                                              : 'Départ',
-                                          deliveryLabel:
-                                              _deliveryCtrl.text.isNotEmpty
-                                              ? _deliveryCtrl.text
-                                              : 'Destination',
-                                          estimatedPrice: _estimatedPrice,
-                                          demFee: _demFee,
-                                          discountAmount: _discountAmount,
-                                          promoLabel: _promoLabel,
-                                          promoCodeCtrl: _promoCodeCtrl,
-                                          promoError: _promoError,
-                                          checkingPromo: _checkingPromo,
-                                          onApplyPromo: _applyPromoCode,
-                                          surgeMultiplier: _surgeMultiplier,
-                                          loadingSurge: _loadingSurge,
-                                          timedOut: _priceTimedOut,
-                                          submitting: _submitting,
-                                          canSubmit:
-                                              _routeComplete &&
-                                              _estimatedPrice != null,
-                                          onRetry: _retryEstimate,
-                                          onSubmit: _submit,
-                                          distanceKm: _routeDistanceKm,
-                                          durationMin: _routeDurationMin,
-                                          isScheduled: _isScheduled,
-                                          scheduledAt: _scheduledAt,
-                                          onToggleScheduled: (v) {
-                                            setState(() {
-                                              _isScheduled = v;
-                                              if (!v) _scheduledAt = null;
-                                            });
-                                            if (v) _pickScheduleDate();
-                                          },
-                                          onPickScheduleDate: _pickScheduleDate,
-                                          onEditPickup: () {
-                                            setState(
-                                              () => _isSelectingPickup = true,
-                                            );
-                                            _goStep(0);
-                                            Future.delayed(
-                                              const Duration(milliseconds: 300),
-                                              () => _pickupFocus.requestFocus(),
-                                            );
-                                          },
-                                          onEditDelivery: () {
-                                            setState(
-                                              () => _isSelectingPickup = false,
-                                            );
-                                            _goStep(0);
-                                            Future.delayed(
-                                              const Duration(milliseconds: 300),
-                                              () =>
-                                                  _deliveryFocus.requestFocus(),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
+                                            },
+                                            onNext: () {
+                                              if (!_validatePhone(
+                                                _receiverPhoneCtrl,
+                                                'destinataire',
+                                              ))
+                                                return;
+                                              _updateEstimate();
+                                              _goStep(3);
+                                            },
+                                          ),
+                                          _Step3Panel(
+                                            priority: widget.priority,
+                                            pickupLabel:
+                                                _pickupCtrl.text.isNotEmpty
+                                                ? _pickupCtrl.text
+                                                : 'Départ',
+                                            deliveryLabel:
+                                                _deliveryCtrl.text.isNotEmpty
+                                                ? _deliveryCtrl.text
+                                                : 'Destination',
+                                            estimatedPrice: _estimatedPrice,
+                                            demFee: _demFee,
+                                            discountAmount: _discountAmount,
+                                            promoLabel: _promoLabel,
+                                            promoCodeCtrl: _promoCodeCtrl,
+                                            promoError: _promoError,
+                                            checkingPromo: _checkingPromo,
+                                            onApplyPromo: _applyPromoCode,
+                                            surgeMultiplier: _surgeMultiplier,
+                                            loadingSurge: _loadingSurge,
+                                            timedOut: _priceTimedOut,
+                                            submitting: _submitting,
+                                            canSubmit:
+                                                _routeComplete &&
+                                                _estimatedPrice != null,
+                                            onRetry: _retryEstimate,
+                                            onSubmit: _submit,
+                                            distanceKm: _routeDistanceKm,
+                                            durationMin: _routeDurationMin,
+                                            onEditPickup: () {
+                                              setState(
+                                                () => _isSelectingPickup = true,
+                                              );
+                                              _goStep(0);
+                                              Future.delayed(
+                                                const Duration(
+                                                  milliseconds: 300,
+                                                ),
+                                                () =>
+                                                    _pickupFocus.requestFocus(),
+                                              );
+                                            },
+                                            onEditDelivery: () {
+                                              setState(
+                                                () =>
+                                                    _isSelectingPickup = false,
+                                              );
+                                              _goStep(0);
+                                              Future.delayed(
+                                                const Duration(
+                                                  milliseconds: 300,
+                                                ),
+                                                () => _deliveryFocus
+                                                    .requestFocus(),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ), // GestureDetector (tap-to-dismiss)
                             ), // SizedBox
                           ), // OverflowBox
                         ), // ClipRect
@@ -1594,6 +1522,29 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
               ), // AnimatedPadding
             ), // AnimatedContainer (gradient)
           ), // Align
+          // ── RETOUR flottant — même niveau que le bouton de recentrage ───────
+          // Placé APRÈS (donc AU-DESSUS, z-order) le panneau — sinon celui-ci
+          // se dessine par-dessus et cache le bouton. Même hauteur que
+          // FloatingMapButton (recentrage), plutôt qu'à cheval sur le bord
+          // du panneau — logique de retour "reculer d'une étape" désormais
+          // exclusive à ce bouton (l'en-tête ne fait plus que "retour à
+          // zéro", voir onReset).
+          Positioned(
+            left: 16,
+            bottom:
+                max(_kMinPanelContent + 22.0, panelH - _panelDragOffset) +
+                60 +
+                keyboardH,
+            child: FloatingBackButton(
+              onTap: () {
+                if (_step > 0) {
+                  _goStep(_step - 1);
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+            ),
+          ),
           // ── TOP BAR ────────────────────────────────────────────────────────
           SafeArea(
             child: Padding(
@@ -1607,12 +1558,10 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                         ? 'Livraison Express ⚡'
                         : 'Livraison Simple',
                     step: _step,
-                    onBack: () {
-                      if (_step > 0) {
-                        _goStep(_step - 1);
-                      } else {
-                        Navigator.pop(context);
-                      }
+                    onReset: () {
+                      if (_step == 0) return;
+                      FocusScope.of(context).unfocus();
+                      _goStep(0);
                     },
                   ),
                   const SizedBox(height: 8),
@@ -1864,7 +1813,7 @@ class _DeliveryTypeBadge extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             isExpress
-                ? 'Livraison Express — livreur le plus proche, +40%'
+                ? 'Livraison Express'
                 : 'Livraison Simple — tarif standard',
             style: TextStyle(
               color: color,
@@ -2482,8 +2431,8 @@ class _Step1Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
-          _DeliveryTypeBadge(priority: priority),
-          const SizedBox(height: 8),
+          // Le badge type de livraison n'est plus répété à chaque étape —
+          // visible une seule fois, à l'étape 1/4 (voir _Step0Panel).
           // `Expanded` + scroll : le badge ajouté au-dessus laissait trop
           // peu de marge sur le budget de hauteur fixe de cette étape
           // (quelques pixels à peine) — même remède que Step0/Step2/Step3
@@ -2494,12 +2443,31 @@ class _Step1Panel extends StatelessWidget {
                 children: [
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Utilisez vos contacts 👤 pour gagner du temps',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.70),
-                        fontSize: 12,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Astuce : ',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.70),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Icon(
+                          Icons.person_outline_rounded,
+                          color: Colors.white.withValues(alpha: 0.70),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'sélectionnez un contact pour gagner du temps',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.70),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -2557,16 +2525,33 @@ class _Step2Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
-          _DeliveryTypeBadge(priority: priority),
-          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(
-              'Utilisez vos contacts 👤 pour gagner du temps',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.70),
-                fontSize: 12,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Astuce : ',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Icon(
+                  Icons.person_outline_rounded,
+                  color: Colors.white.withValues(alpha: 0.70),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'sélectionnez un contact pour gagner du temps',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 10),
@@ -2673,10 +2658,6 @@ class _Step3Panel extends StatelessWidget {
   final VoidCallback? onEditDelivery;
   final double? distanceKm;
   final int? durationMin;
-  final bool isScheduled;
-  final DateTime? scheduledAt;
-  final ValueChanged<bool> onToggleScheduled;
-  final VoidCallback onPickScheduleDate;
 
   const _Step3Panel({
     required this.priority,
@@ -2701,10 +2682,6 @@ class _Step3Panel extends StatelessWidget {
     this.onEditDelivery,
     this.distanceKm,
     this.durationMin,
-    required this.isScheduled,
-    required this.scheduledAt,
-    required this.onToggleScheduled,
-    required this.onPickScheduleDate,
   });
 
   @override
@@ -2713,8 +2690,6 @@ class _Step3Panel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
         children: [
-          _DeliveryTypeBadge(priority: priority),
-          const SizedBox(height: 8),
           // `Expanded` + scroll plutôt qu'un simple `Column` : le contenu
           // ci-dessous (récap trajet, prix, code promo) a grandi plusieurs
           // fois depuis le premier réglage du budget de hauteur fixe de ce
@@ -2823,140 +2798,6 @@ class _Step3Panel extends StatelessWidget {
                       onApply: onApplyPromo,
                     ),
                   ],
-                  // Livraison programmée — manquait côté client (déjà
-                  // disponible pour DEM Pro), écart concurrentiel réel face
-                  // à Uber Eats/Glovo/Jumia qui permettent tous de
-                  // programmer une commande à l'avance.
-                  const SizedBox(height: 10),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isScheduled
-                            ? AppColors.primary.withValues(alpha: 0.4)
-                            : Colors.white.withValues(alpha: 0.12),
-                      ),
-                    ),
-                    child: SwitchListTile(
-                      value: isScheduled,
-                      onChanged: onToggleScheduled,
-                      activeTrackColor: AppColors.primary,
-                      activeThumbColor: Colors.white,
-                      inactiveThumbColor: Colors.white,
-                      inactiveTrackColor: Colors.white24,
-                      title: const Row(
-                        children: [
-                          Icon(
-                            Icons.schedule,
-                            color: AppColors.primary,
-                            size: 18,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Programmer la livraison',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      subtitle: Text(
-                        'Choisir une date et heure précise',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.60),
-                          fontSize: 11.5,
-                        ),
-                      ),
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 2,
-                      ),
-                    ),
-                  ),
-                  if (isScheduled) ...[
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: onPickScheduleDate,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: scheduledAt != null
-                                ? AppColors.primary
-                                : AppColors.warning,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.calendar_today,
-                              color: scheduledAt != null
-                                  ? AppColors.primary
-                                  : AppColors.warning,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: scheduledAt != null
-                                  ? Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _OrderCreateScreenState._fmtScheduleDate(
-                                            scheduledAt!,
-                                          ),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        Text(
-                                          _OrderCreateScreenState._fmtScheduleTime(
-                                            scheduledAt!,
-                                          ),
-                                          style: TextStyle(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.65,
-                                            ),
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : const Text(
-                                      'Appuyez pour choisir la date',
-                                      style: TextStyle(
-                                        color: AppColors.warning,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                            ),
-                            Icon(
-                              Icons.edit_outlined,
-                              color: scheduledAt != null
-                                  ? Colors.white54
-                                  : AppColors.warning,
-                              size: 15,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
                   // Le mode de paiement par défaut (cash) n'était jamais
                   // annoncé avant validation — le client ne savait pas s'il
                   // devait prévoir de l'espèces avant l'acceptation par un
@@ -2991,15 +2832,8 @@ class _Step3Panel extends StatelessWidget {
           const SizedBox(height: 8),
           // Bouton toujours visible en bas — épinglé hors du scroll ci-dessus.
           PrimaryButton(
-            label: isScheduled
-                ? 'Programmer la livraison'
-                : 'Trouvez un livreur',
-            onTap:
-                (canSubmit &&
-                    !submitting &&
-                    (!isScheduled || scheduledAt != null))
-                ? onSubmit
-                : null,
+            label: 'Trouvez un livreur',
+            onTap: (canSubmit && !submitting) ? onSubmit : null,
             loading: submitting,
           ),
         ],

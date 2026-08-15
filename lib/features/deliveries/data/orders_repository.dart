@@ -178,6 +178,23 @@ class OrdersRepository {
     }
   }
 
+  /// Le client a réglé le commerçant directement (Wave/OM en direct, cash en
+  /// main propre...) sur une commande en paiement intégré — bascule la
+  /// commande hors SPLIT_IN_APP pour que seule la livraison reste à
+  /// encaisser (cash ou en ligne redeviennent alors possibles).
+  Future<Map<String, dynamic>> markPaidDirectly(String id) async {
+    try {
+      final response = await _dio.patch('/orders/$id/mark-paid-directly');
+      final data = response.data as Map<String, dynamic>;
+      return (data['order'] ?? data) as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Erreur lors de la mise à jour.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> createOrder(Map<String, dynamic> body) async {
     try {
       final response = await _dio.post('/orders', data: body);
@@ -188,6 +205,28 @@ class OrdersRepository {
         e.response?.data?['message'] ?? 'Impossible de créer la commande.',
         e.response?.statusCode,
       );
+    }
+  }
+
+  /// Livreurs en ligne à proximité de [lat]/[lng] (id + coordonnées
+  /// seulement) — utilisé pour mêler de vrais livreurs aux motos fictives
+  /// pendant la recherche (voir order_confirmation_screen.dart). Purement
+  /// décoratif : liste vide en cas d'échec réseau, jamais bloquant.
+  Future<List<Map<String, dynamic>>> getNearbyDrivers({
+    required double lat,
+    required double lng,
+    double radiusKm = 2,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/orders/nearby-drivers',
+        queryParameters: {'lat': lat, 'lng': lng, 'radiusKm': radiusKm},
+      );
+      return List<Map<String, dynamic>>.from(
+        response.data['drivers'] as List? ?? [],
+      );
+    } on DioException {
+      return [];
     }
   }
 
@@ -565,6 +604,60 @@ class OrdersRepository {
     } on DioException catch (e) {
       throw AppException(
         e.response?.data?['message'] ?? 'Impossible d\'envoyer le signalement.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  // ── Livraisons programmées — engagement anticipé ──────────────────────────
+  // "Job board" des courses programmées pas encore réservées — visible même
+  // hors ligne (voir scheduled-dispatch.service.js côté backend).
+  Future<List<Map<String, dynamic>>> getAvailableScheduledOrders() async {
+    try {
+      final response = await _dio.get('/orders/scheduled/available');
+      return _parseList(response.data);
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ??
+            'Impossible de charger les courses programmées.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  /// Courses programmées que CE driver a réservées.
+  Future<List<Map<String, dynamic>>> getMyScheduledOrders() async {
+    try {
+      final response = await _dio.get('/orders/scheduled/mine');
+      return _parseList(response.data);
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ??
+            'Impossible de charger vos réservations.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> claimScheduledOrder(String id) async {
+    try {
+      final response = await _dio.patch('/orders/$id/claim-scheduled');
+      final data = response.data as Map<String, dynamic>;
+      return (data['order'] ?? data) as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible de réserver cette course.',
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<void> releaseScheduledOrder(String id) async {
+    try {
+      await _dio.patch('/orders/$id/release-scheduled');
+    } on DioException catch (e) {
+      throw AppException(
+        e.response?.data?['message'] ?? 'Impossible d\'annuler la réservation.',
         e.response?.statusCode,
       );
     }

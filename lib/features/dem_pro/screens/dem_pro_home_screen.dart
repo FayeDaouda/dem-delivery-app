@@ -719,6 +719,21 @@ class _AccueilTab extends StatelessWidget {
         daysUntilExpiry != null &&
         daysUntilExpiry <= 7;
 
+    // ── Livraison "vous payez la livraison" pas encore réglée ────────────
+    // Seul repère pour la retrouver une fois l'écran de suivi en direct
+    // quitté (notif manquée, app fermée...) — sans ça, aucun moyen de
+    // revenir payer cette course (voir dem_pro_order_tracking_screen.dart
+    // :_payOnline, où le paiement se fait réellement).
+    final unpaidMerchantOrder = allOrders
+        .cast<Map<String, dynamic>?>()
+        .firstWhere(
+          (o) =>
+              (o?['status'] as String? ?? '').toUpperCase() == 'DELIVERED' &&
+              o?['paymentMode'] == 'merchant' &&
+              o?['paymentStatus'] != 'PAID',
+          orElse: () => null,
+        );
+
     return Column(
       children: [
         // ── Header dégradé cyan — plein-bleed jusqu'en haut de l'écran,
@@ -845,6 +860,71 @@ class _AccueilTab extends StatelessWidget {
                               ),
                             );
                           },
+                        ),
+
+                      // ── Livraison prise en charge, pas encore payée ───────
+                      if (unpaidMerchantOrder != null)
+                        GestureDetector(
+                          onTap: () => context.push(
+                            '/dem-pro/orders/tracking',
+                            extra: {
+                              'orderId': unpaidMerchantOrder['id'],
+                              'driverId':
+                                  (unpaidMerchantOrder['driver'] as Map?)?['id']
+                                      as String? ??
+                                  unpaidMerchantOrder['driverId'] as String? ??
+                                  '',
+                              'initialOrder': unpaidMerchantOrder,
+                            },
+                          ),
+                          child: Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppColors.warning.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: AppColors.warning.withValues(
+                                  alpha: 0.25,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.payments_outlined,
+                                  color: AppColors.warning,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Livraison à régler',
+                                        style: ClientText.bodyStrong.copyWith(
+                                          color: t.text,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Vous avez choisi de payer cette livraison — réglez-la en ligne',
+                                        style: ClientText.label.copyWith(
+                                          color: t.muted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: AppColors.warning,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
 
                       // ── Carte résumé — tableau de bord ────────────────────
@@ -1992,36 +2072,58 @@ class _CompteTabState extends State<_CompteTab>
                   ],
                 ),
                 const SizedBox(height: 10),
-                Container(
-                  decoration: BoxDecoration(
-                    color: t.cardBg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: t.border),
-                  ),
-                  child: SwitchListTile(
-                    value: _planData?['inAppPaymentEnabled'] as bool? ?? false,
-                    onChanged: _toggleInAppPayment,
-                    activeTrackColor: AppColors.primary,
-                    activeThumbColor: Colors.white,
-                    inactiveThumbColor: Colors.white,
-                    inactiveTrackColor: t.border,
-                    title: Text(
-                      'Paiement intégré',
-                      style: ClientText.subtitle.copyWith(color: t.text),
-                    ),
-                    subtitle: Text(
-                      'Le client paie le produit et la livraison en une fois dans l\'app — le produit est crédité sur votre wallet.',
-                      style: ClientText.label.copyWith(
-                        color: t.muted,
-                        height: 1.4,
+                Builder(
+                  builder: (context) {
+                    // Le blocage réel se fait au tap (requireProPlan, voir
+                    // _toggleInAppPayment) — ce cadenas ne fait qu'annoncer
+                    // visuellement ce verrou avant même d'essayer, plutôt que
+                    // de laisser un toggle Free avoir l'air parfaitement
+                    // normal jusqu'à ce qu'on tape dessus.
+                    final locked = !isProPlan(_planData?['plan'] as String?);
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: t.cardBg,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: t.border),
                       ),
-                    ),
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 4,
-                    ),
-                  ),
+                      child: SwitchListTile(
+                        value:
+                            _planData?['inAppPaymentEnabled'] as bool? ?? false,
+                        onChanged: _toggleInAppPayment,
+                        activeTrackColor: AppColors.primary,
+                        activeThumbColor: Colors.white,
+                        inactiveThumbColor: Colors.white,
+                        inactiveTrackColor: t.border,
+                        secondary: locked
+                            ? Icon(
+                                Icons.lock_outline_rounded,
+                                color: t.muted,
+                                size: 20,
+                              )
+                            : null,
+                        title: Text(
+                          'Paiement intégré',
+                          style: ClientText.subtitle.copyWith(
+                            color: locked ? t.muted : t.text,
+                          ),
+                        ),
+                        subtitle: Text(
+                          locked
+                              ? 'Réservé aux plans Pro et Business.'
+                              : 'Le client paie le produit et la livraison en une fois dans l\'app — le produit est crédité sur votre wallet.',
+                          style: ClientText.label.copyWith(
+                            color: t.muted,
+                            height: 1.4,
+                          ),
+                        ),
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 4,
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 24),
 
@@ -2041,7 +2143,7 @@ class _CompteTabState extends State<_CompteTab>
                     ),
                     _TapRow(
                       icon: Icons.inbox_outlined,
-                      label: 'Demandes reçues',
+                      label: 'Commandes reçues',
                       subtitle: _pendingRequestCount > 0
                           ? '$_pendingRequestCount en attente de confirmation'
                           : 'Aucune demande en attente',
@@ -6224,8 +6326,8 @@ const _periodOptions = [
   ('today', 'Jour'),
   ('this_week', 'Semaine'),
   ('this_month', 'Mois'),
-  ('prev_month', 'Mois -1'),
   ('3months', '3 mois'),
+  ('6months', '6 mois'),
 ];
 
 enum _FinanceView { sales, deliveries, insights }
@@ -6416,11 +6518,8 @@ class _FinancesTabState extends State<_FinancesTab>
               dt.year == now.year && dt.month == now.month && dt.day == now.day,
             'this_week' => now.difference(dt).inDays < 7,
             'this_month' => dt.year == now.year && dt.month == now.month,
-            'prev_month' => switch (now.month) {
-              1 => dt.year == now.year - 1 && dt.month == 12,
-              _ => dt.year == now.year && dt.month == now.month - 1,
-            },
             '3months' => now.difference(dt).inDays < 90,
+            '6months' => now.difference(dt).inDays < 180,
             _ => true,
           };
         })
@@ -6556,7 +6655,9 @@ class _FinancesTabState extends State<_FinancesTab>
                   onTap: () => _selectPeriod(opt.$1),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    margin: EdgeInsets.only(right: opt.$1 != '3months' ? 6 : 0),
+                    margin: EdgeInsets.only(
+                      right: opt.$1 != _periodOptions.last.$1 ? 6 : 0,
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 9),
                     decoration: BoxDecoration(
                       color: selected ? AppColors.primary : t.cardBg,
@@ -6898,9 +6999,13 @@ class _FinancesTabState extends State<_FinancesTab>
     final topDestinations =
         (data['topDestinations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final trend = data['trend'] as Map<String, dynamic>? ?? {};
-    final spendTrendPct = (trend['spendTrendPct'] as num?)?.toDouble();
-    final currentTotal = (trend['currentTotal'] as num?)?.toInt() ?? 0;
     final currentCount = (trend['currentCount'] as num?)?.toInt() ?? 0;
+    // Taux de réussite = l'inverse du taux d'annulation déjà calculé côté
+    // serveur (getBusinessInsights) — lecture plus intuitive pour le
+    // commerçant (plus haut = mieux), même donnée sous-jacente.
+    final cancellationRate =
+        (data['cancellationRate'] as num?)?.toDouble() ?? 0.0;
+    final successRate = (100 - cancellationRate).clamp(0, 100);
 
     // Volume hebdomadaire déclaré à l'inscription — jusqu'ici jamais
     // réutilisé nulle part après l'onboarding, une donnée purement
@@ -6964,7 +7069,10 @@ class _FinancesTabState extends State<_FinancesTab>
         const SizedBox(height: 16),
       ],
 
-      // ── Tendance ──────────────────────────────────────────────────────────
+      // ── Résumé activité : CA + commandes + taux de réussite ──────────────
+      // Même style de carte que les résumés Ventes/Livraisons (_MiniStat) —
+      // vue d'ensemble en un coup d'œil plutôt que de répartir ces chiffres
+      // dans d'autres onglets.
       Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
@@ -6975,66 +7083,89 @@ class _FinancesTabState extends State<_FinancesTab>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Dépensé cette période',
-              style: ClientText.label.copyWith(color: t.muted),
-            ),
-            const SizedBox(height: 6),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  formatFcfa(currentTotal),
-                  style: ClientText.hero.copyWith(color: t.text),
-                ),
-                if (spendTrendPct != null) ...[
-                  const SizedBox(width: 10),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            (spendTrendPct >= 0
-                                    ? AppColors.successLight
-                                    : AppColors.error)
-                                .withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            spendTrendPct >= 0
-                                ? Icons.arrow_upward_rounded
-                                : Icons.arrow_downward_rounded,
-                            size: 12,
-                            color: spendTrendPct >= 0
-                                ? AppColors.successLight
-                                : AppColors.error,
-                          ),
-                          Text(
-                            '${spendTrendPct.abs().toStringAsFixed(0)}%',
-                            style: ClientText.label.copyWith(
-                              color: spendTrendPct >= 0
-                                  ? AppColors.successLight
-                                  : AppColors.error,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
+                  child: const Icon(
+                    Icons.insights_rounded,
+                    color: AppColors.primary,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Activité',
+                  style: ClientText.label.copyWith(color: t.muted),
+                ),
               ],
             ),
+            const SizedBox(height: 14),
             Text(
-              'vs période précédente équivalente',
-              style: ClientText.micro.copyWith(color: t.muted),
+              formatFcfa(_totalSales),
+              style: ClientText.hero.copyWith(color: t.text),
+            ),
+            Text(
+              'Chiffre d\'affaires',
+              style: ClientText.label.copyWith(color: t.muted),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStat(
+                    value: '$currentCount',
+                    label: 'Commandes',
+                    color: AppColors.primary,
+                    t: t,
+                  ),
+                ),
+                Container(width: 1, height: 40, color: t.border),
+                Expanded(
+                  child: _MiniStat(
+                    value: '${successRate.toStringAsFixed(0)}%',
+                    label: 'Taux de réussite',
+                    color: AppColors.successLight,
+                    t: t,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // ── Courbe évolution ──────────────────────────────────────────────────
+      // Volume de livraisons par période, en courbe plutôt qu'en barres —
+      // même donnée `breakdown` déjà renvoyée par /dem-pro/me/finances (voir
+      // _FinancesTab._load, computeDailyBreakdown/computeWeeklyBreakdown
+      // /computeMonthlyBreakdown côté backend).
+      Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: t.cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: t.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Courbe évolution',
+              style: ClientText.bodyStrong.copyWith(color: t.text),
+            ),
+            const SizedBox(height: 16),
+            _ActivityLineChart(
+              breakdown:
+                  (_financeData?['breakdown'] as List?)
+                      ?.cast<Map<String, dynamic>>() ??
+                  const [],
+              t: t,
             ),
           ],
         ),
@@ -7149,83 +7280,80 @@ class _FinancesTabState extends State<_FinancesTab>
         const SizedBox(height: 16),
       ],
 
-      // ── Top destinataires ────────────────────────────────────────────────
+      // ── Meilleur client ────────────────────────────────────────────────
+      // Une carte par client (plutôt qu'une liste à puces) — le premier de
+      // la liste porte la médaille, c'est bien "le" meilleur client qu'on
+      // met en avant, pas juste une liste de fréquence.
       Text(
-        'Destinataires les plus fréquents',
+        topDestinations.length > 1 ? 'Meilleurs clients' : 'Meilleur client',
         style: ClientText.bodyStrong.copyWith(color: t.text),
       ),
       const SizedBox(height: 10),
       if (topDestinations.isEmpty)
         _buildEmpty('Aucune livraison sur cette période')
       else
-        Container(
-          decoration: BoxDecoration(
-            color: t.cardBg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: t.border),
-          ),
-          child: Column(
-            children: [
-              for (var i = 0; i < topDestinations.length; i++) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
+        for (var i = 0; i < topDestinations.length; i++) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: t.cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: i == 0
+                    ? AppColors.primary.withValues(alpha: 0.35)
+                    : t.border,
+              ),
+            ),
+            child: Row(
+              children: [
+                if (i == 0)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: Text('🏆', style: TextStyle(fontSize: 16)),
                   ),
-                  child: Row(
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              (topDestinations[i]['receiverName'] as String?) ??
-                                  (topDestinations[i]['address'] as String? ??
-                                      '—'),
-                              style: ClientText.bodyStrong
-                                  .copyWith(color: AppColors.textDark)
-                                  .copyWith(color: t.text),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              topDestinations[i]['address'] as String? ?? '',
-                              style: ClientText.label
-                                  .copyWith(color: AppColors.textDark)
-                                  .copyWith(color: t.muted),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
+                      Text(
+                        (topDestinations[i]['receiverName'] as String?) ??
+                            (topDestinations[i]['address'] as String? ?? '—'),
+                        style: ClientText.bodyStrong.copyWith(color: t.text),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${topDestinations[i]['count']}×',
-                          style: ClientText.label.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                      Text(
+                        topDestinations[i]['address'] as String? ?? '',
+                        style: ClientText.label.copyWith(color: t.muted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-                if (i < topDestinations.length - 1)
-                  Divider(height: 1, color: t.border),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${topDestinations[i]['count']}×',
+                    style: ClientText.label.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ],
-            ],
+            ),
           ),
-        ),
+          if (i < topDestinations.length - 1) const SizedBox(height: 8),
+        ],
     ];
   }
 
@@ -7333,6 +7461,232 @@ class _FinancesTabState extends State<_FinancesTab>
       ],
     ),
   );
+}
+
+// ── Courbe d'activité (onglet Activité) ──────────────────────────────────────
+// Une seule série (volume de livraisons) → un seul trait, pas de légende
+// nécessaire (le titre "Courbe évolution" au-dessus la nomme déjà). Courbe
+// lissée (Catmull-Rom → Bézier) plutôt que des segments droits pour l'aspect
+// "courbe" recherché — même donnée `breakdown` que l'ancien graphique en
+// barres, gardé ci-dessous comme repli pour <2 points (une courbe n'a pas de
+// sens sur un point isolé).
+class _ActivityLineChart extends StatelessWidget {
+  final List<Map<String, dynamic>> breakdown;
+  final _T t;
+  const _ActivityLineChart({required this.breakdown, required this.t});
+
+  @override
+  Widget build(BuildContext context) {
+    if (breakdown.length < 2) {
+      return _ActivityBarChart(breakdown: breakdown, t: t);
+    }
+    final counts = breakdown
+        .map((b) => (b['count'] as num?)?.toInt() ?? 0)
+        .toList();
+    final maxCount = counts.fold(0, (a, b) => a > b ? a : b);
+
+    return SizedBox(
+      height: 128,
+      child: Column(
+        children: [
+          Expanded(
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _ActivityCurvePainter(
+                counts: counts,
+                maxCount: maxCount,
+                lineColor: AppColors.primary,
+                fillColor: AppColors.primary.withValues(alpha: 0.14),
+                haloColor: t.cardBg,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: breakdown.map((b) {
+              final label = b['label'] as String? ?? '';
+              return Expanded(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ClientText.micro.copyWith(color: t.muted, fontSize: 9),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityCurvePainter extends CustomPainter {
+  final List<int> counts;
+  final int maxCount;
+  final Color lineColor;
+  final Color fillColor;
+  final Color haloColor;
+  _ActivityCurvePainter({
+    required this.counts,
+    required this.maxCount,
+    required this.lineColor,
+    required this.fillColor,
+    required this.haloColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (counts.length < 2 || size.width <= 0 || size.height <= 0) return;
+    final n = counts.length;
+    final dx = size.width / (n - 1);
+    // Marge verticale : un point à 0 (ou au max) reste visible sous/au-dessus
+    // du trait, jamais collé pile au bord.
+    const topPad = 6.0, bottomPad = 6.0;
+    final usableH = size.height - topPad - bottomPad;
+
+    double yFor(int count) {
+      final ratio = maxCount > 0 ? count / maxCount : 0.0;
+      return topPad + usableH * (1 - ratio);
+    }
+
+    final points = [
+      for (var i = 0; i < n; i++) Offset(dx * i, yFor(counts[i])),
+    ];
+
+    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = points[i == 0 ? i : i - 1];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = points[i + 2 < points.length ? i + 2 : i + 1];
+      final cp1 = Offset(
+        p1.dx + (p2.dx - p0.dx) / 6,
+        p1.dy + (p2.dy - p0.dy) / 6,
+      );
+      final cp2 = Offset(
+        p2.dx - (p3.dx - p1.dx) / 6,
+        p2.dy - (p3.dy - p1.dy) / 6,
+      );
+      linePath.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
+    }
+
+    // Aire sous la courbe — dégradé léger, jamais un aplat : la ligne reste
+    // la donnée principale, l'aire n'est qu'un repère visuel discret.
+    final fillPath = Path.from(linePath)
+      ..lineTo(points.last.dx, size.height)
+      ..lineTo(points.first.dx, size.height)
+      ..close();
+    canvas.drawPath(
+      fillPath,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [fillColor, fillColor.withValues(alpha: 0.0)],
+        ).createShader(Offset.zero & size),
+    );
+
+    canvas.drawPath(
+      linePath,
+      Paint()
+        ..color = lineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    // Point terminal seul mis en avant (valeur actuelle) — pas un marqueur
+    // par point, pour ne pas surcharger une courbe déjà lisible par sa forme.
+    // Halo à la couleur de la carte : détache proprement le point du remplissage.
+    canvas.drawCircle(points.last, 5, Paint()..color = haloColor);
+    canvas.drawCircle(points.last, 3.5, Paint()..color = lineColor);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ActivityCurvePainter oldDelegate) =>
+      oldDelegate.counts != counts || oldDelegate.maxCount != maxCount;
+}
+
+// ── Graphique d'activité (repli <2 points, voir _ActivityLineChart) ──────────
+// Barres simples faites maison (pas de dépendance externe) — un bâton par
+// bucket (jour/semaine/mois selon la période, voir computeDailyBreakdown
+// /computeWeeklyBreakdown/computeMonthlyBreakdown côté backend), hauteur
+// proportionnelle au nombre de livraisons.
+class _ActivityBarChart extends StatelessWidget {
+  final List<Map<String, dynamic>> breakdown;
+  final _T t;
+  const _ActivityBarChart({required this.breakdown, required this.t});
+
+  @override
+  Widget build(BuildContext context) {
+    if (breakdown.isEmpty) {
+      return SizedBox(
+        height: 100,
+        child: Center(
+          child: Text(
+            'Aucune activité sur cette période',
+            style: ClientText.label.copyWith(color: t.muted),
+          ),
+        ),
+      );
+    }
+    final maxCount = breakdown
+        .map((b) => (b['count'] as num?)?.toInt() ?? 0)
+        .fold(0, (a, b) => a > b ? a : b);
+    return SizedBox(
+      height: 128,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: breakdown.map((b) {
+          final count = (b['count'] as num?)?.toInt() ?? 0;
+          final label = b['label'] as String? ?? '';
+          final heightFrac = maxCount > 0 ? count / maxCount : 0.0;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    '$count',
+                    style: ClientText.micro.copyWith(
+                      color: t.muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeOut,
+                    height: 4 + heightFrac * 76,
+                    decoration: BoxDecoration(
+                      gradient: AppColors.gradientSplash,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ClientText.micro.copyWith(
+                      color: t.muted,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
 }
 
 // ── Toggle Ventes / Livraisons ──────────────────────────────────────────────

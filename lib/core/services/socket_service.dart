@@ -46,6 +46,11 @@ class SocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _batchExpiredController = StreamController<String>.broadcast();
   final _batchCompletedController = StreamController<String>.broadcast();
+  // Acceptation d'une tournée par un livreur — côté client (voir
+  // batch_confirmation_screen.dart), manquait jusqu'ici alors que le
+  // backend émet déjà 'batch:accepted' (orders.service.js:acceptBatch).
+  final _batchAcceptedController =
+      StreamController<Map<String, dynamic>>.broadcast();
   // Paiements SamirPay (recharge wallet livreur + paiement client en ligne)
   final _walletUpdatedController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -82,6 +87,8 @@ class SocketService {
   Stream<Map<String, dynamic>> get onNewBatch => _newBatchController.stream;
   Stream<String> get onBatchExpired => _batchExpiredController.stream;
   Stream<String> get onBatchCompleted => _batchCompletedController.stream;
+  Stream<Map<String, dynamic>> get onBatchAccepted =>
+      _batchAcceptedController.stream;
   // Paiements SamirPay
   Stream<Map<String, dynamic>> get onWalletUpdated =>
       _walletUpdatedController.stream;
@@ -229,6 +236,11 @@ class SocketService {
       ..on('batch:completed', (data) {
         if (data is Map && data['batchId'] != null) {
           _batchCompletedController.add(data['batchId'] as String);
+        }
+      })
+      ..on('batch:accepted', (data) {
+        if (data is Map) {
+          _batchAcceptedController.add(Map<String, dynamic>.from(data));
         }
       })
       ..on('wallet:updated', (data) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -21,9 +22,9 @@ import '../../shared/widgets/colored_address_field.dart';
 import '../../shared/widgets/contact_mini_field.dart';
 import '../../shared/widgets/contact_picker.dart';
 import '../../shared/widgets/favorite_address_chips.dart';
+import '../../shared/widgets/floating_back_button.dart';
 import '../../shared/widgets/floating_map_button.dart';
 import '../../shared/widgets/map_placement_pin.dart';
-import '../../shared/widgets/map_theme_toggle_button.dart';
 import '../../shared/widgets/place_suggestions_list.dart';
 import '../../shared/widgets/pressable.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -35,7 +36,9 @@ import '../home_driver/navigation/navigation_service.dart';
 
 const _kBatchAccent = Color(0xFF0C7A5C);
 const _placeSuggestionsColors = PlaceSuggestionsColors(
-  background: Color(0xFF1A2540),
+  // AppColors.card (au lieu d'un bleu marine codé en dur légèrement
+  // différent) — même fond que le reste de l'app (DEM Pro compris).
+  background: AppColors.card,
   border: Colors.white24,
   divider: _kBatchAccent,
   iconBg: _kBatchAccent,
@@ -106,8 +109,39 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   final _repo = OrdersRepository();
   GoogleMapController? _mapController;
   String? _mapStyle;
-  final _pageCtrl = PageController();
   int _step = 0;
+
+  // ── Hauteur réelle du panneau (mesurée) ───────────────────────────────────
+  // Le panneau n'a plus de hauteur fixe (voir _estimatedPanelHeight) — les
+  // boutons flottants (recentrage/retour) et le cadrage caméra ont besoin de
+  // savoir où se trouve son bord haut *actuel*, mesuré après chaque frame.
+  final _sheetKey = GlobalKey();
+  double? _sheetHeight;
+
+  // `AnimatedSize` anime le panneau sur ~220ms de façon autonome (son
+  // propre AnimationController) — ça continue de peindre de nouvelles
+  // frames SANS jamais redemander à ce widget de se reconstruire. Un seul
+  // postFrameCallback ne capturait donc que la toute première frame de
+  // l'animation (panneau encore petit) ; il fallait un rebuild "par
+  // hasard" (un tap) pour re-déclencher une mesure et enfin voir la
+  // hauteur finale. `addPostFrameCallback` se ré-enchaîne lui-même sur
+  // chaque frame suivante tant que l'animation tourne (chaque frame
+  // rendue en déclenche un nouveau, rebuild ou pas), pendant une fenêtre
+  // large de 400ms — le temps que grandissement + fondu enchaîné soient
+  // bien terminés.
+  void _measureSheetHeight({int framesLeft = 24}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final h = _sheetKey.currentContext?.size?.height;
+      if (h != null &&
+          (_sheetHeight == null || (h - _sheetHeight!).abs() > 0.5)) {
+        setState(() => _sheetHeight = h);
+      }
+      if (framesLeft > 0) {
+        _measureSheetHeight(framesLeft: framesLeft - 1);
+      }
+    });
+  }
 
   late final _publicDio = Dio(
     BaseOptions(
@@ -211,17 +245,41 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   // Même comportement que Livraison simple/Express : la collecte démarre
   // pré-remplie avec la position actuelle du client, modifiable ensuite via
   // la recherche — évite d'avoir à taper sa propre adresse à chaque fois.
+  // Hauteur estimée du panneau du bas, pour cadrer la caméra au-dessus —
+  // Hauteur mesurée du panneau une fois rendu (voir _sheetHeight) ; avant la
+  // toute première mesure (premier frame), on retombe sur l'ancienne
+  // estimation à 62% de l'écran — plafond du panneau, voir le Container plus
+  // bas (BoxConstraints maxHeight). Même principe que DEM Pro (_panelHeight,
+  // dem_pro_batch_create_screen.dart), qui reste sur l'estimation fixe.
+  double get _estimatedPanelHeight =>
+      _sheetHeight ?? MediaQuery.sizeOf(context).height * 0.62;
+
+  // Centre la caméra sur [pos] en la décalant vers le SUD d'une distance
+  // équivalente à la moitié de la hauteur du panneau (convertie en degrés
+  // via la résolution Mercator au zoom utilisé) — [pos] apparaît alors plus
+  // au nord que le centre de l'écran, donc visible au-dessus du panneau au
+  // lieu d'être caché dessous. Même technique que Livraison simple/Express
+  // et DEM Pro.
+  void _centerMapVisible(LatLng pos, {double zoom = 14, double tilt = 30}) {
+    final panelH = _estimatedPanelHeight;
+    final metersPerPixel =
+        156543.03392 * cos(pos.latitude * pi / 180) / pow(2, zoom);
+    final latShift = (panelH / 2) * metersPerPixel / 111320.0;
+    final adjusted = LatLng(pos.latitude - latShift, pos.longitude);
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: adjusted, zoom: zoom, tilt: tilt),
+      ),
+    );
+  }
+
   Future<void> _fetchGpsInit() async {
     setState(() => _loadingGps = true);
     try {
       final pos = await NavigationService.requestAndGetPosition();
       if (pos != null && mounted) {
         final ll = LatLng(pos.latitude, pos.longitude);
-        _mapController?.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(target: ll, zoom: 14, tilt: 30),
-          ),
-        );
+        _centerMapVisible(ll);
         setState(() {
           _pickupLat = ll.latitude;
           _pickupLng = ll.longitude;
@@ -313,7 +371,14 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
       case AddressOptionChoice.currentLocation:
         await _useCurrentLocationFor(field);
       case AddressOptionChoice.favorites:
+        final fav = await pickFavoriteAddress(
+          context,
+          favorites: _favorites,
+          forPickup: field == 'pickup',
+        );
+        if (fav == null || !mounted) return;
         setState(() => _activeField = field);
+        _applyFavorite(fav);
       case AddressOptionChoice.map:
         _enterMapPlacement(field);
       case AddressOptionChoice.manual:
@@ -408,12 +473,116 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
   }
 
   void _goStep(int step) {
+    // La transition visuelle entre étapes est gérée par AnimatedSwitcher/
+    // AnimatedSize (voir build()) — plus besoin d'un PageController.
     setState(() => _step = step);
-    _pageCtrl.animateToPage(
-      step,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
+  }
+
+  // Contenu de l'étape courante — remplace les 4 pages du PageView. La Key
+  // distincte par étape est ce qui déclenche la transition d'AnimatedSwitcher
+  // (sans elle, passer de _TrajetStep à _ExpediteurStep serait déjà détecté
+  // via le runtimeType différent, mais une Key explicite est plus robuste).
+  Widget _buildStepContent() {
+    final Widget child;
+    switch (_step) {
+      case 0:
+        child = _TrajetStep(
+          pickupCtrl: _pickupCtrl,
+          pickupFocus: _pickupFocus,
+          pickupConfirmed: _pickupLat != null,
+          pickupManualEntry: _pickupManualEntry,
+          stops: _stops,
+          activeField: _activeField,
+          suggestions: _suggestions,
+          searching: _searching,
+          favorites: _favorites,
+          onSelectFavorite: _applyFavorite,
+          onPickupTap: () {
+            if (!_pickupManualEntry) {
+              _showAddressMenu('pickup');
+              return;
+            }
+            setState(() => _activeField = 'pickup');
+            _pickupFocus.requestFocus();
+          },
+          onStopTap: (i) {
+            if (!_stops[i].manualEntry) {
+              _showAddressMenu(i);
+              return;
+            }
+            setState(() => _activeField = i);
+            _stops[i].focusNode.requestFocus();
+          },
+          onQueryChanged: _onQueryChanged,
+          onSelectSuggestion: _selectSuggestion,
+          onPickupClear: () {
+            setState(() {
+              _pickupCtrl.clear();
+              _pickupLat = null;
+              _pickupLng = null;
+              _estimate = null;
+              _pickupManualEntry = false;
+            });
+          },
+          onAddStop: _addStop,
+          onRemoveStop: _removeStop,
+          onClearStop: _clearStop,
+          onNext: () => _goStep(1),
+          canNext: _readyForEstimate,
+        );
+      case 1:
+        child = _ExpediteurStep(
+          nameCtrl: _senderNameCtrl,
+          phoneCtrl: _senderPhoneCtrl,
+          onPickContact: () => pickContact(
+            context,
+            nameCtrl: _senderNameCtrl,
+            phoneCtrl: _senderPhoneCtrl,
+          ),
+          onPickMe: () {
+            _fillMe(_senderNameCtrl, _senderPhoneCtrl);
+            if (_senderPhoneCtrl.text.length >= 9) _goStep(2);
+          },
+          onNext: () {
+            if (!_validatePhone(context, _senderPhoneCtrl, 'expéditeur')) {
+              return;
+            }
+            _goStep(2);
+          },
+        );
+      case 2:
+        child = _DestinatairesStep(
+          stops: _stops,
+          onNext: () {
+            // Le numéro de chaque destinataire est désormais obligatoire —
+            // sans lui, le livreur n'a aucun moyen de le joindre à
+            // l'arrivée (voir _validatePhone, même règle que l'expéditeur).
+            for (var i = 0; i < _stops.length; i++) {
+              if (!_validatePhone(
+                context,
+                _stops[i].receiverPhoneCtrl,
+                'destinataire — arrêt ${i + 1}',
+              )) {
+                return;
+              }
+            }
+            _goStep(3);
+          },
+        );
+      default:
+        child = _ResumeStep(
+          pickupLabel: _pickupCtrl.text,
+          stops: _stops,
+          estimate: _estimate,
+          estimating: _estimating,
+          error: _estimateError,
+          ready: _readyForEstimate,
+          submitting: _submitting,
+          onEditTrajet: () => _goStep(0),
+          onSubmit: _submit,
+        );
+    }
+    return KeyedSubtree(key: ValueKey(_step), child: child);
   }
 
   Future<void> _loadMapStyle() async {
@@ -422,15 +591,9 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
     if (mounted) setState(() => _mapStyle = style);
   }
 
-  Future<void> _toggleMapTheme() async {
-    await ref.read(mapNightProvider.notifier).toggle();
-    await _loadMapStyle();
-  }
-
   @override
   void dispose() {
     _debounce?.cancel();
-    _pageCtrl.dispose();
     _pickupCtrl.dispose();
     _pickupFocus.dispose();
     _senderNameCtrl.dispose();
@@ -510,6 +673,11 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
     }
   }
 
+  // Un padding uniforme (72px) ne suffisait pas à garder tous les points
+  // visibles au-dessus du panneau, qui occupe 62% de l'écran — on étend
+  // artificiellement la borne sud, proportionnellement à la part d'écran
+  // cachée, même technique que Livraison simple/Express et DEM Pro
+  // (_fitBoundsVisible).
   Future<void> _fitMapToMarkers() async {
     final controller = _mapController;
     if (controller == null) return;
@@ -521,17 +689,23 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
     if (points.length < 2) return;
     final lats = points.map((p) => p.latitude);
     final lngs = points.map((p) => p.longitude);
+    final south = lats.reduce((a, b) => a < b ? a : b);
+    final north = lats.reduce((a, b) => a > b ? a : b);
+    final west = lngs.reduce((a, b) => a < b ? a : b);
+    final east = lngs.reduce((a, b) => a > b ? a : b);
+
+    final screenH = MediaQuery.sizeOf(context).height;
+    final panelH = _estimatedPanelHeight;
+    final hiddenFrac = (panelH / screenH).clamp(0.05, 0.85);
+    final visibleFrac = (1 - hiddenFrac).clamp(0.15, 0.95);
+    final latSpan = (north - south).clamp(0.0015, 1.0);
+    final extraSouth = latSpan * (hiddenFrac / visibleFrac);
+
     final bounds = LatLngBounds(
-      southwest: LatLng(
-        lats.reduce((a, b) => a < b ? a : b),
-        lngs.reduce((a, b) => a < b ? a : b),
-      ),
-      northeast: LatLng(
-        lats.reduce((a, b) => a > b ? a : b),
-        lngs.reduce((a, b) => a > b ? a : b),
-      ),
+      southwest: LatLng(south - extraSouth, west),
+      northeast: LatLng(north, east),
     );
-    await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 72));
+    await controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 56));
   }
 
   void _addStop() {
@@ -539,6 +713,22 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
     final entry = _StopEntry();
     setState(() => _stops.add(entry));
     _attachFocusListener(_stops.length - 1);
+  }
+
+  // Vide un arrêt (bouton "X" du champ) — jusqu'ici fait inline dans
+  // _StopCard sans setState(), donc le TextField se vidait (le
+  // TextEditingController notifie tout seul) mais la carte gardait le
+  // marqueur et "Suivant" son ancien état, jusqu'au prochain rebuild
+  // déclenché par autre chose. Voir onPickupClear ci-dessus pour le
+  // pendant côté collecte, qui lui faisait déjà ça correctement.
+  void _clearStop(int index) {
+    setState(() {
+      _stops[index].addressCtrl.clear();
+      _stops[index].lat = null;
+      _stops[index].lng = null;
+      _stops[index].manualEntry = false;
+      _estimate = null;
+    });
   }
 
   void _removeStop(int index) {
@@ -625,8 +815,10 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
             .toList(),
       });
       if (!mounted) return;
-      showDemToast(context, 'Tournée créée — recherche d\'un livreur…');
-      context.pushReplacement('/orders/batch/mine/${batch['id']}');
+      // Écran de recherche (radar + motos fictives sur la carte) au lieu
+      // d'aller directement sur le détail — même expérience que la
+      // livraison Simple/Express pendant la recherche d'un livreur.
+      context.pushReplacement('/orders/batch/confirmation', extra: batch);
     } catch (e) {
       if (mounted) showDemToast(context, friendlyError(e), isError: true);
     } finally {
@@ -636,6 +828,7 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _measureSheetHeight();
     final markers = <Marker>{
       if (_pickupLat != null)
         Marker(
@@ -728,41 +921,40 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
                 title: 'Livraison groupée',
                 step: _step,
                 stepCount: _kStepCount,
-                onBack: () {
-                  if (_step > 0) {
-                    _goStep(_step - 1);
-                  } else {
-                    context.pop();
-                  }
+                onReset: () {
+                  if (_step == 0) return;
+                  FocusScope.of(context).unfocus();
+                  _goStep(0);
                 },
               ),
             ),
           ),
-          // `bottom: 16` seul plaçait ce bouton sous la feuille du bas (elle
-          // occupe toujours 62% de l'écran, cf. Container ci-dessous) — donc
-          // invisible en pratique. Positionné juste au-dessus, avec le
-          // nouveau bouton de recentrage GPS à côté (même paire que
-          // Livraison simple/Express).
-          Positioned(
-            left: 16,
+          // Recentrage seul ici désormais — le bouton retour qui
+          // l'accompagnait vit maintenant au-dessus du panneau (voir plus
+          // bas), à cheval sur son bord haut, même position que DEM Pro. Le
+          // mode nuit de la carte a lui migré vers Réglages (préférence
+          // globale, voir mapNightProvider).
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
             right: 16,
-            bottom: MediaQuery.sizeOf(context).height * 0.62 + 16,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                MapThemeToggleButton(onTap: _toggleMapTheme, size: 44),
-                FloatingMapButton(
-                  icon: _loadingGps ? null : Icons.my_location,
-                  loading: _loadingGps,
-                  onTap: _fetchGpsInit,
-                ),
-              ],
+            bottom: _estimatedPanelHeight + 16,
+            child: FloatingMapButton(
+              icon: _loadingGps ? null : Icons.my_location,
+              loading: _loadingGps,
+              onTap: _fetchGpsInit,
             ),
           ),
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
+              key: _sheetKey,
               width: double.infinity,
+              // Plafond de sécurité — le panneau s'adapte désormais au
+              // contenu de l'étape affichée (voir AnimatedSize plus bas) et
+              // ne demande donc plus systématiquement ces 62% ; ça reste la
+              // limite haute pour ne jamais déborder de l'écran (ex : 3
+              // arrêts sur un petit device, voir _DestinatairesStep).
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.sizeOf(context).height * 0.62,
               ),
@@ -797,99 +989,59 @@ class _BatchCreateScreenState extends ConsumerState<BatchCreateScreen> {
                               onConfirm: _confirmMapPlacement,
                               onCancel: _cancelMapPlacement,
                             )
-                          : PageView(
-                              controller: _pageCtrl,
-                              physics: const NeverScrollableScrollPhysics(),
-                              onPageChanged: (i) => setState(() => _step = i),
-                              children: [
-                                _TrajetStep(
-                                  pickupCtrl: _pickupCtrl,
-                                  pickupFocus: _pickupFocus,
-                                  pickupConfirmed: _pickupLat != null,
-                                  pickupManualEntry: _pickupManualEntry,
-                                  stops: _stops,
-                                  activeField: _activeField,
-                                  suggestions: _suggestions,
-                                  searching: _searching,
-                                  favorites: _favorites,
-                                  onSelectFavorite: _applyFavorite,
-                                  onPickupTap: () {
-                                    if (!_pickupManualEntry) {
-                                      _showAddressMenu('pickup');
-                                      return;
-                                    }
-                                    setState(() => _activeField = 'pickup');
-                                    _pickupFocus.requestFocus();
-                                  },
-                                  onStopTap: (i) {
-                                    if (!_stops[i].manualEntry) {
-                                      _showAddressMenu(i);
-                                      return;
-                                    }
-                                    setState(() => _activeField = i);
-                                    _stops[i].focusNode.requestFocus();
-                                  },
-                                  onQueryChanged: _onQueryChanged,
-                                  onSelectSuggestion: _selectSuggestion,
-                                  onPickupClear: () {
-                                    setState(() {
-                                      _pickupCtrl.clear();
-                                      _pickupLat = null;
-                                      _pickupLng = null;
-                                      _estimate = null;
-                                      _pickupManualEntry = false;
-                                    });
-                                  },
-                                  onAddStop: _addStop,
-                                  onRemoveStop: _removeStop,
-                                  onNext: () => _goStep(1),
-                                  canNext: _readyForEstimate,
+                          // Un tap dans une zone vide referme le clavier —
+                          // même comportement que Livraison simple/Express
+                          // et DEM Pro.
+                          : GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => FocusScope.of(context).unfocus(),
+                              // AnimatedSize + AnimatedSwitcher à la place du
+                              // PageView : celui-ci forçait TOUTES les étapes
+                              // à la même hauteur fixe (62% d'écran), d'où le
+                              // vide sous le bouton dès qu'une étape était
+                              // plus courte que la plus haute. Le swipe était
+                              // déjà désactivé (NeverScrollableScrollPhysics)
+                              // — la navigation reste 100% par boutons, donc
+                              // rien ne dépendait du PageController lui-même.
+                              child: AnimatedSize(
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeOutCubic,
+                                alignment: Alignment.topCenter,
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 180),
+                                  transitionBuilder: (child, anim) =>
+                                      FadeTransition(
+                                        opacity: anim,
+                                        child: child,
+                                      ),
+                                  child: _buildStepContent(),
                                 ),
-                                _ExpediteurStep(
-                                  nameCtrl: _senderNameCtrl,
-                                  phoneCtrl: _senderPhoneCtrl,
-                                  onPickContact: () => pickContact(
-                                    context,
-                                    nameCtrl: _senderNameCtrl,
-                                    phoneCtrl: _senderPhoneCtrl,
-                                  ),
-                                  onPickMe: () {
-                                    _fillMe(_senderNameCtrl, _senderPhoneCtrl);
-                                    if (_senderPhoneCtrl.text.length >= 9)
-                                      _goStep(2);
-                                  },
-                                  onNext: () {
-                                    if (!_validatePhone(
-                                      context,
-                                      _senderPhoneCtrl,
-                                      'expéditeur',
-                                    )) {
-                                      return;
-                                    }
-                                    _goStep(2);
-                                  },
-                                ),
-                                _DestinatairesStep(
-                                  stops: _stops,
-                                  onNext: () => _goStep(3),
-                                ),
-                                _ResumeStep(
-                                  pickupLabel: _pickupCtrl.text,
-                                  stops: _stops,
-                                  estimate: _estimate,
-                                  estimating: _estimating,
-                                  error: _estimateError,
-                                  ready: _readyForEstimate,
-                                  submitting: _submitting,
-                                  onEditTrajet: () => _goStep(0),
-                                  onSubmit: _submit,
-                                ),
-                              ],
+                              ),
                             ),
                     ),
                   ],
                 ),
               ),
+            ),
+          ),
+          // ── RETOUR flottant — même niveau que le bouton de recentrage ───────
+          // Placé APRÈS (donc AU-DESSUS, z-order) le panneau — sinon celui-ci
+          // se dessine par-dessus et cache le bouton. La logique "reculer
+          // d'une étape" est désormais exclusive à ce bouton (le header ne
+          // fait plus que "retour à zéro", voir onReset).
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            left: 16,
+            bottom: _estimatedPanelHeight + 16,
+            child: FloatingBackButton(
+              onTap: () {
+                if (_step > 0) {
+                  _goStep(_step - 1);
+                } else {
+                  context.pop();
+                }
+              },
             ),
           ),
         ],
@@ -917,6 +1069,7 @@ class _TrajetStep extends StatelessWidget {
   final VoidCallback onPickupClear;
   final VoidCallback onAddStop;
   final ValueChanged<int> onRemoveStop;
+  final ValueChanged<int> onClearStop;
   final VoidCallback onNext;
   final bool canNext;
 
@@ -938,6 +1091,7 @@ class _TrajetStep extends StatelessWidget {
     required this.onPickupClear,
     required this.onAddStop,
     required this.onRemoveStop,
+    required this.onClearStop,
     required this.onNext,
     required this.canNext,
   });
@@ -947,33 +1101,83 @@ class _TrajetStep extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
       child: Column(
+        // min : sans ça, ce Column (comme les 3 autres étapes) remplit
+        // systématiquement toute la hauteur allouée par AnimatedSize/
+        // Flexible même quand son contenu est plus court — le vide ne
+        // disparaît pas, il se contente de changer de forme. C'est ce
+        // réglage, sur les 4 étapes, qui fait vraiment fonctionner le
+        // panneau à hauteur adaptative (voir build() dans l'écran parent).
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '1 collecte, jusqu\'à $_kMaxStops destinations — -20% sur le total.',
-                    style: ClientText.body.copyWith(color: Colors.white70),
+          // SingleChildScrollView simple, sans Flexible — un Flexible ici
+          // empêchait AnimatedSize (voir build() de l'écran parent) de
+          // détecter la vraie hauteur du contenu : Flexible s'adapte à
+          // l'espace qu'on lui donne plutôt que de réclamer ce dont il a
+          // réellement besoin, donc AnimatedSize se figeait sur une hauteur
+          // trop courte et le bas du contenu restait inaccessible sans
+          // scroller. Même pattern que l'étape Expéditeur (jamais eu ce
+          // problème). Le plafond de sécurité à 62% de l'écran reste géré
+          // plus haut (Container maxHeight, voir build()).
+          SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '1 collecte, jusqu\'à $_kMaxStops destinations — -20% sur le total.',
+                  style: ClientText.body.copyWith(color: Colors.white70),
+                ),
+                const SizedBox(height: 12),
+                AddressField(
+                  controller: pickupCtrl,
+                  focusNode: pickupFocus,
+                  hint: 'Adresse de collecte',
+                  dotColor: AppColors.success,
+                  active: activeField == 'pickup',
+                  confirmed: pickupConfirmed,
+                  readOnly: !pickupManualEntry,
+                  onTap: onPickupTap,
+                  onChanged: onQueryChanged,
+                  onClear: onPickupClear,
+                ),
+                if (activeField == 'pickup' &&
+                    (suggestions.isNotEmpty || searching))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: PlaceSuggestionsList(
+                      suggestions: suggestions,
+                      loading: searching,
+                      colors: _placeSuggestionsColors,
+                      onSelect: onSelectSuggestion,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  AddressField(
-                    controller: pickupCtrl,
-                    focusNode: pickupFocus,
-                    hint: 'Adresse de collecte',
-                    dotColor: AppColors.success,
-                    active: activeField == 'pickup',
-                    confirmed: pickupConfirmed,
-                    readOnly: !pickupManualEntry,
-                    onTap: onPickupTap,
-                    onChanged: onQueryChanged,
-                    onClear: onPickupClear,
+                if (activeField == 'pickup' && favorites.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: FavoriteAddressChips(
+                      favorites: favorites,
+                      onSelect: onSelectFavorite,
+                    ),
                   ),
-                  if (activeField == 'pickup' &&
-                      (suggestions.isNotEmpty || searching))
+                const SizedBox(height: 14),
+                Text(
+                  'Destinations (${stops.length}/$_kMaxStops)',
+                  style: ClientText.bodyStrong.copyWith(color: Colors.white),
+                ),
+                const SizedBox(height: 8),
+                for (var i = 0; i < stops.length; i++) ...[
+                  _StopCard(
+                    index: i,
+                    entry: stops[i],
+                    canRemove: stops.length > _kMinStops,
+                    onRemove: () => onRemoveStop(i),
+                    onQueryChanged: onQueryChanged,
+                    onTap: () => onStopTap(i),
+                    onClear: () => onClearStop(i),
+                    active: activeField == i,
+                  ),
+                  if (activeField == i && (suggestions.isNotEmpty || searching))
                     Padding(
-                      padding: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.only(top: 6, bottom: 6),
                       child: PlaceSuggestionsList(
                         suggestions: suggestions,
                         loading: searching,
@@ -981,84 +1185,44 @@ class _TrajetStep extends StatelessWidget {
                         onSelect: onSelectSuggestion,
                       ),
                     ),
-                  if (activeField == 'pickup' && favorites.isNotEmpty)
+                  if (activeField == i && favorites.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.only(bottom: 6),
                       child: FavoriteAddressChips(
                         favorites: favorites,
                         onSelect: onSelectFavorite,
                       ),
                     ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Destinations (${stops.length}/$_kMaxStops)',
-                    style: ClientText.bodyStrong.copyWith(color: Colors.white),
-                  ),
-                  const SizedBox(height: 8),
-                  for (var i = 0; i < stops.length; i++) ...[
-                    _StopCard(
-                      index: i,
-                      entry: stops[i],
-                      canRemove: stops.length > _kMinStops,
-                      onRemove: () => onRemoveStop(i),
-                      onQueryChanged: onQueryChanged,
-                      onTap: () => onStopTap(i),
-                      active: activeField == i,
-                    ),
-                    if (activeField == i &&
-                        (suggestions.isNotEmpty || searching))
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6, bottom: 6),
-                        child: PlaceSuggestionsList(
-                          suggestions: suggestions,
-                          loading: searching,
-                          colors: _placeSuggestionsColors,
-                          onSelect: onSelectSuggestion,
-                        ),
-                      ),
-                    if (activeField == i && favorites.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: FavoriteAddressChips(
-                          favorites: favorites,
-                          onSelect: onSelectFavorite,
-                        ),
-                      ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (stops.length < _kMaxStops)
-                    Pressable(
-                      onTap: onAddStop,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white24),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.add,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Ajouter un arrêt',
-                              style: ClientText.body.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  const SizedBox(height: 10),
                 ],
-              ),
+                if (stops.length < _kMaxStops)
+                  Pressable(
+                    onTap: onAddStop,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.add, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Ajouter un arrêt',
+                            style: ClientText.body.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 10),
@@ -1066,7 +1230,6 @@ class _TrajetStep extends StatelessWidget {
             label: 'Suivant — Expéditeur',
             trailingIcon: Icons.arrow_forward,
             onTap: canNext ? onNext : null,
-            color: _kBatchAccent,
           ),
         ],
       ),
@@ -1082,6 +1245,7 @@ class _StopCard extends StatelessWidget {
   final VoidCallback onRemove;
   final ValueChanged<String> onQueryChanged;
   final VoidCallback onTap;
+  final VoidCallback onClear;
   const _StopCard({
     required this.index,
     required this.entry,
@@ -1090,6 +1254,7 @@ class _StopCard extends StatelessWidget {
     required this.onRemove,
     required this.onQueryChanged,
     required this.onTap,
+    required this.onClear,
   });
 
   @override
@@ -1148,12 +1313,11 @@ class _StopCard extends StatelessWidget {
             readOnly: !entry.manualEntry,
             onTap: onTap,
             onChanged: onQueryChanged,
-            onClear: () {
-              entry.addressCtrl.clear();
-              entry.lat = null;
-              entry.lng = null;
-              entry.manualEntry = false;
-            },
+            // Délègue au parent (setState) — voir _clearStop dans
+            // _BatchCreateScreenState. Muter `entry` ici sans setState
+            // laissait la carte et le bouton "Suivant" avec leur ancien
+            // état jusqu'au prochain rebuild déclenché par autre chose.
+            onClear: onClear,
           ),
         ],
       ),
@@ -1182,28 +1346,65 @@ class _ExpediteurStep extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Qui dépose le colis au point de collecte ?',
+              'Veuillez renseigner les informations de l\'expéditeur',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.70),
-                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
+          const SizedBox(height: 8),
+          // Même astuce que Destinataires (voir plus bas) et Livraison
+          // Simple/Express — cohérence entre les flux.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Astuce : ',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Icon(
+                  Icons.person_outline_rounded,
+                  color: Colors.white.withValues(alpha: 0.70),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'sélectionnez un contact pour gagner du temps',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 10),
-          Expanded(
-            child: SingleChildScrollView(
-              child: ContactMiniField(
-                label: 'Expéditeur',
-                dotColor: AppColors.success,
-                nameCtrl: nameCtrl,
-                phoneCtrl: phoneCtrl,
-                onPick: onPickContact,
-                onPickMe: onPickMe,
-              ),
+          // Pas d'Expanded ici (contrairement à _DestinatairesStep, qui peut
+          // avoir 2-3 cartes et déborder) — une seule carte, taille fixe.
+          // Avec Expanded, ce contenu était étiré pour remplir toute la
+          // hauteur du panneau (62% de l'écran), poussant le bouton tout en
+          // bas et laissant un grand vide entre la carte et "Suivant".
+          SingleChildScrollView(
+            child: ContactMiniField(
+              label: 'Expéditeur',
+              dotColor: AppColors.success,
+              nameCtrl: nameCtrl,
+              phoneCtrl: phoneCtrl,
+              onPick: onPickContact,
+              onPickMe: onPickMe,
             ),
           ),
           const SizedBox(height: 12),
@@ -1211,7 +1412,6 @@ class _ExpediteurStep extends StatelessWidget {
             label: 'Suivant — Destinataire',
             trailingIcon: Icons.arrow_forward,
             onTap: onNext,
-            color: _kBatchAccent,
           ),
         ],
       ),
@@ -1230,38 +1430,75 @@ class _DestinatairesStep extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Align(
             alignment: Alignment.centerLeft,
+            // Plus "(optionnel)" — le numéro du destinataire est désormais
+            // obligatoire (voir onNext dans _buildStepContent) : sans lui,
+            // le livreur n'a aucun moyen de joindre le destinataire à
+            // l'arrivée.
             child: Text(
-              'Qui réceptionne à chaque arrêt ? (optionnel)',
+              'Veuillez renseigner les informations des destinataires',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.70),
-                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Astuce : ',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Icon(
+                  Icons.person_outline_rounded,
+                  color: Colors.white.withValues(alpha: 0.70),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'sélectionnez un contact pour gagner du temps',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 10),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  for (var i = 0; i < stops.length; i++) ...[
-                    ContactMiniField(
-                      label: 'Destinataire — Arrêt ${i + 1}',
-                      dotColor: AppColors.error,
+          // SingleChildScrollView simple, sans Flexible — voir le
+          // commentaire équivalent dans _TrajetStep : Flexible empêchait
+          // AnimatedSize de détecter la vraie hauteur du contenu.
+          SingleChildScrollView(
+            child: Column(
+              children: [
+                for (var i = 0; i < stops.length; i++) ...[
+                  ContactMiniField(
+                    label: 'Destinataire — Arrêt ${i + 1}',
+                    dotColor: AppColors.error,
+                    nameCtrl: stops[i].receiverNameCtrl,
+                    phoneCtrl: stops[i].receiverPhoneCtrl,
+                    onPick: () => pickContact(
+                      context,
                       nameCtrl: stops[i].receiverNameCtrl,
                       phoneCtrl: stops[i].receiverPhoneCtrl,
-                      onPick: () => pickContact(
-                        context,
-                        nameCtrl: stops[i].receiverNameCtrl,
-                        phoneCtrl: stops[i].receiverPhoneCtrl,
-                      ),
                     ),
-                    if (i < stops.length - 1) const SizedBox(height: 10),
-                  ],
+                  ),
+                  if (i < stops.length - 1) const SizedBox(height: 10),
                 ],
-              ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -1269,7 +1506,6 @@ class _DestinatairesStep extends StatelessWidget {
             label: 'Suivant — Résumé',
             trailingIcon: Icons.arrow_forward,
             onTap: onNext,
-            color: _kBatchAccent,
           ),
         ],
       ),
@@ -1306,37 +1542,78 @@ class _ResumeStep extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: onEditTrajet,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.card,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+          // SingleChildScrollView simple, sans Flexible — voir le
+          // commentaire équivalent dans _TrajetStep : Flexible empêchait
+          // AnimatedSize de détecter la vraie hauteur du contenu.
+          SingleChildScrollView(
+            child: Column(
+              children: [
+                GestureDetector(
+                  onTap: onEditTrajet,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.circle,
+                              color: AppColors.success,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                pickupLabel,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Icon(
+                              Icons.edit_outlined,
+                              color: AppColors.textSecondary.withValues(
+                                alpha: 0.5,
+                              ),
+                              size: 14,
+                            ),
+                          ],
+                        ),
+                        for (final s in stops) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(left: 5),
+                            child: Container(
+                              width: 2,
+                              height: 12,
+                              color: AppColors.textSecondary.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
+                          ),
                           Row(
                             children: [
                               const Icon(
-                                Icons.circle,
-                                color: AppColors.success,
-                                size: 12,
+                                Icons.location_on,
+                                color: AppColors.error,
+                                size: 14,
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  pickupLabel,
+                                  s.addressCtrl.text,
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -1345,84 +1622,44 @@ class _ResumeStep extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              Icon(
-                                Icons.edit_outlined,
-                                color: AppColors.textSecondary.withValues(
-                                  alpha: 0.5,
-                                ),
-                                size: 14,
-                              ),
                             ],
                           ),
-                          for (final s in stops) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(left: 5),
-                              child: Container(
-                                width: 2,
-                                height: 12,
-                                color: AppColors.textSecondary.withValues(
-                                  alpha: 0.3,
-                                ),
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.location_on,
-                                  color: AppColors.error,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    s.addressCtrl.text,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
                         ],
-                      ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  _PriceSummary(
-                    estimate: estimate,
-                    estimating: estimating,
-                    error: error,
-                    ready: ready,
-                  ),
-                  // Même rappel que Simple/Express : le mode de paiement par
-                  // défaut n'était jamais annoncé avant validation.
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.payments_outlined,
-                        size: 14,
-                        color: Colors.white.withValues(alpha: 0.60),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Paiement en espèces à la livraison par défaut — le paiement en ligne sera aussi proposé une fois un livreur trouvé.',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.60),
-                            fontSize: 11,
-                            height: 1.3,
-                          ),
+                ),
+                const SizedBox(height: 12),
+                _PriceSummary(
+                  estimate: estimate,
+                  estimating: estimating,
+                  error: error,
+                  ready: ready,
+                ),
+                // Même rappel que Simple/Express : le mode de paiement par
+                // défaut n'était jamais annoncé avant validation.
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.payments_outlined,
+                      size: 14,
+                      color: Colors.white.withValues(alpha: 0.60),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Paiement en espèces à la livraison par défaut — le paiement en ligne sera aussi proposé une fois un livreur trouvé.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.60),
+                          fontSize: 11,
+                          height: 1.3,
                         ),
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -1432,7 +1669,6 @@ class _ResumeStep extends StatelessWidget {
                 : 'Confirmer la tournée',
             onTap: (estimate != null && !submitting) ? onSubmit : null,
             loading: submitting,
-            color: _kBatchAccent,
           ),
         ],
       ),
@@ -1508,9 +1744,13 @@ class _PriceSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _kBatchAccent.withValues(alpha: 0.14),
+        // Même carte sombre que le trajet juste au-dessus (AppColors.card)
+        // plutôt qu'un lavis vert sombre — le vert `_kBatchAccent` (assez
+        // foncé) sur son propre fond teinté de la même couleur écrasait le
+        // contraste et jurait avec le reste de l'écran, tout en bleu.
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _kBatchAccent.withValues(alpha: 0.40)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1543,14 +1783,29 @@ class _PriceSummary extends StatelessWidget {
             ],
           ),
           if (discount > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Vous économisez ${formatFcfa(discount)} en groupant vos livraisons',
-              style: const TextStyle(
-                color: _kBatchAccent,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.successBright,
+                  size: 14,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Vous économisez ${formatFcfa(discount)} en groupant vos livraisons',
+                    style: const TextStyle(
+                      // successBright (vert clair) au lieu de _kBatchAccent —
+                      // lisible sur la carte sombre, au lieu du vert foncé
+                      // sur fond vert foncé d'avant.
+                      color: AppColors.successBright,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ],

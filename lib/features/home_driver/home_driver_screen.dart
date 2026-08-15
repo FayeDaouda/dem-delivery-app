@@ -173,7 +173,20 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     _loadHeatmap();
     _loadUnreadNotifCount();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(profileProvider.notifier).fetchProfile(goOnlineIfOffline: true);
+      ref
+          .read(profileProvider.notifier)
+          .fetchProfile(goOnlineIfOffline: true)
+          .then((_) {
+            // Sans ça, une course déjà en attente au moment de la connexion
+            // (dispatchée avant que ce livreur ne soit disponible) ne
+            // remonte que via un futur push socket ou l'expiration de
+            // l'offre en cours (jusqu'à 60s) — le livreur devait auparavant
+            // repasser hors ligne/en ligne pour forcer ce refresh REST.
+            if (!mounted) return;
+            if (ref.read(profileProvider).isAvailable) {
+              ref.read(availableOrdersProvider.notifier).refresh();
+            }
+          });
       _connectSocket();
       _startPolling();
     });
@@ -443,9 +456,14 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
         if (['ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].contains(status)) {
           active = o;
         }
+        // paymentMode 'merchant' exclu — rien à encaisser auprès du
+        // destinataire, c'est au commerçant DEM Pro de régler en ligne (voir
+        // active_order_screen.dart:_showMerchantHandlesPaymentDialog). Sans
+        // ce filtre, ces commandes remonteraient à tort comme "à encaisser".
         if (unpaid == null &&
             status == 'DELIVERED' &&
-            (o['paymentStatus'] as String? ?? '').toUpperCase() == 'PENDING') {
+            (o['paymentStatus'] as String? ?? '').toUpperCase() == 'PENDING' &&
+            o['paymentMode'] != 'merchant') {
           unpaid = o;
         }
         if (status != 'DELIVERED' && status != 'PAYMENT_CONFIRMED') continue;
@@ -759,6 +777,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
       ref,
       orderId: orderId,
       price: clientChargeFor(order),
+      isSplitInApp: order['proPaymentMode'] == 'SPLIT_IN_APP',
       onPaid: () {
         if (mounted) setState(() => _unpaidOrder = null);
       },
@@ -1125,67 +1144,10 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
               child: Row(
                 children: [
                   // Toggle
-                  GestureDetector(
-                    onTap: profile.isLoading ? null : _toggleAvailability,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isAvailable
-                            ? AppColors.primary
-                            : Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.circle,
-                            size: 8,
-                            color: isAvailable
-                                ? Colors.white
-                                : AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            isAvailable ? 'En ligne' : 'Hors ligne',
-                            style: ClientText.body.copyWith(
-                              color: isAvailable
-                                  ? Colors.white
-                                  : AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          profile.isLoading
-                              ? const SizedBox(
-                                  width: 28,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Switch.adaptive(
-                                  value: isAvailable,
-                                  onChanged: (_) => _toggleAvailability(),
-                                  activeThumbColor: Colors.white,
-                                  activeTrackColor: Colors.white.withValues(
-                                    alpha: 0.4,
-                                  ),
-                                  inactiveThumbColor: AppColors.textSecondary,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.padded,
-                                ),
-                        ],
-                      ),
-                    ),
+                  _AvailabilityPill(
+                    isAvailable: isAvailable,
+                    isLoading: profile.isLoading,
+                    onTap: _toggleAvailability,
                   ),
                   const Spacer(),
                   GestureDetector(
@@ -2741,6 +2703,221 @@ class _StatRow extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Pill "En ligne / Hors ligne" du header — animation premium ──────────────
+// Remplace l'ancien Switch.adaptive générique : gradient qui morphe, point
+// qui pulse en radar quand en ligne, mini-switch custom avec rebond et
+// retour haptique. Même esprit que le pulse du marqueur driver sur la carte.
+class _AvailabilityPill extends StatefulWidget {
+  final bool isAvailable;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  const _AvailabilityPill({
+    required this.isAvailable,
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  @override
+  State<_AvailabilityPill> createState() => _AvailabilityPillState();
+}
+
+class _AvailabilityPillState extends State<_AvailabilityPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _radarCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  )..repeat();
+  bool _pressed = false;
+
+  @override
+  void dispose() {
+    _radarCtrl.dispose();
+    super.dispose();
+  }
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final on = widget.isAvailable;
+    return GestureDetector(
+      onTapDown: widget.isLoading ? null : (_) => _setPressed(true),
+      onTapCancel: () => _setPressed(false),
+      onTapUp: (_) => _setPressed(false),
+      onTap: widget.isLoading
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              widget.onTap();
+            },
+      child: AnimatedScale(
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: on
+                  ? [AppColors.online, AppColors.primary]
+                  : [
+                      Colors.black.withValues(alpha: 0.75),
+                      Colors.black.withValues(alpha: 0.6),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: (on ? AppColors.online : Colors.black).withValues(
+                  alpha: on ? 0.45 : 0.35,
+                ),
+                blurRadius: on ? 16 : 8,
+                spreadRadius: on ? 1 : 0,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Point radar — pulse en anneau tant que le livreur est en ligne
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: AnimatedBuilder(
+                  animation: _radarCtrl,
+                  builder: (_, __) {
+                    final t = _radarCtrl.value;
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (on)
+                          Opacity(
+                            opacity: (1 - t) * 0.55,
+                            child: Transform.scale(
+                              scale: 1 + t * 1.8,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: on ? Colors.white : AppColors.textSecondary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: SizeTransition(
+                    sizeFactor: anim,
+                    axis: Axis.horizontal,
+                    // Sans ça, l'axe croisé (hauteur) reste sans contrainte
+                    // et le widget s'étire pour remplir tout le Stack parent.
+                    fixedCrossAxisSizeFactor: 1.0,
+                    child: child,
+                  ),
+                ),
+                child: Text(
+                  on ? 'En ligne' : 'Hors ligne',
+                  key: ValueKey(on),
+                  style: ClientText.body.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: widget.isLoading
+                    ? const SizedBox(
+                        key: ValueKey('loading'),
+                        width: 28,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : _MiniSwitch(key: const ValueKey('switch'), value: on),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Mini-switch custom (remplace Switch.adaptive) — même teinte que la pill,
+// thumb qui glisse avec un léger rebond (easeOutBack) plutôt qu'un slide plat.
+class _MiniSwitch extends StatelessWidget {
+  final bool value;
+
+  const _MiniSwitch({super.key, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      width: 34,
+      height: 20,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withValues(alpha: value ? 0.35 : 0.15),
+      ),
+      child: AnimatedAlign(
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutBack,
+        alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 3,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
         ),
       ),
     );

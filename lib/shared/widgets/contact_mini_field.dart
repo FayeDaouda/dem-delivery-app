@@ -85,10 +85,20 @@ class ContactMiniField extends StatelessWidget {
                 ),
               GestureDetector(
                 onTap: onPick,
-                child: const Icon(
-                  Icons.contacts_rounded,
-                  color: AppColors.textMuted,
-                  size: 26,
+                // Même habillage que le bouton "Moi" (fond teinté +
+                // coins arrondis) — sans ça, rien ne signalait que cette
+                // icône est cliquable.
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: dotColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.person_outline_rounded,
+                    color: dotColor,
+                    size: 20,
+                  ),
                 ),
               ),
             ],
