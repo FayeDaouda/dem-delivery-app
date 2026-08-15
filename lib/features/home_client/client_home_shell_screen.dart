@@ -1458,7 +1458,32 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                 ),
               ),
 
-            // ── Recentrer / favoris / badge (accueil) ou recentrer seul (assistant) ──
+            // ── Feuille du bas ───────────────────────────────────────────────
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: isWizard ? 0 : (_navBarHeight + bottomInset),
+                ),
+                child: HomeClientSheetScaffold(
+                  sheetKey: _sheetKey,
+                  panelHeight: _panelHeight,
+                  dragOffset: _dragOffset,
+                  isDragging: _isDragging,
+                  keyboardHeight: keyboardH,
+                  minPanelContent: _kMinPanelContent,
+                  onDraggingChanged: (v) => setState(() => _isDragging = v),
+                  onDragOffsetChanged: (v) => setState(() => _dragOffset = v),
+                  onTapDismissKeyboard: () => FocusScope.of(context).unfocus(),
+                  child: _buildSheetContent(),
+                ),
+              ),
+            ),
+
+            // ── Recentrer / favoris / badge (accueil) ou recentrer seul
+            // (assistant) — placé APRÈS (donc AU-DESSUS, z-order) la
+            // feuille : sinon celle-ci se dessine par-dessus et cache ces
+            // boutons (repéré en test — même règle déjà appliquée plus bas
+            // au bouton retour, oubliée ici par erreur).
             if (!isWizard)
               Positioned(
                 left: 0,
@@ -1541,27 +1566,6 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                   onTap: _orderWizard!.refreshGps,
                 ),
               ),
-
-            // ── Feuille du bas ───────────────────────────────────────────────
-            Positioned.fill(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom: isWizard ? 0 : (_navBarHeight + bottomInset),
-                ),
-                child: HomeClientSheetScaffold(
-                  sheetKey: _sheetKey,
-                  panelHeight: _panelHeight,
-                  dragOffset: _dragOffset,
-                  isDragging: _isDragging,
-                  keyboardHeight: keyboardH,
-                  minPanelContent: _kMinPanelContent,
-                  onDraggingChanged: (v) => setState(() => _isDragging = v),
-                  onDragOffsetChanged: (v) => setState(() => _dragOffset = v),
-                  onTapDismissKeyboard: () => FocusScope.of(context).unfocus(),
-                  child: _buildSheetContent(),
-                ),
-              ),
-            ),
 
             // ── Bouton retour flottant (assistant uniquement) ───────────────
             if (isWizard)
