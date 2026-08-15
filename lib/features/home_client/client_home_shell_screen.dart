@@ -491,12 +491,17 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
 
   @override
   void requestSheetRemeasure() {
-    // Repart d'une chaîne de mesure fraîche à chaque changement de mode/
-    // étape significatif — celle déjà en cours (si elle en est à sa
-    // dernière frame programmée) pourrait sinon s'arrêter juste avant que
-    // le nouveau contenu n'ait fini de s'installer.
+    // NE remet PLUS _sheetHeight à null ici (comme avant) : ça faisait
+    // retomber _panelHeight sur le repli à 62% de l'écran pendant les 1-2
+    // frames avant qu'une nouvelle mesure arrive — un gonflement brusque du
+    // panneau suivi d'un rétrécissement vers la vraie taille, au lieu d'une
+    // seule transition nette. Perçu comme de la lenteur en test, surtout au
+    // bouton retour (retour à une étape plus courte que celle quittée).
+    // On garde la hauteur ACTUELLE (encore valide un instant, l'ancien
+    // contenu ne disparaît pas d'un coup) le temps qu'une chaîne de mesure
+    // fraîche la corrige en douceur vers la vraie taille du nouveau
+    // contenu, dès qu'elle est connue.
     _measuringSheet = false;
-    setState(() => _sheetHeight = null);
     _measureSheetHeight();
   }
 
@@ -1230,6 +1235,26 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
       ? _orderWizard!.refreshGps
       : _batchWizard!.refreshGps;
 
+  // Recalcule la position à l'écran de l'anneau de pulsation du point de
+  // collecte — sans condition (pas la variante "maybe") : le point suivi
+  // n'a pas forcément changé, mais sa position à L'ÉCRAN si dès que la
+  // caméra bouge. Appelé aussi bien en continu pendant un pan/zoom
+  // (onCameraMove) qu'à l'arrêt (onCameraIdle) — voir le commentaire sur
+  // onCameraMove pour le bug que l'appel continu corrige.
+  void _syncPickupScreenPos() {
+    if (_mode == ClientHomeMode.expressSimpleWizard &&
+        _orderWizard!.pickupLat != null) {
+      _orderWizard!.forceUpdatePickupScreenPos(
+        LatLng(_orderWizard!.pickupLat!, _orderWizard!.pickupLng!),
+      );
+    } else if (_mode == ClientHomeMode.batchWizard &&
+        _batchWizard!.pickupLat != null) {
+      _batchWizard!.forceUpdatePickupScreenPos(
+        LatLng(_batchWizard!.pickupLat!, _batchWizard!.pickupLng!),
+      );
+    }
+  }
+
   Set<Marker> get _markers {
     final result = <Marker>{};
     if (_mode == ClientHomeMode.home) {
@@ -1341,32 +1366,19 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                     if ((pos.zoom - _currentZoom).abs() > 0.5)
                       setState(() => _currentZoom = pos.zoom);
                   }
+                  // En continu PENDANT le geste (pas seulement à l'arrêt,
+                  // voir onCameraIdle) — sinon l'anneau de pulsation reste
+                  // figé à sa position d'AVANT le glissé pendant tout le
+                  // geste, alors que le marqueur natif (rendu par le SDK
+                  // Maps, lui, suit déjà la carte en continu) : l'écart
+                  // entre les deux donne l'impression que l'anneau "pulse au
+                  // mauvais endroit" tant que la carte bouge, repéré en test.
+                  _syncPickupScreenPos();
                 },
                 onCameraIdle: () {
                   setState(() => _isMapMoving = false);
                   _programmaticMove = false;
-                  if (_mode == ClientHomeMode.expressSimpleWizard &&
-                      _orderWizard!.pickupLat != null) {
-                    // Sans condition (pas la variante "maybe") — le point
-                    // suivi n'a pas forcément changé, mais après un
-                    // pan/zoom/animation de caméra, sa position à l'écran
-                    // si. Bug d'anneau de pulsation mal positionné repéré en
-                    // test, corrigé ici.
-                    _orderWizard!.forceUpdatePickupScreenPos(
-                      LatLng(
-                        _orderWizard!.pickupLat!,
-                        _orderWizard!.pickupLng!,
-                      ),
-                    );
-                  } else if (_mode == ClientHomeMode.batchWizard &&
-                      _batchWizard!.pickupLat != null) {
-                    _batchWizard!.forceUpdatePickupScreenPos(
-                      LatLng(
-                        _batchWizard!.pickupLat!,
-                        _batchWizard!.pickupLng!,
-                      ),
-                    );
-                  }
+                  _syncPickupScreenPos();
                 },
                 markers: _markers,
                 polylines: _polylines,
