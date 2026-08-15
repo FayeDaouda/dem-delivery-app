@@ -928,27 +928,35 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _buildSheetHandle(),
-                              // `Flexible` ici forçait le panneau à toujours
-                              // grandir jusqu'au ConstrainedBox(maxHeight:
-                              // 0.86*écran) ci-dessus, quel que soit le
-                              // contenu réel de l'étape (voir _panelHeight
-                              // et le diagnostic pré-prod) — AnimatedSize
-                              // fait maintenant épouser la vraie hauteur du
-                              // contenu, avec transition douce entre steps.
-                              Container(
-                                key: _sheetKey,
-                                child: AnimatedSize(
-                                  duration: const Duration(milliseconds: 220),
-                                  curve: Curves.easeOutCubic,
-                                  alignment: Alignment.topCenter,
-                                  child: SingleChildScrollView(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      20,
-                                      0,
-                                      20,
-                                      16,
+                              // Le `Flexible` reste nécessaire (retiré puis
+                              // réintroduit — voir diagnostic pré-prod) :
+                              // sans lui, ce Container reçoit une hauteur
+                              // non bornée par la place réellement dispo à
+                              // côté de la poignée/du bouton, et le
+                              // SingleChildScrollView ci-dessous — qui
+                              // remplit tout l'espace qu'on lui donne au
+                              // lieu de le rendre — pousse alors le bouton
+                              // hors de l'écran (overflow), notamment quand
+                              // le clavier réduit la place dispo. `Flexible`
+                              // borne correctement cet espace ; AnimatedSize
+                              // fait toujours épouser la vraie hauteur du
+                              // contenu QUAND il tient dans cet espace.
+                              Flexible(
+                                child: Container(
+                                  key: _sheetKey,
+                                  child: AnimatedSize(
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Curves.easeOutCubic,
+                                    alignment: Alignment.topCenter,
+                                    child: SingleChildScrollView(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        20,
+                                        0,
+                                        20,
+                                        16,
+                                      ),
+                                      child: _buildPanel(),
                                     ),
-                                    child: _buildPanel(),
                                   ),
                                 ),
                               ),
