@@ -9,7 +9,6 @@ import '../../features/auth/screens/role_selection_screen.dart';
 import '../../features/auth/screens/driver_onboarding_screen.dart';
 import '../../features/auth/screens/client_onboarding_screen.dart';
 import '../../features/home_client/client_home_shell_screen.dart';
-import '../../features/home_client/batch_create_screen.dart';
 import '../../features/home_client/batch_confirmation_screen.dart';
 import '../../features/home_client/batch_tracking_screen.dart';
 import '../../features/home_client/order_confirmation_screen.dart';
@@ -221,10 +220,9 @@ final appRouter = GoRouter(
     // plus une route séparée. Confirmé qu'aucun deep-link externe ne pointe
     // vers cette route avant suppression (seule '/dem-pro/orders/create',
     // sans rapport, existe ailleurs).
-    GoRoute(
-      path: '/orders/batch/create',
-      builder: (context, state) => const BatchCreateScreen(),
-    ),
+    // '/orders/batch/create' supprimée (fusion pré-production, étape B) —
+    // Groupée est désormais aussi un mode de ClientHomeShellScreen, même
+    // raisonnement que Express/Simple ci-dessus.
     GoRoute(
       path: '/orders/batch/confirmation',
       builder: (context, state) {

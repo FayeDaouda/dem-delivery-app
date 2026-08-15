@@ -40,6 +40,7 @@ import '../deliveries/data/orders_repository.dart';
 import '../deliveries/providers/orders_provider.dart';
 import '../home_driver/navigation/navigation_service.dart';
 import '../notifications/data/notifications_repository.dart';
+import 'batch_wizard/batch_wizard_controller.dart';
 import 'home_client_sheet_scaffold.dart';
 import 'map_host.dart';
 import 'order_wizard/order_wizard_controller.dart';
@@ -70,6 +71,7 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
   // ── Mode ─────────────────────────────────────────────────────────────────
   ClientHomeMode _mode = ClientHomeMode.home;
   OrderWizardController? _orderWizard;
+  BatchWizardController? _batchWizard;
 
   // ── Accueil : commandes / notifications ────────────────────────────────
   Map<String, dynamic>? _user;
@@ -245,6 +247,7 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
     _pollTimer?.cancel();
     _mapController?.dispose();
     _orderWizard?.dispose();
+    _batchWizard?.dispose();
     super.dispose();
   }
 
@@ -1026,6 +1029,29 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
     requestSheetRemeasure();
   }
 
+  Future<void> _enterGroupee() async {
+    if (!await ensureLocationEnabled(context)) return;
+    if (!mounted) return;
+    setState(() {
+      _batchWizard ??= BatchWizardController(
+        mapHost: this,
+        onChanged: () => setState(() {}),
+        onSubmitSuccess: () {
+          setState(() {
+            _batchWizard?.dispose();
+            _batchWizard = null;
+            _mode = ClientHomeMode.home;
+          });
+        },
+        vsync: this,
+      );
+      _mode = ClientHomeMode.batchWizard;
+      _dragOffset = 0;
+      _isDragging = false;
+    });
+    requestSheetRemeasure();
+  }
+
   void _exitWizardToHome() {
     setState(() {
       _mode = ClientHomeMode.home;
@@ -1039,6 +1065,18 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
   void _handleBack() {
     if (_mode == ClientHomeMode.expressSimpleWizard) {
       final wizard = _orderWizard!;
+      if (wizard.isMapPlacementMode) {
+        wizard.isMapPlacementMode = false;
+        setState(() {});
+        return;
+      }
+      if (wizard.step > 0) {
+        wizard.goStep(wizard.step - 1, context);
+      } else {
+        _exitWizardToHome();
+      }
+    } else if (_mode == ClientHomeMode.batchWizard) {
+      final wizard = _batchWizard!;
       if (wizard.isMapPlacementMode) {
         wizard.isMapPlacementMode = false;
         setState(() {});
@@ -1122,13 +1160,7 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                       label: 'Groupée',
                       valueLabel: 'Économique',
                       color: AppColors.accentIndigo,
-                      onTap: () async {
-                        // Étape B — encore l'ancienne route séparée pour l'instant.
-                        if (!await ensureLocationEnabled(context)) return;
-                        if (!mounted) return;
-                        await context.push('/orders/batch/create');
-                        _checkPendingOrder();
-                      },
+                      onTap: () => _enterGroupee(),
                     ),
                   ),
                 ),
@@ -1147,9 +1179,23 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
       case ClientHomeMode.expressSimpleWizard:
         return _orderWizard!.buildStep(context);
       case ClientHomeMode.batchWizard:
-        return _buildHomeSheet();
+        return _batchWizard!.buildStep(context);
     }
   }
+
+  // Le bouton flottant "recentrer" du mode assistant est commun aux deux
+  // parcours (Express/Simple, Groupée) — évite un `if (_mode == ...)`
+  // dupliqué à chaque endroit qui en a besoin (voir la rangée de boutons
+  // flottants juste au-dessus de la feuille).
+  bool get _activeWizardLoadingGps =>
+      _mode == ClientHomeMode.expressSimpleWizard
+      ? _orderWizard!.loadingGps
+      : _batchWizard!.loadingGps;
+
+  VoidCallback get _activeWizardRefreshGps =>
+      _mode == ClientHomeMode.expressSimpleWizard
+      ? _orderWizard!.refreshGps
+      : _batchWizard!.refreshGps;
 
   Set<Marker> get _markers {
     final result = <Marker>{};
@@ -1180,13 +1226,17 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
       }
     } else if (_mode == ClientHomeMode.expressSimpleWizard) {
       result.addAll(_orderWizard!.markers);
+    } else if (_mode == ClientHomeMode.batchWizard) {
+      result.addAll(_batchWizard!.markers);
     }
     return result;
   }
 
   Set<Polyline> get _polylines {
-    if (_mode == ClientHomeMode.expressSimpleWizard)
+    if (_mode == ClientHomeMode.expressSimpleWizard) {
       return _orderWizard!.polylines;
+    }
+    if (_mode == ClientHomeMode.batchWizard) return _batchWizard!.polylines;
     return {};
   }
 
@@ -1206,14 +1256,22 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
     final isWizard = _mode != ClientHomeMode.home;
     final isPlacement =
         isWizard &&
-        _mode == ClientHomeMode.expressSimpleWizard &&
-        _orderWizard!.isMapPlacementMode;
+        ((_mode == ClientHomeMode.expressSimpleWizard &&
+                _orderWizard!.isMapPlacementMode) ||
+            (_mode == ClientHomeMode.batchWizard &&
+                _batchWizard!.isMapPlacementMode));
 
     if (_mode == ClientHomeMode.expressSimpleWizard &&
         _orderWizard!.pickupLat != null &&
         !isPlacement) {
       _orderWizard!.maybeUpdatePickupScreenPos(
         LatLng(_orderWizard!.pickupLat!, _orderWizard!.pickupLng!),
+      );
+    } else if (_mode == ClientHomeMode.batchWizard &&
+        _batchWizard!.pickupLat != null &&
+        !isPlacement) {
+      _batchWizard!.maybeUpdatePickupScreenPos(
+        LatLng(_batchWizard!.pickupLat!, _batchWizard!.pickupLng!),
       );
     }
 
@@ -1267,6 +1325,14 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                         _orderWizard!.pickupLng!,
                       ),
                     );
+                  } else if (_mode == ClientHomeMode.batchWizard &&
+                      _batchWizard!.pickupLat != null) {
+                    _batchWizard!.forceUpdatePickupScreenPos(
+                      LatLng(
+                        _batchWizard!.pickupLat!,
+                        _batchWizard!.pickupLng!,
+                      ),
+                    );
                   }
                 },
                 markers: _markers,
@@ -1311,6 +1377,15 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                 color: AppColors.success,
                 size: 66,
               ),
+            if (_mode == ClientHomeMode.batchWizard &&
+                _batchWizard!.pickupLat != null &&
+                !(_batchWizard!.isMapPlacementMode &&
+                    _batchWizard!.activeField == 'pickup'))
+              ScreenPulseRing(
+                position: _batchWizard!.pickupScreenPos,
+                color: AppColors.success,
+                size: 66,
+              ),
 
             if (isPlacement)
               Center(
@@ -1320,9 +1395,13 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                     scale: _isMapMoving ? 1.15 : 1.0,
                     duration: const Duration(milliseconds: 200),
                     child: MapPlacementPin(
-                      color: _orderWizard!.isSelectingPickup
-                          ? AppColors.success
-                          : AppColors.error,
+                      color: _mode == ClientHomeMode.expressSimpleWizard
+                          ? (_orderWizard!.isSelectingPickup
+                                ? AppColors.success
+                                : AppColors.error)
+                          : (_batchWizard!.activeField == 'pickup'
+                                ? AppColors.success
+                                : AppColors.error),
                     ),
                   ),
                 ),
@@ -1374,6 +1453,14 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: _buildOrderWizardTopBar(),
+                        ),
+                      )
+                    : _mode == ClientHomeMode.batchWizard
+                    ? KeyedSubtree(
+                        key: const ValueKey('batch-top-bar'),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _buildBatchWizardTopBar(),
                         ),
                       )
                     : !isWizard
@@ -1556,11 +1643,11 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                             children: [
                               FloatingBackButton(onTap: _handleBack),
                               FloatingMapButton(
-                                icon: _orderWizard!.loadingGps
+                                icon: _activeWizardLoadingGps
                                     ? null
                                     : Icons.my_location,
-                                loading: _orderWizard!.loadingGps,
-                                onTap: _orderWizard!.refreshGps,
+                                loading: _activeWizardLoadingGps,
+                                onTap: _activeWizardRefreshGps,
                               ),
                             ],
                           )
@@ -1675,6 +1762,30 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
               const SizedBox(height: 8),
               if (wizard.step == 0) ..._buildOrderAddressFields(wizard),
             ],
+          ),
+        ),
+      ),
+    ];
+  }
+
+  // Contrairement à Express/Simple, les champs d'adresse de Groupée (collecte
+  // + arrêts dynamiques) restent DANS la feuille (étape Trajet) — même
+  // architecture que l'ancien batch_create_screen.dart, adaptée à une liste
+  // de 2-3 arrêts qui ne tiendrait pas proprement dans la barre du haut.
+  List<Widget> _buildBatchWizardTopBar() {
+    final wizard = _batchWizard!;
+    return [
+      SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: WizardTopBar(
+            title: 'Livraison groupée',
+            step: wizard.step,
+            onReset: () {
+              if (wizard.step == 0) return;
+              FocusScope.of(context).unfocus();
+              wizard.goStep(0, context);
+            },
           ),
         ),
       ),
