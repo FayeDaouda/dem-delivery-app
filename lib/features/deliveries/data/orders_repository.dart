@@ -252,9 +252,6 @@ class OrdersRepository {
     String orderType = 'DELIVERY',
     String priority = 'NORMAL',
   }) async {
-    debugPrint(
-      '[getEstimate] CALLING pickup=($pickupLat,$pickupLng) delivery=($deliveryLat,$deliveryLng)',
-    );
     try {
       final res = await _dio.get(
         '/orders/estimate',
@@ -267,7 +264,6 @@ class OrdersRepository {
           'priority': priority,
         },
       );
-      debugPrint('[getEstimate] OK: ${res.data}');
       return res.data as Map<String, dynamic>;
     } on DioException catch (e) {
       debugPrint(

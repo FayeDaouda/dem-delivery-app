@@ -938,6 +938,11 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
 
   // ── Submit ────────────────────────────────────────────────────────────────
   Future<void> _submit() async {
+    // Défense en profondeur — le setState juste en dessous désactive déjà le
+    // bouton dès la 1ère frame, et le serveur déduplique aussi (voir
+    // orders.service.js:createOrder), mais rien n'empêchait un second appel
+    // synchrone de passer avant le rebuild.
+    if (_submitting) return;
     if (_pickupCtrl.text.trim().isEmpty) {
       _pickupCtrl.text =
           '${_pickupLat!.toStringAsFixed(4)}, ${_pickupLng!.toStringAsFixed(4)}';
