@@ -8,8 +8,7 @@ import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/role_selection_screen.dart';
 import '../../features/auth/screens/driver_onboarding_screen.dart';
 import '../../features/auth/screens/client_onboarding_screen.dart';
-import '../../features/home_client/home_client_screen.dart';
-import '../../features/home_client/order_create_screen.dart';
+import '../../features/home_client/client_home_shell_screen.dart';
 import '../../features/home_client/batch_create_screen.dart';
 import '../../features/home_client/batch_confirmation_screen.dart';
 import '../../features/home_client/batch_tracking_screen.dart';
@@ -195,7 +194,7 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/client/home',
-      builder: (context, state) => const HomeClientScreen(),
+      builder: (context, state) => const ClientHomeShellScreen(),
     ),
     GoRoute(
       path: '/client/profile',
@@ -217,14 +216,11 @@ final appRouter = GoRouter(
       path: '/client/referrals',
       builder: (context, state) => const ReferralsScreen(),
     ),
-    GoRoute(
-      path: '/orders/create',
-      builder: (context, state) {
-        final type = state.uri.queryParameters['type'] ?? 'DELIVERY';
-        final priority = state.uri.queryParameters['priority'] ?? 'NORMAL';
-        return OrderCreateScreen(orderType: type, priority: priority);
-      },
-    ),
+    // '/orders/create' supprimée (fusion pré-production, étape A) — Express/
+    // Simple sont désormais des modes de ClientHomeShellScreen ('/client/home'),
+    // plus une route séparée. Confirmé qu'aucun deep-link externe ne pointe
+    // vers cette route avant suppression (seule '/dem-pro/orders/create',
+    // sans rapport, existe ailleurs).
     GoRoute(
       path: '/orders/batch/create',
       builder: (context, state) => const BatchCreateScreen(),
