@@ -40,10 +40,12 @@ import '../deliveries/data/orders_repository.dart';
 import '../home_driver/navigation/map_theme.dart';
 import '../home_driver/navigation/navigation_service.dart';
 
-// ─── Heights par step ────────────────────────────────────────────────────────
-// Les hauteurs tablette sont plus généreuses pour exploiter l'écran iPad.
-const _kPanelHeightsPhone = [215.0, 290.0, 350.0, 250.0];
-const _kPanelHeightsTablet = [255.0, 340.0, 420.0, 300.0];
+// ─── Hauteur du panneau du bas ───────────────────────────────────────────────
+// Plus de tableau de hauteurs fixes par step (voir diagnostic pré-prod) — le
+// panneau s'adapte désormais au contenu réel de l'étape affichée, mesuré via
+// _sheetKey/_measureSheetHeight (même mécanisme que batch_create_screen.dart).
+// _kMinPanelContent reste : c'est la hauteur MINIMALE quand le tiroir est
+// rétracté au glissé (drag handle), pas une estimation de contenu.
 const _kMinPanelContent =
     66.0; // button (52) + bottom padding (12) + 2px margin
 
@@ -84,7 +86,28 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
   int _step = 0; // 0=Trajet, 1=Contacts, 2=Résumé
   double _panelDragOffset = 0.0;
   bool _isDragging = false;
-  late final PageController _pageCtrl;
+
+  // ── Hauteur réelle du panneau (mesurée) ───────────────────────────────────
+  // Voir batch_create_screen.dart pour le détail du mécanisme — la seule
+  // différence ici est le tiroir rétractable au glissé (_panelDragOffset),
+  // qui a besoin de connaître la hauteur NATURELLE du contenu (mesurée ici)
+  // pour savoir de combien il peut se rétracter.
+  final _sheetKey = GlobalKey();
+  double? _sheetHeight;
+
+  void _measureSheetHeight({int framesLeft = 24}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final h = _sheetKey.currentContext?.size?.height;
+      if (h != null &&
+          (_sheetHeight == null || (h - _sheetHeight!).abs() > 0.5)) {
+        setState(() => _sheetHeight = h);
+      }
+      if (framesLeft > 0) {
+        _measureSheetHeight(framesLeft: framesLeft - 1);
+      }
+    });
+  }
 
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
@@ -203,7 +226,6 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
   @override
   void initState() {
     super.initState();
-    _pageCtrl = PageController();
     _loadMapStyle();
     _fetchGpsInit();
     _loadUser();
@@ -342,7 +364,6 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
 
   @override
   void dispose() {
-    _pageCtrl.dispose();
     _pickupReveal.dispose();
     _searchDebounce?.cancel();
     _surgeDebounce?.cancel();
@@ -388,19 +409,14 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
     }
   }
 
-  // Estimation de la hauteur du panneau du bas pour la step courante — sert
-  // uniquement à cadrer la caméra (pas la vraie valeur exacte utilisée par
-  // le layout, cf. `panelH` dans build(), qui inclut aussi `stepExtra` —
-  // trop de détail pour ce seul besoin). Même principe que DEM Pro
-  // (_panelHeight, dem_pro_order_create_screen.dart).
-  double get _estimatedPanelHeight {
-    if (_isMapPlacementMode) return 106.0;
-    final isTablet = MediaQuery.of(context).size.width > 600;
-    final heights = isTablet ? _kPanelHeightsTablet : _kPanelHeightsPhone;
-    final bottomSafeArea = MediaQuery.of(context).viewPadding.bottom;
-    final extraH = bottomSafeArea > 20 ? 24.0 : 0.0;
-    return heights[_step] + extraH;
-  }
+  // Hauteur réelle du panneau — mesurée (voir _sheetHeight), avec un
+  // fallback à 62% de l'écran avant la toute première mesure. Utilisée à la
+  // fois pour cadrer la caméra ET pour le layout du panneau lui-même (voir
+  // build()) — une seule source de vérité, contrairement à l'ancien calcul
+  // par tableau de hauteurs fixes qui divergeait de `stepExtra`. Même
+  // principe que Livraison groupée (batch_create_screen.dart).
+  double get _estimatedPanelHeight =>
+      _sheetHeight ?? MediaQuery.of(context).size.height * 0.62;
 
   // Centre la caméra sur [pos] en la décalant vers le SUD d'une distance
   // équivalente à la moitié de la hauteur du panneau (convertie en degrés
@@ -886,19 +902,149 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
 
   void _goStep(int step) {
     FocusScope.of(context).unfocus();
+    // La transition visuelle entre étapes est gérée par AnimatedSwitcher/
+    // AnimatedSize (voir build()) — plus besoin d'un PageController.
     setState(() {
       _step = step;
       _panelDragOffset = 0.0;
       _isDragging = false;
     });
-    _pageCtrl.animateToPage(
-      step,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
     if (step >= 1 && _pickupLat != null && _deliveryLat != null) {
       _fitBothPoints();
     }
+  }
+
+  // Contenu de l'étape courante — remplace les pages du PageView. La Key
+  // distincte déclenche la transition d'AnimatedSwitcher (placement carte vs
+  // step numérotée, ou changement de step). Même mécanisme que Livraison
+  // groupée (batch_create_screen.dart), étendu au panneau de confirmation de
+  // placement carte — qui dépendait auparavant du même calcul de hauteur
+  // fixe que les 4 steps (voir _isMapPlacementMode plus bas dans build()).
+  Widget _buildStepContent() {
+    final Widget child;
+    if (_isMapPlacementMode) {
+      child = MapPlacementConfirmPanel(
+        color: _isSelectingPickup ? AppColors.success : AppColors.error,
+        label: _isSelectingPickup
+            ? 'Valider ce point de départ'
+            : 'Valider cette destination',
+        onConfirm: _confirmPlacement,
+      );
+    } else {
+      switch (_step) {
+        case 0:
+          child = _Step0Panel(
+            priority: widget.priority,
+            routeComplete: _routeComplete,
+            estimatedPrice: _estimatedPrice,
+            demFee: _demFee,
+            surgeMultiplier: _surgeMultiplier,
+            loadingSurge: _loadingSurge,
+            timedOut: _priceTimedOut,
+            onRetry: _retryEstimate,
+            onNext: () => _goStep(1),
+            distanceKm: _routeDistanceKm,
+            durationMin: _routeDurationMin,
+          );
+        case 1:
+          child = _Step1Panel(
+            priority: widget.priority,
+            orderType: widget.orderType,
+            nameCtrl: _senderNameCtrl,
+            phoneCtrl: _senderPhoneCtrl,
+            onPickContact: () => pickContact(
+              context,
+              nameCtrl: _senderNameCtrl,
+              phoneCtrl: _senderPhoneCtrl,
+            ),
+            onPickMe: () {
+              _fillMe(_senderNameCtrl, _senderPhoneCtrl);
+              if (_senderPhoneCtrl.text.length >= 9) _goStep(2);
+            },
+            onPhoneComplete: () => _goStep(2),
+            onNext: () {
+              if (!_validatePhone(_senderPhoneCtrl, 'expéditeur')) return;
+              _goStep(2);
+            },
+          );
+        case 2:
+          child = _Step2Panel(
+            priority: widget.priority,
+            orderType: widget.orderType,
+            nameCtrl: _receiverNameCtrl,
+            phoneCtrl: _receiverPhoneCtrl,
+            descriptionCtrl: _descriptionCtrl,
+            onPickContact: () => pickContact(
+              context,
+              nameCtrl: _receiverNameCtrl,
+              phoneCtrl: _receiverPhoneCtrl,
+            ),
+            onPickMe: () {
+              _fillMe(_receiverNameCtrl, _receiverPhoneCtrl);
+              if (_receiverPhoneCtrl.text.length >= 9) {
+                _updateEstimate();
+                _goStep(3);
+              }
+            },
+            onPhoneComplete: () {
+              _updateEstimate();
+              _goStep(3);
+            },
+            onNext: () {
+              if (!_validatePhone(_receiverPhoneCtrl, 'destinataire')) return;
+              _updateEstimate();
+              _goStep(3);
+            },
+          );
+        default:
+          child = _Step3Panel(
+            priority: widget.priority,
+            pickupLabel: _pickupCtrl.text.isNotEmpty
+                ? _pickupCtrl.text
+                : 'Départ',
+            deliveryLabel: _deliveryCtrl.text.isNotEmpty
+                ? _deliveryCtrl.text
+                : 'Destination',
+            estimatedPrice: _estimatedPrice,
+            demFee: _demFee,
+            discountAmount: _discountAmount,
+            promoLabel: _promoLabel,
+            promoCodeCtrl: _promoCodeCtrl,
+            promoError: _promoError,
+            checkingPromo: _checkingPromo,
+            onApplyPromo: _applyPromoCode,
+            surgeMultiplier: _surgeMultiplier,
+            loadingSurge: _loadingSurge,
+            timedOut: _priceTimedOut,
+            submitting: _submitting,
+            canSubmit: _routeComplete && _estimatedPrice != null,
+            onRetry: _retryEstimate,
+            onSubmit: _submit,
+            distanceKm: _routeDistanceKm,
+            durationMin: _routeDurationMin,
+            onEditPickup: () {
+              setState(() => _isSelectingPickup = true);
+              _goStep(0);
+              Future.delayed(
+                const Duration(milliseconds: 300),
+                () => _pickupFocus.requestFocus(),
+              );
+            },
+            onEditDelivery: () {
+              setState(() => _isSelectingPickup = false);
+              _goStep(0);
+              Future.delayed(
+                const Duration(milliseconds: 300),
+                () => _deliveryFocus.requestFocus(),
+              );
+            },
+          );
+      }
+    }
+    return KeyedSubtree(
+      key: ValueKey(_isMapPlacementMode ? 'placement' : _step),
+      child: child,
+    );
   }
 
   // Ajuste le zoom pour que départ ET destination soient visibles
@@ -1005,41 +1151,17 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
   // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    _measureSheetHeight();
     final keyboardH = MediaQuery.of(context).viewInsets.bottom;
-    final bottomSafeArea = MediaQuery.of(context).viewPadding.bottom;
-    // +24px supplémentaires pour les appareils avec indicateur maison (iPhone X+)
-    final extraH = bottomSafeArea > 20 ? 24.0 : 0.0;
-    final isTablet = MediaQuery.of(context).size.width > 600;
-    final heights = isTablet ? _kPanelHeightsTablet : _kPanelHeightsPhone;
-    // Le badge de type de livraison (Simple/Express) en haut de chaque
-    // étape n'existait pas quand `_kPanelHeightsPhone`/`Tablet` ont été
-    // réglées — +34 sur toutes les étapes pour l'absorber sans dépendre du
-    // scroll de secours.
-    double stepExtra = 34.0;
-    // L'étape 3 (Résumé) empile la carte de prix SOUS un récap de trajet et
-    // un champ promo — elle seule a besoin de ces suppléments pour ses
-    // lignes optionnelles (distance/durée, réduction, total — toujours
-    // affiché depuis peu). L'étape 0 affiche la carte de prix seule : lui
-    // appliquer les mêmes suppléments laissait un grand vide sous la carte
-    // (le badge +34 ci-dessus suffit largement, le scroll de secours couvre
-    // le reste). Calculé ligne par ligne plutôt qu'avec un seul chiffre
-    // magique, pour rester correct si d'autres lignes s'ajoutent encore.
-    if (_step == 3 && _estimatedPrice != null) {
-      stepExtra += 40; // Divider + "Total à payer" (toujours affiché)
-      if (_routeDistanceKm != null && _routeDurationMin != null) {
-        stepExtra += 26; // ligne distance/durée
-      }
-      if ((_discountAmount ?? 0) > 0) {
-        stepExtra += 26; // ligne Réduction
-      }
-    }
-    final panelH = _isMapPlacementMode
-        // 90 ne suffisait pas au contenu réel de MapPlacementConfirmPanel
-        // (bouton + marges ≈ 98px) — dépassement de 8px en bas ("BOTTOM
-        // OVERFLOWED BY 8.0 PIXELS"). +16 de marge de sécurité au lieu de
-        // combler pile la valeur mesurée sur un seul appareil.
-        ? 106.0
-        : heights[_step] + extraH + stepExtra;
+    // Hauteur réelle du panneau (mesurée) — remplace l'ancien tableau de
+    // hauteurs fixes par step + les suppléments `stepExtra` ajustés à la main
+    // à chaque nouvelle ligne de contenu (dont un overflow déjà causé une
+    // fois sur ce panneau). Voir _estimatedPanelHeight/_sheetKey et le
+    // diagnostic pré-prod — même mécanisme que Livraison groupée
+    // (batch_create_screen.dart), étendu ici au panneau de confirmation de
+    // placement carte (_buildStepContent), qui dépendait auparavant d'un
+    // 106.0 fixe ayant lui aussi débordé une fois sur un appareil.
+    final panelH = _estimatedPanelHeight;
 
     // Polyline + inactive markers
     Set<Polyline> polylines = {};
@@ -1333,191 +1455,61 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                         ),
                       ),
 
-                      // Content via PageView (non scrollable)
+                      // Contenu via AnimatedSize + AnimatedSwitcher — plus de
+                      // PageView à hauteur fixe (voir _buildStepContent, qui
+                      // couvre aussi le panneau de placement carte). Le
+                      // tiroir rétractable au glissé ci-dessous reste
+                      // inchangé dans son principe (AnimatedContainer +
+                      // OverflowBox) — seule la source de sa hauteur
+                      // "pleine" (panelH) a changé : mesurée au lieu d'un
+                      // chiffre fixe par step (voir diagnostic pré-prod). Le
+                      // swipe horizontal était déjà désactivé
+                      // (NeverScrollableScrollPhysics) — la navigation reste
+                      // 100% par boutons, rien ne dépend du PageController.
                       AnimatedContainer(
                         duration: _isDragging
                             ? Duration.zero
                             : const Duration(milliseconds: 280),
                         curve: Curves.easeInOut,
-                        height: _isMapPlacementMode
-                            ? panelH - 20
-                            : max(
-                                _kMinPanelContent,
-                                (panelH - 20) - _panelDragOffset,
-                              ),
+                        height: max(
+                          _kMinPanelContent,
+                          (panelH - 20) - _panelDragOffset,
+                        ),
                         child: ClipRect(
                           child: OverflowBox(
                             alignment: Alignment.bottomCenter,
-                            maxHeight: panelH - 20,
-                            child: SizedBox(
-                              height: panelH - 20,
-                              child: _isMapPlacementMode
-                                  ? MapPlacementConfirmPanel(
-                                      color: _isSelectingPickup
-                                          ? AppColors.success
-                                          : AppColors.error,
-                                      label: _isSelectingPickup
-                                          ? 'Valider ce point de départ'
-                                          : 'Valider cette destination',
-                                      onConfirm: _confirmPlacement,
-                                    )
-                                  // Un tap dans une zone vide referme le
-                                  // clavier — même comportement que DEM Pro
-                                  // et Livraison groupée.
-                                  : GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () =>
-                                          FocusScope.of(context).unfocus(),
-                                      child: PageView(
-                                        controller: _pageCtrl,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        onPageChanged: (i) =>
-                                            setState(() => _step = i),
-                                        children: [
-                                          _Step0Panel(
-                                            priority: widget.priority,
-                                            routeComplete: _routeComplete,
-                                            estimatedPrice: _estimatedPrice,
-                                            demFee: _demFee,
-                                            surgeMultiplier: _surgeMultiplier,
-                                            loadingSurge: _loadingSurge,
-                                            timedOut: _priceTimedOut,
-                                            onRetry: _retryEstimate,
-                                            onNext: () => _goStep(1),
-                                            distanceKm: _routeDistanceKm,
-                                            durationMin: _routeDurationMin,
-                                          ),
-                                          _Step1Panel(
-                                            priority: widget.priority,
-                                            orderType: widget.orderType,
-                                            nameCtrl: _senderNameCtrl,
-                                            phoneCtrl: _senderPhoneCtrl,
-                                            onPickContact: () => pickContact(
-                                              context,
-                                              nameCtrl: _senderNameCtrl,
-                                              phoneCtrl: _senderPhoneCtrl,
-                                            ),
-                                            onPickMe: () {
-                                              _fillMe(
-                                                _senderNameCtrl,
-                                                _senderPhoneCtrl,
-                                              );
-                                              if (_senderPhoneCtrl
-                                                      .text
-                                                      .length >=
-                                                  9)
-                                                _goStep(2);
-                                            },
-                                            onPhoneComplete: () => _goStep(2),
-                                            onNext: () {
-                                              if (!_validatePhone(
-                                                _senderPhoneCtrl,
-                                                'expéditeur',
-                                              ))
-                                                return;
-                                              _goStep(2);
-                                            },
-                                          ),
-                                          _Step2Panel(
-                                            priority: widget.priority,
-                                            orderType: widget.orderType,
-                                            nameCtrl: _receiverNameCtrl,
-                                            phoneCtrl: _receiverPhoneCtrl,
-                                            descriptionCtrl: _descriptionCtrl,
-                                            onPickContact: () => pickContact(
-                                              context,
-                                              nameCtrl: _receiverNameCtrl,
-                                              phoneCtrl: _receiverPhoneCtrl,
-                                            ),
-                                            onPickMe: () {
-                                              _fillMe(
-                                                _receiverNameCtrl,
-                                                _receiverPhoneCtrl,
-                                              );
-                                              if (_receiverPhoneCtrl
-                                                      .text
-                                                      .length >=
-                                                  9) {
-                                                _updateEstimate();
-                                                _goStep(3);
-                                              }
-                                            },
-                                            onPhoneComplete: () {
-                                              _updateEstimate();
-                                              _goStep(3);
-                                            },
-                                            onNext: () {
-                                              if (!_validatePhone(
-                                                _receiverPhoneCtrl,
-                                                'destinataire',
-                                              ))
-                                                return;
-                                              _updateEstimate();
-                                              _goStep(3);
-                                            },
-                                          ),
-                                          _Step3Panel(
-                                            priority: widget.priority,
-                                            pickupLabel:
-                                                _pickupCtrl.text.isNotEmpty
-                                                ? _pickupCtrl.text
-                                                : 'Départ',
-                                            deliveryLabel:
-                                                _deliveryCtrl.text.isNotEmpty
-                                                ? _deliveryCtrl.text
-                                                : 'Destination',
-                                            estimatedPrice: _estimatedPrice,
-                                            demFee: _demFee,
-                                            discountAmount: _discountAmount,
-                                            promoLabel: _promoLabel,
-                                            promoCodeCtrl: _promoCodeCtrl,
-                                            promoError: _promoError,
-                                            checkingPromo: _checkingPromo,
-                                            onApplyPromo: _applyPromoCode,
-                                            surgeMultiplier: _surgeMultiplier,
-                                            loadingSurge: _loadingSurge,
-                                            timedOut: _priceTimedOut,
-                                            submitting: _submitting,
-                                            canSubmit:
-                                                _routeComplete &&
-                                                _estimatedPrice != null,
-                                            onRetry: _retryEstimate,
-                                            onSubmit: _submit,
-                                            distanceKm: _routeDistanceKm,
-                                            durationMin: _routeDurationMin,
-                                            onEditPickup: () {
-                                              setState(
-                                                () => _isSelectingPickup = true,
-                                              );
-                                              _goStep(0);
-                                              Future.delayed(
-                                                const Duration(
-                                                  milliseconds: 300,
-                                                ),
-                                                () =>
-                                                    _pickupFocus.requestFocus(),
-                                              );
-                                            },
-                                            onEditDelivery: () {
-                                              setState(
-                                                () =>
-                                                    _isSelectingPickup = false,
-                                              );
-                                              _goStep(0);
-                                              Future.delayed(
-                                                const Duration(
-                                                  milliseconds: 300,
-                                                ),
-                                                () => _deliveryFocus
-                                                    .requestFocus(),
-                                              );
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ), // GestureDetector (tap-to-dismiss)
-                            ), // SizedBox
+                            minHeight: 0,
+                            // Plafond de sécurité générique (même principe
+                            // que Livraison groupée) plutôt que `panelH`
+                            // elle-même — sinon la mesure ne pourrait jamais
+                            // détecter qu'une étape a besoin de PLUS de
+                            // place que la dernière mesurée (circularité).
+                            maxHeight:
+                                MediaQuery.of(context).size.height * 0.62,
+                            // Un tap dans une zone vide referme le clavier —
+                            // même comportement que DEM Pro et Livraison
+                            // groupée.
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => FocusScope.of(context).unfocus(),
+                              child: Container(
+                                key: _sheetKey,
+                                child: AnimatedSize(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                  alignment: Alignment.topCenter,
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 180),
+                                    transitionBuilder: (child, anim) =>
+                                        FadeTransition(
+                                          opacity: anim,
+                                          child: child,
+                                        ),
+                                    child: _buildStepContent(),
+                                  ),
+                                ),
+                              ),
+                            ), // GestureDetector (tap-to-dismiss)
                           ), // OverflowBox
                         ), // ClipRect
                       ), // AnimatedContainer
@@ -1863,84 +1855,87 @@ class _Step0Panel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Column(
+        // min : sans ça, ce Column (comme les 3 autres étapes) remplit
+        // systématiquement toute la hauteur allouée par AnimatedSize même
+        // quand son contenu est plus court — c'est ce réglage, sur les 4
+        // étapes, qui fait fonctionner le panneau à hauteur adaptative (voir
+        // build() dans l'écran parent et le diagnostic pré-prod).
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // `Expanded` + scroll plutôt qu'un `Spacer` fixe : le badge de
-          // type de livraison ajouté au-dessus du conseil "Astuce" laissait
-          // à peine quelques pixels de marge sur le budget de hauteur fixe
-          // de cette étape — même remède que le panneau Résumé (voir plus
-          // bas) pour ne plus jamais dépendre d'un calcul au pixel près.
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Rappel du type de livraison choisi — visible dès
-                  // l'étape Trajet, avant même que le prix ne soit
-                  // disponible, ET une fois le prix affiché (auparavant
-                  // visible seulement dans l'état "Astuce", donc absent dès
-                  // que le trajet était complet).
-                  _DeliveryTypeBadge(priority: priority),
-                  const SizedBox(height: 8),
-                  // Le conseil "Astuce" cède la place au prix dès qu'il est
-                  // disponible — évite d'empiler un texte devenu obsolète
-                  // (l'action qu'il décrit est déjà faite) au-dessus de
-                  // l'info la plus utile.
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 320),
-                    switchInCurve: Curves.easeOut,
-                    switchOutCurve: Curves.easeIn,
-                    transitionBuilder: (child, anim) => FadeTransition(
-                      opacity: anim,
-                      child: SizeTransition(
-                        sizeFactor: anim,
-                        alignment: Alignment.topCenter,
-                        child: child,
-                      ),
+          // SingleChildScrollView simple, sans Expanded — un Expanded/
+          // Flexible ici empêchait AnimatedSize de détecter la vraie hauteur
+          // du contenu (voir diagnostic pré-prod). Le plafond de sécurité à
+          // 62% de l'écran reste géré plus haut (OverflowBox, voir build()).
+          SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Rappel du type de livraison choisi — visible dès
+                // l'étape Trajet, avant même que le prix ne soit
+                // disponible, ET une fois le prix affiché (auparavant
+                // visible seulement dans l'état "Astuce", donc absent dès
+                // que le trajet était complet).
+                _DeliveryTypeBadge(priority: priority),
+                const SizedBox(height: 8),
+                // Le conseil "Astuce" cède la place au prix dès qu'il est
+                // disponible — évite d'empiler un texte devenu obsolète
+                // (l'action qu'il décrit est déjà faite) au-dessus de
+                // l'info la plus utile.
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 320),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SizeTransition(
+                      sizeFactor: anim,
+                      alignment: Alignment.topCenter,
+                      child: child,
                     ),
-                    child: routeComplete
-                        ? _EstimatePriceCard(
-                            key: const ValueKey('price'),
-                            estimatedPrice: estimatedPrice,
-                            demFee: demFee,
-                            surgeMultiplier: surgeMultiplier,
-                            loadingSurge: loadingSurge,
-                            timedOut: timedOut,
-                            onRetry: onRetry,
-                            distanceKm: distanceKm,
-                            durationMin: durationMin,
-                          )
-                        : Column(
-                            key: const ValueKey('tip'),
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                'Astuce',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Appuie sur la barre de recherche pour choisir "
-                                'comment renseigner tes adresses.',
-                                maxLines: 3,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.70),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.normal,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                          ),
                   ),
-                ],
-              ),
+                  child: routeComplete
+                      ? _EstimatePriceCard(
+                          key: const ValueKey('price'),
+                          estimatedPrice: estimatedPrice,
+                          demFee: demFee,
+                          surgeMultiplier: surgeMultiplier,
+                          loadingSurge: loadingSurge,
+                          timedOut: timedOut,
+                          onRetry: onRetry,
+                          distanceKm: distanceKm,
+                          durationMin: durationMin,
+                        )
+                      : Column(
+                          key: const ValueKey('tip'),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Astuce',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "Appuie sur la barre de recherche pour choisir "
+                              'comment renseigner tes adresses.',
+                              maxLines: 3,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.70),
+                                fontSize: 14,
+                                fontWeight: FontWeight.normal,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -2435,58 +2430,57 @@ class _Step1Panel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
+        // min : voir le même réglage sur _Step0Panel — indispensable pour
+        // que le panneau s'adapte au contenu réel (diagnostic pré-prod).
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Le badge type de livraison n'est plus répété à chaque étape —
           // visible une seule fois, à l'étape 1/4 (voir _Step0Panel).
-          // `Expanded` + scroll : le badge ajouté au-dessus laissait trop
-          // peu de marge sur le budget de hauteur fixe de cette étape
-          // (quelques pixels à peine) — même remède que Step0/Step2/Step3
-          // pour ne plus jamais dépendre d'un calcul au pixel près.
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Astuce : ',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.70),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Icon(
-                          Icons.person_outline_rounded,
+          // SingleChildScrollView simple, sans Expanded — voir _Step0Panel.
+          SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Astuce : ',
+                        style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.70),
-                          size: 14,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'sélectionnez un contact pour gagner du temps',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.70),
-                            fontSize: 12,
-                          ),
+                      ),
+                      Icon(
+                        Icons.person_outline_rounded,
+                        color: Colors.white.withValues(alpha: 0.70),
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'sélectionnez un contact pour gagner du temps',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.70),
+                          fontSize: 12,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                  ContactMiniField(
-                    label: 'Expéditeur',
-                    dotColor: AppColors.success,
-                    nameCtrl: nameCtrl,
-                    phoneCtrl: phoneCtrl,
-                    onPick: onPickContact,
-                    onPickMe: onPickMe,
-                    onPhoneComplete: onPhoneComplete,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 10),
+                ContactMiniField(
+                  label: 'Expéditeur',
+                  dotColor: AppColors.success,
+                  nameCtrl: nameCtrl,
+                  phoneCtrl: phoneCtrl,
+                  onPick: onPickContact,
+                  onPickMe: onPickMe,
+                  onPhoneComplete: onPhoneComplete,
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -2529,6 +2523,9 @@ class _Step2Panel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
+        // min : voir le même réglage sur _Step0Panel — indispensable pour
+        // que le panneau s'adapte au contenu réel (diagnostic pré-prod).
+        mainAxisSize: MainAxisSize.min,
         children: [
           Align(
             alignment: Alignment.centerLeft,
@@ -2560,72 +2557,72 @@ class _Step2Panel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  ContactMiniField(
-                    label: 'Destinataire',
-                    dotColor: AppColors.error,
-                    nameCtrl: nameCtrl,
-                    phoneCtrl: phoneCtrl,
-                    onPick: onPickContact,
-                    onPickMe: onPickMe,
-                    onPhoneComplete: onPhoneComplete,
-                  ),
-                  if (orderType == 'DELIVERY') ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: descriptionCtrl,
-                      style: const TextStyle(fontSize: 14, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Description du colis (optionnel)',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.65),
-                          fontSize: 14,
-                        ),
-                        prefixIcon: Padding(
-                          padding: const EdgeInsets.only(left: 12, right: 8),
-                          child: Icon(
-                            Icons.inventory_2_outlined,
-                            color: Colors.white.withValues(alpha: 0.65),
-                            size: 18,
-                          ),
-                        ),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 0,
-                          minHeight: 0,
-                        ),
-                        fillColor: Colors.white.withValues(alpha: 0.14),
-                        filled: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.22),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.22),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        isDense: true,
+          // SingleChildScrollView simple, sans Expanded — voir _Step0Panel.
+          SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ContactMiniField(
+                  label: 'Destinataire',
+                  dotColor: AppColors.error,
+                  nameCtrl: nameCtrl,
+                  phoneCtrl: phoneCtrl,
+                  onPick: onPickContact,
+                  onPickMe: onPickMe,
+                  onPhoneComplete: onPhoneComplete,
+                ),
+                if (orderType == 'DELIVERY') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descriptionCtrl,
+                    style: const TextStyle(fontSize: 14, color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Description du colis (optionnel)',
+                      hintStyle: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.65),
+                        fontSize: 14,
                       ),
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(left: 12, right: 8),
+                        child: Icon(
+                          Icons.inventory_2_outlined,
+                          color: Colors.white.withValues(alpha: 0.65),
+                          size: 18,
+                        ),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 0,
+                        minHeight: 0,
+                      ),
+                      fillColor: Colors.white.withValues(alpha: 0.14),
+                      filled: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.45),
+                        ),
+                      ),
+                      isDense: true,
                     ),
-                  ],
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -2694,144 +2691,139 @@ class _Step3Panel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
+        // min : voir le même réglage sur _Step0Panel — indispensable pour
+        // que le panneau s'adapte au contenu réel (diagnostic pré-prod).
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // `Expanded` + scroll plutôt qu'un simple `Column` : le contenu
-          // ci-dessous (récap trajet, prix, code promo) a grandi plusieurs
-          // fois depuis le premier réglage du budget de hauteur fixe de ce
-          // panneau, provoquant à chaque fois un nouvel overflow. Avec un
-          // scroll, un ajout futur réduit l'espace visible au pire, mais ne
-          // peut plus jamais déborder — le bouton reste toujours visible en
-          // bas, épinglé hors du scroll.
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Route recap
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        GestureDetector(
-                          onTap: onEditPickup,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: AddressRow(
-                                  icon: Icons.circle,
-                                  iconColor: AppColors.success,
-                                  address: pickupLabel,
-                                  dark: true,
-                                ),
-                              ),
-                              if (onEditPickup != null)
-                                Icon(
-                                  Icons.edit_outlined,
-                                  color: AppColors.textSecondary.withValues(
-                                    alpha: 0.5,
-                                  ),
-                                  size: 14,
-                                ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: Container(
-                            width: 2,
-                            height: 14,
-                            color: AppColors.textSecondary.withValues(
-                              alpha: 0.3,
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: onEditDelivery,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: AddressRow(
-                                  icon: Icons.location_on,
-                                  iconColor: AppColors.error,
-                                  address: deliveryLabel,
-                                  dark: true,
-                                ),
-                              ),
-                              if (onEditDelivery != null)
-                                Icon(
-                                  Icons.edit_outlined,
-                                  color: AppColors.textSecondary.withValues(
-                                    alpha: 0.5,
-                                  ),
-                                  size: 14,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+          // SingleChildScrollView simple, sans Expanded — voir _Step0Panel.
+          // Le bouton reste épinglé hors du scroll, toujours visible en bas.
+          SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Route recap
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
-                  const SizedBox(height: 10),
-
-                  // Price card
-                  _EstimatePriceCard(
-                    estimatedPrice: estimatedPrice,
-                    demFee: demFee,
-                    discountAmount: discountAmount,
-                    promoLabel: promoLabel,
-                    surgeMultiplier: surgeMultiplier,
-                    loadingSurge: loadingSurge,
-                    timedOut: timedOut,
-                    onRetry: onRetry,
-                    distanceKm: distanceKm,
-                    durationMin: durationMin,
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  if (estimatedPrice != null && !loadingSurge && !timedOut) ...[
-                    const SizedBox(height: 8),
-                    _PromoCodeField(
-                      controller: promoCodeCtrl,
-                      error: promoError,
-                      checking: checkingPromo,
-                      applied: discountAmount != null && discountAmount! > 0,
-                      onApply: onApplyPromo,
-                    ),
-                  ],
-                  // Le mode de paiement par défaut (cash) n'était jamais
-                  // annoncé avant validation — le client ne savait pas s'il
-                  // devait prévoir de l'espèces avant l'acceptation par un
-                  // livreur. Purement informatif ici, le choix "payer en
-                  // ligne" reste proposé après acceptation.
-                  const SizedBox(height: 10),
-                  Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.payments_outlined,
-                        size: 14,
-                        color: Colors.white.withValues(alpha: 0.60),
+                      GestureDetector(
+                        onTap: onEditPickup,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: AddressRow(
+                                icon: Icons.circle,
+                                iconColor: AppColors.success,
+                                address: pickupLabel,
+                                dark: true,
+                              ),
+                            ),
+                            if (onEditPickup != null)
+                              Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.textSecondary.withValues(
+                                  alpha: 0.5,
+                                ),
+                                size: 14,
+                              ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Paiement en espèces à la livraison par défaut — le paiement en ligne sera aussi proposé une fois un livreur trouvé.',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.60),
-                            fontSize: 11,
-                            height: 1.3,
-                          ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Container(
+                          width: 2,
+                          height: 14,
+                          color: AppColors.textSecondary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: onEditDelivery,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: AddressRow(
+                                icon: Icons.location_on,
+                                iconColor: AppColors.error,
+                                address: deliveryLabel,
+                                dark: true,
+                              ),
+                            ),
+                            if (onEditDelivery != null)
+                              Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.textSecondary.withValues(
+                                  alpha: 0.5,
+                                ),
+                                size: 14,
+                              ),
+                          ],
                         ),
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 10),
+
+                // Price card
+                _EstimatePriceCard(
+                  estimatedPrice: estimatedPrice,
+                  demFee: demFee,
+                  discountAmount: discountAmount,
+                  promoLabel: promoLabel,
+                  surgeMultiplier: surgeMultiplier,
+                  loadingSurge: loadingSurge,
+                  timedOut: timedOut,
+                  onRetry: onRetry,
+                  distanceKm: distanceKm,
+                  durationMin: durationMin,
+                ),
+                if (estimatedPrice != null && !loadingSurge && !timedOut) ...[
                   const SizedBox(height: 8),
+                  _PromoCodeField(
+                    controller: promoCodeCtrl,
+                    error: promoError,
+                    checking: checkingPromo,
+                    applied: discountAmount != null && discountAmount! > 0,
+                    onApply: onApplyPromo,
+                  ),
                 ],
-              ),
+                // Le mode de paiement par défaut (cash) n'était jamais
+                // annoncé avant validation — le client ne savait pas s'il
+                // devait prévoir de l'espèces avant l'acceptation par un
+                // livreur. Purement informatif ici, le choix "payer en
+                // ligne" reste proposé après acceptation.
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.payments_outlined,
+                      size: 14,
+                      color: Colors.white.withValues(alpha: 0.60),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Paiement en espèces à la livraison par défaut — le paiement en ligne sera aussi proposé une fois un livreur trouvé.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.60),
+                          fontSize: 11,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
           ),
           const SizedBox(height: 8),

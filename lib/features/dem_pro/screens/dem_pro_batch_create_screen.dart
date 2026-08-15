@@ -82,6 +82,29 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
   int _step = 0;
   bool get _onRecap => _step >= _stops.length;
 
+  // ── Hauteur réelle du panneau (mesurée) ───────────────────────────────────
+  // Même correctif que dem_pro_order_create_screen.dart : le commentaire
+  // historique sur `_panelHeight` annonçait déjà un panneau qui "épouse son
+  // contenu", mais `Flexible(child: SingleChildScrollView)` (voir build())
+  // le forçait en réalité à toujours grandir jusqu'au plafond de 86% de
+  // l'écran, quel que soit le contenu réel — voir diagnostic pré-prod.
+  final _sheetKey = GlobalKey();
+  double? _sheetHeight;
+
+  void _measureSheetHeight({int framesLeft = 24}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final h = _sheetKey.currentContext?.size?.height;
+      if (h != null &&
+          (_sheetHeight == null || (h - _sheetHeight!).abs() > 0.5)) {
+        setState(() => _sheetHeight = h);
+      }
+      if (framesLeft > 0) {
+        _measureSheetHeight(framesLeft: framesLeft - 1);
+      }
+    });
+  }
+
   // ── Map ──────────────────────────────────────────────────────────────────
   GoogleMapController? _mapCtrl;
   String? _mapStyle;
@@ -274,12 +297,13 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
     ),
   );
 
-  /// Hauteur approximative du panneau du bas — le panneau épouse désormais
-  /// son contenu (plus de fraction d'écran fixe), donc ceci n'est qu'une
-  /// estimation suffisante pour cadrer la caméra, pas une valeur exacte.
+  /// Hauteur réelle du panneau — mesurée (voir _sheetHeight), avec un
+  /// fallback avant la toute première mesure. Sert à la fois à cadrer la
+  /// caméra ET au layout du panneau lui-même (voir build()).
   double get _panelHeight {
-    final h = MediaQuery.of(context).size.height;
     if (_placingMap) return 130;
+    if (_sheetHeight != null) return _sheetHeight!;
+    final h = MediaQuery.of(context).size.height;
     return h * (_onRecap ? 0.5 : 0.4);
   }
 
@@ -758,6 +782,7 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _measureSheetHeight();
     return PopScope(
       canPop: !_placingMap,
       onPopInvokedWithResult: (didPop, _) {
@@ -903,15 +928,28 @@ class _State extends ConsumerState<DemProBatchCreateScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _buildSheetHandle(),
-                              Flexible(
-                                child: SingleChildScrollView(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    20,
-                                    0,
-                                    20,
-                                    16,
+                              // `Flexible` ici forçait le panneau à toujours
+                              // grandir jusqu'au ConstrainedBox(maxHeight:
+                              // 0.86*écran) ci-dessus, quel que soit le
+                              // contenu réel de l'étape (voir _panelHeight
+                              // et le diagnostic pré-prod) — AnimatedSize
+                              // fait maintenant épouser la vraie hauteur du
+                              // contenu, avec transition douce entre steps.
+                              Container(
+                                key: _sheetKey,
+                                child: AnimatedSize(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                  alignment: Alignment.topCenter,
+                                  child: SingleChildScrollView(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      20,
+                                      0,
+                                      20,
+                                      16,
+                                    ),
+                                    child: _buildPanel(),
                                   ),
-                                  child: _buildPanel(),
                                 ),
                               ),
                               _buildLaunchButton(),

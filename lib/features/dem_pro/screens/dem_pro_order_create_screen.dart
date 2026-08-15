@@ -115,6 +115,33 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
   int _step =
       0; // 0=Destination, 1=Articles, 2=Colis, 3=Livraison, 4=Confirmation
 
+  // ── Hauteur réelle du panneau (mesurée) ───────────────────────────────────
+  // Le commentaire historique sur `_panelHeight` annonçait déjà un panneau
+  // qui "épouse son contenu" — mais `Flexible(child: SingleChildScrollView)`
+  // (voir build()) force en réalité le panneau à toujours grandir jusqu'au
+  // plafond de 86% de l'écran, quel que soit le contenu réel (Flexible
+  // alloue l'espace disponible à son enfant, qui le remplit sans jamais
+  // hériter d'un `mainAxisSize.min`) — même bug que celui déjà corrigé sur
+  // Livraison simple/Express et groupée (voir diagnostic pré-prod). Ce
+  // mécanisme de mesure comble l'écart entre l'intention du commentaire et
+  // ce que le code faisait réellement.
+  final _sheetKey = GlobalKey();
+  double? _sheetHeight;
+
+  void _measureSheetHeight({int framesLeft = 24}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final h = _sheetKey.currentContext?.size?.height;
+      if (h != null &&
+          (_sheetHeight == null || (h - _sheetHeight!).abs() > 0.5)) {
+        setState(() => _sheetHeight = h);
+      }
+      if (framesLeft > 0) {
+        _measureSheetHeight(framesLeft: framesLeft - 1);
+      }
+    });
+  }
+
   // ── Map ─────────────────────────────────────────────────────────────────
   GoogleMapController? _mapCtrl;
   String? _mapStyle;
@@ -197,11 +224,12 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     }
   }
 
-  /// Préremplit destinataire/adresse (texte) + repère/instructions depuis une
-  /// demande reçue via la page publique. Ne fournit jamais de coordonnées —
-  /// le client final n'en donne pas — donc `_deliveryLat/_deliveryLng`
-  /// restent `null` et le commerçant doit positionner le point de livraison
-  /// lui-même (recherche ou carte) avant de pouvoir avancer à l'étape 2.
+  /// Préremplit destinataire/adresse/articles depuis une demande reçue via la
+  /// page publique — tout y est déjà (voir ci-dessous), donc pas besoin de
+  /// refaire cliquer le commerçant sur 4 étapes déjà remplies : on saute
+  /// directement au résumé/finalisation (étape 4) si les infos obligatoires
+  /// sont là. Sinon (adresse sans coordonnées, téléphone invalide...), on
+  /// reste à l'étape 0 pour qu'il complète lui-même avant de continuer.
   void _applyOrderRequest(Map<String, dynamic> request) {
     _fromRequestId = request['id'] as String?;
     _deliveryAddress = request['deliveryAddress'] as String? ?? '';
@@ -255,6 +283,17 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
         a.productId = item['productId'] as String?;
         _articles.add(a);
       }
+    }
+
+    // Même condition que _canAdvance pour l'étape 0 — si elle est déjà
+    // remplie, pas besoin de la refaire valider manuellement. Le point de
+    // départ (pickup) charge en asynchrone (voir _loadProAddresses) : une
+    // fois prêt, _applyProAddress/_geocodePickupAddress/_fetchGps
+    // déclenchent déjà l'estimation dès qu'ils voient _step == 4, donc rien
+    // d'autre à faire ici pour que le résumé arrive rempli.
+    if (_deliveryLat != null &&
+        isValidSenegalMobile(_recipientPhoneCtrl.text.trim())) {
+      _step = 4;
     }
   }
 
@@ -1081,10 +1120,11 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
     _fitBoundsVisible(points);
   }
 
-  // Hauteur approximative du panneau du bas — il épouse désormais son
-  // contenu (plus de fraction d'écran fixe), donc ceci n'est qu'une
-  // estimation suffisante pour cadrer la caméra, pas une valeur exacte.
+  // Hauteur réelle du panneau — mesurée (voir _sheetHeight), avec un
+  // fallback par step avant la toute première mesure. Sert à la fois à
+  // cadrer la caméra ET au layout du panneau lui-même (voir build()).
   double get _panelHeight {
+    if (_sheetHeight != null) return _sheetHeight!;
     final h = MediaQuery.of(context).size.height;
     return h *
         switch (_step) {
@@ -1098,6 +1138,7 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _measureSheetHeight();
     return PopScope(
       canPop: _step == 0,
       onPopInvokedWithResult: (didPop, _) {
@@ -1248,9 +1289,22 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _buildSheetHandle(),
-                              Flexible(
-                                child: SingleChildScrollView(
-                                  child: _buildPanel(),
+                              // `Flexible` ici forçait le panneau à toujours
+                              // grandir jusqu'au ConstrainedBox(maxHeight:
+                              // 0.86*écran) ci-dessus, quel que soit le
+                              // contenu réel de l'étape (voir _panelHeight
+                              // et le diagnostic pré-prod) — AnimatedSize
+                              // fait maintenant épouser la vraie hauteur du
+                              // contenu, avec transition douce entre steps.
+                              Container(
+                                key: _sheetKey,
+                                child: AnimatedSize(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                  alignment: Alignment.topCenter,
+                                  child: SingleChildScrollView(
+                                    child: _buildPanel(),
+                                  ),
                                 ),
                               ),
                               _buildNavButtons(),
@@ -2600,6 +2654,57 @@ class _State extends ConsumerState<DemProOrderCreateScreen> {
               style: ClientText.label.copyWith(color: AppColors.error),
             ),
           ],
+        ],
+
+        // Montant réel que le livreur doit récupérer auprès du client final —
+        // valeur des articles + frais de livraison (remise déduite). Ne
+        // s'affiche qu'en paiement à la livraison : en mode "vous payez la
+        // livraison", le commerçant règle les frais lui-même, ce total
+        // combiné n'a pas de sens pour lui.
+        if (_paymentMode == 'cod' && articlesTotal > 0 && total != null) ...[
+          const SizedBox(height: 10),
+          StaggeredEntrance(
+            index: 5,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.payments_outlined,
+                    color: AppColors.success,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Total à collecter au client',
+                      style: ClientText.bodyStrong.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    formatFcfa(
+                      articlesTotal +
+                          (total - (_discountAmount ?? 0)).clamp(
+                            0,
+                            double.infinity,
+                          ),
+                    ),
+                    style: ClientText.hero.copyWith(color: AppColors.success),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
         const SizedBox(height: 8),
       ],
