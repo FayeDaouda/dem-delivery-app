@@ -1463,7 +1463,14 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
               Positioned(
                 left: 0,
                 right: 0,
-                bottom: _panelHeight + _navBarHeight + bottomInset,
+                // - _dragOffset : sans lui, ces boutons restaient à la
+                // hauteur de la feuille PLEINE même quand elle est
+                // rétractée au glissé, laissant un grand vide entre eux et
+                // la feuille repliée (repéré en test).
+                bottom:
+                    max(_kMinPanelContent, _panelHeight - _dragOffset) +
+                    _navBarHeight +
+                    bottomInset,
                 child: Padding(
                   padding: const EdgeInsets.only(
                     left: 16,
