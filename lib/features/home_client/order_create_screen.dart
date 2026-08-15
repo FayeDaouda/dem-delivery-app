@@ -1497,7 +1497,18 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                                 child: AnimatedSize(
                                   duration: const Duration(milliseconds: 220),
                                   curve: Curves.easeOutCubic,
-                                  alignment: Alignment.topCenter,
+                                  // bottomCenter (pas topCenter comme sur
+                                  // Livraison groupée) — doit matcher
+                                  // l'alignment de l'OverflowBox parent
+                                  // (voir plus haut), lui-même bottomCenter
+                                  // pour le tiroir à glisser. Avec des
+                                  // alignments opposés, le contenu du haut
+                                  // (le badge Simple/Express, tout premier
+                                  // élément de chaque étape) pouvait
+                                  // apparaître tronqué/fantôme pendant la
+                                  // transition — repéré en test (voir
+                                  // diagnostic pré-prod).
+                                  alignment: Alignment.bottomCenter,
                                   child: AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 180),
                                     transitionBuilder: (child, anim) =>
