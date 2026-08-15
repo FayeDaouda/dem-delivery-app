@@ -123,7 +123,22 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
   bool _isDragging = false;
   static const _kMinPanelContent = 66.0;
 
-  void _measureSheetHeight({int framesLeft = 24}) {
+  // build() appelle _measureSheetHeight() sans condition à CHAQUE
+  // reconstruction (position GPS, pulsation, entrée en escalier des
+  // tuiles...) — sans ce garde, chaque appel relançait sa PROPRE chaîne de
+  // mesure sur 24 frames, empilant plusieurs chaînes redondantes en
+  // parallèle (repéré en test — un des facteurs de lenteur perçue au
+  // changement de contenu). Un seul appel "racine" actif à la fois suffit :
+  // la chaîne déjà en cours capte de toute façon la frame suivante.
+  bool _measuringSheet = false;
+
+  void _measureSheetHeight() {
+    if (_measuringSheet) return;
+    _measuringSheet = true;
+    _measureSheetHeightFrame(framesLeft: 16);
+  }
+
+  void _measureSheetHeightFrame({required int framesLeft}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final h = _sheetKey.currentContext?.size?.height;
@@ -131,7 +146,11 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
           (_sheetHeight == null || (h - _sheetHeight!).abs() > 0.5)) {
         setState(() => _sheetHeight = h);
       }
-      if (framesLeft > 0) _measureSheetHeight(framesLeft: framesLeft - 1);
+      if (framesLeft > 0) {
+        _measureSheetHeightFrame(framesLeft: framesLeft - 1);
+      } else {
+        _measuringSheet = false;
+      }
     });
   }
 
@@ -150,8 +169,15 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
   final _tilesRowKey = GlobalKey();
   double? _tilesRowHeight;
   static const _kHomeSheetBottomPadding = 20.0; // fromLTRB(20,4,20,20)
+  bool _measuringTilesRow = false;
 
-  void _measureTilesRowHeight({int framesLeft = 24}) {
+  void _measureTilesRowHeight() {
+    if (_measuringTilesRow) return;
+    _measuringTilesRow = true;
+    _measureTilesRowHeightFrame(framesLeft: 16);
+  }
+
+  void _measureTilesRowHeightFrame({required int framesLeft}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final h = _tilesRowKey.currentContext?.size?.height;
@@ -160,7 +186,9 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
         setState(() => _tilesRowHeight = h);
       }
       if (framesLeft > 0) {
-        _measureTilesRowHeight(framesLeft: framesLeft - 1);
+        _measureTilesRowHeightFrame(framesLeft: framesLeft - 1);
+      } else {
+        _measuringTilesRow = false;
       }
     });
   }
@@ -463,6 +491,11 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
 
   @override
   void requestSheetRemeasure() {
+    // Repart d'une chaîne de mesure fraîche à chaque changement de mode/
+    // étape significatif — celle déjà en cours (si elle en est à sa
+    // dernière frame programmée) pourrait sinon s'arrêter juste avant que
+    // le nouveau contenu n'ait fini de s'installer.
+    _measuringSheet = false;
     setState(() => _sheetHeight = null);
     _measureSheetHeight();
   }
