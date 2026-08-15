@@ -1317,79 +1317,111 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
               ),
             ),
 
-            // ── Cloche notifications (accueil uniquement) ──────────────────
-            if (!isWizard)
-              Positioned(
-                top: 0,
-                right: 12,
-                child: SafeArea(
-                  bottom: false,
-                  child: GestureDetector(
-                    onTap: () async {
-                      await context.push('/client/notifications');
-                      _loadUnreadNotifCount();
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      margin: const EdgeInsets.only(top: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 8,
-                          ),
-                        ],
-                      ),
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          const Center(
-                            child: Icon(
-                              Icons.notifications_outlined,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                          ),
-                          if (_unreadNotifCount > 0)
-                            Positioned(
-                              top: -2,
-                              right: -2,
-                              child: Container(
-                                padding: const EdgeInsets.all(3),
-                                constraints: const BoxConstraints(
-                                  minWidth: 16,
-                                  minHeight: 16,
-                                ),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.error,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Text(
-                                  _unreadNotifCount > 9
-                                      ? '9+'
-                                      : '$_unreadNotifCount',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
+            // ── Zone du haut : cloche (accueil) ↔ barre assistant (Express/
+            // Simple) — un seul AnimatedSwitcher au lieu de 2 `if` distincts
+            // qui se coupaient sec l'un l'autre : l'apparition/disparition
+            // est maintenant glissée + fondue, jamais brusque.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (transitionChild, anim) => SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, -0.06),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: FadeTransition(opacity: anim, child: transitionChild),
+                ),
+                child: _mode == ClientHomeMode.expressSimpleWizard
+                    ? KeyedSubtree(
+                        key: const ValueKey('wizard-top-bar'),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _buildOrderWizardTopBar(),
+                        ),
+                      )
+                    : !isWizard
+                    ? KeyedSubtree(
+                        key: const ValueKey('notif-bell'),
+                        child: Align(
+                          alignment: Alignment.topRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: SafeArea(
+                              bottom: false,
+                              child: GestureDetector(
+                                onTap: () async {
+                                  await context.push('/client/notifications');
+                                  _loadUnreadNotifCount();
+                                },
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  margin: const EdgeInsets.only(top: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surface,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.2,
+                                        ),
+                                        blurRadius: 8,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      const Center(
+                                        child: Icon(
+                                          Icons.notifications_outlined,
+                                          color: AppColors.primary,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      if (_unreadNotifCount > 0)
+                                        Positioned(
+                                          top: -2,
+                                          right: -2,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(3),
+                                            constraints: const BoxConstraints(
+                                              minWidth: 16,
+                                              minHeight: 16,
+                                            ),
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.error,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Text(
+                                              _unreadNotifCount > 9
+                                                  ? '9+'
+                                                  : '$_unreadNotifCount',
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
               ),
-
-            // ── Barre assistant (Express/Simple) ────────────────────────────
-            if (_mode == ClientHomeMode.expressSimpleWizard)
-              ..._buildOrderWizardTopBar(),
+            ),
 
             // ── Bandeau "course acceptée" pendant la saisie ─────────────────
             if (_pendingAcceptedBanner != null)
@@ -1458,134 +1490,123 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                 ),
               ),
 
-            // ── Feuille du bas ───────────────────────────────────────────────
-            Positioned.fill(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom: isWizard ? 0 : (_navBarHeight + bottomInset),
-                ),
-                child: HomeClientSheetScaffold(
-                  sheetKey: _sheetKey,
-                  panelHeight: _panelHeight,
-                  dragOffset: _dragOffset,
-                  isDragging: _isDragging,
-                  keyboardHeight: keyboardH,
-                  minPanelContent: _kMinPanelContent,
-                  onDraggingChanged: (v) => setState(() => _isDragging = v),
-                  onDragOffsetChanged: (v) => setState(() => _dragOffset = v),
-                  onTapDismissKeyboard: () => FocusScope.of(context).unfocus(),
-                  child: _buildSheetContent(),
-                ),
+            // ── Boutons flottants + feuille + navbar ─────────────────────────
+            // UN SEUL Column empilé en bas (au lieu de 4 Positioned calculés
+            // à la main) — même schéma que home_driver_screen.dart. Les
+            // boutons flottants suivent la hauteur RÉELLE de la feuille (et
+            // la navbar, et le clavier) automatiquement, en flux naturel,
+            // sans aucun calcul manuel de position. Élimine à la racine toute
+            // la classe de bugs rencontrée cette session sur l'ancienne
+            // version à base de Positioned (boutons cachés derrière la
+            // feuille par erreur de z-order, écart visible au glissé,
+            // décalage "+60" arbitraire en mode assistant) : les boutons
+            // flottants se retrouvent maintenant toujours à la même distance
+            // (16px, ~1cm) au-dessus de la feuille, dans tous les modes/états.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── Flottants juste au-dessus de la feuille ──
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                    ),
+                    child: isWizard
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              FloatingBackButton(onTap: _handleBack),
+                              FloatingMapButton(
+                                icon: _orderWizard!.loadingGps
+                                    ? null
+                                    : Icons.my_location,
+                                loading: _orderWizard!.loadingGps,
+                                onTap: _orderWizard!.refreshGps,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Pressable(
+                                onTap: () =>
+                                    context.push('/client/favorite-addresses'),
+                                child: Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surface,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppColors.card,
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: AppShadows.floating,
+                                  ),
+                                  child: const Icon(
+                                    Icons.bookmark_outline_rounded,
+                                    color: AppColors.primary,
+                                    size: 24,
+                                  ),
+                                ),
+                              ),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Builder(
+                                    builder: (_) {
+                                      final badge = _buildSmartBadge();
+                                      return badge != null
+                                          ? Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 8,
+                                              ),
+                                              child: badge,
+                                            )
+                                          : const SizedBox.shrink();
+                                    },
+                                  ),
+                                  MapLocationModeButton(
+                                    mode: _locationModeCtrl.mode,
+                                    compassBearing:
+                                        _locationModeCtrl.compassBearing,
+                                    onTap: _locationModeCtrl.cycle,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                  ),
+
+                  // ── Feuille du bas (partagée par les 3 modes) ──
+                  HomeClientSheetScaffold(
+                    sheetKey: _sheetKey,
+                    panelHeight: _panelHeight,
+                    dragOffset: _dragOffset,
+                    isDragging: _isDragging,
+                    keyboardHeight: keyboardH,
+                    minPanelContent: _kMinPanelContent,
+                    onDraggingChanged: (v) => setState(() => _isDragging = v),
+                    onDragOffsetChanged: (v) => setState(() => _dragOffset = v),
+                    onTapDismissKeyboard: () =>
+                        FocusScope.of(context).unfocus(),
+                    child: _buildSheetContent(),
+                  ),
+
+                  // ── Navbar fixe (accueil uniquement) ──
+                  if (!isWizard) _ClientNavBar(bottomInset: bottomInset),
+                ],
               ),
             ),
-
-            // ── Recentrer / favoris / badge (accueil) ou recentrer seul
-            // (assistant) — placé APRÈS (donc AU-DESSUS, z-order) la
-            // feuille : sinon celle-ci se dessine par-dessus et cache ces
-            // boutons (repéré en test — même règle déjà appliquée plus bas
-            // au bouton retour, oubliée ici par erreur).
-            if (!isWizard)
-              Positioned(
-                left: 0,
-                right: 0,
-                // - _dragOffset : sans lui, ces boutons restaient à la
-                // hauteur de la feuille PLEINE même quand elle est
-                // rétractée au glissé, laissant un grand vide entre eux et
-                // la feuille repliée (repéré en test).
-                bottom:
-                    max(_kMinPanelContent, _panelHeight - _dragOffset) +
-                    _navBarHeight +
-                    bottomInset,
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    bottom: 16,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Pressable(
-                        onTap: () => context.push('/client/favorite-addresses'),
-                        child: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppColors.card,
-                              width: 1.5,
-                            ),
-                            boxShadow: AppShadows.floating,
-                          ),
-                          child: const Icon(
-                            Icons.bookmark_outline_rounded,
-                            color: AppColors.primary,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Builder(
-                            builder: (_) {
-                              final badge = _buildSmartBadge();
-                              return badge != null
-                                  ? Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: badge,
-                                    )
-                                  : const SizedBox.shrink();
-                            },
-                          ),
-                          MapLocationModeButton(
-                            mode: _locationModeCtrl.mode,
-                            compassBearing: _locationModeCtrl.compassBearing,
-                            onTap: _locationModeCtrl.cycle,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Positioned(
-                right: 16,
-                bottom:
-                    max(_kMinPanelContent + 22.0, _panelHeight - _dragOffset) +
-                    60 +
-                    keyboardH,
-                child: FloatingMapButton(
-                  icon: _orderWizard!.loadingGps ? null : Icons.my_location,
-                  loading: _orderWizard!.loadingGps,
-                  onTap: _orderWizard!.refreshGps,
-                ),
-              ),
-
-            // ── Bouton retour flottant (assistant uniquement) ───────────────
-            if (isWizard)
-              Positioned(
-                left: 16,
-                bottom:
-                    max(_kMinPanelContent + 22.0, _panelHeight - _dragOffset) +
-                    60 +
-                    keyboardH,
-                child: FloatingBackButton(onTap: _handleBack),
-              ),
-
-            // ── Navbar fixe (accueil uniquement) ────────────────────────────
-            if (!isWizard)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _ClientNavBar(bottomInset: bottomInset),
-              ),
           ],
         ),
       ),

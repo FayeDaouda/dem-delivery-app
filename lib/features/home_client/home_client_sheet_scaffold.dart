@@ -65,118 +65,134 @@ class HomeClientSheetScaffold extends StatelessWidget {
       onDragOffsetChanged(dragOffset == 0 ? max(0.0, maxOffset) : 0.0);
     }
 
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: AnimatedContainer(
+    // Plus d'Align(bottomCenter) ici — inutile depuis que ce widget est posé
+    // directement dans un Column (voir client_home_shell_screen.dart, même
+    // schéma que home_driver_screen.dart : boutons flottants + feuille dans
+    // UN SEUL Column empilé en bas, plutôt que des Positioned calculés à la
+    // main). C'est ce Column, pas cet Align, qui ancre la feuille en bas.
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOut,
+      decoration: BoxDecoration(
+        gradient: AppColors.gradientSplash,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: AnimatedPadding(
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeInOut,
-        decoration: BoxDecoration(
-          gradient: AppColors.gradientSplash,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: AnimatedPadding(
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeInOut,
-          padding: EdgeInsets.only(bottom: keyboardHeight),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Drag handle
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragStart: (_) => onDraggingChanged(true),
-                  onVerticalDragUpdate: (d) {
-                    onDragOffsetChanged(
-                      (dragOffset + d.delta.dy).clamp(0.0, max(0.0, maxOffset)),
-                    );
-                  },
-                  onVerticalDragEnd: (d) {
-                    final v = d.primaryVelocity ?? 0;
-                    onDraggingChanged(false);
-                    onDragOffsetChanged(
-                      (v > 200 || dragOffset > maxOffset / 2)
-                          ? max(0.0, maxOffset)
-                          : 0.0,
-                    );
-                  },
-                  onTap: toggleCollapse,
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 22,
-                    child: Center(
-                      child: Container(
-                        width: 36,
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+        padding: EdgeInsets.only(bottom: keyboardHeight),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragStart: (_) => onDraggingChanged(true),
+                onVerticalDragUpdate: (d) {
+                  onDragOffsetChanged(
+                    (dragOffset + d.delta.dy).clamp(0.0, max(0.0, maxOffset)),
+                  );
+                },
+                onVerticalDragEnd: (d) {
+                  final v = d.primaryVelocity ?? 0;
+                  onDraggingChanged(false);
+                  onDragOffsetChanged(
+                    (v > 200 || dragOffset > maxOffset / 2)
+                        ? max(0.0, maxOffset)
+                        : 0.0,
+                  );
+                },
+                onTap: toggleCollapse,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 22,
+                  child: Center(
+                    child: Container(
+                      width: 36,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
                 ),
+              ),
 
-                // Contenu via AnimatedSize + AnimatedSwitcher — épouse la
-                // vraie hauteur du contenu affiché (voir _sheetKey/mesure
-                // côté ClientHomeShellScreen), avec le tiroir rétractable
-                // au glissé posé par-dessus (AnimatedContainer + OverflowBox).
-                AnimatedContainer(
-                  duration: isDragging
-                      ? Duration.zero
-                      : const Duration(milliseconds: 280),
-                  curve: Curves.easeInOut,
-                  height: max(minPanelContent, panelHeight - dragOffset),
-                  child: ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.bottomCenter,
-                      minHeight: 0,
-                      // Plafond de sécurité générique — jamais `panelHeight`
-                      // elle-même, sinon la mesure ne pourrait jamais
-                      // détecter qu'un mode a besoin de PLUS de place que le
-                      // dernier mesuré (circularité).
-                      maxHeight: MediaQuery.of(context).size.height * 0.62,
-                      // Un tap dans une zone vide referme le clavier.
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: onTapDismissKeyboard,
-                        child: Container(
-                          key: sheetKey,
-                          child: AnimatedSize(
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOutCubic,
-                            // bottomCenter — doit matcher l'alignment de
-                            // l'OverflowBox ci-dessus (tiroir à glisser).
-                            // Avec des alignments opposés, le contenu du
-                            // haut de la feuille apparaît tronqué/fantôme
-                            // pendant la transition (bug déjà rencontré et
-                            // corrigé sur order_create_screen.dart).
-                            alignment: Alignment.bottomCenter,
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 180),
-                              transitionBuilder: (transitionChild, anim) =>
-                                  FadeTransition(
+              // Contenu via AnimatedSize + AnimatedSwitcher — épouse la
+              // vraie hauteur du contenu affiché (voir _sheetKey/mesure
+              // côté ClientHomeShellScreen), avec le tiroir rétractable
+              // au glissé posé par-dessus (AnimatedContainer + OverflowBox).
+              AnimatedContainer(
+                duration: isDragging
+                    ? Duration.zero
+                    : const Duration(milliseconds: 280),
+                curve: Curves.easeInOut,
+                height: max(minPanelContent, panelHeight - dragOffset),
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.bottomCenter,
+                    minHeight: 0,
+                    // Plafond de sécurité générique — jamais `panelHeight`
+                    // elle-même, sinon la mesure ne pourrait jamais
+                    // détecter qu'un mode a besoin de PLUS de place que le
+                    // dernier mesuré (circularité).
+                    maxHeight: MediaQuery.of(context).size.height * 0.62,
+                    // Un tap dans une zone vide referme le clavier.
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onTapDismissKeyboard,
+                      child: Container(
+                        key: sheetKey,
+                        child: AnimatedSize(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          // bottomCenter — doit matcher l'alignment de
+                          // l'OverflowBox ci-dessus (tiroir à glisser).
+                          // Avec des alignments opposés, le contenu du
+                          // haut de la feuille apparaît tronqué/fantôme
+                          // pendant la transition (bug déjà rencontré et
+                          // corrigé sur order_create_screen.dart).
+                          alignment: Alignment.bottomCenter,
+                          // Glissé + fondu, comme le socle livreur — un
+                          // léger déplacement vertical (pas un plein écran
+                          // comme sur home_driver_screen.dart, ici le
+                          // contenu change à chaque étape, pas à chaque
+                          // changement de mode : une glisse discrète évite
+                          // l'effet "saccadé" d'un simple fondu sec.
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 240),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (transitionChild, anim) =>
+                                SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(0, 0.05),
+                                    end: Offset.zero,
+                                  ).animate(anim),
+                                  child: FadeTransition(
                                     opacity: anim,
                                     child: transitionChild,
                                   ),
-                              child: child,
-                            ),
+                                ),
+                            child: child,
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
