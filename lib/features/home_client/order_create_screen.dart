@@ -1413,7 +1413,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                         onVerticalDragStart: (_) =>
                             setState(() => _isDragging = true),
                         onVerticalDragUpdate: (d) {
-                          final maxOffset = (panelH - 20) - _kMinPanelContent;
+                          final maxOffset = panelH - _kMinPanelContent;
                           setState(() {
                             _panelDragOffset = (_panelDragOffset + d.delta.dy)
                                 .clamp(0.0, max(0.0, maxOffset));
@@ -1421,7 +1421,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                         },
                         onVerticalDragEnd: (d) {
                           final v = d.primaryVelocity ?? 0;
-                          final maxOffset = (panelH - 20) - _kMinPanelContent;
+                          final maxOffset = panelH - _kMinPanelContent;
                           setState(() {
                             _isDragging = false;
                             _panelDragOffset =
@@ -1431,7 +1431,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                           });
                         },
                         onTap: () {
-                          final maxOffset = (panelH - 20) - _kMinPanelContent;
+                          final maxOffset = panelH - _kMinPanelContent;
                           setState(() {
                             _isDragging = false;
                             _panelDragOffset = _panelDragOffset == 0
@@ -1473,7 +1473,7 @@ class _OrderCreateScreenState extends ConsumerState<OrderCreateScreen>
                         curve: Curves.easeInOut,
                         height: max(
                           _kMinPanelContent,
-                          (panelH - 20) - _panelDragOffset,
+                          panelH - _panelDragOffset,
                         ),
                         child: ClipRect(
                           child: OverflowBox(
