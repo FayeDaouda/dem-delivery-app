@@ -1311,6 +1311,19 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
 
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     final keyboardH = MediaQuery.of(context).viewInsets.bottom;
+    // À l'étape 0 d'Express/Simple, les champs d'adresse (le seul texte
+    // qu'on puisse taper à ce moment-là) vivent dans la barre du HAUT (voir
+    // _buildOrderAddressFields), pas dans la feuille — OrderStep0Panel n'a
+    // aucun champ. La feuille n'a donc besoin d'aucune place pour le
+    // clavier à cette étape précise ; lui en redonner quand même la
+    // faisait "remonter" sans raison pendant la saisie, repéré en test.
+    // Pour tous les autres cas (Groupée, dont les champs d'adresse restent
+    // DANS la feuille ; étapes 1-3 d'Express/Simple, contact/promo) le vrai
+    // clavier reste transmis normalement.
+    final sheetKeyboardH =
+        (_mode == ClientHomeMode.expressSimpleWizard && _orderWizard!.step == 0)
+        ? 0.0
+        : keyboardH;
     final isWizard = _mode != ClientHomeMode.home;
     final isPlacement =
         isWizard &&
@@ -1776,7 +1789,7 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                     panelHeight: _panelHeight,
                     dragOffset: _dragOffset,
                     isDragging: _isDragging,
-                    keyboardHeight: keyboardH,
+                    keyboardHeight: sheetKeyboardH,
                     minPanelContent: _mode == ClientHomeMode.home
                         ? _homeMinPanelContent
                         : _kMinPanelContent,
