@@ -86,9 +86,9 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
   bool _nearbyAlerted = false;
   bool _arrivedOverlayVisible = false;
 
-  // ── Annulation client (2 min après acceptation) ───────────────────────────
-  Timer? _clientCancelTimer;
-  int _clientCancelSecondsLeft = 120;
+  // ── Annulation client — permise tant que le livreur n'est pas déjà arrivé
+  // au point de collecte (vérifié côté serveur, voir orders.service.js
+  // :_assertDriverNotNearPickup). Plus de fenêtre de temps ici.
   bool _clientCancelling = false;
   int _clientCancelSwipeTick = 0;
 
@@ -112,7 +112,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _routeRefreshTimer?.cancel();
-    _clientCancelTimer?.cancel();
     _locationModeCtrl.dispose();
     _programmaticMoveTimer?.cancel();
     _mapController?.dispose();
@@ -171,27 +170,6 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     if (phase == 'ACCEPTED' || phase == 'PICKED_UP') {
       _fetchRoute();
     }
-  }
-
-  void _startClientCancelWindow(Map<String, dynamic>? order) {
-    if (order == null) return;
-    final acceptedAt = order['acceptedAt'] as String?;
-    final status = order['status'] as String? ?? '';
-    if (acceptedAt == null || status != 'ACCEPTED') {
-      _clientCancelSecondsLeft = 0;
-      return;
-    }
-    final elapsed = DateTime.now()
-        .difference(DateTime.parse(acceptedAt))
-        .inSeconds;
-    _clientCancelSecondsLeft = (120 - elapsed).clamp(0, 120);
-    if (_clientCancelSecondsLeft <= 0) return;
-    _clientCancelTimer?.cancel();
-    _clientCancelTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() => _clientCancelSecondsLeft--);
-      if (_clientCancelSecondsLeft <= 0) _clientCancelTimer?.cancel();
-    });
   }
 
   Future<void> _clientCancelOrder() async {
@@ -1012,29 +990,11 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     // ── Source unique de vérité pour l'état métier ──────────────────────────
     final orderState = ref.watch(clientOrderStateProvider(widget.orderId));
 
-    // Init timer annulation si pas encore démarré
-    if (_clientCancelTimer == null &&
-        _clientCancelSecondsLeft == 120 &&
-        orderState.orderData != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _startClientCancelWindow(orderState.orderData);
-      });
-    }
-
     // ── Side effects (carte, haptic, dialog) réagissant aux changements ─────
     ref.listen<ClientOrderState>(clientOrderStateProvider(widget.orderId), (
       prev,
       next,
     ) {
-      if (prev?.orderData == null &&
-          next.orderData != null &&
-          _clientCancelTimer == null) {
-        _startClientCancelWindow(next.orderData);
-      }
-      if (next.phase == 'PICKED_UP' && _clientCancelTimer != null) {
-        _clientCancelTimer?.cancel();
-        setState(() => _clientCancelSecondsLeft = 0);
-      }
       final newLoc = next.driverLocation;
 
       // Changement de position driver
@@ -1839,14 +1799,12 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                           color: AppColors.primary,
                           onTap: () => _showShareSheet(context),
                         ),
-                        if (orderState.phase == 'ACCEPTED' &&
-                            _clientCancelSecondsLeft > 0)
+                        if (orderState.phase == 'ACCEPTED')
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: SwipeToConfirm(
                               key: ValueKey('cancel-$_clientCancelSwipeTick'),
-                              label:
-                                  'Glissez pour annuler (${_clientCancelSecondsLeft}s)',
+                              label: 'Glissez pour annuler',
                               onConfirmed: _clientCancelOrder,
                               loading: _clientCancelling,
                               trackColor: Colors.white,

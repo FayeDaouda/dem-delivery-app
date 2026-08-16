@@ -2767,7 +2767,12 @@ class _AvailabilityPillState extends State<_AvailabilityPill>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 320),
           curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          // Même hauteur que le bouton profil voisin (48px) — la pill
+          // paraissait plus courte que les boutons ronds du header, pas
+          // alignée avec eux. Largeur augmentée en cohérence (padding
+          // horizontal plus généreux).
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -2779,7 +2784,7 @@ class _AvailabilityPillState extends State<_AvailabilityPill>
                       Colors.black.withValues(alpha: 0.6),
                     ],
             ),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
                 color: (on ? AppColors.online : Colors.black).withValues(
@@ -2794,7 +2799,12 @@ class _AvailabilityPillState extends State<_AvailabilityPill>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Point radar — pulse en anneau tant que le livreur est en ligne
+              // Point radar — pulse en anneau tant que le livreur est en ligne.
+              // La boîte fait 16×16 mais l'anneau grossit jusqu'à ~2.8× le
+              // point (22px) — sans clipBehavior.none, le Stack le coupait
+              // net à 16px (comportement par défaut hardEdge) et le pulse
+              // était quasi invisible. La boîte de layout reste 16×16 (ne
+              // pousse pas les voisins), seul le rendu déborde librement.
               SizedBox(
                 width: 16,
                 height: 16,
@@ -2804,18 +2814,22 @@ class _AvailabilityPillState extends State<_AvailabilityPill>
                     final t = _radarCtrl.value;
                     return Stack(
                       alignment: Alignment.center,
+                      clipBehavior: Clip.none,
                       children: [
                         if (on)
                           Opacity(
-                            opacity: (1 - t) * 0.55,
+                            opacity: (1 - t) * 0.6,
                             child: Transform.scale(
-                              scale: 1 + t * 1.8,
+                              scale: 1 + t * 2.4,
                               child: Container(
                                 width: 8,
                                 height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
+                                decoration: BoxDecoration(
                                   shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.4,
+                                  ),
                                 ),
                               ),
                             ),
@@ -2833,7 +2847,7 @@ class _AvailabilityPillState extends State<_AvailabilityPill>
                   },
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
                 switchInCurve: Curves.easeOut,

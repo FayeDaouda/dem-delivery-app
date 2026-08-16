@@ -1,5 +1,7 @@
 # Plateforme minimale — doit correspondre à IPHONEOS_DEPLOYMENT_TARGET du projet Xcode
-platform :ios, '14.0'
+# 15.0 — Apple exige ce minimum pour tout nouvel upload à partir du
+# printemps 2027 (avertissement App Store Connect), anticipé ici.
+platform :ios, '15.0'
 
 # Désactive les stats CocoaPods (évite la latence réseau pendant flutter build)
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -49,7 +51,7 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
 
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
       config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'

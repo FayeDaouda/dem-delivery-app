@@ -88,10 +88,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   // ── Guidage vocal ──────────────────────────────────────────────────────────
   bool _voiceNavEnabled = true;
 
-  // ── Annulation livreur (2 min — aligné sur le client) ─────────────────────
-  static const _cancelWindowSeconds = 120;
-  Timer? _cancelWindowTimer;
-  int _cancelSecondsLeft = _cancelWindowSeconds;
+  // ── Annulation livreur — permise tant qu'il n'est pas déjà arrivé au point
+  // de collecte (vérifié côté serveur). Plus de fenêtre de temps ici.
   bool _driverCancelling = false;
 
   // ── Preuve de livraison (photo optionnelle) ───────────────────────────────
@@ -155,7 +153,6 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
       if (mounted) setState(() => _driverIcon = icon);
     });
     _startNavigation();
-    _startCancelWindow();
 
     final orderId = _order['id'] as String?;
     _cancelledSub = SocketService.instance.onOrderCancelled.listen((data) {
@@ -179,31 +176,11 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _cancelledSub?.cancel();
-    _cancelWindowTimer?.cancel();
     _locationSub?.cancel();
     _alertTimer?.cancel();
     _mapController?.dispose();
     VoiceNavService.instance.dispose();
     super.dispose();
-  }
-
-  void _startCancelWindow() {
-    final acceptedAt = _order['acceptedAt'] as String?;
-    if (acceptedAt != null) {
-      final elapsed = DateTime.now()
-          .difference(DateTime.parse(acceptedAt))
-          .inSeconds;
-      _cancelSecondsLeft = (_cancelWindowSeconds - elapsed).clamp(
-        0,
-        _cancelWindowSeconds,
-      );
-    }
-    if (_cancelSecondsLeft <= 0 || _isPickedUp) return;
-    _cancelWindowTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() => _cancelSecondsLeft--);
-      if (_cancelSecondsLeft <= 0) _cancelWindowTimer?.cancel();
-    });
   }
 
   Future<void> _driverCancel() async {
@@ -1765,8 +1742,8 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                     ],
                   ),
 
-                  // Bouton annuler livreur (2 min)
-                  if (!_isPickedUp && !_isDelivered && _cancelSecondsLeft > 0)
+                  // Bouton annuler livreur
+                  if (!_isPickedUp && !_isDelivered)
                     Padding(
                       padding: const EdgeInsets.only(top: 8, bottom: 4),
                       child: SizedBox(
@@ -1793,7 +1770,7 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                                   ),
                                 )
                               : Text(
-                                  'Annuler la course (${_cancelSecondsLeft}s)',
+                                  'Annuler la course',
                                   style: ClientText.label,
                                 ),
                         ),
