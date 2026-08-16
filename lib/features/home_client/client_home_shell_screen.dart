@@ -1453,8 +1453,13 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
               ),
 
             // ── Voile dégradé en haut ───────────────────────────────────────
+            // AnimatedContainer (même durée/courbe que le reste) plutôt
+            // qu'un Container à hauteur fixe qui sautait sec entre 260 et
+            // ~100px à l'entrée/sortie d'un mode de livraison.
             IgnorePointer(
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 190),
+                curve: Curves.easeOutCubic,
                 height: isWizard
                     ? 260
                     : (MediaQuery.of(context).padding.top + 56),
@@ -1675,80 +1680,94 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // ── Flottants juste au-dessus de la feuille ──
+                  // AnimatedSwitcher (au lieu d'un ternaire qui bascule sec)
+                  // — même langage que la zone du haut (cloche ↔ barre
+                  // assistant) et la feuille elle-même : l'entrée dans un
+                  // mode de livraison doit être aussi fluide que le retour.
                   Padding(
                     padding: const EdgeInsets.only(
                       left: 16,
                       right: 16,
                       bottom: 16,
                     ),
-                    child: isWizard
-                        ? Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              FloatingBackButton(onTap: _handleBack),
-                              FloatingMapButton(
-                                icon: _activeWizardLoadingGps
-                                    ? null
-                                    : Icons.my_location,
-                                loading: _activeWizardLoadingGps,
-                                onTap: _activeWizardRefreshGps,
-                              ),
-                            ],
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Pressable(
-                                onTap: () =>
-                                    context.push('/client/favorite-addresses'),
-                                child: Container(
-                                  width: 52,
-                                  height: 52,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surface,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: AppColors.card,
-                                      width: 1.5,
-                                    ),
-                                    boxShadow: AppShadows.floating,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 190),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (transitionChild, anim) =>
+                          FadeTransition(opacity: anim, child: transitionChild),
+                      child: isWizard
+                          ? Row(
+                              key: const ValueKey('wizard-buttons'),
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                FloatingBackButton(onTap: _handleBack),
+                                FloatingMapButton(
+                                  icon: _activeWizardLoadingGps
+                                      ? null
+                                      : Icons.my_location,
+                                  loading: _activeWizardLoadingGps,
+                                  onTap: _activeWizardRefreshGps,
+                                ),
+                              ],
+                            )
+                          : Row(
+                              key: const ValueKey('home-buttons'),
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Pressable(
+                                  onTap: () => context.push(
+                                    '/client/favorite-addresses',
                                   ),
-                                  child: const Icon(
-                                    Icons.bookmark_outline_rounded,
-                                    color: AppColors.primary,
-                                    size: 24,
+                                  child: Container(
+                                    width: 52,
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: AppColors.card,
+                                        width: 1.5,
+                                      ),
+                                      boxShadow: AppShadows.floating,
+                                    ),
+                                    child: const Icon(
+                                      Icons.bookmark_outline_rounded,
+                                      color: AppColors.primary,
+                                      size: 24,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Builder(
-                                    builder: (_) {
-                                      final badge = _buildSmartBadge();
-                                      return badge != null
-                                          ? Padding(
-                                              padding: const EdgeInsets.only(
-                                                bottom: 8,
-                                              ),
-                                              child: badge,
-                                            )
-                                          : const SizedBox.shrink();
-                                    },
-                                  ),
-                                  MapLocationModeButton(
-                                    mode: _locationModeCtrl.mode,
-                                    compassBearing:
-                                        _locationModeCtrl.compassBearing,
-                                    onTap: _locationModeCtrl.cycle,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Builder(
+                                      builder: (_) {
+                                        final badge = _buildSmartBadge();
+                                        return badge != null
+                                            ? Padding(
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 8,
+                                                ),
+                                                child: badge,
+                                              )
+                                            : const SizedBox.shrink();
+                                      },
+                                    ),
+                                    MapLocationModeButton(
+                                      mode: _locationModeCtrl.mode,
+                                      compassBearing:
+                                          _locationModeCtrl.compassBearing,
+                                      onTap: _locationModeCtrl.cycle,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                    ),
                   ),
 
                   // ── Feuille du bas (partagée par les 3 modes) ──
@@ -1773,8 +1792,20 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
                     child: _buildSheetContent(),
                   ),
 
-                  // ── Navbar fixe (accueil uniquement) ──
-                  if (!isWizard) _ClientNavBar(bottomInset: bottomInset),
+                  // ── Navbar (accueil uniquement) ──
+                  // AnimatedSize plutôt qu'un `if` sec : sans lui, la navbar
+                  // disparaissait/réapparaissait d'un coup pendant que la
+                  // feuille juste au-dessus grandissait/rétrécissait en
+                  // douceur — les deux mouvements se battaient visuellement
+                  // (repéré en test à l'entrée dans un mode de livraison).
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 190),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: isWizard
+                        ? const SizedBox(width: double.infinity)
+                        : _ClientNavBar(bottomInset: bottomInset),
+                  ),
                 ],
               ),
             ),
