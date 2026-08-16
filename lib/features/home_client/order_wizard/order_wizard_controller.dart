@@ -190,6 +190,22 @@ class OrderWizardController {
     } catch (_) {}
   }
 
+  // Dès que les 2 points sont connus, cadre les deux plutôt que de rester
+  // centré sur celui qu'on vient juste de renseigner — le client voit
+  // aussitôt le trajet complet (départ + destination), sans attendre
+  // d'avoir avancé jusqu'à l'étape Contact. Avant ça (un seul point
+  // connu), centre simplement dessus comme avant.
+  void _reframeMap(LatLng justSet) {
+    if (pickupLat != null && deliveryLat != null) {
+      mapHost.fitPoints([
+        LatLng(pickupLat!, pickupLng!),
+        LatLng(deliveryLat!, deliveryLng!),
+      ]);
+    } else {
+      mapHost.centerOn(justSet);
+    }
+  }
+
   void applyFavorite(Map<String, dynamic> fav) {
     final lat = (fav['lat'] as num).toDouble();
     final lng = (fav['lng'] as num).toDouble();
@@ -205,7 +221,7 @@ class OrderWizardController {
     }
     suggestions = [];
     onChanged();
-    mapHost.centerOn(LatLng(lat, lng));
+    _reframeMap(LatLng(lat, lng));
     _updateEstimate();
   }
 
@@ -416,7 +432,7 @@ class OrderWizardController {
       }
       isMapPlacementMode = false;
       onChanged();
-      mapHost.centerOn(ll);
+      _reframeMap(ll);
       await _reverseGeocode(ll, forPickup: forPickup);
       _updateEstimate();
     } catch (_) {
@@ -482,6 +498,17 @@ class OrderWizardController {
       deliveryLng = pos.longitude;
     }
     onChanged();
+    // Si les 2 points sont maintenant connus, cadre les deux — sinon la
+    // caméra reste exactement là où l'utilisateur vient de la positionner
+    // au glissé (contrairement aux autres façons de renseigner une adresse,
+    // qui partent d'un point pas encore visible et ont donc besoin de
+    // recentrer la caméra dessus).
+    if (pickupLat != null && deliveryLat != null) {
+      mapHost.fitPoints([
+        LatLng(pickupLat!, pickupLng!),
+        LatLng(deliveryLat!, deliveryLng!),
+      ]);
+    }
     _updateEstimate();
     await _reverseGeocode(pos, forPickup: isSelectingPickup);
   }
@@ -560,7 +587,7 @@ class OrderWizardController {
           deliveryCtrl.text = name;
         }
         onChanged();
-        mapHost.centerOn(LatLng(lat, lng));
+        _reframeMap(LatLng(lat, lng));
         _updateEstimate();
 
         if (wasSelectingPickup && deliveryCtrl.text.isEmpty) {
