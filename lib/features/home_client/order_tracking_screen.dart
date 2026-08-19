@@ -1074,6 +1074,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
 
     final driverMap = order?['driver'] as Map<String, dynamic>?;
     final driverName = driverMap?['name'] as String? ?? 'Livreur';
+    final driverAvatar = driverMap?['avatar'] as String?;
     final hasDriverPhone = (driverMap?['phone'] as String?)?.isNotEmpty == true;
     final driverRating = (driverMap?['averageRating'] as num?)?.toDouble();
     final pickupAddress = order?['pickupAddress'] as String? ?? '';
@@ -1554,18 +1555,21 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                       // Driver info row
                       Row(
                         children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              shape: BoxShape.circle,
+                          CircleAvatar(
+                            radius: 21,
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.15,
                             ),
-                            child: const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                            backgroundImage: driverAvatar != null
+                                ? NetworkImage(driverAvatar)
+                                : null,
+                            child: driverAvatar == null
+                                ? const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 24,
+                                  )
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(

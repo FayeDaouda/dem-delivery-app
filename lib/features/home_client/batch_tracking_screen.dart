@@ -403,13 +403,21 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  const CircleAvatar(
+                                  CircleAvatar(
                                     backgroundColor: _kBatchAccent,
-                                    child: Icon(
-                                      Icons.person,
-                                      color: Colors.white,
-                                      size: 18,
-                                    ),
+                                    backgroundImage:
+                                        driver['avatar'] is String
+                                        ? NetworkImage(
+                                            driver['avatar'] as String,
+                                          )
+                                        : null,
+                                    child: driver['avatar'] is! String
+                                        ? const Icon(
+                                            Icons.person,
+                                            color: Colors.white,
+                                            size: 18,
+                                          )
+                                        : null,
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(

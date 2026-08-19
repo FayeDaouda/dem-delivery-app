@@ -166,6 +166,7 @@ class _OrderDetailBody extends StatelessWidget {
     final delivery = order['deliveryAddress'] as String? ?? '—';
     final driver = order['driver'] as Map?;
     final driverName = driver?['name'] as String?;
+    final driverAvatar = driver?['avatar'] as String?;
     final driverRating = (driver?['averageRating'] as num?)?.toDouble();
     final proofPhotoUrl = order['proofPhotoUrl'] as String?;
     final hasProofPhoto = proofPhotoUrl != null && proofPhotoUrl.isNotEmpty;
@@ -256,18 +257,19 @@ class _OrderDetailBody extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.person,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: Colors.white.withValues(alpha: 0.15),
+                  backgroundImage: driverAvatar != null
+                      ? NetworkImage(driverAvatar)
+                      : null,
+                  child: driverAvatar == null
+                      ? const Icon(
+                          Icons.person,
+                          color: Colors.white,
+                          size: 24,
+                        )
+                      : null,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
