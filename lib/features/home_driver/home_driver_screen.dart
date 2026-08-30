@@ -160,11 +160,12 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     });
     PoiService.loadPois().then((pois) {
       buildPoiIconSet(pois).then((set) {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _pois = pois;
             _poiIconSet = set;
           });
+        }
       });
     });
     _startGPS();
@@ -866,7 +867,7 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
                   ),
                 ),
                 child: const Text(
-                  'Payer ma passe maintenant',
+                  'Payer mon pass maintenant',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
               ),
@@ -998,11 +999,12 @@ class _HomeDriverScreenState extends ConsumerState<HomeDriverScreen>
     try {
       await ref.read(ordersRepositoryProvider).declineBatch(batchId);
     } catch (_) {}
-    if (mounted)
+    if (mounted) {
       setState(() {
         _currentBatch = null;
         _batchActionLoading = false;
       });
+    }
   }
 
   Future<void> _acceptBatch(String batchId) async {
@@ -2810,7 +2812,7 @@ class _AvailabilityPillState extends State<_AvailabilityPill>
                 height: 16,
                 child: AnimatedBuilder(
                   animation: _radarCtrl,
-                  builder: (_, __) {
+                  builder: (_, _) {
                     final t = _radarCtrl.value;
                     return Stack(
                       alignment: Alignment.center,

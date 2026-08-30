@@ -203,10 +203,12 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
 
     setState(() => _driverCancelling = true);
     try {
+      final orderId = _order['id'] as String;
       await ref
           .read(ordersRepositoryProvider)
-          .driverCancelOrder(_order['id'] as String, reason: reason);
+          .driverCancelOrder(orderId, reason: reason);
       if (!mounted) return;
+      ref.read(availableOrdersProvider.notifier).declineOrderLocally(orderId);
       ref.read(availableOrdersProvider.notifier).clear();
       context.go('/driver/home');
     } catch (e) {
@@ -1323,132 +1325,145 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
             ),
           ),
 
-          // ── Bouton paiement QR (expéditeur à la récupération, destinataire à
-          // la livraison) — toujours visible, y compris pendant une alerte de
-          // proximité (zones d'écran distinctes, aucun chevauchement réel) et
-          // après livraison (le paiement peut être demandé au moment même de
-          // la remise du colis). Le backend refuse déjà toute nouvelle
-          // tentative sur une commande déjà payée (409), donc laisser le
-          // bouton actif ne peut pas provoquer de double paiement.
+          // ── Boutons de contrôle de la carte (sur le côté droit) ──
           Positioned(
             right: 16,
-            bottom: 350,
-            child: GestureDetector(
-              onTap: _openPaymentQr,
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 10,
+            top: MediaQuery.of(context).padding.top + 16,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Bouton paiement QR
+                GestureDetector(
+                  onTap: _openPaymentQr,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 10,
+                        ),
+                      ],
                     ),
-                  ],
+                    child: const Icon(
+                      Icons.qr_code_2_rounded,
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                  ),
                 ),
-                child: const Icon(
-                  Icons.qr_code_2_rounded,
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-              ),
+                if (!_isDelivered) ...[
+                  const SizedBox(height: 12),
+                  // Bouton guidage vocal
+                  GestureDetector(
+                    onTap: () async {
+                      await VoiceNavService.instance.toggle();
+                      if (mounted)
+                        setState(
+                          () => _voiceNavEnabled = VoiceNavService.instance.enabled,
+                        );
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _voiceNavEnabled ? AppColors.primary : Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        _voiceNavEnabled
+                            ? Icons.volume_up_rounded
+                            : Icons.volume_off_rounded,
+                        color: _voiceNavEnabled ? Colors.white : Colors.grey,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ],
+                if (!_autoFollow && _driverPosition != null) ...[
+                  const SizedBox(height: 12),
+                  // Bouton re-centrer
+                  GestureDetector(
+                    onTap: _recenter,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.my_location,
+                        color: AppColors.primary,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
 
-          // ── Bouton guidage vocal ──
-          if (!_isDelivered)
-            Positioned(
-              right: 16,
-              bottom: 290,
-              child: GestureDetector(
-                onTap: () async {
-                  await VoiceNavService.instance.toggle();
-                  if (mounted)
-                    setState(
-                      () => _voiceNavEnabled = VoiceNavService.instance.enabled,
-                    );
-                },
+          // ── Feuille infos bas (Draggable) ──
+          DraggableScrollableSheet(
+            initialChildSize: 0.4,
+            minChildSize: 0.16,
+            maxChildSize: 0.70, // Reasonable max limit
+            snap: true,
+            builder: (context, scrollController) {
+              return Align(
+                alignment: Alignment.bottomCenter,
                 child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: _voiceNavEnabled ? AppColors.primary : Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 10,
+                decoration: BoxDecoration(
+                  gradient: AppColors.gradientDialog,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      blurRadius: 20,
+                    ),
+                  ],
+                ),
+                child: ListView(
+                  controller: scrollController,
+                  shrinkWrap: true,
+                  physics: const ClampingScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    12,
+                    20,
+                    MediaQuery.of(context).viewPadding.bottom + 24,
+                  ),
+                  children: [
+                    // Poignée de glissement (Drag Handle)
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 5,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white30,
+                          borderRadius: BorderRadius.circular(2.5),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: Icon(
-                    _voiceNavEnabled
-                        ? Icons.volume_up_rounded
-                        : Icons.volume_off_rounded,
-                    color: _voiceNavEnabled ? Colors.white : Colors.grey,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ),
-
-          // ── Bouton re-centrer (visible quand autoFollow désactivé) ──
-          if (!_autoFollow && _driverPosition != null)
-            Positioned(
-              right: 16,
-              bottom: 230,
-              child: GestureDetector(
-                onTap: _recenter,
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.my_location,
-                    color: AppColors.primary,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ),
-
-          // ── Feuille infos bas ──
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                MediaQuery.of(context).viewPadding.bottom + 24,
-              ),
-              decoration: BoxDecoration(
-                gradient: AppColors.gradientDialog,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 20,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                    ),
                   // Phase + distance en temps réel
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -1925,7 +1940,9 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                 ],
               ),
             ),
-          ),
+        );
+      },
+    ),
         ],
       ),
     );

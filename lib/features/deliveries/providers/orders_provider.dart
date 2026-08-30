@@ -30,7 +30,7 @@ class AvailableOrdersNotifier extends AsyncNotifier<List<Map<String, dynamic>>> 
     }
   }
 
-  /// Retire une course par son id (offre expirée côté backend).
+  /// Retire une course par son id (refusée ou expirée).
   void removeOrder(String orderId) {
     final current = state.value ?? [];
     state = AsyncData(current.where((o) => o['id'] != orderId).toList());

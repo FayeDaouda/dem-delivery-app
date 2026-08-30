@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,64 @@ import '../router/app_startup_notifier.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   // Firebase est déjà initialisé par main.dart. Navigation impossible ici.
+  try {
+    final type = message.data['type'] as String?;
+    final channelId = message.data['channelId'] as String?;
+
+    if (channelId == 'dem_order_alert' || type == 'ORDER_OFFER' || type == 'BATCH_OFFER') {
+      final localNotificationsPlugin = FlutterLocalNotificationsPlugin();
+      const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosInitSettings = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
+      await localNotificationsPlugin.initialize(
+        settings: InitializationSettings(android: androidInitSettings, iOS: iosInitSettings),
+      );
+
+      final title = message.data['title'] ?? message.notification?.title ?? 'Nouvelle course disponible !';
+      final body = message.data['body'] ?? message.notification?.body ?? 'Ouvrez l\'application pour accepter la course.';
+
+      final androidDetails = AndroidNotificationDetails(
+        'dem_order_alert',
+        'Alertes courses DEM',
+        channelDescription: 'Son et vibration pour les nouvelles courses',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+        playSound: true,
+        sound: const RawResourceAndroidNotificationSound('dem_order_alert'),
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList([0, 300, 200, 300, 200, 300]),
+        visibility: NotificationVisibility.public,
+      );
+      
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        sound: 'dem_order_alert.wav',
+      );
+
+      final details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      final payloadStr = jsonEncode(message.data);
+
+      await localNotificationsPlugin.show(
+        id: 7777,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payloadStr,
+      );
+    }
+  } catch (e) {
+    debugPrint('[FCM Background] Error: $e');
+  }
 }
 
 class NotificationService {
@@ -34,7 +93,10 @@ class NotificationService {
         android: androidInitSettings,
         iOS: iosInitSettings,
       );
-      await _localNotificationsPlugin.initialize(settings: initSettings);
+      await _localNotificationsPlugin.initialize(
+        settings: initSettings,
+        onDidReceiveNotificationResponse: _handleLocalNotificationTap,
+      );
 
       // Canal Android haute importance (alertes, nouvelles courses)
       const channel = AndroidNotificationChannel(
@@ -106,6 +168,18 @@ class NotificationService {
       final initial = await _messaging.getInitialMessage();
       if (initial != null) _handleTap(initial);
 
+      // Vérifie si l'app a été ouverte via une local notification (en tâche terminée)
+      final details = await _localNotificationsPlugin.getNotificationAppLaunchDetails();
+      if (details != null && details.didNotificationLaunchApp) {
+        final payload = details.notificationResponse?.payload;
+        if (payload != null) {
+          try {
+            final data = jsonDecode(payload) as Map<String, dynamic>;
+            _handleTapFromData(data);
+          } catch (_) {}
+        }
+      }
+
       clearBadge();
     } catch (_) {
       // Silencieux sur émulateur sans Google Play Services
@@ -164,10 +238,14 @@ class NotificationService {
   // ── Navigation ───────────────────────────────────────────────────────────────
 
   static void _handleTap(RemoteMessage message) {
-    final type = message.data['type'] as String?;
-    final orderId = message.data['orderId'] as String?;
-    final driverId = message.data['driverId'] as String?;
-    final batchId = message.data['batchId'] as String?;
+    _handleTapFromData(message.data);
+  }
+
+  static void _handleTapFromData(Map<String, dynamic> data) {
+    final type = data['type'] as String?;
+    final orderId = data['orderId'] as String?;
+    final driverId = data['driverId'] as String?;
+    final batchId = data['batchId'] as String?;
 
     Future.delayed(const Duration(milliseconds: 300), () {
       final role = appStartupNotifier.role;
@@ -197,6 +275,16 @@ class NotificationService {
       final route = _routeForType(type);
       if (route != null) appRouter.go(route);
     });
+  }
+
+  static void _handleLocalNotificationTap(NotificationResponse response) {
+    final payload = response.payload;
+    if (payload != null) {
+      try {
+        final data = jsonDecode(payload) as Map<String, dynamic>;
+        _handleTapFromData(data);
+      } catch (_) {}
+    }
   }
 
   // ── Bannière en haut (foreground) ────────────────────────────────────────
@@ -431,7 +519,6 @@ class NotificationService {
       importance: Importance.max,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
-      fullScreenIntent: true,
       playSound: true,
       sound: const RawResourceAndroidNotificationSound('dem_order_alert'),
       enableVibration: true,

@@ -246,7 +246,7 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
 
     final operatorName = await chooseOperator(
       context,
-      title: 'Payer ma passe avec',
+      title: 'Payer mon pass avec',
     );
     if (operatorName == null || !mounted) return;
 
@@ -600,8 +600,8 @@ class _DriverWalletScreenState extends State<DriverWalletScreen> {
           actionLabel: _activatingFreeForfait
               ? 'Activation...'
               : displayAmount <= 0
-              ? 'Activer ma passe (gratuite)'
-              : 'Payer ma passe (${displayAmount.toStringAsFixed(0)} FCFA)',
+              ? 'Activer mon pass (gratuit)'
+              : 'Payer mon pass (${displayAmount.toStringAsFixed(0)} FCFA)',
           onAction: _activatingFreeForfait ? null : _payForfaitOnline,
         ),
         const SizedBox(height: 10),
