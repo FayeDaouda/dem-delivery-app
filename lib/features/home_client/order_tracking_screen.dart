@@ -1803,7 +1803,13 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                           color: AppColors.primary,
                           onTap: () => _showShareSheet(context),
                         ),
-                        if (orderState.phase == 'ACCEPTED')
+                        // Une fois payée en ligne, l'auto-annulation est
+                        // bloquée côté backend (aucun remboursement
+                        // automatique) — on ne propose donc plus le swipe,
+                        // juste un renvoi vers le service client, plutôt que
+                        // de laisser le client glisser pour rien.
+                        if (orderState.phase == 'ACCEPTED' &&
+                            paymentStatus != 'PAID')
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: SwipeToConfirm(
@@ -1815,6 +1821,19 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                               thumbColor: AppColors.error,
                               iconColor: Colors.white,
                               labelColor: AppColors.error,
+                            ),
+                          )
+                        else if (orderState.phase == 'ACCEPTED' &&
+                            paymentStatus == 'PAID')
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Commande déjà payée — contactez le service client pour l\'annuler.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ),
                       ],

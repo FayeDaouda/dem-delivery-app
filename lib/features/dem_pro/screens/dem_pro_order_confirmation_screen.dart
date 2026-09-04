@@ -11,7 +11,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/error/app_exception.dart';
 import '../../../core/services/socket_service.dart';
+import '../../../core/utils/dem_toast.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/theme/map_theme_provider.dart';
 import '../../deliveries/providers/orders_provider.dart';
@@ -275,8 +277,16 @@ class _DemProOrderConfirmationScreenState
       if (orderId != null) {
         await ref.read(ordersRepositoryProvider).cancelOrder(orderId);
       }
-    } catch (_) {}
-    if (mounted) context.go('/dem-pro/home');
+      if (mounted) context.go('/dem-pro/home');
+    } catch (e) {
+      // Avant : l'erreur était avalée et on naviguait quand même — le
+      // commerçant croyait sa commande annulée alors qu'elle ne l'était pas
+      // (ex: déjà payée en ligne, désormais bloqué côté backend).
+      if (mounted) {
+        setState(() => _cancelling = false);
+        showDemToast(context, friendlyError(e), isError: true);
+      }
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
