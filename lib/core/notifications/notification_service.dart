@@ -318,6 +318,7 @@ class NotificationService {
     'DEM_PRO_PLAN_GIFTED' => '/dem-pro/home',
     // ── Paiement — driver ───────────────────────────────────────────────────
     'PAYMENT_RESOLVED' => '/driver/home', // admin confirme paiement
+    'ORDER_PAYMENT_CONFIRMED' => '/driver/home', // client a payé en ligne (SamirPay) — le listener socket de home_driver_screen.dart affiche le toast/rafraîchit les stats
     _ => null,
   };
 
