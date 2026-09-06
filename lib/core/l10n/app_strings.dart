@@ -56,7 +56,7 @@ class AppStrings {
   String get license         => _t('Permis de conduire',       "Driver's license");
   String get docVerified     => _t('Vérifié',                  'Verified');
   String get docPending      => _t('À soumettre',              'To submit');
-  String get historyTitle    => _t('Historique des courses',   'Ride history');
+  String get historyTitle    => _t('Historique des courses',   'Delivery history');
   String get editPhone       => _t('Modifier numéro',          'Edit number');
   String get language        => _t('Langue',                   'Language');
   String get support         => _t('Support',                  'Support');
