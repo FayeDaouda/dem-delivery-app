@@ -1021,6 +1021,13 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                   '$price FCFA encaissés',
                   style: const TextStyle(fontSize: 15, color: Colors.white70),
                 ),
+                if (_hasCommission) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '($_demFee FCFA de frais DEM déjà déduits)',
+                    style: const TextStyle(fontSize: 11, color: Colors.white60),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Text(
                   _order['deliveryAddress'] ?? '',
@@ -1104,6 +1111,13 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
   }
 
   bool get _isExpress => _order['priority'] == 'EXPRESS';
+
+  // Frais de mise en relation DEM (matrice zone, jamais cumulé avec EXPRESS
+  // qui garde son propre modèle) — déjà déduits de `price`, sans signalement
+  // le livreur voit juste un chiffre plus bas que le tarif annoncé au
+  // client, sans comprendre pourquoi.
+  int get _demFee => (_order['demFee'] as num?)?.toInt() ?? 0;
+  bool get _hasCommission => !_isExpress && _demFee > 0;
 
   /// Numéro du client — compatible format plat (dev) et imbriqué (API réelle)
   /// Dev order : _order['clientPhone'] = '+221...'
@@ -1696,6 +1710,17 @@ class _ActiveOrderScreenState extends ConsumerState<ActiveOrderScreen>
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: AppColors.warning.withValues(alpha: 0.90),
+                          ),
+                        ),
+                      ],
+                      if (_hasCommission) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '($_demFee FCFA de frais DEM déjà déduits)',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white70,
                           ),
                         ),
                       ],

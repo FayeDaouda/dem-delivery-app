@@ -1887,6 +1887,12 @@ class _OrderNotificationSheet extends StatelessWidget {
     // EXPRESS_DRIVER_EXTRA côté backend) mais rien ne le signalait — le
     // livreur voyait juste un chiffre plus élevé sans comprendre pourquoi.
     final isExpress = order['priority'] == 'EXPRESS';
+    // Frais de mise en relation DEM (matrice zone, jamais cumulé avec
+    // EXPRESS qui garde son propre modèle) — déjà déduits de `price`, sans
+    // signalement le livreur voit juste un chiffre plus bas que le tarif
+    // annoncé au client, sans comprendre pourquoi.
+    final demFee = (order['demFee'] as num?)?.toInt() ?? 0;
+    final hasCommission = !isExpress && demFee > 0;
     final accentColor = isExpress ? AppColors.warning : AppColors.primary;
 
     return GradientSheet(
@@ -2052,6 +2058,18 @@ class _OrderNotificationSheet extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: AppColors.warning,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                  if (hasCommission) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'dont $demFee FCFA de frais DEM (déjà déduits)',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white70,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),

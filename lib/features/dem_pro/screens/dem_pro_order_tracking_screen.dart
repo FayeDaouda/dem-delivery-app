@@ -862,8 +862,13 @@ class _DemProOrderTrackingScreenState
                           builder: (context) {
                             final charge = clientChargeFor(o);
                             if (charge >= price.round()) {
+                              // `charge` inclut demFee (frais DEM éventuels) —
+                              // jamais `price` seul, qui reste 100% pour le
+                              // livreur (voir clientChargeFor). Sans ce fix,
+                              // une commande avec demFee > 0 affichait le gain
+                              // du livreur au lieu du vrai total client.
                               return Text(
-                                formatFcfa(price.toInt()),
+                                formatFcfa(charge),
                                 style: ClientText.subtitle.copyWith(
                                   color: Colors.white,
                                 ),

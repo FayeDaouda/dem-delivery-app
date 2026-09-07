@@ -1688,8 +1688,14 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                               final charge = clientChargeFor(order ?? const {});
                               final hasDiscount = charge < price;
                               if (!hasDiscount) {
+                                // `charge` inclut demFee (frais DEM éventuels,
+                                // ex: matrice zone) — jamais `price` seul, qui
+                                // reste 100% pour le livreur (voir
+                                // clientChargeFor). Sans ce fix, une commande
+                                // avec demFee > 0 et sans réduction affichait
+                                // le gain du livreur au lieu du vrai total.
                                 return Text(
-                                  formatFcfa(price),
+                                  formatFcfa(charge),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 15,

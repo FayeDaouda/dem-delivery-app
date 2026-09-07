@@ -487,6 +487,10 @@ class _DemProOrderConfirmationScreenState
   }
 
   Widget _buildWaiting(String pickup, String delivery, num price) {
+    // Montant réellement dû par le client (inclut demFee éventuels, ex:
+    // matrice zone) — jamais `price` seul, qui reste 100% pour le livreur
+    // (voir price_format.dart:clientChargeFor).
+    final charge = clientChargeFor(widget.order);
     return Column(
       key: const ValueKey('waiting'),
       mainAxisSize: MainAxisSize.min,
@@ -543,7 +547,7 @@ class _DemProOrderConfirmationScreenState
               ),
               const SizedBox(width: 6),
               Text(
-                formatFcfa(price.toInt()),
+                formatFcfa(charge),
                 style: ClientText.subtitle.copyWith(color: Colors.white),
               ),
             ],
