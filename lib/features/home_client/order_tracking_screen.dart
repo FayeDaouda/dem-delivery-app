@@ -436,7 +436,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
       context,
       orderId: widget.orderId,
       driverId: widget.driverId,
-      amount: (_s.orderData?['price'] as num?)?.toDouble(),
+      amount: clientChargeFor(_s.orderData ?? const {}).toDouble(),
       onDone: () {
         if (mounted) context.go('/client/home');
       },

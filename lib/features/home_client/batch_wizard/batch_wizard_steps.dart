@@ -633,8 +633,10 @@ class BatchStep3Panel extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           PrimaryButton(
+            // batchChargeFor ajoute demFee au total — jamais estimate['total']
+            // seul, qui exclut les frais DEM sommés par arrêt.
             label: estimate != null
-                ? 'Confirmer — ${formatFcfa((estimate!['total'] as num).toInt())}'
+                ? 'Confirmer — ${formatFcfa(batchChargeFor(estimate!))}'
                 : 'Confirmer la tournée',
             onTap: (estimate != null && !submitting) ? onSubmit : null,
             loading: submitting,
@@ -705,7 +707,10 @@ class _PriceSummary extends StatelessWidget {
 
     final rawTotal = (estimate!['rawTotal'] as num).toInt();
     final discount = (estimate!['discountAmount'] as num).toInt();
-    final total = (estimate!['total'] as num).toInt();
+    final demFee = (estimate!['demFee'] as num?)?.toInt() ?? 0;
+    // total à payer = total (déjà net de la réduction tournée) + demFee
+    // (frais DEM sommés par arrêt, jamais inclus dans "total" seul).
+    final total = batchChargeFor(estimate!);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -725,8 +730,11 @@ class _PriceSummary extends StatelessWidget {
               ),
               const Spacer(),
               if (discount > 0)
+                // Comparaison sur la même base que le total final (avec
+                // demFee) — sinon l'écart affiché ne représente pas
+                // vraiment l'économie réalisée en groupant.
                 Text(
-                  formatFcfa(rawTotal),
+                  formatFcfa(rawTotal + demFee),
                   style: const TextStyle(
                     color: Colors.white38,
                     fontSize: 13,
@@ -744,6 +752,22 @@ class _PriceSummary extends StatelessWidget {
               ),
             ],
           ),
+          if (demFee > 0) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text(
+                  'dont Frais DEM',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const Spacer(),
+                Text(
+                  '+${formatFcfa(demFee)}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
           if (discount > 0) ...[
             const SizedBox(height: 8),
             Row(

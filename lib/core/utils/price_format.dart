@@ -25,3 +25,17 @@ int clientChargeFor(Map<String, dynamic> order) {
   final discount = (order['discountAmount'] as num?)?.toDouble() ?? 0;
   return (price + demFee - discount).clamp(0, double.infinity).round();
 }
+
+/// Équivalent de [clientChargeFor] pour une tournée groupée (BatchOrder) —
+/// le total persisté (`totalPrice`) est déjà net de la réduction tournée
+/// (-20%, voir batch.service.js:_priceStops) mais n'inclut PAS `demFee`
+/// (frais DEM sommés par arrêt, gardés à part) : jamais `totalPrice` seul.
+/// Le champ "total" est utilisé côté réponse d'estimation (avant création),
+/// "totalPrice" une fois la tournée créée — on accepte les deux noms.
+int batchChargeFor(Map<String, dynamic> batch) {
+  final total = (batch['totalPrice'] as num?)?.toDouble() ??
+      (batch['total'] as num?)?.toDouble() ??
+      0;
+  final demFee = (batch['demFee'] as num?)?.toDouble() ?? 0;
+  return (total + demFee).clamp(0, double.infinity).round();
+}

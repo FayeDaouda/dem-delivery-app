@@ -638,7 +638,9 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
     SharedPreferences prefs,
     List<String> shownIds,
   ) {
-    final price = (order['price'] as num?)?.toInt() ?? 0;
+    // price inclut demFee (frais DEM éventuels) — jamais order['price'] seul,
+    // qui reste 100% pour le livreur (voir clientChargeFor).
+    final price = clientChargeFor(order);
     final delivery = order['deliveryAddress'] as String? ?? '—';
     Timer? autoClose;
     showDialog(
@@ -918,7 +920,9 @@ class _ClientHomeShellScreenState extends ConsumerState<ClientHomeShellScreen>
               final status = (o['status'] as String? ?? '').toUpperCase();
               final delivery = o['deliveryAddress'] as String? ?? '—';
               final pickup = o['pickupAddress'] as String? ?? '—';
-              final price = (o['price'] as num?)?.toInt() ?? 0;
+              // price inclut demFee (frais DEM éventuels) — jamais o['price']
+              // seul, qui reste 100% pour le livreur (voir clientChargeFor).
+              final price = clientChargeFor(o);
               final isPending = status == 'PENDING';
               final String statusLabel = switch (status) {
                 'PICKED_UP' || 'IN_TRANSIT' => 'En route vers vous',

@@ -192,7 +192,8 @@ class _BatchListScreenState extends State<BatchListScreen> {
               ),
               const Spacer(),
               Text(
-                formatFcfa((b['totalPrice'] as num?)?.toInt() ?? 0),
+                // batchChargeFor ajoute demFee — jamais totalPrice seul.
+                formatFcfa(batchChargeFor(b)),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -487,10 +488,9 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                                 ),
                                 const Spacer(),
                                 Text(
-                                  formatFcfa(
-                                    (batch?['totalPrice'] as num?)?.toInt() ??
-                                        0,
-                                  ),
+                                  // batchChargeFor ajoute demFee — jamais
+                                  // totalPrice seul.
+                                  formatFcfa(batchChargeFor(batch ?? const {})),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -509,8 +509,9 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                                   context,
                                   orderId: lastStop['id'] as String,
                                   driverId: driver['id'] as String,
-                                  amount: (batch?['totalPrice'] as num?)
-                                      ?.toDouble(),
+                                  amount: batchChargeFor(
+                                    batch ?? const {},
+                                  ).toDouble(),
                                   onDone: _load,
                                 ),
                                 icon: const Icon(Icons.star_outline, size: 18),

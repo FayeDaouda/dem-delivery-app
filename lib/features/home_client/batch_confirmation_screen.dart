@@ -1031,7 +1031,12 @@ class _BatchConfirmationScreenState
                                                 ),
                                                 const Spacer(),
                                                 Text(
-                                                  formatFcfa(totalPrice),
+                                                  // totalPrice exclut demFee
+                                                  // (affiché juste au-dessus)
+                                                  // — jamais l'un sans l'autre.
+                                                  formatFcfa(
+                                                    totalPrice + demFee,
+                                                  ),
                                                   style: const TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 14,

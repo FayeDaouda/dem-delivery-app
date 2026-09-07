@@ -378,8 +378,10 @@ class _OrderDetailBody extends StatelessWidget {
               ),
               const Spacer(),
               if (!hasDiscount)
+                // charge inclut demFee (frais DEM éventuels) — jamais price
+                // seul, qui reste 100% pour le livreur (clientChargeFor).
                 Text(
-                  formatFcfa(price),
+                  formatFcfa(charge),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,

@@ -735,7 +735,9 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
     final order = widget.order;
     final id = (order['id'] as String? ?? '').toUpperCase();
     final shortId = id.length >= 8 ? id.substring(0, 8) : id;
-    final price = (order['price'] as num?)?.toInt() ?? 0;
+    // charge inclut demFee (frais DEM éventuels) — jamais price seul, qui
+    // reste 100% pour le livreur (voir clientChargeFor).
+    final price = clientChargeFor(order);
     final status = (order['status'] as String? ?? '').toUpperCase();
     final paymentStatus = (order['paymentStatus'] as String?) ?? 'PENDING';
     final rawDate = order['createdAt'] as String?;
