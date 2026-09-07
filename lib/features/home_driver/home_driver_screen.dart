@@ -2464,10 +2464,16 @@ class _StatDetailModalState extends State<_StatDetailModal> {
 
     int cToday = 0, cWeek = 0, cTotal = 0, cCancelled = 0;
     int gToday = 0, gWeek = 0, gMonth = 0, gTotal = 0;
+    // Frais DEM déjà déduits des gains ci-dessus (matrice zone/EXPRESS pour
+    // une course simple, grille de commissions pour une tournée) — jamais
+    // affiché avant sur ces totaux agrégés, contrairement au détail par
+    // commande (active_order_screen.dart, driver_order_history_screen.dart).
+    int fToday = 0, fWeek = 0, fMonth = 0, fTotal = 0;
 
     for (final o in orders) {
       final status = (o['status'] as String? ?? '').toUpperCase();
       final price = (o['price'] as num?)?.toInt() ?? 0;
+      final demFee = (o['demFee'] as num?)?.toInt() ?? 0;
       final raw2 = o['createdAt'] as String?;
       final dt = raw2 != null ? DateTime.tryParse(raw2)?.toLocal() : null;
 
@@ -2479,18 +2485,24 @@ class _StatDetailModalState extends State<_StatDetailModal> {
 
       cTotal++;
       gTotal += price;
+      fTotal += demFee;
       if (dt != null) {
         final sameDay =
             dt.year == now.year && dt.month == now.month && dt.day == now.day;
         if (sameDay) {
           cToday++;
           gToday += price;
+          fToday += demFee;
         }
         if (!dt.isBefore(mon)) {
           cWeek++;
           gWeek += price;
+          fWeek += demFee;
         }
-        if (dt.year == now.year && dt.month == now.month) gMonth += price;
+        if (dt.year == now.year && dt.month == now.month) {
+          gMonth += price;
+          fMonth += demFee;
+        }
       }
     }
 
@@ -2507,6 +2519,10 @@ class _StatDetailModalState extends State<_StatDetailModal> {
       'gWeek': gWeek,
       'gMonth': gMonth,
       'gTotal': gTotal,
+      'fToday': fToday,
+      'fWeek': fWeek,
+      'fMonth': fMonth,
+      'fTotal': fTotal,
     };
   }
 
@@ -2652,22 +2668,30 @@ class _StatDetailModalState extends State<_StatDetailModal> {
                       _StatRow(
                         label: "Aujourd'hui",
                         value: '${s['gToday']} FCFA',
-                        sub: 'revenus du jour',
+                        sub: (s['fToday'] as int) > 0
+                            ? 'revenus du jour (dont ${s['fToday']} FCFA de frais DEM)'
+                            : 'revenus du jour',
                       ),
                       _StatRow(
                         label: 'Cette semaine',
                         value: '${s['gWeek']} FCFA',
-                        sub: 'revenus 7 jours',
+                        sub: (s['fWeek'] as int) > 0
+                            ? 'revenus 7 jours (dont ${s['fWeek']} FCFA de frais DEM)'
+                            : 'revenus 7 jours',
                       ),
                       _StatRow(
                         label: 'Ce mois',
                         value: '${s['gMonth']} FCFA',
-                        sub: 'revenus 30 jours',
+                        sub: (s['fMonth'] as int) > 0
+                            ? 'revenus 30 jours (dont ${s['fMonth']} FCFA de frais DEM)'
+                            : 'revenus 30 jours',
                       ),
                       _StatRow(
                         label: 'Total cumulé',
                         value: '${s['gTotal']} FCFA',
-                        sub: 'depuis le début',
+                        sub: (s['fTotal'] as int) > 0
+                            ? 'depuis le début (dont ${s['fTotal']} FCFA de frais DEM)'
+                            : 'depuis le début',
                       ),
                     ],
                   );

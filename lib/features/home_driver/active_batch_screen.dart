@@ -1019,6 +1019,17 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
       .skip(_currentStopIndex)
       .fold(0, (s, o) => s + ((o['price'] as num?)?.toInt() ?? 0));
 
+  // Frais DEM par arrêt (grille de commissions, voir fee-grid.js côté
+  // backend — mécanisme distinct de la matrice zone/EXPRESS des courses
+  // simples, mais tout aussi réel et déjà déduit de `price`) — presque
+  // systématique sur une tournée (tout arrêt >= 900F environ en a un).
+  int get _totalTourDemFee =>
+      _stops.fold(0, (s, o) => s + ((o['demFee'] as num?)?.toInt() ?? 0));
+
+  int get _remainingTourDemFee => _stops
+      .skip(_currentStopIndex)
+      .fold(0, (s, o) => s + ((o['demFee'] as num?)?.toInt() ?? 0));
+
   List<Widget> _buildPickupContent() {
     final address = widget.batch['pickupAddress'] as String? ?? '';
     return [
@@ -1134,6 +1145,21 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                 ),
               ],
             ),
+            if (_totalTourDemFee > 0) ...[
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  const Spacer(),
+                  Text(
+                    '(dont $_totalTourDemFee FCFA de frais DEM déjà déduits)',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.white54,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1210,6 +1236,8 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
     final receiverName = stop['receiverName'] as String?;
     final receiverPhone = stop['receiverPhone'] as String?;
     final price = (stop['price'] as num?)?.toInt() ?? 0;
+    // Frais DEM de cet arrêt (grille de commissions) — déjà déduit de price.
+    final demFee = (stop['demFee'] as num?)?.toInt() ?? 0;
     final address = stop['deliveryAddress'] as String? ?? '';
     final landmark = stop['landmark'] as String?;
     // Type de colis / "Fragile" / instructions saisis par le client (Pro ou
@@ -1262,11 +1290,19 @@ class _ActiveBatchScreenState extends ConsumerState<ActiveBatchScreen>
                       color: AppColors.accentIndigo,
                     ),
                   ),
+                if (demFee > 0)
+                  Text(
+                    '(dont $demFee FCFA de frais DEM déjà déduits)',
+                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                  ),
                 // Total restant sur la tournée — avant, seul le prix de cet
                 // arrêt était visible pendant l'exécution, jamais un total.
                 if (!isLastStop)
                   Text(
-                    'Reste $_remainingTourPrice FCFA sur la tournée',
+                    _remainingTourDemFee > 0
+                        ? 'Reste $_remainingTourPrice FCFA sur la tournée '
+                              '(dont $_remainingTourDemFee FCFA de frais DEM)'
+                        : 'Reste $_remainingTourPrice FCFA sur la tournée',
                     style: const TextStyle(color: Colors.white54, fontSize: 11),
                   ),
               ],

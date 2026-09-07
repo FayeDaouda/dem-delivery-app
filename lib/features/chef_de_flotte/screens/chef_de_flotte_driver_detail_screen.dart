@@ -585,12 +585,26 @@ class _State extends State<ChefDeFlotteDriverDetailScreen> {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            Text(
-                              '${((periodStats['earnings'] as num?) ?? 0).round()} FCFA',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.primaryMid,
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${((periodStats['earnings'] as num?) ?? 0).round()} FCFA',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primaryMid,
+                                  ),
+                                ),
+                                if (((periodStats['demFee'] as num?) ?? 0) > 0)
+                                  Text(
+                                    // Frais DEM déjà déduits de "earnings".
+                                    '(dont ${((periodStats['demFee'] as num).round())} FCFA de frais DEM)',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ],
                         ),

@@ -489,6 +489,11 @@ class _OrderCard extends ConsumerWidget {
     final id = (orderId ?? '').toUpperCase();
     final shortId = id.length >= 8 ? id.substring(0, 8) : id;
     final price = (order['price'] as num?)?.toInt() ?? 0;
+    // Frais de mise en relation DEM (matrice zone) déjà déduits de `price` —
+    // jamais cumulé avec EXPRESS, qui garde son propre modèle en %. Même
+    // convention que active_order_screen.dart/_hasCommission.
+    final demFee = (order['demFee'] as num?)?.toInt() ?? 0;
+    final hasCommission = order['priority'] != 'EXPRESS' && demFee > 0;
     final status = (order['status'] as String? ?? '').toUpperCase();
     final paymentStatus = (order['paymentStatus'] as String? ?? '')
         .toUpperCase();
@@ -602,9 +607,24 @@ class _OrderCard extends ConsumerWidget {
                   ),
                 ),
                 const Spacer(),
-                Text(
-                  '$price FCFA',
-                  style: ClientText.button.copyWith(color: AppColors.primary),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$price FCFA',
+                      style: ClientText.button.copyWith(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    if (hasCommission)
+                      Text(
+                        '(dont $demFee FCFA de frais DEM déjà déduits)',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),

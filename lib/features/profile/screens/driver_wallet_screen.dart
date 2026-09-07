@@ -1147,6 +1147,10 @@ class _TransactionTile extends StatelessWidget {
     final color = isCredit ? AppColors.successLight : AppColors.error;
     final isOnlinePayment =
         type == 'CREDIT_DELIVERY' && transaction['paymentMethod'] == 'online';
+    // Frais DEM déjà déduits de `amount` (voir wallet.service.js:
+    // _annotatePaymentMethod) — le libellé "Livraison — <adresse>" seul ne
+    // permettait pas de comprendre l'écart avec le tarif annoncé au client.
+    final demFee = (transaction['demFee'] as num?)?.toInt() ?? 0;
     final cashoutStatus = _cashoutStatus();
 
     return Container(
@@ -1224,6 +1228,14 @@ class _TransactionTile extends StatelessWidget {
                     fontSize: 11,
                   ),
                 ),
+                if (demFee > 0)
+                  Text(
+                    '(dont $demFee FCFA de frais DEM déjà déduits)',
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 10,
+                    ),
+                  ),
                 if (cashoutStatus != null) ...[
                   const SizedBox(height: 4),
                   Container(

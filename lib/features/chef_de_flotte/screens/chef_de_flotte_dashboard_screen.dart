@@ -598,6 +598,10 @@ class _PeriodStatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final courses = (data['courses'] as num?) ?? 0;
     final earnings = (data['earnings'] as num?) ?? 0;
+    // Frais DEM déjà déduits de `earnings` — signalé pour comprendre l'écart
+    // avec le tarif affiché au client (matrice zone/EXPRESS, ou grille de
+    // commissions pour une tournée).
+    final demFee = (data['demFee'] as num?) ?? 0;
     final previousCourses = (data['previousCourses'] as num?) ?? 0;
     final trend = _trend(courses, previousCourses);
 
@@ -667,12 +671,25 @@ class _PeriodStatsCard extends StatelessWidget {
                   ],
                 ],
               ),
-              Text(
-                '${earnings.round()} FCFA',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primaryMid,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${earnings.round()} FCFA',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primaryMid,
+                    ),
+                  ),
+                  if (demFee > 0)
+                    Text(
+                      '(dont ${demFee.round()} FCFA de frais DEM)',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
