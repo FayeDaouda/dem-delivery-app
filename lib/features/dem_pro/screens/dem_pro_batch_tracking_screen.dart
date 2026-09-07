@@ -717,7 +717,8 @@ class _DemProBatchTrackingScreenState
     final orders =
         (batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final driver = batch['driver'] as Map<String, dynamic>?;
-    final total = (batch['totalPrice'] as num?) ?? 0;
+    // batchChargeFor ajoute demFee — jamais totalPrice seul.
+    final total = batchChargeFor(batch);
     final pickup = batch['pickupAddress'] as String? ?? '';
     final createdAt = batch['createdAt'] as String?;
     // `_batchStatusColor` est pensé pour un fond clair — sur le dégradé,
@@ -1513,7 +1514,8 @@ class _StopRow extends StatelessWidget {
     final status = order['status'] as String? ?? 'PENDING';
     final address = order['deliveryAddress'] as String? ?? '';
     final receiver = order['receiverName'] as String?;
-    final price = (order['price'] as num?) ?? 0;
+    // clientChargeFor ajoute demFee — jamais order['price'] seul.
+    final price = clientChargeFor(order);
     final done = _stopDone(status);
     final stopColor = _stopStatusColor(status);
     final stopLabel = _stopStatusLabel(status);

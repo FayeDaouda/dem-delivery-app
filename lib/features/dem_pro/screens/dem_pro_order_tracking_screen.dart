@@ -558,6 +558,7 @@ class _DemProOrderTrackingScreenState
     final pickup = _short(o['pickupAddress'] as String?);
     final delivery = _short(o['deliveryAddress'] as String?);
     final price = (o['price'] as num?) ?? 0;
+    final demFee = (o['demFee'] as num?) ?? 0;
     final needsMerchantPayment =
         o['paymentMode'] == 'merchant' && o['paymentStatus'] != 'PAID';
     final driver = o['driver'] as Map<String, dynamic>?;
@@ -861,7 +862,11 @@ class _DemProOrderTrackingScreenState
                         Builder(
                           builder: (context) {
                             final charge = clientChargeFor(o);
-                            if (charge >= price.round()) {
+                            // Comparaison sur price+demFee (le "avant
+                            // réduction" réel), pas price seul — sinon le
+                            // barré sous-évaluait le total de demFee quand
+                            // discount > demFee (charge < price malgré tout).
+                            if (charge >= (price + demFee).round()) {
                               // `charge` inclut demFee (frais DEM éventuels) —
                               // jamais `price` seul, qui reste 100% pour le
                               // livreur (voir clientChargeFor). Sans ce fix,
@@ -878,7 +883,7 @@ class _DemProOrderTrackingScreenState
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  formatFcfa(price.toInt()),
+                                  formatFcfa((price + demFee).round()),
                                   style: ClientText.label.copyWith(
                                     color: Colors.white.withValues(alpha: 0.6),
                                     decoration: TextDecoration.lineThrough,

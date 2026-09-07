@@ -4025,7 +4025,9 @@ class _ActiveOrderCard extends StatelessWidget {
     final status = order['status'] as String;
     final pickup = _shortAddress(order['pickupAddress'] as String? ?? '');
     final delivery = _shortAddress(order['deliveryAddress'] as String? ?? '');
-    final price = order['price'] as num? ?? 0;
+    // price inclut demFee (frais DEM éventuels) — jamais order['price'] seul,
+    // qui reste 100% pour le livreur (voir clientChargeFor).
+    final price = clientChargeFor(order);
     final createdAt = order['createdAt'] as String?;
     final scheduledAt = order['scheduledAt'] as String?;
     final isScheduled = status == 'SCHEDULED';
@@ -4283,7 +4285,8 @@ class _HistoriqueRow extends StatelessWidget {
     final status = order['status'] as String;
     final pickup = _shortAddress(order['pickupAddress'] as String? ?? '');
     final delivery = _shortAddress(order['deliveryAddress'] as String? ?? '');
-    final price = order['price'] as num? ?? 0;
+    // price inclut demFee (frais DEM éventuels) — jamais order['price'] seul.
+    final price = clientChargeFor(order);
     final isScheduled = status == 'SCHEDULED';
     final isExpress = order['priority'] == 'EXPRESS';
     final date = _formatDateTime(
@@ -4536,7 +4539,8 @@ class _BatchCard extends StatelessWidget {
     final status = batch['status'] as String? ?? 'PENDING';
     final orders =
         (batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final total = (batch['totalPrice'] as num?) ?? 0;
+    // batchChargeFor ajoute demFee — jamais totalPrice seul.
+    final total = batchChargeFor(batch);
     final pickup = batch['pickupAddress'] as String? ?? '';
     final driver = batch['driver'] as Map<String, dynamic>?;
     final createdAt = batch['createdAt'] as String?;
@@ -4735,7 +4739,8 @@ class _BatchHistoryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = batch['status'] as String? ?? '';
-    final total = (batch['totalPrice'] as num?) ?? 0;
+    // batchChargeFor ajoute demFee — jamais totalPrice seul.
+    final total = batchChargeFor(batch);
     final orders = (batch['orders'] as List?)?.length ?? 0;
     final createdAt = batch['createdAt'] as String?;
     final statusColor = _batchStatusColor(status);
@@ -6455,7 +6460,9 @@ class _FinancesTabState extends State<_FinancesTab>
             ((it['price'] as num?)?.toInt() ?? 0) *
             ((it['quantity'] as num?)?.toInt() ?? 1);
       }
-      final deliveryPrice = (o['price'] as num?)?.toInt() ?? 0;
+      // clientChargeFor ajoute demFee et retranche discountAmount — jamais
+      // price seul sur un export comptable.
+      final deliveryPrice = clientChargeFor(o);
       final driver = o['driver'] as Map<String, dynamic>?;
       final deliveredAt = DateTime.tryParse(
         o['deliveredAt'] as String? ?? '',
@@ -6550,7 +6557,10 @@ class _FinancesTabState extends State<_FinancesTab>
   int get _totalDelivery {
     int total = 0;
     for (final o in _filteredOrders) {
-      total += (o['price'] as num?)?.toInt() ?? 0;
+      // clientChargeFor ajoute demFee et retranche discountAmount — jamais
+      // price seul (repli utilisé seulement si _financeData est indisponible,
+      // le chemin normal via l'API est déjà correct côté backend).
+      total += clientChargeFor(o);
     }
     return total;
   }
@@ -8007,7 +8017,8 @@ class _DeliveryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final address = _shortAddress(order['deliveryAddress'] as String? ?? '—');
-    final amount = (order['price'] as num?)?.toInt() ?? 0;
+    // amount inclut demFee (frais DEM éventuels) — jamais order['price'] seul.
+    final amount = clientChargeFor(order);
     final driver = order['driver'] as Map<String, dynamic>?;
     final driverName = driver?['name'] as String?;
     final date = _formatDateTime(order['createdAt'] as String?);

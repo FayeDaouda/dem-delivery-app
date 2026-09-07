@@ -160,6 +160,7 @@ class _OrderDetailBody extends StatelessWidget {
     final statusColor = _kStatusColor[status] ?? Colors.white70;
     final statusLabel = _kStatusLabel[status] ?? status;
     final price = (order['price'] as num?)?.toInt() ?? 0;
+    final demFee = (order['demFee'] as num?)?.toInt() ?? 0;
     final charge = clientChargeFor(order);
     final hasDiscount = charge < price;
     final pickup = order['pickupAddress'] as String? ?? '—';
@@ -390,7 +391,8 @@ class _OrderDetailBody extends StatelessWidget {
                 )
               else ...[
                 Text(
-                  formatFcfa(price),
+                  // "Avant réduction" réel = price+demFee, pas price seul.
+                  formatFcfa(price + demFee),
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
                     fontSize: 12,

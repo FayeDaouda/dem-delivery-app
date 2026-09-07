@@ -94,7 +94,9 @@ class _DemProReceiptScreenState extends State<DemProReceiptScreen> {
     final delivery = _short(order['deliveryAddress'] as String?);
     final price = (order['price'] as num?) ?? 0;
     final demFee = (order['demFee'] as num?) ?? 0;
-    final total = price + demFee;
+    // clientChargeFor soustrait aussi discountAmount — price + demFee seul
+    // surestimait le total pour une commande avec réduction promo.
+    final total = clientChargeFor(order);
     final description = order['description'] as String?;
     final items = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final receiverName = order['receiverName'] as String?;

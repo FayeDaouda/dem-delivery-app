@@ -2157,7 +2157,13 @@ class _BatchNotificationSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final orders =
         (batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final total = (batch['totalPrice'] as num?)?.toInt() ?? 0;
+    // Le gain du livreur = somme du price de chaque arrêt (il touche 100% du
+    // prix plein) — JAMAIS batch['totalPrice'], qui est le montant déjà
+    // réduit (-20%) facturé au CLIENT (voir dispatch.service.js). driverTotal
+    // est précalculé côté backend ; repli sur la somme des arrêts si absent
+    // (compat avec un payload plus ancien).
+    final total = (batch['driverTotal'] as num?)?.toInt() ??
+        orders.fold<int>(0, (s, o) => s + ((o['price'] as num?)?.toInt() ?? 0));
     final pickup = batch['pickupAddress'] as String? ?? '';
     final stopCount = orders.length;
 

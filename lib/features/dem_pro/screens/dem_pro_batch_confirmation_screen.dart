@@ -16,7 +16,8 @@ class DemProBatchConfirmationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final orders =
         (batch['orders'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final total = (batch['totalPrice'] as num?)?.toInt() ?? 0;
+    // batchChargeFor ajoute demFee — jamais totalPrice seul.
+    final total = batchChargeFor(batch);
     final scheduled = batch['scheduledAt'] as String?;
     final isScheduled = scheduled != null;
 

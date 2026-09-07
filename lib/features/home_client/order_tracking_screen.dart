@@ -1080,6 +1080,7 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
     final pickupAddress = order?['pickupAddress'] as String? ?? '';
     final deliveryAddress = order?['deliveryAddress'] as String? ?? '';
     final price = (order?['price'] as num?)?.toInt() ?? 0;
+    final demFee = (order?['demFee'] as num?)?.toInt() ?? 0;
     final paymentStatus = order?['paymentStatus'] as String? ?? 'PENDING';
 
     // Fallback : position DB si socket pas encore reçu
@@ -1707,7 +1708,10 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen>
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    formatFcfa(price),
+                                    // "Avant réduction" réel = price+demFee,
+                                    // pas price seul (sinon sous-évalué de
+                                    // demFee quand demFee > 0).
+                                    formatFcfa(price + demFee),
                                     style: TextStyle(
                                       color: Colors.white.withValues(
                                         alpha: 0.55,

@@ -862,7 +862,9 @@ class _HistoryRow extends StatelessWidget {
         .split(',')
         .first
         .trim();
-    final price = (order['price'] as num?) ?? 0;
+    // price inclut demFee et retranche discountAmount — jamais order['price']
+    // seul (voir clientChargeFor).
+    final price = clientChargeFor(order);
     final items = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     int productTotal = 0;
     for (final it in items) {

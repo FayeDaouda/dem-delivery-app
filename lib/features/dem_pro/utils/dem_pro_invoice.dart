@@ -56,7 +56,9 @@ Future<Uint8List> buildInvoicePdf({
   final receiverPhone = order['receiverPhone'] as String?;
   final deliveryAddress = order['deliveryAddress'] as String?;
   final items = (order['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-  final deliveryPrice = (order['price'] as num?)?.toInt() ?? 0;
+  // clientChargeFor = price + demFee - discountAmount — jamais order['price']
+  // seul (gain net du livreur) sur un document facturant le client final.
+  final deliveryPrice = clientChargeFor(order);
 
   int productTotal = 0;
   for (final it in items) {
